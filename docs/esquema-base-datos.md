@@ -56,9 +56,10 @@ erDiagram
 
     EMPRESAS ||--o{ TERCEROS : administra
     TERCEROS ||--o{ TERCERO_ROLES : puede_ser
-    TERCEROS ||--o{ LISTAS_PRECIOS : posee
-    LISTAS_PRECIOS ||--o{ LISTA_PRECIO_DETALLES : contiene
-    TIPOS_POLLO ||--o{ LISTA_PRECIO_DETALLES : valoriza
+    TERCEROS o|--o{ LISTAS_PRECIOS : posee
+    LISTAS_PRECIOS ||--o{ PRECIOS_HISTORIAL : versiona
+    TIPOS_POLLO ||--o{ PRECIOS_HISTORIAL : valoriza
+    USUARIOS ||--o{ PRECIOS_HISTORIAL : registra
 
     SUCURSALES ||--o{ ALMACENES : contiene
     SUCURSALES ||--o{ BALANZAS : utiliza
@@ -71,6 +72,7 @@ erDiagram
     ALMACENES o|--o{ TICKETS_DESPACHO : almacen_destino
     TICKETS_DESPACHO ||--o{ TICKET_PRECIOS : congela
     TIPOS_POLLO ||--o{ TICKET_PRECIOS : aplica
+    PRECIOS_HISTORIAL ||--o{ TICKET_PRECIOS : origina
 
     BALANZAS ||--o{ LECTURAS_BALANZA : produce
     TICKETS_DESPACHO ||--o{ PESADAS : contiene
@@ -132,13 +134,42 @@ erDiagram
 
 | Tabla | Responsabilidad |
 |---|---|
-| `listas_precios` | Cabecera de una tarifa general, de cliente o de proveedor, con vigencia. |
-| `lista_precio_detalles` | Precio por kilogramo y tipo de pollo. |
-| `ticket_precios` | Copia inmutable del precio aplicado al cerrar o valorizar un ticket. |
+| `listas_precios` | Identifica una tarifa general o una tarifa propia de un cliente/proveedor. |
+| `precios_historial` | Conserva cada precio por tipo de pollo con fecha y hora de inicio y fin de vigencia. |
+| `ticket_precios` | Copia inmutable del precio aplicado y referencia el registro histórico que lo originó. |
 
-No debe consultarse el precio actual para recalcular un ticket histórico. El
-precio usado se copia en `ticket_precios`, de modo que un cambio futuro no
-altere ventas o compras anteriores.
+Cada cliente puede tener su propia lista de precios. Si no existe un precio
+específico vigente para ese cliente y tipo de pollo, se utiliza el precio
+general vigente.
+
+Ejemplo:
+
+| Lista | Cliente | Tipo | Precio/kg | Vigente desde | Vigente hasta |
+|---|---|---|---:|---|---|
+| General venta | — | Pollo vivo | 8.50 | 2026-06-20 00:00 | 2026-06-20 10:29 |
+| General venta | — | Pollo vivo | 8.70 | 2026-06-20 10:30 | abierto |
+| Cliente Rogelio | Rogelio | Pollo vivo | 8.30 | 2026-06-20 08:00 | 2026-06-20 11:14 |
+| Cliente Rogelio | Rogelio | Pollo vivo | 8.45 | 2026-06-20 11:15 | abierto |
+
+El campo `vigente_hasta` vacío identifica la versión actualmente vigente.
+Aunque normalmente exista un precio general diario, el uso de fecha y hora
+permite registrar varios cambios durante el mismo día.
+
+Al cambiar un precio se ejecuta una transacción:
+
+1. bloquear el precio vigente para la lista y tipo de pollo;
+2. completar su `vigente_hasta`;
+3. insertar el nuevo registro en `precios_historial`;
+4. registrar usuario, fecha/hora y motivo del cambio.
+
+El valor histórico de `precio_kg` no se sobrescribe ni se elimina. Si hubo un
+error, se inserta una nueva versión correctiva.
+
+No debe consultarse el precio actual para recalcular un ticket existente. En la
+primera pesada del ticket, los precios aplicables se copian en
+`ticket_precios`. Así, un cambio posterior no altera el total del ticket. Si el
+negocio necesita actualizar un ticket todavía abierto, debe existir una acción
+explícita que reemplace sus precios y quede registrada en auditoría.
 
 ### Operación diaria
 
@@ -155,7 +186,8 @@ En el frontend actual:
 - cada objeto de `truck.cages` corresponde a una fila de `pesadas`;
 - `clientId` corresponde al cliente o almacén de destino;
 - `origenId` corresponde al proveedor o almacén de origen;
-- `generalPricesKg` y `pricesKg` pasan a listas de precios;
+- `generalPricesKg` pasa a la lista general y cada `pricesKg` del cliente pasa
+  a su propia lista con versiones en `precios_historial`;
 - `CHICKEN_TYPES`, `CRATE_TYPES` y las balanzas pasan a tablas de catálogo.
 
 ### Inventario
@@ -204,6 +236,14 @@ actualizarse dentro de la misma transacción que registra el movimiento.
     de existencias deben ejecutarse en una sola transacción.
 13. Todo cierre, anulación, cambio de precio o edición de una pesada debe
     registrarse en `auditoria_eventos`.
+14. Solo puede existir un precio vigente por lista y tipo de pollo; sus
+    intervalos de vigencia no pueden superponerse.
+15. Un cambio de precio nunca actualiza `precio_kg` de una versión histórica:
+    cierra la versión actual e inserta otra.
+16. Para obtener el precio de un cliente se busca primero su precio específico
+    vigente y, si no existe, se usa el precio general vigente.
+17. El precio del ticket se congela en su primera pesada. Los cambios globales
+    o del cliente no deben recalcularlo automáticamente.
 
 ## 5. Tipos de datos recomendados
 
@@ -224,7 +264,7 @@ actualizarse dentro de la misma transacción que registra el movimiento.
 
 1. Empresa, sucursal, usuarios, roles y permisos.
 2. Terceros, roles de terceros y catálogos operativos.
-3. Listas de precios y sus detalles.
+3. Listas de precios, historial de versiones y precios congelados por ticket.
 4. Jornadas, tickets, lecturas de balanza y pesadas.
 5. Movimientos y existencias de inventario.
 6. Comprobantes, relaciones de facturación y pagos.
@@ -241,7 +281,7 @@ Al instalar la base deben registrarse, como mínimo:
 | `almacenes` | `ALMACEN_1` y `ALMACEN_2` |
 | `balanzas` | `BALANZA_1` y `BALANZA_2` |
 | `roles` | `ADMINISTRADOR`, `OPERADOR`, `FACTURACION`, `CONSULTA` |
-| lista general | Precios iniciales de compra y venta por tipo de pollo |
+| lista general | Precios iniciales de compra y venta por tipo de pollo, con fecha/hora de vigencia |
 
 Los diez tickets que aparecen hoy en pantalla no deben cargarse como diez
 camiones permanentes. Al abrir una jornada se pueden crear los tickets
@@ -275,5 +315,6 @@ stateDiagram-v2
 - definir si las transferencias entre almacenes necesitan aprobación;
 - definir los datos adicionales de vehículos y conductores;
 - confirmar si el precio del proveedor representa costo de compra;
+- definir quiénes pueden cambiar precios y si el cambio requiere aprobación;
 - definir la política de redondeo fiscal y de pesos;
 - definir cuánto tiempo se conservarán las tramas crudas de las balanzas.

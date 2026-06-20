@@ -254,31 +254,36 @@ Table listas_precios {
   id bigint [pk, increment]
   empresa_id bigint [not null, ref: > empresas.id]
   tercero_id bigint [ref: > terceros.id, note: "Vacío para una lista general"]
+  codigo varchar(50) [not null]
   nombre varchar(120) [not null]
   operacion tipo_operacion_precio [not null]
-  vigente_desde date [not null]
-  vigente_hasta date
   estado estado_general [not null, default: 'ACTIVO']
   created_by bigint [not null, ref: > usuarios.id]
   created_at timestamp [not null]
   updated_at timestamp [not null]
 
   indexes {
-    (empresa_id, operacion, vigente_desde)
+    (empresa_id, codigo) [unique]
     (tercero_id, operacion, estado)
   }
 }
 
-Table lista_precio_detalles {
+Table precios_historial {
   id bigint [pk, increment]
   lista_precio_id bigint [not null, ref: > listas_precios.id]
   tipo_pollo_id bigint [not null, ref: > tipos_pollo.id]
   precio_kg decimal(12,4) [not null]
+  vigente_desde timestamp [not null]
+  vigente_hasta timestamp
+  motivo_cambio varchar(250)
+  reemplaza_precio_id bigint [ref: > precios_historial.id]
+  registrado_por bigint [not null, ref: > usuarios.id]
   created_at timestamp [not null]
-  updated_at timestamp [not null]
 
   indexes {
-    (lista_precio_id, tipo_pollo_id) [unique]
+    (lista_precio_id, tipo_pollo_id, vigente_desde) [unique]
+    (lista_precio_id, tipo_pollo_id, vigente_hasta)
+    (registrado_por, created_at)
   }
 }
 
@@ -324,9 +329,10 @@ Table ticket_precios {
   id bigint [pk, increment]
   ticket_id bigint [not null, ref: > tickets_despacho.id]
   tipo_pollo_id bigint [not null, ref: > tipos_pollo.id]
-  lista_precio_id bigint [ref: > listas_precios.id]
+  precio_historial_id bigint [not null, ref: > precios_historial.id]
   precio_kg decimal(12,4) [not null]
   origen_precio varchar(30) [not null]
+  congelado_por bigint [not null, ref: > usuarios.id]
   created_at timestamp [not null]
 
   indexes {
