@@ -1,0 +1,475 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrada de Camiones | Sistema Pollos</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section class="scale-strip-mobile card" aria-label="Pesos de balanzas">
+    <article class="scale-strip-item">
+      <span>Balanza 1</span>
+      <strong id="display-scale-mini-1">0.00 <small>kg</small></strong>
+    </article>
+    <article class="scale-strip-item">
+      <span>Balanza 2</span>
+      <strong id="display-scale-mini-2">0.00 <small>kg</small></strong>
+    </article>
+  </section>
+
+  <nav class="mobile-tabs" aria-label="Navegación móvil">
+    <button id="mobileTabRegistro" class="mobile-tab is-active" type="button" data-mobile-panel-target="registro">Registro</button>
+    <button id="mobileTabCamiones" class="mobile-tab" type="button" data-mobile-panel-target="camiones">Tickets</button>
+  </nav>
+
+  <main id="appShell" class="app-shell" data-mobile-panel="registro">
+    <section class="control-panel" data-mobile-panel="registro">
+      <header class="hero card">
+        <div class="admin-config">
+          <button id="configMenuBtn" class="config-menu-btn" type="button" aria-label="Abrir configuración" aria-haspopup="dialog" aria-expanded="false" aria-controls="configMenu">
+            <span aria-hidden="true">&#9881;</span>
+          </button>
+          <div id="configMenu" class="config-menu" role="dialog" aria-label="Configuración del panel" hidden>
+            <div class="config-menu-head">
+              <strong>Configuración</strong>
+              <button id="closeConfigMenuBtn" class="config-close-btn" type="button" aria-label="Cerrar configuración">X</button>
+            </div>
+            <div class="config-menu-actions">
+              <button id="openJsonBtn" class="btn btn-ghost" type="button">Ver JSON</button>
+              <button id="resetDayBtn" class="btn btn-ghost" type="button">Reiniciar jornada</button>
+              <button id="openFontSidebarBtn" class="btn btn-ghost" type="button">Tamaños personalizados</button>
+              <div class="font-tools" aria-label="Tamaño de letra">
+                <span>Letra</span>
+                <div class="font-tools-actions">
+                  <button id="fontDecreaseBtn" class="font-size-btn" type="button" aria-label="Reducir tamaño de letra">A-</button>
+                  <strong id="fontSizeStatus" aria-live="polite">Normal</strong>
+                  <button id="fontIncreaseBtn" class="font-size-btn" type="button" aria-label="Aumentar tamaño de letra">A+</button>
+                  <button id="fontResetBtn" class="font-size-btn font-size-reset" type="button" aria-label="Restablecer tamaño de letra">A</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Control de Recepción</p>
+          <h1>Entrada de Camiones de Pollos</h1>
+          <p class="hero-copy">Vista única para monitor táctil. Registro simultáneo con 2 balanzas.</p>
+        </div>
+        <div class="hero-actions">
+          <div class="hero-menu-row">
+            <a id="backToMenuBtn" class="menu-return-btn" href="menu.html">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 6h7v7H4z"></path>
+                <path d="M13 6h7v7h-7z"></path>
+                <path d="M4 15h7v3H4z"></path>
+                <path d="M13 15h7v3h-7z"></path>
+              </svg>
+              <span>Menú</span>
+            </a>
+          </div>
+          <div class="price-grid">
+            <label class="price-control">
+              Precio general pollo vivo (kg)
+              <input id="generalPriceVivoKg" type="number" min="0.01" step="0.01" value="8.50" readonly inputmode="none" data-keypad-label="Precio general pollo vivo por kg">
+            </label>
+            <label class="price-control">
+              Precio general pollo pelado (kg)
+              <input id="generalPricePeladoKg" type="number" min="0.01" step="0.01" value="8.50" readonly inputmode="none" data-keypad-label="Precio general pollo pelado por kg">
+            </label>
+          </div>
+        </div>
+      </header>
+
+      <section class="scale-section">
+        <article class="scale-card card" data-scale-card="1">
+          <div class="scale-card-head">
+            <h2>Balanza 1</h2>
+            <button id="openScaleSettings1" class="scale-settings-btn" type="button" aria-label="Configurar balanza 1" aria-haspopup="dialog" aria-expanded="false" aria-controls="scaleSettingsModal1">
+              <span aria-hidden="true">&#9881;</span>
+            </button>
+          </div>
+          <p class="scale-display" id="display-scale-1">0.00 <span>kg</span></p>
+          <button id="capture-scale-1" class="btn btn-secondary" type="button">Usar balanza 1</button>
+        </article>
+
+        <article class="scale-card card" data-scale-card="2">
+          <div class="scale-card-head">
+            <h2>Balanza 2</h2>
+            <button id="openScaleSettings2" class="scale-settings-btn" type="button" aria-label="Configurar balanza 2" aria-haspopup="dialog" aria-expanded="false" aria-controls="scaleSettingsModal2">
+              <span aria-hidden="true">&#9881;</span>
+            </button>
+          </div>
+          <p class="scale-display" id="display-scale-2">0.00 <span>kg</span></p>
+          <button id="capture-scale-2" class="btn btn-secondary" type="button">Usar balanza 2</button>
+        </article>
+      </section>
+
+      <section class="entry-section card">
+        <div class="section-head">
+          <h2>Registrar Pesada</h2>
+        </div>
+
+        <form id="cageForm" novalidate>
+          <div class="type-switch" role="group" aria-label="Tipo de pollo">
+            <button class="type-btn is-active" data-type="pollo_vivo" type="button">Pollo vivo</button>
+            <button class="type-btn" data-type="pollo_pelado" type="button">Pollo pelado</button>
+          </div>
+
+          <div class="form-grid">
+            <label class="field dispatch-truck-field">
+              Ticket de despacho (columna)
+              <select id="truckSelect"></select>
+            </label>
+
+            <div class="field">
+              <span>Origen de la mercadería</span>
+              <button id="selectProviderBtn" class="provider-select-btn" type="button" aria-haspopup="dialog" aria-controls="providerModal">
+                <span class="provider-select-copy">
+                  <small>Proveedor o almacén seleccionado</small>
+                  <strong id="selectedProviderName">Seleccionar origen</strong>
+                </span>
+                <span class="provider-select-action">Buscar</span>
+              </button>
+            </div>
+
+            <label id="truckPlateField" class="field">
+              Placa del camión de origen
+              <input id="truckPlate" type="text" maxlength="15" placeholder="Ej: ABC-123" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+              <small class="field-help">Obligatoria cuando el origen es un proveedor.</small>
+            </label>
+
+            <label class="field">
+              Cantidad de aves por java (fijo)
+              <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 25" required readonly inputmode="none" data-keypad-label="Cantidad fija de aves por java" data-keypad-decimal="false">
+            </label>
+
+            <label class="field">
+              Cantidad de javas (fijo)
+              <input id="javaCount" type="number" min="1" step="1" value="1" required readonly inputmode="none" data-keypad-label="Cantidad de javas" data-keypad-decimal="false">
+            </label>
+
+            <label class="field">
+              Tipo de java
+              <select id="crateType">
+                <option value="java_700">Java 7.00 kg</option>
+                <option value="java_690">Java 6.90 kg</option>
+              </select>
+            </label>
+
+            <label class="field">
+              Origen del peso
+              <select id="weightSource">
+                <option value="1">Balanza 1</option>
+                <option value="2">Balanza 2</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+
+            <label class="field" id="manualWeightField" hidden>
+              Peso bruto manual (kg)
+              <input id="manualWeight" type="number" min="0" step="0.01" placeholder="Ej: 49.50" readonly inputmode="none" data-keypad-label="Peso bruto manual (kg)">
+            </label>
+
+            <div class="weight-preview">
+              <span>Peso neto a registrar</span>
+              <strong id="selectedWeightValue">0.00 kg</strong>
+              <small id="selectedWeightBreakdown">Bruto 0.00 - Javas 0.00 | Aves totales 0</small>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-success" type="submit">Agregar registro</button>
+            <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+    </section>
+
+    <section class="columns-section card" data-mobile-panel="camiones">
+      <div class="section-head">
+        <h2>Tickets de Despacho en Paralelo</h2>
+        <p id="globalStats" class="global-stats"></p>
+      </div>
+      <div id="trucksGrid" class="truck-grid"></div>
+      <aside id="selectedTruckDetails" class="selected-truck-details" aria-live="polite"></aside>
+    </section>
+  </main>
+
+  <div id="fontSidebarOverlay" class="font-sidebar-overlay" hidden>
+    <aside id="fontSizeSidebar" class="font-size-sidebar card" role="dialog" aria-modal="true" aria-labelledby="fontSizeSidebarTitle">
+      <div class="font-sidebar-head">
+        <div>
+          <p class="font-sidebar-caption">Ajuste por sección</p>
+          <h2 id="fontSizeSidebarTitle">Tamaños personalizados</h2>
+        </div>
+        <button id="closeFontSidebarBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <div id="fontSizeControls" class="font-size-controls"></div>
+      <div class="font-sidebar-footer">
+        <button id="resetFontSizesBtn" class="btn btn-ghost" type="button">Restablecer tamaños</button>
+      </div>
+    </aside>
+  </div>
+
+  <div id="scaleSettingsModal1" class="modal" hidden>
+    <div class="scale-settings-card card" role="dialog" aria-modal="true" aria-labelledby="scaleSettingsTitle1">
+      <div class="section-head">
+        <h2 id="scaleSettingsTitle1">Configurar Balanza 1</h2>
+        <button id="closeScaleSettings1" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <div class="scale-settings-content">
+        <section class="scale-settings-panel" aria-labelledby="scaleSyncTitle1">
+          <h3 id="scaleSyncTitle1">Sincronizar balanza</h3>
+          <div class="scale-connection" data-scale-connection="1">
+            <div class="scale-status-row">
+              <span id="scale-status-1" class="scale-status scale-status-offline">Sin conexión Bluetooth</span>
+              <small id="scale-last-1">Sin lecturas</small>
+            </div>
+            <div class="scale-connect-actions">
+              <button id="connect-ble-scale-1" class="btn btn-ghost" type="button">Conectar BLE</button>
+              <button id="connect-serial-scale-1" class="btn btn-ghost" type="button">Serial BT</button>
+              <button id="disconnect-scale-1" class="btn btn-ghost" type="button" disabled>Desconectar</button>
+            </div>
+            <small id="scale-raw-1" class="scale-raw">Trama: --</small>
+          </div>
+        </section>
+
+        <section class="scale-settings-panel" aria-labelledby="scaleManualTitle1">
+          <h3 id="scaleManualTitle1">Agregar valor manual</h3>
+          <label class="field">
+            Lectura manual (kg)
+            <div class="inline-control">
+              <input id="input-scale-1" type="number" min="0" step="0.01" placeholder="Ej: 54.80" readonly inputmode="none" data-keypad-label="Lectura manual balanza 1 (kg)">
+              <button id="set-scale-1" class="btn btn-primary" type="button">Actualizar</button>
+            </div>
+          </label>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="scaleSettingsModal2" class="modal" hidden>
+    <div class="scale-settings-card card" role="dialog" aria-modal="true" aria-labelledby="scaleSettingsTitle2">
+      <div class="section-head">
+        <h2 id="scaleSettingsTitle2">Configurar Balanza 2</h2>
+        <button id="closeScaleSettings2" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <div class="scale-settings-content">
+        <section class="scale-settings-panel" aria-labelledby="scaleSyncTitle2">
+          <h3 id="scaleSyncTitle2">Sincronizar balanza</h3>
+          <div class="scale-connection" data-scale-connection="2">
+            <div class="scale-status-row">
+              <span id="scale-status-2" class="scale-status scale-status-offline">Sin conexión Bluetooth</span>
+              <small id="scale-last-2">Sin lecturas</small>
+            </div>
+            <div class="scale-connect-actions">
+              <button id="connect-ble-scale-2" class="btn btn-ghost" type="button">Conectar BLE</button>
+              <button id="connect-serial-scale-2" class="btn btn-ghost" type="button">Serial BT</button>
+              <button id="disconnect-scale-2" class="btn btn-ghost" type="button" disabled>Desconectar</button>
+            </div>
+            <small id="scale-raw-2" class="scale-raw">Trama: --</small>
+          </div>
+        </section>
+
+        <section class="scale-settings-panel" aria-labelledby="scaleManualTitle2">
+          <h3 id="scaleManualTitle2">Agregar valor manual</h3>
+          <label class="field">
+            Lectura manual (kg)
+            <div class="inline-control">
+              <input id="input-scale-2" type="number" min="0" step="0.01" placeholder="Ej: 61.30" readonly inputmode="none" data-keypad-label="Lectura manual balanza 2 (kg)">
+              <button id="set-scale-2" class="btn btn-primary" type="button">Actualizar</button>
+            </div>
+          </label>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="jsonModal" class="modal" hidden>
+    <div class="modal-card card" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle">
+      <div class="section-head">
+        <h2 id="jsonModalTitle">Estado JSON (Base para API)</h2>
+        <div class="modal-actions">
+          <button id="copyJsonBtn" class="btn btn-ghost" type="button">Copiar JSON</button>
+          <button id="closeJsonBtn" class="btn btn-primary" type="button">Cerrar</button>
+        </div>
+      </div>
+      <pre id="jsonOutput" class="json-output"></pre>
+    </div>
+  </div>
+
+  <div id="clientModal" class="modal" hidden>
+    <div class="client-modal-card card" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
+      <div class="section-head">
+        <h2 id="clientModalTitle">Asignar destino</h2>
+        <button id="closeClientModalBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <p id="clientModalTruckLabel" class="client-modal-truck">--</p>
+      <label class="client-search">
+        <span>Buscar cliente o almacén</span>
+        <input id="clientSearch" type="search" placeholder="Escribe un nombre o almacén..." autocomplete="off">
+      </label>
+      <div id="clientList" class="client-list" role="listbox" aria-label="Lista de clientes y almacenes"></div>
+    </div>
+  </div>
+
+  <div id="itemModal" class="modal" hidden>
+    <div class="item-modal-card card" role="dialog" aria-modal="true" aria-labelledby="itemModalTitle">
+      <div class="section-head">
+        <h2 id="itemModalTitle">Detalle de registro</h2>
+        <button id="closeItemModalBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+
+      <div class="item-highlight">
+        <div class="item-pill">
+          <span>Registro</span>
+          <strong id="itemCageNumber">#--</strong>
+        </div>
+        <div class="item-pill">
+          <span>Ticket de despacho</span>
+          <strong id="itemTruckName">--</strong>
+        </div>
+        <div class="item-pill">
+          <span>Hora</span>
+          <strong id="itemHour">--</strong>
+        </div>
+      </div>
+
+      <form id="itemEditForm" class="item-form" novalidate>
+        <div class="item-form-grid">
+          <label class="field">
+            Tipo de pollo
+            <select id="editType"></select>
+          </label>
+
+          <label class="field">
+            Cantidad de aves por java
+            <input id="editBirdCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Cantidad de aves por java" data-keypad-decimal="false">
+          </label>
+
+          <label class="field">
+            Cantidad de javas
+            <input id="editJavaCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Cantidad de javas" data-keypad-decimal="false">
+          </label>
+
+          <label class="field">
+            Tipo de java
+            <select id="editCrateType"></select>
+          </label>
+
+          <label class="field">
+            Peso bruto (kg)
+            <input id="editWeight" type="number" min="0.01" step="0.01" required readonly inputmode="none" data-keypad-label="Peso bruto (kg)">
+          </label>
+
+          <label class="field">
+            Origen del peso
+            <select id="editWeightSource">
+              <option value="1">Balanza 1</option>
+              <option value="2">Balanza 2</option>
+              <option value="manual">Manual</option>
+            </select>
+          </label>
+
+          <div class="field">
+            <span>Origen de la mercadería</span>
+            <button id="editSelectProviderBtn" class="provider-select-btn" type="button" aria-haspopup="dialog" aria-controls="providerModal">
+              <span class="provider-select-copy">
+                <small>Origen registrado en esta pesada</small>
+                <strong id="editSelectedProviderName">Sin origen registrado</strong>
+              </span>
+              <span class="provider-select-action">Cambiar</span>
+            </button>
+          </div>
+
+          <label id="editTruckPlateField" class="field">
+            Placa del camión de origen
+            <input id="editTruckPlate" type="text" maxlength="15" placeholder="Ej: ABC-123" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+            <small class="field-help">Obligatoria cuando el origen es un proveedor.</small>
+          </label>
+        </div>
+
+        <p id="itemFormMessage" class="item-form-message" role="status" aria-live="polite"></p>
+
+        <div class="item-form-actions">
+          <button id="deleteItemBtn" class="btn btn-danger" type="button">Eliminar registro</button>
+          <button class="btn btn-success" type="submit">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="providerModal" class="modal provider-modal" hidden>
+    <div class="provider-modal-card card" role="dialog" aria-modal="true" aria-labelledby="providerModalTitle">
+      <div class="section-head">
+        <div>
+          <p class="provider-modal-caption">Origen de la mercadería</p>
+          <h2 id="providerModalTitle">Seleccionar origen</h2>
+        </div>
+        <button id="closeProviderModalBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+
+      <label class="field provider-search">
+        Buscar proveedor o almacén
+        <input id="providerSearch" type="search" placeholder="Nombre, almacén, DNI/RUC o dirección" autocomplete="off">
+      </label>
+
+      <p id="providerModalSelection" class="provider-modal-selection">Ningún origen seleccionado.</p>
+      <div id="providerList" class="provider-list" role="listbox" aria-label="Lista de proveedores y almacenes"></div>
+    </div>
+  </div>
+
+  <div id="errorModal" class="modal error-modal" hidden>
+    <div class="error-modal-card card" role="alertdialog" aria-modal="true" aria-labelledby="errorModalTitle" aria-describedby="errorModalMessage">
+      <div class="error-modal-head">
+        <div>
+          <p class="error-modal-caption">Error de registro</p>
+          <h2 id="errorModalTitle">Revisa los datos</h2>
+        </div>
+        <button id="closeErrorModalBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <p id="errorModalMessage" class="error-modal-message"></p>
+      <dl id="errorModalDetails" class="error-modal-details"></dl>
+    </div>
+  </div>
+
+  <div id="numericPadModal" class="modal numeric-pad-modal" hidden>
+    <div class="numeric-pad-card card" role="dialog" aria-modal="true" aria-labelledby="numericPadTitle">
+      <div class="numeric-pad-head">
+        <div>
+          <p class="numeric-pad-caption">Editando campo numérico</p>
+          <h2 id="numericPadTitle">Campo</h2>
+        </div>
+        <button id="numericPadCloseBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+
+      <p id="numericPadValue" class="numeric-pad-value">0</p>
+
+      <div class="numeric-pad-grid">
+        <button class="numeric-key" type="button" data-keypad-key="7">7</button>
+        <button class="numeric-key" type="button" data-keypad-key="8">8</button>
+        <button class="numeric-key" type="button" data-keypad-key="9">9</button>
+        <button class="numeric-key" type="button" data-keypad-key="4">4</button>
+        <button class="numeric-key" type="button" data-keypad-key="5">5</button>
+        <button class="numeric-key" type="button" data-keypad-key="6">6</button>
+        <button class="numeric-key" type="button" data-keypad-key="1">1</button>
+        <button class="numeric-key" type="button" data-keypad-key="2">2</button>
+        <button class="numeric-key" type="button" data-keypad-key="3">3</button>
+        <button class="numeric-key" type="button" data-keypad-key="0">0</button>
+        <button class="numeric-key" type="button" data-keypad-key="00">00</button>
+        <button id="numericPadDotBtn" class="numeric-key" type="button" data-keypad-key="dot">.</button>
+      </div>
+
+      <div class="numeric-pad-actions">
+        <button id="numericPadBackBtn" class="btn btn-ghost" type="button">Borrar</button>
+        <button id="numericPadClearBtn" class="btn btn-ghost" type="button">Limpiar</button>
+        <button id="numericPadOkBtn" class="btn btn-success" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

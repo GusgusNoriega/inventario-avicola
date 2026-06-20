@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es" class="directory-root">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clientes y Proveedores | Sistema Pollos</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="directory-page">
+  <main class="directory-view" data-directory-view="clientes">
+    <header class="directory-header card">
+      <div class="directory-title">
+        <p class="eyebrow">Directorio comercial</p>
+        <h1>Clientes y proveedores</h1>
+        <div class="directory-tabs" role="tablist" aria-label="Tipo de registro">
+          <button class="directory-tab is-active" type="button" data-record-type="clientes" role="tab" aria-selected="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path>
+              <path d="M4 21a8 8 0 0 1 16 0"></path>
+            </svg>
+            <span>Clientes</span>
+          </button>
+          <button class="directory-tab" type="button" data-record-type="proveedores" role="tab" aria-selected="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 7h11v9H3z"></path>
+              <path d="M14 10h3l3 3v3h-6z"></path>
+              <path d="M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+              <path d="M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+            </svg>
+            <span>Proveedores</span>
+          </button>
+        </div>
+      </div>
+      <div class="directory-header-actions">
+        <button id="openGlobalPriceModalBtn" class="global-price-open-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="globalPriceModal">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 3v18"></path>
+            <path d="M7 8h8.5a3.5 3.5 0 0 1 0 7H7"></path>
+            <path d="M6 17l-3-3 3-3"></path>
+            <path d="M18 7l3 3-3 3"></path>
+          </svg>
+          <span>Cambiar precio global</span>
+        </button>
+        <a class="menu-return-btn" href="menu.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 6h7v7H4z"></path>
+          <path d="M13 6h7v7h-7z"></path>
+          <path d="M4 15h7v3H4z"></path>
+          <path d="M13 15h7v3h-7z"></path>
+        </svg>
+        <span>Menú</span>
+        </a>
+      </div>
+    </header>
+
+    <section class="directory-stats" aria-label="Resumen de registros">
+      <article class="directory-stat card">
+        <span>Clientes</span>
+        <strong id="clientCount">0</strong>
+      </article>
+      <article class="directory-stat card">
+        <span>Proveedores</span>
+        <strong id="providerCount">0</strong>
+      </article>
+      <article class="directory-stat card directory-stat-accent">
+        <span id="activeTypeLabel">Vista activa</span>
+        <strong id="activeTypeCount">0</strong>
+      </article>
+    </section>
+
+    <section class="directory-workspace">
+      <section class="directory-form-panel card" aria-labelledby="directoryFormTitle">
+        <div class="section-head">
+          <h2 id="directoryFormTitle">Registrar cliente</h2>
+          <span id="directoryEditBadge" class="directory-edit-badge" hidden>Editando</span>
+        </div>
+
+        <form id="directoryForm" class="directory-form" novalidate>
+          <div class="directory-form-grid">
+            <label class="field directory-field-wide">
+              Nombre / razón social
+              <input id="personName" type="text" autocomplete="name" placeholder="Ej: Comercial El Sol" required>
+            </label>
+
+            <label class="field">
+              DNI / RUC
+              <input id="personDni" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 12345678" required>
+            </label>
+
+            <label class="field">
+              Dirección
+              <input id="personAddress" type="text" autocomplete="street-address" placeholder="Ej: Av. Principal 123" required>
+            </label>
+
+            <label class="field">
+              Precio pollo vivo (kg)
+              <input id="priceVivo" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+            </label>
+
+            <label class="field">
+              Precio pollo pelado (kg)
+              <input id="pricePelado" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+            </label>
+
+            <label class="field">
+              Precio pollo beneficiado (kg)
+              <input id="priceBeneficiado" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+            </label>
+          </div>
+
+          <div class="directory-form-actions">
+            <button id="saveDirectoryBtn" class="btn btn-success directory-btn" type="submit">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M5 4h12l2 2v14H5z"></path>
+                <path d="M8 4v6h8V4"></path>
+                <path d="M8 17h8"></path>
+              </svg>
+              <span>Guardar cliente</span>
+            </button>
+            <button id="clearDirectoryBtn" class="btn btn-ghost directory-btn" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 7h16"></path>
+                <path d="M9 7V5h6v2"></path>
+                <path d="M8 11v6"></path>
+                <path d="M16 11v6"></path>
+                <path d="M6 7l1 13h10l1-13"></path>
+              </svg>
+              <span>Limpiar</span>
+            </button>
+            <p id="directoryMessage" class="form-message" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+
+      </section>
+
+      <section class="directory-list-panel" aria-labelledby="directoryListTitle">
+        <div class="directory-list-toolbar">
+          <div>
+            <p class="eyebrow">Registros</p>
+            <h2 id="directoryListTitle">Clientes registrados</h2>
+          </div>
+          <label class="directory-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"></path>
+              <path d="M16 16l5 5"></path>
+            </svg>
+            <input id="directorySearch" type="search" placeholder="Buscar por nombre, DNI o dirección">
+          </label>
+        </div>
+        <div id="directoryList" class="directory-list" aria-live="polite"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="globalPriceModal" class="modal directory-global-modal" hidden>
+    <section class="directory-global-modal-card card" role="dialog" aria-modal="true" aria-labelledby="globalPriceTitle">
+      <div class="directory-global-head">
+        <div>
+          <p class="eyebrow">Ajuste global</p>
+          <h2 id="globalPriceTitle">Cambiar precio global</h2>
+        </div>
+        <button id="closeGlobalPriceModalBtn" class="directory-modal-close" type="button" aria-label="Cerrar ajuste global">X</button>
+      </div>
+
+      <span id="globalPriceScope" class="directory-record-tag">clientes</span>
+
+      <div class="directory-global-grid">
+        <label class="field">
+          Tipo de precio
+          <select id="globalPriceType">
+            <option value="pollo_vivo">Pollo vivo</option>
+            <option value="pollo_pelado">Pollo pelado</option>
+            <option value="pollo_beneficiado">Pollo beneficiado</option>
+          </select>
+        </label>
+
+        <label class="field">
+          Monto a aplicar
+          <input id="globalPriceAmount" type="number" min="0.01" step="0.01" placeholder="Ej: 1.00">
+        </label>
+      </div>
+
+      <div class="directory-global-actions">
+        <button id="increaseGlobalPriceBtn" class="btn btn-secondary directory-btn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+          <span>Aumentar</span>
+        </button>
+        <button id="decreaseGlobalPriceBtn" class="btn btn-ghost directory-btn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M5 12h14"></path>
+          </svg>
+          <span>Disminuir</span>
+        </button>
+      </div>
+
+      <p id="globalPriceMessage" class="form-message" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <script src="clientes.js"></script>
+</body>
+</html>
