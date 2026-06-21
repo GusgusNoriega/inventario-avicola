@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Entrada de Camiones | Sistema Pollos</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body>
   <section class="scale-strip-mobile card" aria-label="Pesos de balanzas">
@@ -58,7 +58,7 @@
         </div>
         <div class="hero-actions">
           <div class="hero-menu-row">
-            <a id="backToMenuBtn" class="menu-return-btn" href="menu.html">
+            <a id="backToMenuBtn" class="menu-return-btn" href="{{ route('menu') }}">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M4 6h7v7H4z"></path>
                 <path d="M13 6h7v7h-7z"></path>
@@ -469,7 +469,7 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="{{ asset('js/app.js') }}"></script>
 </body>
 </html>
 

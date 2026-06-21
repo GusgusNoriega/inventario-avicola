@@ -3342,6 +3342,382 @@ body.directory-page {
   overflow: auto;
 }
 
+html.customer-history-root,
+body.customer-history-page {
+  min-height: 100%;
+  overflow: auto;
+}
+
+body.customer-history-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(43, 199, 255, 0.08), transparent 34rem),
+    var(--bg-main);
+  color: var(--text-main);
+}
+
+.customer-history-view {
+  width: min(1500px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 48px;
+}
+
+.customer-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+}
+
+.customer-history-header h1 {
+  margin: 4px 0 6px;
+}
+
+.customer-history-meta {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.customer-history-message {
+  min-height: 24px;
+  margin: 10px 0;
+}
+
+.customer-history-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.customer-history-stats .directory-stat strong {
+  font-size: clamp(18px, 2vw, 26px);
+}
+
+.customer-history-filters {
+  padding: 22px;
+  margin-bottom: 28px;
+}
+
+.customer-history-filter-grid {
+  display: grid;
+  grid-template-columns: 1.5fr repeat(2, minmax(170px, 0.75fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.customer-history-filter-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.customer-history-section {
+  margin-top: 28px;
+}
+
+.customer-history-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.customer-history-section-head h2 {
+  margin: 3px 0 0;
+}
+
+.customer-ticket-list {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-ticket-list.is-loading {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.customer-ticket {
+  padding: 0;
+  overflow: hidden;
+}
+
+.customer-ticket-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.customer-ticket-head h3 {
+  margin: 9px 0 4px;
+  font-size: 20px;
+}
+
+.customer-ticket-head p,
+.customer-ticket-total span {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.customer-ticket-total {
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+  justify-content: center;
+}
+
+.customer-ticket-total strong {
+  margin-top: 4px;
+  color: var(--success);
+  font-size: 24px;
+}
+
+.customer-ticket-summary,
+.customer-ticket-prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding: 13px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.customer-ticket-summary span,
+.customer-ticket-prices span {
+  color: var(--text-muted);
+}
+
+.customer-ticket-summary strong,
+.customer-ticket-prices strong {
+  color: var(--text-main);
+}
+
+.customer-ticket-prices {
+  background: rgba(76, 175, 80, 0.06);
+}
+
+.customer-history-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.customer-history-section > .customer-history-table-wrap {
+  padding: 0;
+}
+
+.customer-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 820px;
+}
+
+.customer-history-table th,
+.customer-history-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.customer-history-table th {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.customer-history-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.customer-history-table tr.is-inactive {
+  opacity: 0.55;
+}
+
+.customer-history-empty-cell {
+  padding: 28px !important;
+  text-align: center !important;
+  color: var(--text-muted);
+}
+
+.customer-status {
+  display: inline-flex;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.customer-status-current,
+.customer-status-activa {
+  border-color: rgba(76, 175, 80, 0.45);
+  background: rgba(76, 175, 80, 0.12);
+  color: var(--success);
+}
+
+.customer-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.provider-history-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.provider-vehicle-panel {
+  margin-bottom: 16px;
+  padding: 22px;
+}
+
+.provider-vehicle-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.provider-vehicle-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.provider-vehicle-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-card-soft);
+}
+
+.provider-vehicle-card > div {
+  display: grid;
+  min-width: 0;
+}
+
+.provider-vehicle-card strong {
+  color: var(--text-main);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+}
+
+.provider-vehicle-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.provider-vehicle-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--secondary);
+  background: rgba(255, 208, 42, 0.1);
+}
+
+.provider-vehicle-icon svg {
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.provider-history-filter-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr repeat(2, minmax(160px, 0.75fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.provider-history-table {
+  min-width: 1320px;
+}
+
+.provider-history-table td:nth-child(2) {
+  display: grid;
+}
+
+.provider-history-table td:nth-child(2) small {
+  color: var(--text-muted);
+}
+
+.provider-destination-cliente {
+  border-color: rgba(43, 199, 255, 0.45);
+  background: rgba(43, 199, 255, 0.1);
+  color: var(--primary);
+}
+
+.provider-destination-almacen {
+  border-color: rgba(255, 208, 42, 0.45);
+  background: rgba(255, 208, 42, 0.1);
+  color: var(--secondary);
+}
+
+@media (max-width: 1100px) {
+  .customer-history-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .customer-history-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .provider-history-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .provider-history-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .customer-history-view {
+    width: min(100% - 20px, 1500px);
+    padding-top: 10px;
+  }
+
+  .customer-history-header,
+  .customer-ticket-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-ticket-total {
+    align-items: start;
+  }
+
+  .customer-history-stats,
+  .customer-history-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-history-stats,
+  .provider-history-filter-grid,
+  .provider-vehicle-form {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-history-filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .directory-page {
   background:
     radial-gradient(circle at top left, rgba(43, 199, 255, 0.08), transparent 34rem),

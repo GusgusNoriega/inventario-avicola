@@ -1,4 +1,4 @@
-const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
+import { apiRequest } from "./api-client.js";
 
 const DIRECTORY_TYPES = {
   clientes: {
@@ -7,8 +7,7 @@ const DIRECTORY_TYPES = {
     title: "Clientes registrados",
     formTitle: "Registrar cliente",
     editTitle: "Editar cliente",
-    saveLabel: "Guardar cliente",
-    prefix: "cli-local"
+    saveLabel: "Guardar cliente"
   },
   proveedores: {
     singular: "proveedor",
@@ -16,18 +15,23 @@ const DIRECTORY_TYPES = {
     title: "Proveedores registrados",
     formTitle: "Registrar proveedor",
     editTitle: "Editar proveedor",
-    saveLabel: "Guardar proveedor",
-    prefix: "prov-local"
+    saveLabel: "Guardar proveedor"
   }
 };
 
 const PRICE_FIELDS = [
-  { key: "pollo_vivo", inputId: "priceVivo", label: "Vivo" },
-  { key: "pollo_pelado", inputId: "pricePelado", label: "Pelado" },
-  { key: "pollo_beneficiado", inputId: "priceBeneficiado", label: "Beneficiado" }
+  { key: "pollo_vivo", apiKey: "POLLO_VIVO", inputId: "priceVivo", label: "Vivo" },
+  { key: "pollo_pelado", apiKey: "POLLO_PELADO", inputId: "pricePelado", label: "Pelado" },
+  { key: "pollo_beneficiado", apiKey: "POLLO_BENEFICIADO", inputId: "priceBeneficiado", label: "Beneficiado" }
 ];
 
 const ICONS = {
+  view: `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+  `,
   edit: `
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M4 20h4l11-11-4-4L4 16z"></path>
@@ -96,77 +100,31 @@ const elements = {
 let activeType = getTypeFromHash() || "clientes";
 let editingId = null;
 let pendingDeleteId = null;
-let directory = loadDirectory();
-
-function createEmptyDirectory() {
-  return {
-    clientes: [],
-    proveedores: []
-  };
-}
-
-function loadDirectory() {
-  try {
-    const raw = localStorage.getItem(PEOPLE_STORAGE_KEY);
-    if (!raw) {
-      return createEmptyDirectory();
-    }
-
-    const parsed = JSON.parse(raw);
-    return {
-      clientes: normalizeRecordList(parsed?.clientes, "clientes"),
-      proveedores: normalizeRecordList(parsed?.proveedores, "proveedores")
-    };
-  } catch {
-    return createEmptyDirectory();
-  }
-}
-
-function saveDirectory() {
-  localStorage.setItem(PEOPLE_STORAGE_KEY, JSON.stringify(directory));
-}
-
-function normalizeRecordList(records, type) {
-  if (!Array.isArray(records)) {
-    return [];
-  }
-
-  return records
-    .map((record) => normalizeRecord(record, type))
-    .filter(Boolean);
-}
-
-function normalizeRecord(record, type) {
-  const meta = DIRECTORY_TYPES[type] || DIRECTORY_TYPES.clientes;
-  const name = String(record?.name || record?.nombre || "").trim();
-  const id = String(record?.id || `${meta.prefix}-${Date.now()}`).trim();
-
-  if (!name || !id) {
-    return null;
-  }
-
-  const rawPrices = record?.pricesKg || record?.preciosKg || {};
-
-  return {
-    id,
-    type,
-    name,
-    nombre: name,
-    dni: String(record?.dni || "").trim(),
-    direccion: String(record?.direccion || "").trim(),
-    pricesKg: {
-      pollo_vivo: normalizePrice(rawPrices.pollo_vivo ?? record?.precioPolloVivoKg),
-      pollo_pelado: normalizePrice(rawPrices.pollo_pelado ?? record?.precioPolloPeladoKg),
-      pollo_beneficiado: normalizePrice(rawPrices.pollo_beneficiado ?? record?.precioPolloBeneficiadoKg)
-    },
-    createdAt: record?.createdAt || new Date().toISOString(),
-    updatedAt: record?.updatedAt || record?.createdAt || new Date().toISOString()
-  };
-}
+let searchTimer = null;
+let requestSequence = { clientes: 0, proveedores: 0 };
+let directory = { clientes: [], proveedores: [] };
+let totals = { clientes: 0, proveedores: 0 };
+let loading = { clientes: false, proveedores: false };
 
 function normalizePrice(value) {
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 10000) / 10000 : 0;
+}
+
+function normalizeRecord(record, type) {
+  return {
+    id: String(record.id),
+    type,
+    name: String(record.name || record.nombre || "").trim(),
+    dni: String(record.dni || record.numero_documento || "").trim(),
+    direccion: String(record.direccion || "").trim(),
+    pricesKg: PRICE_FIELDS.reduce((prices, field) => {
+      prices[field.key] = normalizePrice(record.pricesKg?.[field.key]);
+      return prices;
+    }, {}),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
 }
 
 function formatCurrency(value) {
@@ -195,6 +153,15 @@ function getRecordLabel(type = activeType) {
   return DIRECTORY_TYPES[type] || DIRECTORY_TYPES.clientes;
 }
 
+function getErrorMessage(error) {
+  const validationErrors = error?.data?.errors;
+  const firstError = validationErrors
+    ? Object.values(validationErrors).flat().find(Boolean)
+    : null;
+
+  return firstError || error?.message || "No se pudo completar la operación.";
+}
+
 function setMessage(text, isError = false) {
   elements.message.textContent = text || "";
   elements.message.classList.toggle("is-error", Boolean(isError));
@@ -203,6 +170,11 @@ function setMessage(text, isError = false) {
 function setGlobalPriceMessage(text, isError = false) {
   elements.globalPriceMessage.textContent = text || "";
   elements.globalPriceMessage.classList.toggle("is-error", Boolean(isError));
+}
+
+function setFormBusy(isBusy) {
+  elements.saveBtn.disabled = isBusy;
+  elements.clearBtn.disabled = isBusy;
 }
 
 function openGlobalPriceModal() {
@@ -217,7 +189,7 @@ function closeGlobalPriceModal() {
   setGlobalPriceMessage("");
 }
 
-function setActiveType(type, shouldUpdateHash = true) {
+function setActiveType(type, shouldUpdateHash = true, shouldLoad = true) {
   if (!DIRECTORY_TYPES[type]) {
     return;
   }
@@ -231,15 +203,16 @@ function setActiveType(type, shouldUpdateHash = true) {
   }
 
   render();
+
+  if (shouldLoad) {
+    void searchRecords(type, elements.search.value.trim());
+  }
 }
 
 function resetForm(shouldRender = true) {
   editingId = null;
   pendingDeleteId = null;
   elements.form.reset();
-  PRICE_FIELDS.forEach((field) => {
-    elements.priceInputs[field.key].value = "";
-  });
   elements.editBadge.hidden = true;
   setMessage("");
   setGlobalPriceMessage("");
@@ -251,11 +224,11 @@ function resetForm(shouldRender = true) {
 
 function readFormRecord() {
   const meta = getRecordLabel();
-  const name = elements.name.value.trim();
-  const dni = elements.dni.value.trim();
+  const name = elements.name.value.trim().toLocaleUpperCase("es-PE");
+  const dni = elements.dni.value.replace(/\D+/g, "");
   const direccion = elements.address.value.trim();
-  const pricesKg = PRICE_FIELDS.reduce((acc, field) => {
-    acc[field.key] = normalizePrice(elements.priceInputs[field.key].value);
+  const prices = PRICE_FIELDS.reduce((acc, field) => {
+    acc[field.apiKey] = normalizePrice(elements.priceInputs[field.key].value);
     return acc;
   }, {});
 
@@ -263,46 +236,30 @@ function readFormRecord() {
     return { error: `Ingresa el nombre del ${meta.singular}.` };
   }
 
-  if (!dni) {
-    return { error: "Ingresa DNI o RUC." };
+  if (![8, 11].includes(dni.length)) {
+    return { error: "El DNI debe tener 8 dígitos y el RUC 11 dígitos." };
   }
 
   if (!direccion) {
     return { error: "Ingresa la dirección." };
   }
 
-  const invalidPrice = PRICE_FIELDS.find((field) => pricesKg[field.key] <= 0);
+  const invalidPrice = PRICE_FIELDS.find((field) => prices[field.apiKey] <= 0);
   if (invalidPrice) {
     return { error: `Ingresa un precio válido para pollo ${invalidPrice.label.toLowerCase()}.` };
   }
 
-  const duplicated = getActiveRecords().some((record) => (
-    record.dni.toLowerCase() === dni.toLowerCase() && record.id !== editingId
-  ));
-
-  if (duplicated) {
-    return { error: `Ya existe un ${meta.singular} con ese DNI/RUC.` };
-  }
-
-  const now = new Date().toISOString();
-  const existing = getActiveRecords().find((record) => record.id === editingId);
-
   return {
     record: {
-      id: existing?.id || `${meta.prefix}-${Date.now()}`,
-      type: activeType,
-      name,
-      nombre: name,
-      dni,
+      nombre_razon_social: name,
+      numero_documento: dni,
       direccion,
-      pricesKg,
-      createdAt: existing?.createdAt || now,
-      updatedAt: now
+      precios: prices
     }
   };
 }
 
-function saveRecord(event) {
+async function saveRecord(event) {
   event.preventDefault();
 
   const meta = getRecordLabel();
@@ -313,90 +270,85 @@ function saveRecord(event) {
     return;
   }
 
-  const records = getActiveRecords();
-  const index = records.findIndex((record) => record.id === result.record.id);
+  setFormBusy(true);
+  setMessage(editingId ? "Guardando cambios..." : "Guardando...");
 
-  if (index >= 0) {
-    records[index] = result.record;
-  } else {
-    records.unshift(result.record);
+  try {
+    const path = editingId ? `/${activeType}/${editingId}` : `/${activeType}`;
+    const response = await apiRequest(path, {
+      method: editingId ? "PUT" : "POST",
+      body: JSON.stringify(result.record)
+    });
+
+    resetForm(false);
+    setMessage(response.message || `${meta.singular[0].toUpperCase()}${meta.singular.slice(1)} guardado.`);
+    await refreshType(activeType);
+  } catch (error) {
+    setMessage(getErrorMessage(error), true);
+  } finally {
+    setFormBusy(false);
+    render();
   }
-
-  directory[activeType] = records;
-  saveDirectory();
-  resetForm(false);
-  setMessage(`${meta.singular[0].toUpperCase()}${meta.singular.slice(1)} guardado.`);
-  setGlobalPriceMessage("");
-  render();
 }
 
-function getPriceField(fieldKey) {
-  return PRICE_FIELDS.find((field) => field.key === fieldKey) || PRICE_FIELDS[0];
+async function loadRecords(type, query = "", updateTotal = query === "") {
+  const requestId = ++requestSequence[type];
+  loading[type] = true;
+
+  if (type === activeType) {
+    renderList();
+  }
+
+  try {
+    const params = new URLSearchParams({ per_page: "100" });
+    if (query) {
+      params.set("buscar", query);
+    }
+
+    const response = await apiRequest(`/${type}?${params.toString()}`);
+
+    if (requestId !== requestSequence[type]) {
+      return;
+    }
+
+    directory[type] = (response.data || []).map((record) => normalizeRecord(record, type));
+    if (updateTotal) {
+      totals[type] = Number(response.meta?.total ?? directory[type].length);
+    }
+  } catch (error) {
+    if (requestId !== requestSequence[type]) {
+      return;
+    }
+
+    directory[type] = [];
+    setMessage(getErrorMessage(error), true);
+  } finally {
+    if (requestId === requestSequence[type]) {
+      loading[type] = false;
+      render();
+    }
+  }
 }
 
-function syncEditingFormPrices() {
-  if (!editingId) {
+async function refreshType(type) {
+  const query = type === activeType ? elements.search.value.trim() : "";
+
+  if (!query) {
+    await loadRecords(type);
     return;
   }
 
-  const record = getActiveRecords().find((item) => item.id === editingId);
-  if (!record) {
-    return;
-  }
-
-  PRICE_FIELDS.forEach((field) => {
-    elements.priceInputs[field.key].value = Number(record.pricesKg[field.key] || 0).toFixed(2);
-  });
+  const countResponse = await apiRequest(`/${type}?per_page=1`);
+  totals[type] = Number(countResponse.meta?.total ?? 0);
+  await loadRecords(type, query, false);
 }
 
-function applyGlobalPriceAdjustment(direction) {
-  const meta = getRecordLabel();
-  const records = getActiveRecords();
-  const amount = normalizePrice(elements.globalPriceAmount.value);
-  const field = getPriceField(elements.globalPriceType.value);
-  const multiplier = direction === "decrease" ? -1 : 1;
-
-  if (!records.length) {
-    setGlobalPriceMessage(`No hay ${meta.plural} para ajustar.`, true);
-    return;
-  }
-
-  if (amount <= 0) {
-    setGlobalPriceMessage("Ingresa un monto mayor a cero.", true);
-    return;
-  }
-
-  const blockedRecord = records.find((record) => (
-    normalizePrice((record.pricesKg[field.key] || 0) + multiplier * amount) <= 0
-  ));
-
-  if (blockedRecord) {
-    setGlobalPriceMessage(`La disminucion dejaria a ${blockedRecord.name} sin precio valido.`, true);
-    return;
-  }
-
-  const now = new Date().toISOString();
-  directory[activeType] = records.map((record) => ({
-    ...record,
-    pricesKg: {
-      ...record.pricesKg,
-      [field.key]: normalizePrice(record.pricesKg[field.key] + multiplier * amount)
-    },
-    updatedAt: now
-  }));
-
-  saveDirectory();
-  pendingDeleteId = null;
-  syncEditingFormPrices();
-  setMessage("");
-  setGlobalPriceMessage(
-    `${direction === "decrease" ? "Disminuido" : "Aumentado"} ${formatCurrency(amount)} en pollo ${field.label.toLowerCase()} para ${records.length} ${meta.plural}.`
-  );
-  render();
+async function searchRecords(type, query) {
+  await loadRecords(type, query, query === "");
 }
 
 function editRecord(id) {
-  const record = getActiveRecords().find((item) => item.id === id);
+  const record = getActiveRecords().find((item) => item.id === String(id));
   if (!record) {
     return;
   }
@@ -415,45 +367,84 @@ function editRecord(id) {
   elements.name.focus();
 }
 
-function deleteRecord(id) {
+async function deleteRecord(id) {
   const meta = getRecordLabel();
-  const record = getActiveRecords().find((item) => item.id === id);
+  const record = getActiveRecords().find((item) => item.id === String(id));
   if (!record) {
     return;
   }
 
-  if (pendingDeleteId !== id) {
-    pendingDeleteId = id;
-    setMessage(`Pulsa eliminar otra vez para borrar ${record.name}.`, true);
+  if (pendingDeleteId !== record.id) {
+    pendingDeleteId = record.id;
+    setMessage(`Pulsa eliminar otra vez para desactivar a ${record.name}.`, true);
     renderList();
     return;
   }
 
   pendingDeleteId = null;
-  directory[activeType] = getActiveRecords().filter((item) => item.id !== id);
-  saveDirectory();
 
-  if (editingId === id) {
-    resetForm(false);
+  try {
+    const response = await apiRequest(`/${activeType}/${record.id}`, { method: "DELETE" });
+    if (editingId === record.id) {
+      resetForm(false);
+    }
+    setMessage(response.message || `${meta.singular[0].toUpperCase()}${meta.singular.slice(1)} desactivado.`);
+    await refreshType(activeType);
+  } catch (error) {
+    setMessage(getErrorMessage(error), true);
   }
-
-  setMessage(`${meta.singular[0].toUpperCase()}${meta.singular.slice(1)} eliminado.`);
-  render();
 }
 
-function recordMatchesSearch(record, query) {
-  if (!query) {
-    return true;
+async function applyGlobalPriceAdjustment(direction) {
+  const meta = getRecordLabel();
+  const amount = normalizePrice(elements.globalPriceAmount.value);
+  const field = PRICE_FIELDS.find((item) => item.key === elements.globalPriceType.value) || PRICE_FIELDS[0];
+
+  if (amount <= 0) {
+    setGlobalPriceMessage("Ingresa un monto mayor a cero.", true);
+    return;
   }
 
-  const haystack = [
-    record.name,
-    record.dni,
-    record.direccion,
-    PRICE_FIELDS.map((field) => record.pricesKg[field.key]).join(" ")
-  ].join(" ").toLowerCase();
+  elements.increaseGlobalPriceBtn.disabled = true;
+  elements.decreaseGlobalPriceBtn.disabled = true;
+  setGlobalPriceMessage("Actualizando precios...");
 
-  return haystack.includes(query);
+  try {
+    const response = await apiRequest(`/${activeType}/precios/ajuste-global`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        tipo_pollo: field.apiKey,
+        monto: amount,
+        direccion: direction === "decrease" ? "DISMINUIR" : "AUMENTAR"
+      })
+    });
+
+    await refreshType(activeType);
+    syncEditingFormPrices();
+    setGlobalPriceMessage(
+      `${direction === "decrease" ? "Disminuido" : "Aumentado"} ${formatCurrency(amount)} en pollo ${field.label.toLowerCase()} para ${response.affected} ${meta.plural}.`
+    );
+  } catch (error) {
+    setGlobalPriceMessage(getErrorMessage(error), true);
+  } finally {
+    elements.increaseGlobalPriceBtn.disabled = false;
+    elements.decreaseGlobalPriceBtn.disabled = false;
+  }
+}
+
+function syncEditingFormPrices() {
+  if (!editingId) {
+    return;
+  }
+
+  const record = getActiveRecords().find((item) => item.id === editingId);
+  if (!record) {
+    return;
+  }
+
+  PRICE_FIELDS.forEach((field) => {
+    elements.priceInputs[field.key].value = Number(record.pricesKg[field.key] || 0).toFixed(2);
+  });
 }
 
 function renderFormHeader() {
@@ -472,15 +463,11 @@ function renderTabs() {
 }
 
 function renderStats() {
-  const clientTotal = directory.clientes.length;
-  const providerTotal = directory.proveedores.length;
   const meta = getRecordLabel();
-  const activeTotal = getActiveRecords().length;
-
-  elements.clientCount.textContent = String(clientTotal);
-  elements.providerCount.textContent = String(providerTotal);
+  elements.clientCount.textContent = String(totals.clientes);
+  elements.providerCount.textContent = String(totals.proveedores);
   elements.activeTypeLabel.textContent = meta.plural;
-  elements.activeTypeCount.textContent = String(activeTotal);
+  elements.activeTypeCount.textContent = String(totals[activeType]);
   elements.globalPriceScope.textContent = meta.plural;
 }
 
@@ -494,6 +481,17 @@ function renderRecordCard(record) {
       <strong>${formatCurrency(record.pricesKg[field.key])}</strong>
     </div>
   `).join("");
+  const detailTemplate = activeType === "clientes"
+    ? elements.root.dataset.clientDetailUrl
+    : elements.root.dataset.providerDetailUrl;
+  const detailUrl = detailTemplate?.replace("__ID__", encodeURIComponent(record.id));
+  const detailAction = detailUrl
+    ? `
+        <a class="directory-record-action" href="${escapeHtml(detailUrl)}" aria-label="Ver detalle de ${escapeHtml(record.name)}" title="Ver detalle e historial">
+          ${ICONS.view}
+        </a>
+      `
+    : "";
 
   return `
     <article class="directory-record card" data-record-id="${escapeHtml(record.id)}">
@@ -510,10 +508,11 @@ function renderRecordCard(record) {
         ${priceItems}
       </div>
       <div class="directory-record-actions">
+        ${detailAction}
         <button class="directory-record-action" type="button" data-action="edit" data-id="${escapeHtml(record.id)}" aria-label="Editar ${escapeHtml(record.name)}" title="Editar">
           ${ICONS.edit}
         </button>
-        <button class="directory-record-action directory-record-action-danger ${isConfirmingDelete ? "is-confirming" : ""}" type="button" data-action="delete" data-id="${escapeHtml(record.id)}" aria-label="${isConfirmingDelete ? "Confirmar eliminación de" : "Eliminar"} ${escapeHtml(record.name)}" title="${isConfirmingDelete ? "Confirmar" : "Eliminar"}">
+        <button class="directory-record-action directory-record-action-danger ${isConfirmingDelete ? "is-confirming" : ""}" type="button" data-action="delete" data-id="${escapeHtml(record.id)}" aria-label="${isConfirmingDelete ? "Confirmar desactivación de" : "Desactivar"} ${escapeHtml(record.name)}" title="${isConfirmingDelete ? "Confirmar" : "Desactivar"}">
           ${ICONS.delete}
         </button>
       </div>
@@ -523,18 +522,24 @@ function renderRecordCard(record) {
 
 function renderList() {
   const meta = getRecordLabel();
-  const query = elements.search.value.trim().toLowerCase();
-  const records = getActiveRecords()
-    .filter((record) => recordMatchesSearch(record, query))
-    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-
+  const query = elements.search.value.trim();
   elements.listTitle.textContent = meta.title;
 
+  if (loading[activeType]) {
+    elements.list.innerHTML = `
+      <div class="directory-empty">
+        <strong>Cargando ${escapeHtml(meta.plural)}...</strong>
+      </div>
+    `;
+    return;
+  }
+
+  const records = getActiveRecords();
   if (!records.length) {
     elements.list.innerHTML = `
       <div class="directory-empty">
         <strong>Sin ${escapeHtml(meta.plural)}.</strong>
-        <span>${query ? "No hay coincidencias con la búsqueda." : "Aún no hay registros guardados."}</span>
+        <span>${query ? "No hay coincidencias por nombre o documento." : "Aún no hay registros guardados."}</span>
       </div>
     `;
     return;
@@ -557,8 +562,16 @@ elements.recordTypeButtons.forEach((button) => {
 });
 
 elements.form.addEventListener("submit", saveRecord);
+elements.name.addEventListener("blur", () => {
+  elements.name.value = elements.name.value.trim().toLocaleUpperCase("es-PE");
+});
 elements.clearBtn.addEventListener("click", () => resetForm(true));
-elements.search.addEventListener("input", renderList);
+elements.search.addEventListener("input", () => {
+  window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(() => {
+    void searchRecords(activeType, elements.search.value.trim());
+  }, 300);
+});
 elements.openGlobalPriceModalBtn.addEventListener("click", openGlobalPriceModal);
 elements.closeGlobalPriceModalBtn.addEventListener("click", closeGlobalPriceModal);
 elements.increaseGlobalPriceBtn.addEventListener("click", () => applyGlobalPriceAdjustment("increase"));
@@ -584,7 +597,7 @@ elements.list.addEventListener("click", (event) => {
   }
 
   if (actionButton.dataset.action === "delete") {
-    deleteRecord(id);
+    void deleteRecord(id);
   }
 });
 
@@ -595,14 +608,8 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-window.addEventListener("storage", (event) => {
-  if (event.key !== PEOPLE_STORAGE_KEY) {
-    return;
-  }
-
-  directory = loadDirectory();
-  resetForm(false);
-  render();
+window.addEventListener("auth:expired", () => {
+  setMessage("La sesión de la API venció. Inicia sesión nuevamente.", true);
 });
 
 document.addEventListener("keydown", (event) => {
@@ -611,4 +618,8 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-setActiveType(activeType, Boolean(window.location.hash));
+setActiveType(activeType, Boolean(window.location.hash), false);
+await Promise.all([
+  loadRecords("clientes"),
+  loadRecords("proveedores")
+]);

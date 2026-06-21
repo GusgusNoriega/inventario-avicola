@@ -4,10 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Clientes y Proveedores | Sistema Pollos</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body class="directory-page">
-  <main class="directory-view" data-directory-view="clientes">
+  <main
+    class="directory-view"
+    data-directory-view="clientes"
+    data-client-detail-url="{{ url('/directorio/clientes/__ID__') }}"
+    data-provider-detail-url="{{ url('/directorio/proveedores/__ID__') }}"
+  >
     <header class="directory-header card">
       <div class="directory-title">
         <p class="eyebrow">Directorio comercial</p>
@@ -41,7 +46,7 @@
           </svg>
           <span>Cambiar precio global</span>
         </button>
-        <a class="menu-return-btn" href="menu.html">
+        <a class="menu-return-btn" href="{{ route('menu') }}">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M4 6h7v7H4z"></path>
           <path d="M13 6h7v7h-7z"></path>
@@ -144,7 +149,7 @@
               <path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"></path>
               <path d="M16 16l5 5"></path>
             </svg>
-            <input id="directorySearch" type="search" placeholder="Buscar por nombre, DNI o dirección">
+            <input id="directorySearch" type="search" placeholder="Buscar por nombre o número de documento">
           </label>
         </div>
         <div id="directoryList" class="directory-list" aria-live="polite"></div>
@@ -200,6 +205,6 @@
     </section>
   </div>
 
-  <script src="clientes.js"></script>
+  <script type="module" src="{{ asset('js/clientes.js') }}"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Menú Principal | Sistema Pollos</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body class="menu-page">
   <section id="menuView" class="main-menu-view" aria-labelledby="menuTitle">
@@ -19,7 +19,7 @@
       </header>
 
       <nav class="menu-grid" aria-label="Vistas del sistema">
-        <a class="menu-tile menu-tile-primary" href="index.html#recepcion">
+        <a class="menu-tile menu-tile-primary" href="{{ route('operacion') }}#recepcion">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M3 7h11v9H3z"></path>
@@ -35,7 +35,7 @@
           <span class="menu-status">Disponible</span>
         </a>
 
-        <a class="menu-tile menu-tile-primary" href="index.html#despacho">
+        <a class="menu-tile menu-tile-primary" href="{{ route('operacion') }}#despacho">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M4 5h16v4H4z"></path>
@@ -68,7 +68,7 @@
           <span class="menu-status menu-status-soon">Por crear</span>
         </a>
 
-        <a class="menu-tile menu-tile-primary" href="clientes.html">
+        <a class="menu-tile menu-tile-primary" href="{{ route('directorio') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path>
@@ -105,6 +105,6 @@
     </div>
   </section>
 
-  <script src="menu.js"></script>
+  <script src="{{ asset('js/menu.js') }}"></script>
 </body>
 </html>
