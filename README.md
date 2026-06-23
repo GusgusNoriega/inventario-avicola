@@ -59,3 +59,4 @@ Documentación adicional:
 - [Arquitectura de la API](docs/arquitectura-api.md)
 - [Esquema de base de datos](docs/esquema-base-datos.md)
 - [Migraciones y base local](docs/migraciones-base-datos.md)
+- [Despliegue en cPanel sin Node ni npm](docs/despliegue-cpanel.md)
