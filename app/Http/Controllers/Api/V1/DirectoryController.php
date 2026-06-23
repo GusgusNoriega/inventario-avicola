@@ -9,6 +9,7 @@ use App\Http\Requests\Directory\UpdateTerceroRequest;
 use App\Http\Resources\TerceroResource;
 use App\Models\Empresa;
 use App\Models\ListaPrecio;
+use App\Models\ProveedorVehiculo;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\User;
@@ -36,6 +37,22 @@ class DirectoryController extends Controller
         $search = trim($validated['buscar'] ?? '');
         $perPage = (int) ($validated['per_page'] ?? 100);
 
+        $relations = [
+            'roles',
+            'listasPrecios' => fn ($query) => $query
+                ->where('operacion', $operation)
+                ->where('estado', ListaPrecio::STATUS_ACTIVE),
+            'listasPrecios.preciosVigentes.tipoPollo',
+        ];
+
+        if ($role === TerceroRole::PROVIDER) {
+            $relations['vehiculosProveedor'] = fn ($query) => $query
+                ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
+                ->whereNull('vigente_hasta')
+                ->with('vehiculo')
+                ->orderBy('id');
+        }
+
         $records = Tercero::query()
             ->where('empresa_id', $this->companyId($request))
             ->where('estado', Tercero::STATUS_ACTIVE)
@@ -45,13 +62,7 @@ class DirectoryController extends Controller
                     ->where('nombre_razon_social', 'like', "%{$search}%")
                     ->orWhere('numero_documento', 'like', "%{$search}%");
             }))
-            ->with([
-                'roles',
-                'listasPrecios' => fn ($query) => $query
-                    ->where('operacion', $operation)
-                    ->where('estado', ListaPrecio::STATUS_ACTIVE),
-                'listasPrecios.preciosVigentes.tipoPollo',
-            ])
+            ->with($relations)
             ->orderByDesc('updated_at')
             ->paginate($perPage)
             ->withQueryString();

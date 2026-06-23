@@ -72,6 +72,57 @@ class DirectoryApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 3);
     }
 
+    public function test_client_can_be_created_without_specific_prices(): void
+    {
+        $payload = $this->payload();
+        unset($payload['precios']);
+
+        $this->postJson('/api/v1/clientes', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.pricesKg.pollo_vivo', null)
+            ->assertJsonPath('data.pricesKg.pollo_pelado', null)
+            ->assertJsonPath('data.pricesKg.pollo_beneficiado', null);
+
+        $this->assertDatabaseCount('listas_precios', 0);
+        $this->assertDatabaseCount('precios_historial', 0);
+    }
+
+    public function test_provider_still_requires_all_specific_prices(): void
+    {
+        $payload = $this->payload();
+        unset($payload['precios']);
+
+        $this->postJson('/api/v1/proveedores', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('precios');
+    }
+
+    public function test_client_specific_price_can_be_cleared_to_use_the_global_price(): void
+    {
+        $recordId = $this->postJson('/api/v1/clientes', $this->payload())
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->putJson("/api/v1/clientes/{$recordId}", $this->payload([
+            'precios' => [
+                TipoPollo::CHICKEN_LIVE => null,
+                TipoPollo::CHICKEN_DRESSED => 9.5,
+                TipoPollo::CHICKEN_PROCESSED => 10.5,
+            ],
+        ]))
+            ->assertOk()
+            ->assertJsonPath('data.pricesKg.pollo_vivo', null)
+            ->assertJsonPath('data.pricesKg.pollo_pelado', 9.5);
+
+        $liveTypeId = DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::CHICKEN_LIVE)
+            ->value('id');
+        $this->assertDatabaseMissing('precios_historial', [
+            'tipo_pollo_id' => $liveTypeId,
+            'vigente_hasta' => null,
+        ]);
+    }
+
     public function test_existing_third_party_can_also_become_a_provider(): void
     {
         $this->postJson('/api/v1/clientes', $this->payload())->assertCreated();

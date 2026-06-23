@@ -99,17 +99,17 @@
 
             <label class="field">
               Precio pollo vivo (kg)
-              <input id="priceVivo" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+              <input id="priceVivo" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el global">
             </label>
 
             <label class="field">
               Precio pollo pelado (kg)
-              <input id="pricePelado" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+              <input id="pricePelado" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el global">
             </label>
 
             <label class="field">
               Precio pollo beneficiado (kg)
-              <input id="priceBeneficiado" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+              <input id="priceBeneficiado" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el global">
             </label>
           </div>
 

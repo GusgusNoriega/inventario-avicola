@@ -183,6 +183,12 @@ class ProviderHistoryApiTest extends TestCase
         $this->getJson("/api/v1/proveedores/{$this->providerId}/historial")
             ->assertOk()
             ->assertJsonCount(2, 'data.vehicles');
+        $this->getJson('/api/v1/operacion/proveedores?per_page=100')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $this->providerId)
+            ->assertJsonCount(2, 'data.0.vehicles')
+            ->assertJsonPath('data.0.vehicles.0.plate', 'ABC-123')
+            ->assertJsonPath('data.0.vehicles.1.plate', 'XYZ-999');
 
         $this->deleteJson("/api/v1/proveedores/{$this->providerId}/vehiculos/{$first}")
             ->assertOk();

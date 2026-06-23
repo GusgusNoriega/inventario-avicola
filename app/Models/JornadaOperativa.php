@@ -19,6 +19,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class JornadaOperativa extends Model
 {
+    public const STATUS_OPEN = 'ABIERTA';
+
+    public const STATUS_CLOSED = 'CERRADA';
+
     public $timestamps = false;
 
     protected $table = 'jornadas_operativas';

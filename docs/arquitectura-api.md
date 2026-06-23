@@ -71,6 +71,10 @@ una sola vez durante el login.
 | `GET` | `/api/v1/proveedores/{id}/historial` | Token Bearer; acceso público temporal en local |
 | `POST` | `/api/v1/proveedores/{id}/vehiculos` | Token Bearer; acceso público temporal en local |
 | `DELETE` | `/api/v1/proveedores/{id}/vehiculos/{asignacion}` | Token Bearer; acceso público temporal en local |
+| `GET` | `/api/v1/operacion/catalogo` | `DESPACHOS_VER`; acceso público temporal en local |
+| `GET` | `/api/v1/operacion/clientes` | `DESPACHOS_VER`; acceso público temporal en local |
+| `GET` | `/api/v1/operacion/proveedores` | `DESPACHOS_VER`; acceso público temporal en local |
+| `POST` | `/api/v1/operacion/tickets` | `DESPACHOS_CREAR`; acceso público temporal en local |
 
 Los endpoints del directorio buscan exclusivamente por nombre o número de
 documento. La creación registra el tercero, su rol y su lista de precios con
@@ -98,6 +102,37 @@ normaliza a mayúsculas, reutiliza el vehículo si ya existe y crea la relación
 en `proveedor_vehiculos`. Una placa no puede estar asignada activamente a dos
 proveedores al mismo tiempo. Al retirarla se desactiva la relación sin borrar
 el vehículo ni su historial.
+
+## Registro transaccional de tickets
+
+La pantalla operativa conserva las pesadas en el navegador mientras el ticket
+sea un borrador. No se crea ninguna fila en `tickets_despacho`, `ticket_precios`
+o `pesadas` al pulsar **Agregar registro**.
+
+Al pulsar **Registrar ticket**, el frontend envía el destino y todas las
+pesadas a `POST /api/v1/operacion/tickets`. La pantalla de despacho no muestra,
+envía ni administra precios. La API resuelve internamente la lista vigente del
+cliente y usa la lista general vigente como respaldo; si la configuración
+interna necesaria no existe, rechaza el ticket completo. La API ejecuta en una
+sola transacción:
+
+1. validación de cliente o almacén de destino;
+2. resolución de la jornada operativa;
+3. generación del código correlativo;
+4. congelamiento de precios en `ticket_precios`;
+5. validación de proveedores, placas, almacenes, tipos de pollo y javas;
+6. recálculo de aves, tara y peso neto;
+7. creación del ticket cerrado y todas sus pesadas.
+
+Si falla cualquier pesada, la transacción se revierte completa. El campo
+`referencia_externa` contiene el UUID del borrador y evita duplicados cuando
+una solicitud se reintenta.
+
+Cuando se actualiza el precio específico de un cliente, la misma transacción
+revaloriza sus `ticket_precios` correspondientes a la jornada operativa
+vigente. Esto cubre despachos realizados después del corte de las 9:00 p. m.
+que se cobran durante la mañana siguiente. Los tickets de jornadas anteriores
+no se modifican y cada cambio queda registrado en `auditoria_eventos`.
 
 Durante el desarrollo puede utilizarse:
 

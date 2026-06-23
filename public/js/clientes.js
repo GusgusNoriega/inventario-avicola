@@ -108,7 +108,7 @@ let loading = { clientes: false, proveedores: false };
 
 function normalizePrice(value) {
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 10000) / 10000 : 0;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 10000) / 10000 : null;
 }
 
 function normalizeRecord(record, type) {
@@ -128,7 +128,9 @@ function normalizeRecord(record, type) {
 }
 
 function formatCurrency(value) {
-  return `S/ ${Number(value || 0).toFixed(2)}`;
+  return value === null || value === undefined
+    ? "Sin precio"
+    : `S/ ${Number(value).toFixed(2)}`;
 }
 
 function escapeHtml(value) {
@@ -228,7 +230,8 @@ function readFormRecord() {
   const dni = elements.dni.value.replace(/\D+/g, "");
   const direccion = elements.address.value.trim();
   const prices = PRICE_FIELDS.reduce((acc, field) => {
-    acc[field.apiKey] = normalizePrice(elements.priceInputs[field.key].value);
+    const rawValue = elements.priceInputs[field.key].value.trim();
+    acc[field.apiKey] = rawValue === "" ? null : normalizePrice(rawValue);
     return acc;
   }, {});
 
@@ -244,7 +247,12 @@ function readFormRecord() {
     return { error: "Ingresa la dirección." };
   }
 
-  const invalidPrice = PRICE_FIELDS.find((field) => prices[field.apiKey] <= 0);
+  const invalidPrice = PRICE_FIELDS.find((field) => {
+    const price = prices[field.apiKey];
+    return activeType === "proveedores"
+      ? price === null || price <= 0
+      : price !== null && price <= 0;
+  });
   if (invalidPrice) {
     return { error: `Ingresa un precio válido para pollo ${invalidPrice.label.toLowerCase()}.` };
   }
@@ -359,7 +367,10 @@ function editRecord(id) {
   elements.dni.value = record.dni;
   elements.address.value = record.direccion;
   PRICE_FIELDS.forEach((field) => {
-    elements.priceInputs[field.key].value = Number(record.pricesKg[field.key] || 0).toFixed(2);
+    const price = record.pricesKg[field.key];
+    elements.priceInputs[field.key].value = price === null || price === undefined
+      ? ""
+      : Number(price).toFixed(2);
   });
   elements.editBadge.hidden = false;
   setMessage("");
@@ -443,7 +454,10 @@ function syncEditingFormPrices() {
   }
 
   PRICE_FIELDS.forEach((field) => {
-    elements.priceInputs[field.key].value = Number(record.pricesKg[field.key] || 0).toFixed(2);
+    const price = record.pricesKg[field.key];
+    elements.priceInputs[field.key].value = price === null || price === undefined
+      ? ""
+      : Number(price).toFixed(2);
   });
 }
 
@@ -452,6 +466,13 @@ function renderFormHeader() {
   elements.formTitle.textContent = editingId ? meta.editTitle : meta.formTitle;
   elements.saveBtn.querySelector("span").textContent = editingId ? "Guardar cambios" : meta.saveLabel;
   elements.editBadge.hidden = !editingId;
+  PRICE_FIELDS.forEach((field) => {
+    const input = elements.priceInputs[field.key];
+    input.required = activeType === "proveedores";
+    input.placeholder = activeType === "proveedores"
+      ? "0.00"
+      : "Vacío: usa el global";
+  });
 }
 
 function renderTabs() {

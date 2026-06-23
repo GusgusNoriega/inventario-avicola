@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'jornada_id',
     'codigo',
+    'referencia_externa',
     'canal',
     'cliente_destino_id',
     'almacen_destino_id',
@@ -21,6 +22,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class TicketDespacho extends Model
 {
+    public const STATUS_OPEN = 'ABIERTO';
+
+    public const STATUS_CLOSED = 'CERRADO';
+
     protected $table = 'tickets_despacho';
 
     /**

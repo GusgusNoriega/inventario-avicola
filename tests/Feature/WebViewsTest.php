@@ -12,6 +12,7 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Menú principal')
             ->assertSee(route('operacion'), false)
+            ->assertSee(route('jornada'), false)
             ->assertSee(route('directorio'), false);
     }
 
@@ -20,7 +21,23 @@ class WebViewsTest extends TestCase
         $this->get('/operacion')
             ->assertOk()
             ->assertSee('Entrada de Camiones de Pollos')
+            ->assertSee('<select id="truckPlate"', false)
+            ->assertDontSee('Precio general pollo')
+            ->assertDontSee('generalPriceVivoKg', false)
+            ->assertSee('type="module"', false)
             ->assertSee(asset('js/app.js'), false);
+    }
+
+    public function test_operation_javascript_does_not_render_or_send_prices(): void
+    {
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringNotContainsString('general_prices', $javascript);
+        $this->assertStringNotContainsString('Total S/', $javascript);
+        $this->assertStringNotContainsString('Precios cliente', $javascript);
+        $this->assertStringNotContainsString('Precios generales', $javascript);
+        $this->assertStringNotContainsString('response.data?.prices', $javascript);
     }
 
     public function test_directory_view_is_available_without_database_queries(): void
@@ -29,6 +46,16 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Clientes y proveedores')
             ->assertSee(asset('js/clientes.js'), false);
+    }
+
+    public function test_journey_configuration_view_is_available_without_database_queries(): void
+    {
+        $this->get('/jornada')
+            ->assertOk()
+            ->assertSee('Proveedores de la jornada')
+            ->assertSee('Precios globales')
+            ->assertSee('solo como referencia')
+            ->assertSee(asset('js/jornada.js'), false);
     }
 
     public function test_customer_history_view_is_available_without_database_queries(): void

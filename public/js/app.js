@@ -1,5 +1,7 @@
 ﻿const STORAGE_KEY = "sistema-pollos-state-v1";
 
+import { apiRequest } from "./api-client.js";
+
 const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
 
 const FONT_SIZE_STORAGE_KEY = "sistema-pollos-font-size-v1";
@@ -39,7 +41,6 @@ const CUSTOM_FONT_SIZE_GROUPS = [
       { id: "truckLabel", label: "Etiquetas tickets", type: "letra", cssVar: "--fs-truck-label", defaultPx: 12, min: 9, max: 24 },
       { id: "truckNumber", label: "Números resumen ticket", type: "número", cssVar: "--fs-truck-number", defaultPx: 16, min: 10, max: 36 },
       { id: "truckClientName", label: "Nombre del cliente", type: "letra", cssVar: "--fs-truck-client-name", defaultPx: 12, min: 9, max: 28 },
-      { id: "truckPrice", label: "Texto de precios ticket", type: "letra", cssVar: "--fs-truck-price", defaultPx: 12, min: 9, max: 28 },
       { id: "truckTableHead", label: "Encabezados tabla", type: "letra", cssVar: "--fs-truck-table-head", defaultPx: 12, min: 8, max: 24 },
       { id: "truckTableId", label: "Columna # registro", type: "número", cssVar: "--fs-truck-table-id", defaultPx: 13, min: 8, max: 26 },
       { id: "truckTableType", label: "Columna tipo pollo", type: "letra", cssVar: "--fs-truck-table-type", defaultPx: 12, min: 8, max: 26 },
@@ -56,7 +57,6 @@ const CUSTOM_FONT_SIZE_GROUPS = [
       { id: "helperText", label: "Mensajes y estadisticas", type: "letra", cssVar: "--fs-helper-text", defaultPx: 14, min: 10, max: 28 },
       { id: "selectedLabel", label: "Etiquetas ticket seleccionado", type: "letra", cssVar: "--fs-selected-label", defaultPx: 12, min: 9, max: 24 },
       { id: "selectedNumber", label: "Números ticket seleccionado", type: "número", cssVar: "--fs-selected-number", defaultPx: 19, min: 11, max: 42 },
-      { id: "selectedTotal", label: "Total S/ seleccionado", type: "número", cssVar: "--fs-selected-total", defaultPx: 21, min: 12, max: 48 },
       { id: "keypadValue", label: "Número teclado táctil", type: "número", cssVar: "--fs-keypad-value", defaultPx: 42, min: 22, max: 80 },
       { id: "keypadNumber", label: "Botones teclado táctil", type: "número", cssVar: "--fs-keypad-number", defaultPx: 29, min: 16, max: 58 }
     ]
@@ -65,9 +65,9 @@ const CUSTOM_FONT_SIZE_GROUPS = [
 const CUSTOM_FONT_SIZE_ITEMS = CUSTOM_FONT_SIZE_GROUPS.flatMap((group) => group.items);
 
 const CHICKEN_TYPES = [
-  { id: "pollo_vivo", label: "Pollo vivo", shortLabel: "Vivo", tagClass: "tag-pollo-vivo", defaultPriceKg: 8.5 },
-  { id: "pollo_pelado", label: "Pollo pelado", shortLabel: "Pelado", tagClass: "tag-pollo-pelado", defaultPriceKg: 8.5 },
-  { id: "pollo_beneficiado", label: "Pollo beneficiado", shortLabel: "Benef.", tagClass: "tag-pollo-beneficiado", defaultPriceKg: 8.5 }
+  { id: "pollo_vivo", apiCode: "POLLO_VIVO", label: "Pollo vivo", shortLabel: "Vivo", tagClass: "tag-pollo-vivo" },
+  { id: "pollo_pelado", apiCode: "POLLO_PELADO", label: "Pollo pelado", shortLabel: "Pelado", tagClass: "tag-pollo-pelado" },
+  { id: "pollo_beneficiado", apiCode: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "Benef.", tagClass: "tag-pollo-beneficiado" }
 ];
 const DISPATCH_CHICKEN_TYPES = CHICKEN_TYPES.filter((type) => type.id !== "pollo_beneficiado");
 
@@ -82,12 +82,12 @@ const LEGACY_TYPE_MAP = {
 };
 
 const CLIENTS = [
-  { id: "cli-001", name: "Rogelio Oscar Cruz Alvino", pricesKg: { pollo_vivo: 8.3, pollo_pelado: 8.7 } },
-  { id: "cli-002", name: "Ursula Huaman", pricesKg: { pollo_vivo: 8.1, pollo_pelado: 8.5 } },
-  { id: "cli-003", name: "Avicola San Fernando", pricesKg: { pollo_vivo: 8.6, pollo_pelado: 9.0 } },
-  { id: "cli-004", name: "Distribuidora Polleria Central", pricesKg: { pollo_vivo: 8.4, pollo_pelado: 8.8 } },
-  { id: "cli-005", name: "Comercializadora El Corral", pricesKg: { pollo_vivo: 8.2, pollo_pelado: 8.6 } },
-  { id: "cli-006", name: "Mercado Mayorista La Esperanza", pricesKg: { pollo_vivo: 8.5, pollo_pelado: 8.9 } }
+  { id: "cli-001", name: "Rogelio Oscar Cruz Alvino" },
+  { id: "cli-002", name: "Ursula Huaman" },
+  { id: "cli-003", name: "Avicola San Fernando" },
+  { id: "cli-004", name: "Distribuidora Polleria Central" },
+  { id: "cli-005", name: "Comercializadora El Corral" },
+  { id: "cli-006", name: "Mercado Mayorista La Esperanza" }
 ];
 
 const WAREHOUSE_DESTINATIONS = [
@@ -95,13 +95,17 @@ const WAREHOUSE_DESTINATIONS = [
     id: "destino-almacen-1",
     name: "Almacén 1",
     destinationType: "almacen",
-    warehouseNumber: 1
+    warehouseNumber: 1,
+    databaseId: null,
+    warehouseCode: "ALMACEN_1"
   },
   {
     id: "destino-almacen-2",
     name: "Almacén 2",
     destinationType: "almacen",
-    warehouseNumber: 2
+    warehouseNumber: 2,
+    databaseId: null,
+    warehouseCode: "ALMACEN_2"
   }
 ];
 const WAREHOUSE_ORIGINS = WAREHOUSE_DESTINATIONS.map((warehouse) => ({
@@ -110,20 +114,17 @@ const WAREHOUSE_ORIGINS = WAREHOUSE_DESTINATIONS.map((warehouse) => ({
   nombre: warehouse.name,
   originType: "almacen",
   warehouseNumber: warehouse.warehouseNumber,
+  databaseId: warehouse.databaseId,
+  warehouseCode: warehouse.warehouseCode,
   dni: "",
   direccion: ""
 }));
 
 const VALID_TYPES = new Set(DISPATCH_CHICKEN_TYPES.map((type) => type.id));
 const VALID_WEIGHT_SOURCES = new Set(["1", "2", "manual"]);
-const DEFAULT_GENERAL_PRICES_KG = {
-  pollo_vivo: 8.5,
-  pollo_pelado: 8.5,
-  pollo_beneficiado: 8.5
-};
 const CRATE_TYPES = [
-  { id: "java_700", label: "Java 7.00 kg", weightKg: 7.0 },
-  { id: "java_690", label: "Java 6.90 kg", weightKg: 6.9 }
+  { id: "java_700", apiCode: "JAVA_700", label: "Java 7.00 kg", weightKg: 7.0 },
+  { id: "java_690", apiCode: "JAVA_690", label: "Java 6.90 kg", weightKg: 6.9 }
 ];
 const DEFAULT_CRATE_TYPE_ID = CRATE_TYPES[0].id;
 const VALID_CRATE_TYPE_IDS = new Set(CRATE_TYPES.map((crate) => crate.id));
@@ -136,6 +137,7 @@ const MAX_TRUCK_PLATE_LENGTH = 15;
 const SCALE_IDS = [1, 2];
 const MAX_SCALE_RAW_LENGTH = 160;
 const SCALE_PERSIST_INTERVAL_MS = 1000;
+const SCALE_AUTO_RECONNECT_DELAY_MS = 1200;
 const KG_PER_LB = 0.45359237;
 const SCALE_SERIAL_DEFAULTS = {
   baudRate: 9600,
@@ -185,6 +187,11 @@ const SCALE_BLE_PROFILES = [
   }
 ];
 const SCALE_BLE_SERVICE_UUIDS = Array.from(new Set(SCALE_BLE_PROFILES.map((profile) => profile.service)));
+let liveDirectoryClients = null;
+let liveDirectoryProviders = null;
+let operationCatalog = null;
+let dailyJourneyPlan = null;
+let directoryLoadPromise = null;
 
 const elements = {
   backToMenuBtn: document.getElementById("backToMenuBtn"),
@@ -195,13 +202,12 @@ const elements = {
   truckSelect: document.getElementById("truckSelect"),
   selectProviderBtn: document.getElementById("selectProviderBtn"),
   selectedProviderName: document.getElementById("selectedProviderName"),
+  selectedProviderPlateLabel: document.getElementById("selectedProviderPlateLabel"),
   truckPlateField: document.getElementById("truckPlateField"),
   truckPlate: document.getElementById("truckPlate"),
-  generalPriceInputs: {
-    pollo_vivo: document.getElementById("generalPriceVivoKg"),
-    pollo_pelado: document.getElementById("generalPricePeladoKg"),
-    pollo_beneficiado: document.getElementById("generalPriceBeneficiadoKg")
-  },
+  truckPlateHelp: document.getElementById("truckPlateHelp"),
+  dailyProviderCount: document.getElementById("dailyProviderCount"),
+  dailyProviderList: document.getElementById("dailyProviderList"),
   birdCount: document.getElementById("birdCount"),
   javaCount: document.getElementById("javaCount"),
   crateType: document.getElementById("crateType"),
@@ -255,6 +261,7 @@ const elements = {
   editSelectedProviderName: document.getElementById("editSelectedProviderName"),
   editTruckPlateField: document.getElementById("editTruckPlateField"),
   editTruckPlate: document.getElementById("editTruckPlate"),
+  editTruckPlateHelp: document.getElementById("editTruckPlateHelp"),
   providerModal: document.getElementById("providerModal"),
   providerModalTitle: document.getElementById("providerModalTitle"),
   closeProviderModalBtn: document.getElementById("closeProviderModalBtn"),
@@ -266,6 +273,11 @@ const elements = {
   errorModalTitle: document.getElementById("errorModalTitle"),
   errorModalMessage: document.getElementById("errorModalMessage"),
   errorModalDetails: document.getElementById("errorModalDetails"),
+  touchSelectModal: document.getElementById("touchSelectModal"),
+  touchSelectTitle: document.getElementById("touchSelectTitle"),
+  touchSelectCurrentValue: document.getElementById("touchSelectCurrentValue"),
+  touchSelectOptions: document.getElementById("touchSelectOptions"),
+  touchSelectCloseBtn: document.getElementById("touchSelectCloseBtn"),
   numericPadModal: document.getElementById("numericPadModal"),
   numericPadTitle: document.getElementById("numericPadTitle"),
   numericPadValue: document.getElementById("numericPadValue"),
@@ -342,20 +354,73 @@ let scaleConnections = { 1: null, 2: null };
 let scaleRenderFrames = { 1: null, 2: null };
 let scaleLastPersistedAt = { 1: 0, 2: 0 };
 let capturedScaleWeights = { 1: null, 2: null };
+let scaleRestorePromise = null;
+let scaleRestoreTimer = null;
+const pendingTicketRegistrations = new Set();
 let keypadContext = {
   targetInput: null,
   value: "",
   allowDecimal: true,
   fieldLabel: ""
 };
+let touchSelectContext = {
+  targetSelect: null,
+  fieldLabel: ""
+};
+
+function createDraftId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === "x" ? random : ((random & 0x3) | 0x8);
+    return value.toString(16);
+  });
+}
+
+function normalizeTicketRegistration(registration) {
+  const id = Number(registration?.id);
+  const code = String(registration?.code || "").trim();
+
+  if (!Number.isInteger(id) || id <= 0 || !code) {
+    return null;
+  }
+
+  return {
+    id,
+    code,
+    status: String(registration?.status || "CERRADO"),
+    operatingDate: String(registration?.operatingDate || registration?.operating_date || ""),
+    registeredAt: String(registration?.registeredAt || registration?.registered_at || ""),
+    destination: registration?.destination
+      ? {
+          type: String(registration.destination.type || ""),
+          id: String(registration.destination.id || ""),
+          name: String(registration.destination.name || "")
+        }
+      : null
+  };
+}
 
 function createDefaultTruck(index) {
   return {
     id: `camion-${index + 1}`,
     name: `Ticket ${index + 1}`,
+    draftId: createDraftId(),
+    registration: null,
     clientId: null,
     cages: []
   };
+}
+
+function isTruckRegistered(truck) {
+  return Boolean(normalizeTicketRegistration(truck?.registration));
+}
+
+function getTruckTicketLabel(truck) {
+  return normalizeTicketRegistration(truck?.registration)?.code || truck?.name || "Ticket";
 }
 
 function normalizeDispatchTicketName(name, index) {
@@ -398,13 +463,49 @@ function createDefaultScaleState(id) {
     lastRaw: "",
     updatedAt: null,
     connectionMode: null,
-    deviceName: ""
+    deviceName: "",
+    autoConnectMode: null,
+    serialPortInfo: null,
+    bleDeviceId: ""
   };
+}
+
+function normalizeSerialPortInfo(info) {
+  if (!info || typeof info !== "object") {
+    return null;
+  }
+
+  const usbVendorId = info.usbVendorId === null || info.usbVendorId === undefined
+    ? null
+    : Number(info.usbVendorId);
+  const usbProductId = info.usbProductId === null || info.usbProductId === undefined
+    ? null
+    : Number(info.usbProductId);
+  const matchIndex = Number(info.matchIndex);
+  const portIndex = Number(info.portIndex);
+  const bluetoothServiceClassId = String(info.bluetoothServiceClassId || "").trim();
+  const normalized = {
+    usbVendorId: Number.isInteger(usbVendorId) && usbVendorId >= 0 ? usbVendorId : null,
+    usbProductId: Number.isInteger(usbProductId) && usbProductId >= 0 ? usbProductId : null,
+    bluetoothServiceClassId: bluetoothServiceClassId || null,
+    matchIndex: Number.isInteger(matchIndex) && matchIndex >= 0 ? matchIndex : 0,
+    portIndex: Number.isInteger(portIndex) && portIndex >= 0 ? portIndex : 0
+  };
+
+  return normalized.usbVendorId !== null
+    || normalized.usbProductId !== null
+    || normalized.bluetoothServiceClassId
+    || Number.isInteger(portIndex)
+    ? normalized
+    : null;
 }
 
 function normalizeScaleState(scale, id) {
   const fallback = createDefaultScaleState(id);
   const currentWeight = roundWeight(Number(scale?.currentWeight));
+  const autoConnectMode = ["ble", "serial"].includes(scale?.autoConnectMode)
+    ? scale.autoConnectMode
+    : null;
 
   return {
     ...fallback,
@@ -412,7 +513,10 @@ function normalizeScaleState(scale, id) {
     lastRaw: String(scale?.lastRaw || "").slice(-MAX_SCALE_RAW_LENGTH),
     updatedAt: scale?.updatedAt || null,
     connectionMode: scale?.connectionMode || null,
-    deviceName: scale?.deviceName || ""
+    deviceName: scale?.deviceName || "",
+    autoConnectMode,
+    serialPortInfo: normalizeSerialPortInfo(scale?.serialPortInfo),
+    bleDeviceId: String(scale?.bleDeviceId || "")
   };
 }
 
@@ -436,6 +540,10 @@ function getTypeMeta(typeId) {
 }
 
 function readPeopleDirectoryClients() {
+  if (Array.isArray(liveDirectoryClients)) {
+    return liveDirectoryClients;
+  }
+
   try {
     const raw = localStorage.getItem(PEOPLE_STORAGE_KEY);
     if (!raw) {
@@ -450,6 +558,10 @@ function readPeopleDirectoryClients() {
 }
 
 function readPeopleDirectoryProviders() {
+  if (Array.isArray(liveDirectoryProviders)) {
+    return liveDirectoryProviders;
+  }
+
   try {
     const raw = localStorage.getItem(PEOPLE_STORAGE_KEY);
     if (!raw) {
@@ -480,8 +592,6 @@ function normalizeCatalogClient(record, source = "directory") {
     return null;
   }
 
-  const rawPrices = record?.pricesKg || record?.preciosKg || {};
-
   return {
     id,
     name,
@@ -490,15 +600,16 @@ function normalizeCatalogClient(record, source = "directory") {
     direccion: String(record?.direccion || "").trim(),
     source,
     destinationType: record?.destinationType === "almacen" ? "almacen" : "cliente",
+    databaseId: String(record?.databaseId || (
+      record?.destinationType === "almacen" ? "" : record?.id
+    ) || "").trim() || null,
     warehouseNumber: record?.destinationType === "almacen"
       ? Number(record?.warehouseNumber) || null
       : null,
-    updatedAt: record?.updatedAt || record?.createdAt || "",
-    pricesKg: {
-      pollo_vivo: normalizePriceKg(rawPrices.pollo_vivo ?? record?.precioPolloVivoKg, DEFAULT_GENERAL_PRICES_KG.pollo_vivo),
-      pollo_pelado: normalizePriceKg(rawPrices.pollo_pelado ?? record?.precioPolloPeladoKg, DEFAULT_GENERAL_PRICES_KG.pollo_pelado),
-      pollo_beneficiado: normalizePriceKg(rawPrices.pollo_beneficiado ?? record?.precioPolloBeneficiadoKg, DEFAULT_GENERAL_PRICES_KG.pollo_beneficiado)
-    }
+    warehouseCode: record?.destinationType === "almacen"
+      ? String(record?.warehouseCode || "").trim()
+      : "",
+    updatedAt: record?.updatedAt || record?.createdAt || ""
   };
 }
 
@@ -512,12 +623,14 @@ function getClientCatalog() {
     }
   });
 
-  CLIENTS.forEach((client) => {
-    const normalized = normalizeCatalogClient(client, "sample");
-    if (normalized && !catalogById.has(normalized.id)) {
-      catalogById.set(normalized.id, normalized);
-    }
-  });
+  if (!Array.isArray(liveDirectoryClients)) {
+    CLIENTS.forEach((client) => {
+      const normalized = normalizeCatalogClient(client, "sample");
+      if (normalized && !catalogById.has(normalized.id)) {
+        catalogById.set(normalized.id, normalized);
+      }
+    });
+  }
 
   WAREHOUSE_DESTINATIONS.forEach((warehouse) => {
     const normalized = normalizeCatalogClient(warehouse, "warehouse");
@@ -562,12 +675,18 @@ function normalizeClientId(clientId) {
   }
 
   const normalized = String(clientId);
+  if (!Array.isArray(liveDirectoryClients)) {
+    return normalized;
+  }
+
   return getClientCatalog().some((client) => client.id === normalized) ? normalized : null;
 }
 
 function getTruckClientName(truck) {
   const client = getClientById(truck.clientId);
-  return client ? client.name : "Sin destino asignado";
+  return client?.name
+    || normalizeTicketRegistration(truck?.registration)?.destination?.name
+    || "Sin destino asignado";
 }
 
 function isWarehouseDestination(client) {
@@ -578,12 +697,42 @@ function getDestinationTypeLabel(client) {
   return isWarehouseDestination(client) ? "Almacén" : "Cliente";
 }
 
+function normalizeProviderVehicle(vehicle) {
+  const rawPlate = typeof vehicle === "string"
+    ? vehicle
+    : vehicle?.plate || vehicle?.placa;
+  const plate = normalizeTruckPlate(rawPlate);
+
+  if (!plate) {
+    return null;
+  }
+
+  return {
+    id: String(vehicle?.id || vehicle?.association_id || "").trim() || null,
+    vehicleId: String(vehicle?.vehicle_id || vehicle?.vehicleId || "").trim() || null,
+    plate,
+    alias: String(vehicle?.alias || "").trim()
+  };
+}
+
 function normalizeCatalogProvider(record) {
   const id = String(record?.id || "").trim();
   const name = String(record?.name || record?.nombre || "").trim();
 
   if (!id || !name) {
     return null;
+  }
+
+  const vehiclesByPlate = new Map();
+  const rawVehicles = record?.vehicles || record?.vehiculos || record?.plates || [];
+
+  if (Array.isArray(rawVehicles)) {
+    rawVehicles.forEach((vehicle) => {
+      const normalizedVehicle = normalizeProviderVehicle(vehicle);
+      if (normalizedVehicle) {
+        vehiclesByPlate.set(normalizedVehicle.plate, normalizedVehicle);
+      }
+    });
   }
 
   return {
@@ -594,11 +743,12 @@ function normalizeCatalogProvider(record) {
     warehouseNumber: null,
     dni: String(record?.dni || "").trim(),
     direccion: String(record?.direccion || "").trim(),
-    updatedAt: record?.updatedAt || record?.createdAt || ""
+    updatedAt: record?.updatedAt || record?.createdAt || "",
+    vehicles: Array.from(vehiclesByPlate.values())
   };
 }
 
-function getProviderCatalog() {
+function getAllProviderCatalog() {
   return readPeopleDirectoryProviders()
     .map(normalizeCatalogProvider)
     .filter(Boolean)
@@ -606,6 +756,27 @@ function getProviderCatalog() {
       const updatedComparison = String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
       return updatedComparison || a.name.localeCompare(b.name, "es", { sensitivity: "base" });
     });
+}
+
+function getProviderCatalog() {
+  const providers = getAllProviderCatalog();
+  if (dailyJourneyPlan === null) {
+    return providers;
+  }
+
+  const selectedVehicleIds = new Set(
+    (dailyJourneyPlan.trucks || [])
+      .filter((truck) => truck.selected)
+      .map((truck) => String(truck.provider_vehicle_id))
+  );
+
+  return providers
+    .map((provider) => ({
+      ...provider,
+      vehicles: getProviderVehicles(provider)
+        .filter((vehicle) => selectedVehicleIds.has(String(vehicle.id)))
+    }))
+    .filter((provider) => provider.vehicles.length > 0);
 }
 
 function getProviderById(providerId) {
@@ -619,6 +790,10 @@ function getProviderById(providerId) {
 
 function normalizeProviderId(providerId) {
   const normalizedId = String(providerId || "").trim();
+  if (normalizedId && !Array.isArray(liveDirectoryProviders)) {
+    return normalizedId;
+  }
+
   return getProviderById(normalizedId) ? normalizedId : null;
 }
 
@@ -640,11 +815,27 @@ function getOriginById(originId) {
 
 function normalizeOriginId(originId) {
   const normalizedId = String(originId || "").trim();
+  if (normalizedId && !Array.isArray(liveDirectoryProviders)) {
+    return normalizedId;
+  }
+
   return getOriginById(normalizedId) ? normalizedId : null;
 }
 
 function isWarehouseOrigin(origin) {
   return origin?.originType === "almacen";
+}
+
+function getProviderVehicles(origin) {
+  return isWarehouseOrigin(origin) || !Array.isArray(origin?.vehicles)
+    ? []
+    : origin.vehicles;
+}
+
+function getProviderVehicleByPlate(origin, plate) {
+  const normalizedPlate = normalizeTruckPlate(plate);
+  return getProviderVehicles(origin)
+    .find((vehicle) => vehicle.plate === normalizedPlate) || null;
 }
 
 function getWarehouseOriginByNumber(warehouseNumber) {
@@ -659,6 +850,7 @@ function buildOriginRecord(origin) {
       origenId: null,
       origenNombre: "",
       numeroAlmacenOrigen: null,
+      almacenOrigenId: null,
       origen: null,
       proveedorOrigenId: null,
       proveedorOrigenNombre: "",
@@ -672,7 +864,8 @@ function buildOriginRecord(origin) {
     nombre: origin.name,
     name: origin.name,
     tipo: origin.originType,
-    numeroAlmacen: warehouse ? origin.warehouseNumber : null
+    numeroAlmacen: warehouse ? origin.warehouseNumber : null,
+    almacenId: warehouse ? origin.databaseId : null
   };
 
   return {
@@ -680,6 +873,7 @@ function buildOriginRecord(origin) {
     origenId: origin.id,
     origenNombre: origin.name,
     numeroAlmacenOrigen: warehouse ? origin.warehouseNumber : null,
+    almacenOrigenId: warehouse ? origin.databaseId : null,
     origen: originRecord,
     proveedorOrigenId: warehouse ? null : origin.id,
     proveedorOrigenNombre: warehouse ? "" : origin.name,
@@ -756,6 +950,9 @@ function normalizeCageRecord(cage, fallbackId) {
           originType,
           warehouseNumber: originType === "almacen"
             ? Number(cage?.numeroAlmacenOrigen ?? rawOrigin?.numeroAlmacen) || null
+            : null,
+          databaseId: originType === "almacen"
+            ? String(cage?.almacenOrigenId || rawOrigin?.almacenId || "").trim() || null
             : null
         }
       : null
@@ -859,7 +1056,9 @@ function normalizeCageRecord(cage, fallbackId) {
     origenPeso: source,
     balanza: source === "manual" ? null : Number(source),
     ...originRecord,
-    placaCamion: truckPlate
+    placaCamion: truckPlate,
+    proveedorVehiculoId: cage?.proveedorVehiculoId || cage?.proveedor_vehiculo_id || null,
+    vehiculoId: cage?.vehiculoId || cage?.vehiculo_id || null
   };
 }
 
@@ -871,9 +1070,9 @@ function createDefaultState() {
       birdCountPerJava: 1,
       javaCount: 1,
       crateTypeId: DEFAULT_CRATE_TYPE_ID,
-      originId: null
+      originId: null,
+      truckPlate: ""
     },
-    generalPricesKg: { ...DEFAULT_GENERAL_PRICES_KG },
     scales: {
       1: createDefaultScaleState(1),
       2: createDefaultScaleState(2)
@@ -888,19 +1087,6 @@ function roundWeight(value) {
 
 function formatWeight(value) {
   return `${Number(value).toFixed(2)} kg`;
-}
-
-function formatCurrency(value) {
-  return `S/ ${Number(value).toFixed(2)}`;
-}
-
-function normalizePriceKg(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-
-  return roundWeight(parsed);
 }
 
 function normalizeJavaCount(value, fallback = 1) {
@@ -972,85 +1158,6 @@ function calculateWeightBreakdown(grossWeight, javaCount, crateWeightKg) {
     crateWeightKg: crateWeight,
     tareWeightKg: tare,
     netWeightKg: net
-  };
-}
-
-function normalizePricesKg(rawPrices, fallbackPrices = DEFAULT_GENERAL_PRICES_KG) {
-  const normalized = {};
-
-  CHICKEN_TYPES.forEach((type) => {
-    const fallback = normalizePriceKg(fallbackPrices?.[type.id], type.defaultPriceKg);
-    normalized[type.id] = normalizePriceKg(rawPrices?.[type.id], fallback);
-  });
-
-  return normalized;
-}
-
-function getClientPricesKg(client, fallbackPrices = DEFAULT_GENERAL_PRICES_KG) {
-  if (!client) {
-    return normalizePricesKg({}, fallbackPrices);
-  }
-
-  const rawPrices = {};
-  const legacyPrice = normalizePriceKg(client.priceKg, 0);
-
-  CHICKEN_TYPES.forEach((type) => {
-    const explicitPrice = client?.pricesKg?.[type.id];
-
-    if (explicitPrice !== undefined && explicitPrice !== null && explicitPrice !== "") {
-      rawPrices[type.id] = explicitPrice;
-      return;
-    }
-
-    if (legacyPrice > 0) {
-      rawPrices[type.id] = legacyPrice;
-    }
-  });
-
-  return normalizePricesKg(rawPrices, fallbackPrices);
-}
-
-function formatPricesSummary(pricesKg) {
-  const normalizedPrices = normalizePricesKg(pricesKg, DEFAULT_GENERAL_PRICES_KG);
-  return DISPATCH_CHICKEN_TYPES
-    .map((type) => `${type.shortLabel}: ${formatCurrency(normalizedPrices[type.id])}/kg`)
-    .join(" | ");
-}
-
-function calculateTotalAmountByType(byType, pricesKg) {
-  const normalizedPrices = normalizePricesKg(pricesKg, DEFAULT_GENERAL_PRICES_KG);
-  return roundWeight(
-    byType.reduce((sum, item) => sum + (Number(item.weight) || 0) * normalizedPrices[item.id], 0)
-  );
-}
-
-function getTruckPricing(truck) {
-  const generalPricesKg = normalizePricesKg(state.generalPricesKg, DEFAULT_GENERAL_PRICES_KG);
-  const client = getClientById(truck.clientId);
-
-  if (isWarehouseDestination(client)) {
-    return {
-      pricesKg: generalPricesKg,
-      source: "almacen",
-      sourceLabel: "Precios generales (almacén)",
-      client
-    };
-  }
-
-  if (client) {
-    return {
-      pricesKg: getClientPricesKg(client, generalPricesKg),
-      source: "cliente",
-      sourceLabel: "Precios cliente",
-      client
-    };
-  }
-
-  return {
-    pricesKg: generalPricesKg,
-    source: "general",
-    sourceLabel: "Precios generales",
-    client: null
   };
 }
 
@@ -1127,6 +1234,8 @@ function openNumericPadForInput(input) {
   if (!input) {
     return;
   }
+
+  closeTouchSelect();
 
   if (!elements.numericPadModal.hidden && keypadContext.targetInput === input) {
     return;
@@ -1207,6 +1316,9 @@ function bindNumericInputs() {
   numericInputs.forEach((input) => {
     input.readOnly = true;
     input.setAttribute("inputmode", "none");
+    input.classList.add("touch-number-control");
+    input.setAttribute("role", "button");
+    input.setAttribute("aria-haspopup", "dialog");
 
     let tapState = null;
 
@@ -1272,6 +1384,124 @@ function bindNumericInputs() {
 
       event.preventDefault();
       openNumericPadForInput(input);
+    });
+  });
+}
+
+function getTouchSelectFieldLabel(select) {
+  if (select.dataset.touchLabel) {
+    return select.dataset.touchLabel;
+  }
+
+  const wrappingLabel = select.closest("label");
+  if (wrappingLabel) {
+    const firstText = Array.from(wrappingLabel.childNodes)
+      .find((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+    if (firstText?.textContent) {
+      return firstText.textContent.replace(/\s+/g, " ").trim();
+    }
+  }
+
+  const field = select.closest(".field");
+  const fieldLabel = field?.querySelector(":scope > span")?.textContent;
+  return fieldLabel?.trim() || select.id || "Seleccionar opción";
+}
+
+function resetTouchSelectContext() {
+  touchSelectContext = {
+    targetSelect: null,
+    fieldLabel: ""
+  };
+}
+
+function renderTouchSelectOptions() {
+  const select = touchSelectContext.targetSelect;
+  if (!select || !elements.touchSelectOptions) {
+    return;
+  }
+
+  const options = Array.from(select.options);
+  const selectedOption = options.find((option) => option.selected);
+  elements.touchSelectTitle.textContent = touchSelectContext.fieldLabel || "Seleccionar opción";
+  elements.touchSelectCurrentValue.textContent = selectedOption?.textContent?.trim() || "Sin selección";
+
+  elements.touchSelectOptions.innerHTML = options.map((option, index) => {
+    const isActive = option.value === select.value;
+    const isDisabled = option.disabled || !option.value && option.textContent.trim().toLowerCase().startsWith("selecciona");
+
+    return `
+      <button
+        class="touch-select-option ${isActive ? "is-active" : ""}"
+        type="button"
+        role="option"
+        aria-selected="${isActive ? "true" : "false"}"
+        data-touch-select-index="${index}"
+        ${isDisabled ? "disabled" : ""}
+      >
+        <span class="touch-select-option-index">${String(index + 1).padStart(2, "0")}</span>
+        <strong>${escapeHtml(option.textContent.trim())}</strong>
+        <span class="touch-select-option-check" aria-hidden="true">${isActive ? "✓" : "›"}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function openTouchSelect(select) {
+  if (!select || select.disabled || !elements.touchSelectModal) {
+    return;
+  }
+
+  closeNumericPad();
+  closeConfigMenu();
+  touchSelectContext.targetSelect = select;
+  touchSelectContext.fieldLabel = getTouchSelectFieldLabel(select);
+  renderTouchSelectOptions();
+  elements.touchSelectModal.hidden = false;
+}
+
+function closeTouchSelect() {
+  if (elements.touchSelectModal) {
+    elements.touchSelectModal.hidden = true;
+  }
+  resetTouchSelectContext();
+}
+
+function selectTouchOption(index) {
+  const select = touchSelectContext.targetSelect;
+  const option = select?.options?.[Number(index)];
+  if (!select || !option || option.disabled) {
+    return;
+  }
+
+  select.value = option.value;
+  select.dispatchEvent(new Event("input", { bubbles: true }));
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+  closeTouchSelect();
+}
+
+function bindTouchSelects() {
+  document.querySelectorAll("select").forEach((select) => {
+    select.classList.add("touch-select-control");
+    select.setAttribute("aria-haspopup", "dialog");
+
+    select.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || select.disabled) {
+        return;
+      }
+      event.preventDefault();
+      openTouchSelect(select);
+    });
+
+    select.addEventListener("click", (event) => {
+      event.preventDefault();
+    });
+
+    select.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      openTouchSelect(select);
     });
   });
 }
@@ -1361,6 +1591,8 @@ function loadState() {
       ? parsed.trucks.map((truck, index) => ({
           id: truck.id || `camion-${index + 1}`,
           name: normalizeDispatchTicketName(truck.name, index),
+          draftId: String(truck.draftId || truck.draft_id || "").trim() || createDraftId(),
+          registration: normalizeTicketRegistration(truck.registration || truck.registroTicket),
           clientId: normalizeClientId(truck.clientId || truck.clienteId || truck?.cliente?.id),
           cages: Array.isArray(truck.cages)
             ? truck.cages.map((cage, cageIndex) => normalizeCageRecord(cage, cageIndex + 1))
@@ -1374,14 +1606,6 @@ function loadState() {
       return Math.max(max, localMax);
     }, 0);
 
-    const legacyGeneralPrice = normalizePriceKg(parsed.generalPriceKg, 0);
-    const legacyGeneralPrices = legacyGeneralPrice > 0
-      ? {
-          pollo_vivo: legacyGeneralPrice,
-          pollo_pelado: legacyGeneralPrice,
-          pollo_beneficiado: legacyGeneralPrice
-        }
-      : DEFAULT_GENERAL_PRICES_KG;
     const parsedEntryDefaults = parsed.entryDefaults || {};
     const legacyBirdCountPerJava = normalizeBirdCountPerJava(
       parsedEntryDefaults.birdCountPerJava
@@ -1405,6 +1629,12 @@ function loadState() {
           || parsedEntryDefaults.providerId
           || parsedEntryDefaults.proveedorId
           || parsedEntryDefaults.proveedorOrigenId
+      ),
+      truckPlate: normalizeTruckPlate(
+        parsedEntryDefaults.truckPlate
+          || parsedEntryDefaults.plate
+          || parsedEntryDefaults.placaCamion
+          || ""
       )
     };
 
@@ -1412,7 +1642,6 @@ function loadState() {
       lastId: Math.max(Number(parsed.lastId) || 0, maxId),
       selectedType: normalizeType(parsed.selectedType),
       entryDefaults,
-      generalPricesKg: normalizePricesKg(parsed.generalPricesKg, legacyGeneralPrices),
       scales: {
         1: normalizeScaleState(parsed?.scales?.[1], 1),
         2: normalizeScaleState(parsed?.scales?.[2], 2)
@@ -1654,6 +1883,7 @@ function openFontSidebar() {
   closeConfigMenu();
   closeAllScaleSettings();
   closeNumericPad();
+  closeTouchSelect();
   renderFontSizeControls();
   setFontSidebarOpen(true);
 }
@@ -1702,6 +1932,7 @@ function closeAllScaleSettings() {
 function openScaleSettings(scaleId) {
   closeConfigMenu();
   closeNumericPad();
+  closeTouchSelect();
   closeAllScaleSettings();
   renderScaleConnectionPanels();
   setScaleSettingsOpen(scaleId, true);
@@ -1716,7 +1947,7 @@ function reconcileTruckClientAssignments(shouldSave = false) {
   let changed = false;
 
   state.trucks.forEach((truck) => {
-    if (truck.clientId && !validClientIds.has(truck.clientId)) {
+    if (!isTruckRegistered(truck) && truck.clientId && !validClientIds.has(truck.clientId)) {
       truck.clientId = null;
       changed = true;
     }
@@ -1735,14 +1966,26 @@ function ensureDefaultOriginSelection(shouldSave = false) {
   const currentOriginId = String(
     state.entryDefaults?.originId || state.entryDefaults?.providerId || ""
   ).trim();
-  const nextOriginId = origins.some((origin) => origin.id === currentOriginId)
-    ? currentOriginId
-    : providers[0]?.id || origins[0]?.id || null;
+  const currentTruckPlate = normalizeTruckPlate(state.entryDefaults?.truckPlate || "");
+  const nextOriginId = dailyJourneyPlan !== null
+    ? (
+        providers.some((origin) => origin.id === currentOriginId)
+          ? currentOriginId
+          : providers[0]?.id || null
+      )
+    : (
+        providers.some((origin) => origin.id === currentOriginId)
+          ? currentOriginId
+          : providers[0]?.id
+            || (origins.some((origin) => origin.id === currentOriginId) ? currentOriginId : origins[0]?.id)
+            || null
+      );
   const changed = currentOriginId !== String(nextOriginId || "");
 
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
-    originId: nextOriginId
+    originId: nextOriginId,
+    truckPlate: changed ? "" : currentTruckPlate
   };
   delete state.entryDefaults.providerId;
 
@@ -1762,6 +2005,134 @@ function refreshClientsFromDirectory() {
   renderAll();
 }
 
+async function loadDirectoryRecords(type) {
+  const firstPage = await apiRequest(`/operacion/${type}?per_page=100`);
+  const records = [...(firstPage.data || [])];
+  const lastPage = Number(firstPage.meta?.last_page || 1);
+
+  if (lastPage > 1) {
+    const remainingPages = await Promise.all(
+      Array.from(
+        { length: lastPage - 1 },
+        (_, index) => apiRequest(`/operacion/${type}?per_page=100&page=${index + 2}`)
+      )
+    );
+    remainingPages.forEach((page) => records.push(...(page.data || [])));
+  }
+
+  return records;
+}
+
+function applyOperationCatalog(catalog) {
+  operationCatalog = catalog || null;
+  const warehouses = Array.isArray(catalog?.warehouses) ? catalog.warehouses : [];
+
+  if (warehouses.length) {
+    const destinations = warehouses.map((warehouse, index) => {
+      const code = String(warehouse.code || "").trim();
+      const codeNumber = Number(code.match(/(\d+)$/)?.[1]);
+      const warehouseNumber = Number.isInteger(codeNumber) && codeNumber > 0
+        ? codeNumber
+        : index + 1;
+
+      return {
+        id: `destino-almacen-${warehouseNumber}`,
+        name: String(warehouse.name || `Almacén ${warehouseNumber}`),
+        destinationType: "almacen",
+        warehouseNumber,
+        databaseId: String(warehouse.id),
+        warehouseCode: code,
+        direccion: String(warehouse.address || "")
+      };
+    });
+
+    WAREHOUSE_DESTINATIONS.splice(0, WAREHOUSE_DESTINATIONS.length, ...destinations);
+    WAREHOUSE_ORIGINS.splice(
+      0,
+      WAREHOUSE_ORIGINS.length,
+      ...destinations.map((warehouse) => ({
+        id: `origen-almacen-${warehouse.warehouseNumber}`,
+        name: warehouse.name,
+        nombre: warehouse.name,
+        originType: "almacen",
+        warehouseNumber: warehouse.warehouseNumber,
+        databaseId: warehouse.databaseId,
+        warehouseCode: warehouse.warehouseCode,
+        dni: "",
+        direccion: warehouse.direccion
+      }))
+    );
+  }
+
+  const cageTypesByCode = new Map(
+    (catalog?.cage_types || []).map((type) => [String(type.code || ""), type])
+  );
+  CRATE_TYPES.forEach((crate) => {
+    const apiType = cageTypesByCode.get(crate.apiCode);
+    if (!apiType) {
+      return;
+    }
+
+    crate.label = String(apiType.name || crate.label);
+    crate.weightKg = roundWeight(Number(apiType.weight_kg) || crate.weightKg);
+  });
+  renderCrateTypeOptions();
+
+}
+
+function applyJourneyPlan(plan) {
+  dailyJourneyPlan = plan && typeof plan === "object"
+    ? plan
+    : { configured: false, trucks: [], selected_count: 0 };
+}
+
+function loadCurrentDirectoryData() {
+  if (directoryLoadPromise) {
+    return directoryLoadPromise;
+  }
+
+  directoryLoadPromise = (async () => {
+    const [clientsResult, providersResult, catalogResult, journeyResult] = await Promise.allSettled([
+      loadDirectoryRecords("clientes"),
+      loadDirectoryRecords("proveedores"),
+      apiRequest("/operacion/catalogo"),
+      apiRequest("/operacion/jornada")
+    ]);
+
+    if (clientsResult.status === "fulfilled") {
+      liveDirectoryClients = clientsResult.value;
+    }
+
+    if (providersResult.status === "fulfilled") {
+      liveDirectoryProviders = providersResult.value;
+    }
+
+    if (catalogResult.status === "fulfilled") {
+      applyOperationCatalog(catalogResult.value?.data);
+    }
+
+    if (journeyResult.status === "fulfilled") {
+      applyJourneyPlan(journeyResult.value?.data);
+    } else {
+      applyJourneyPlan(null);
+    }
+
+    refreshClientsFromDirectory();
+
+    if (
+      providersResult.status === "rejected"
+      || catalogResult.status === "rejected"
+      || journeyResult.status === "rejected"
+    ) {
+      setFormMessage("No se pudieron actualizar todos los catálogos operativos desde la base de datos.", true);
+    }
+  })().finally(() => {
+    directoryLoadPromise = null;
+  });
+
+  return directoryLoadPromise;
+}
+
 function getScaleState(scaleId) {
   if (!state.scales[scaleId]) {
     state.scales[scaleId] = createDefaultScaleState(scaleId);
@@ -1769,6 +2140,83 @@ function getScaleState(scaleId) {
 
   state.scales[scaleId] = normalizeScaleState(state.scales[scaleId], scaleId);
   return state.scales[scaleId];
+}
+
+function clearScaleConnectionPreference(scaleId) {
+  const scale = getScaleState(scaleId);
+  scale.autoConnectMode = null;
+  scale.serialPortInfo = null;
+  scale.bleDeviceId = "";
+  scale.connectionMode = null;
+  scale.deviceName = "";
+  saveState();
+}
+
+function getSerialPortInfo(port) {
+  try {
+    return normalizeSerialPortInfo(port?.getInfo?.() || {});
+  } catch {
+    return null;
+  }
+}
+
+function serialPortIdentifiersMatch(portInfo, savedInfo) {
+  const current = normalizeSerialPortInfo(portInfo);
+  const saved = normalizeSerialPortInfo(savedInfo);
+  if (!current || !saved) {
+    return false;
+  }
+
+  const identifiers = ["usbVendorId", "usbProductId", "bluetoothServiceClassId"];
+  const comparableIdentifiers = identifiers.filter((key) => saved[key] !== null);
+  return comparableIdentifiers.length > 0
+    && comparableIdentifiers.every((key) => current[key] === saved[key]);
+}
+
+async function rememberSerialScalePort(scaleId, port) {
+  const scale = getScaleState(scaleId);
+  let authorizedPorts = [];
+
+  try {
+    authorizedPorts = await navigator.serial.getPorts();
+  } catch {
+    authorizedPorts = [];
+  }
+
+  const portInfo = getSerialPortInfo(port) || {
+    usbVendorId: null,
+    usbProductId: null,
+    bluetoothServiceClassId: null,
+    matchIndex: 0,
+    portIndex: 0
+  };
+  const matchingPorts = authorizedPorts.filter((candidate) => {
+    const candidateInfo = getSerialPortInfo(candidate);
+    return serialPortIdentifiersMatch(candidateInfo, portInfo);
+  });
+  const matchIndex = Math.max(matchingPorts.findIndex((candidate) => candidate === port), 0);
+  const portIndex = Math.max(authorizedPorts.findIndex((candidate) => candidate === port), 0);
+
+  scale.autoConnectMode = "serial";
+  scale.connectionMode = "serial";
+  scale.serialPortInfo = {
+    ...portInfo,
+    matchIndex,
+    portIndex
+  };
+  scale.bleDeviceId = "";
+  scale.deviceName = "Puerto serial Bluetooth";
+  saveState();
+}
+
+function rememberBleScaleDevice(scaleId, device) {
+  const scale = getScaleState(scaleId);
+  scale.autoConnectMode = "ble";
+  scale.connectionMode = "ble";
+  scale.serialPortInfo = null;
+  scale.bleDeviceId = String(device?.id || "");
+  scale.deviceName = device?.name || "BLE sin nombre";
+  saveState();
 }
 
 function getScaleModeLabel(mode) {
@@ -1828,9 +2276,20 @@ function renderScaleConnectionPanels() {
     const disconnectButton = elements.scaleDisconnectButtons[scaleId];
 
     let statusClass = "scale-status-offline";
-    let statusText = featureWarning || "Sin conexión Bluetooth";
+    const rememberedMode = scale.autoConnectMode
+      ? getScaleModeLabel(scale.autoConnectMode)
+      : "";
+    let statusText = featureWarning || (
+      rememberedMode
+        ? `Reconexión automática ${rememberedMode} pendiente`
+        : "Sin conexión Bluetooth"
+    );
+    if (!featureWarning && scale.autoConnectMode === "ble" && !navigator.bluetooth?.getDevices) {
+      statusText = "BLE recordada; este navegador requiere usar Conectar BLE";
+    }
     const isConnecting = connection?.status === "connecting";
     const isConnected = connection?.status === "connected";
+    const hasRememberedPreference = Boolean(scale.autoConnectMode);
 
     if (isConnecting) {
       statusClass = "scale-status-connecting";
@@ -1868,7 +2327,7 @@ function renderScaleConnectionPanels() {
     }
 
     if (disconnectButton) {
-      disconnectButton.disabled = !isConnecting && !isConnected;
+      disconnectButton.disabled = !isConnecting && !isConnected && !hasRememberedPreference;
     }
   });
 }
@@ -2176,6 +2635,7 @@ function handleScaleDisconnected(scaleId, message = "Balanza desconectada.") {
   };
   renderScaleConnectionPanels();
   setFormMessage(message, true);
+  scheduleScaleConnectionRestore();
 }
 
 function startBleReadPolling(scaleId) {
@@ -2207,9 +2667,14 @@ function startBleReadPolling(scaleId) {
   }, 750);
 }
 
-async function disconnectScale(scaleId, showMessage = true) {
+async function disconnectScale(scaleId, showMessage = true, forgetPreference = false) {
+  if (forgetPreference) {
+    clearScaleConnectionPreference(scaleId);
+  }
+
   const connection = scaleConnections[scaleId];
   if (!connection) {
+    renderScaleConnectionPanels();
     return;
   }
 
@@ -2275,7 +2740,7 @@ async function disconnectScale(scaleId, showMessage = true) {
   }
 }
 
-async function connectBleScale(scaleId) {
+async function connectBleScale(scaleId, rememberedDevice = null) {
   if (!window.isSecureContext) {
     setFormMessage("Para conectar por Bluetooth abre la web en localhost o HTTPS.", true);
     renderScaleConnectionPanels();
@@ -2289,18 +2754,21 @@ async function connectBleScale(scaleId) {
   }
 
   await disconnectScale(scaleId, false);
+  const automatic = Boolean(rememberedDevice);
   scaleConnections[scaleId] = {
     mode: "ble",
     status: "connecting",
-    statusMessage: `Selecciona el dispositivo BLE para Balanza ${scaleId}...`
+    statusMessage: automatic
+      ? `Reconectando Balanza ${scaleId} por BLE...`
+      : `Selecciona el dispositivo BLE para Balanza ${scaleId}...`
   };
   renderScaleConnectionPanels();
 
   try {
-    const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: SCALE_BLE_SERVICE_UUIDS
-    });
+    const device = rememberedDevice || await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: SCALE_BLE_SERVICE_UUIDS
+      });
     const deviceName = device.name || "BLE sin nombre";
     const connection = scaleConnections[scaleId];
 
@@ -2360,8 +2828,14 @@ async function connectBleScale(scaleId) {
       startBleReadPolling(scaleId);
     }
 
+    rememberBleScaleDevice(scaleId, device);
     renderScaleConnectionPanels();
-    setFormMessage(`Balanza ${scaleId} conectada por BLE (${found.profile.label}).`);
+    setFormMessage(
+      automatic
+        ? `Balanza ${scaleId} reconectada automáticamente por BLE (${found.profile.label}).`
+        : `Balanza ${scaleId} conectada por BLE (${found.profile.label}).`
+    );
+    return true;
   } catch (error) {
     await disconnectScale(scaleId, false);
     const message = getConnectionErrorMessage(error, `No se pudo conectar la balanza ${scaleId} por BLE.`);
@@ -2370,7 +2844,10 @@ async function connectBleScale(scaleId) {
       statusMessage: message
     };
     renderScaleConnectionPanels();
-    setFormMessage(message, error?.name !== "NotFoundError");
+    if (!automatic) {
+      setFormMessage(message, error?.name !== "NotFoundError");
+    }
+    return false;
   }
 }
 
@@ -2460,7 +2937,7 @@ async function readSerialScale(scaleId) {
   }
 }
 
-async function connectSerialScale(scaleId) {
+async function connectSerialScale(scaleId, rememberedPort = null) {
   if (!window.isSecureContext) {
     setFormMessage("Para conectar por puerto serial Bluetooth abre la web en localhost o HTTPS.", true);
     renderScaleConnectionPanels();
@@ -2474,15 +2951,18 @@ async function connectSerialScale(scaleId) {
   }
 
   await disconnectScale(scaleId, false);
+  const automatic = Boolean(rememberedPort);
   scaleConnections[scaleId] = {
     mode: "serial",
     status: "connecting",
-    statusMessage: `Selecciona el puerto Bluetooth serial de Balanza ${scaleId}...`
+    statusMessage: automatic
+      ? `Reconectando puerto serial de Balanza ${scaleId}...`
+      : `Selecciona el puerto Bluetooth serial de Balanza ${scaleId}...`
   };
   renderScaleConnectionPanels();
 
   try {
-    const port = await navigator.serial.requestPort();
+    const port = rememberedPort || await navigator.serial.requestPort();
     await port.open(SCALE_SERIAL_DEFAULTS);
     scaleConnections[scaleId] = {
       mode: "serial",
@@ -2494,9 +2974,15 @@ async function connectSerialScale(scaleId) {
       buffer: "",
       abort: false
     };
+    await rememberSerialScalePort(scaleId, port);
     renderScaleConnectionPanels();
-    readSerialScale(scaleId);
-    setFormMessage(`Balanza ${scaleId} conectada por puerto serial Bluetooth a ${SCALE_SERIAL_DEFAULTS.baudRate} baudios.`);
+    void readSerialScale(scaleId);
+    setFormMessage(
+      automatic
+        ? `Balanza ${scaleId} reconectada automáticamente por puerto serial.`
+        : `Balanza ${scaleId} conectada por puerto serial Bluetooth a ${SCALE_SERIAL_DEFAULTS.baudRate} baudios.`
+    );
+    return true;
   } catch (error) {
     await disconnectScale(scaleId, false);
     const message = getConnectionErrorMessage(error, `No se pudo abrir el puerto serial de balanza ${scaleId}.`);
@@ -2505,8 +2991,148 @@ async function connectSerialScale(scaleId) {
       statusMessage: message
     };
     renderScaleConnectionPanels();
-    setFormMessage(message, error?.name !== "NotFoundError");
+    if (!automatic) {
+      setFormMessage(message, error?.name !== "NotFoundError");
+    }
+    return false;
   }
+}
+
+function findRememberedSerialPort(scaleId, ports, claimedPorts) {
+  const savedInfo = getScaleState(scaleId).serialPortInfo;
+  if (!savedInfo) {
+    return null;
+  }
+
+  const hasIdentifiers = savedInfo.usbVendorId !== null
+    || savedInfo.usbProductId !== null
+    || Boolean(savedInfo.bluetoothServiceClassId);
+
+  if (hasIdentifiers) {
+    const matchingPorts = ports.filter((port) => {
+      return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
+    });
+    const preferredPort = matchingPorts[savedInfo.matchIndex];
+
+    if (preferredPort && !claimedPorts.has(preferredPort)) {
+      return preferredPort;
+    }
+
+    const availableMatch = matchingPorts.find((port) => !claimedPorts.has(port));
+    if (availableMatch) {
+      return availableMatch;
+    }
+  }
+
+  const indexedPort = ports[savedInfo.portIndex];
+  return indexedPort && !claimedPorts.has(indexedPort) ? indexedPort : null;
+}
+
+function isScaleConnectionActive(connection) {
+  if (connection?.status !== "connected") {
+    return false;
+  }
+
+  if (connection.mode === "serial") {
+    return Boolean(connection.port?.readable);
+  }
+
+  if (connection.mode === "ble") {
+    return Boolean(connection.device?.gatt?.connected);
+  }
+
+  return false;
+}
+
+async function restoreScaleConnections() {
+  if (scaleRestorePromise) {
+    return scaleRestorePromise;
+  }
+
+  scaleRestorePromise = (async () => {
+    if (!window.isSecureContext) {
+      return;
+    }
+
+    const claimedSerialPorts = new Set(
+      SCALE_IDS
+        .map((scaleId) => scaleConnections[scaleId])
+        .filter((connection) => isScaleConnectionActive(connection))
+        .map((connection) => connection.port)
+        .filter(Boolean)
+    );
+
+    if (navigator.serial?.getPorts) {
+      let ports = [];
+      try {
+        ports = await navigator.serial.getPorts();
+      } catch {
+        ports = [];
+      }
+
+      for (const scaleId of SCALE_IDS) {
+        const connection = scaleConnections[scaleId];
+        if (connection?.status === "connecting" || isScaleConnectionActive(connection)) {
+          continue;
+        }
+
+        if (getScaleState(scaleId).autoConnectMode !== "serial") {
+          continue;
+        }
+
+        const port = findRememberedSerialPort(scaleId, ports, claimedSerialPorts);
+        if (!port) {
+          continue;
+        }
+
+        claimedSerialPorts.add(port);
+        await connectSerialScale(scaleId, port);
+      }
+    }
+
+    if (navigator.bluetooth?.getDevices) {
+      let devices = [];
+      try {
+        devices = await navigator.bluetooth.getDevices();
+      } catch {
+        devices = [];
+      }
+
+      for (const scaleId of SCALE_IDS) {
+        const connection = scaleConnections[scaleId];
+        if (connection?.status === "connecting" || isScaleConnectionActive(connection)) {
+          continue;
+        }
+
+        const scale = getScaleState(scaleId);
+        if (scale.autoConnectMode !== "ble" || !scale.bleDeviceId) {
+          continue;
+        }
+
+        const device = devices.find((candidate) => candidate.id === scale.bleDeviceId);
+        if (device) {
+          await connectBleScale(scaleId, device);
+        }
+      }
+    }
+
+    renderScaleConnectionPanels();
+  })().finally(() => {
+    scaleRestorePromise = null;
+  });
+
+  return scaleRestorePromise;
+}
+
+function scheduleScaleConnectionRestore() {
+  if (scaleRestoreTimer) {
+    window.clearTimeout(scaleRestoreTimer);
+  }
+
+  scaleRestoreTimer = window.setTimeout(() => {
+    scaleRestoreTimer = null;
+    void restoreScaleConnections();
+  }, SCALE_AUTO_RECONNECT_DELAY_MS);
 }
 
 function getScaleWeight(scaleId) {
@@ -2734,8 +3360,9 @@ function renderEntryDefaults() {
   const javaCount = normalizeJavaCount(defaults.javaCount, 1);
   const crateTypeId = normalizeCrateTypeId(defaults.crateTypeId, DEFAULT_CRATE_TYPE_ID);
   const originId = normalizeOriginId(defaults.originId || defaults.providerId);
+  const truckPlate = normalizeTruckPlate(defaults.truckPlate || defaults.plate || "");
 
-  state.entryDefaults = { birdCountPerJava, javaCount, crateTypeId, originId };
+  state.entryDefaults = { birdCountPerJava, javaCount, crateTypeId, originId, truckPlate };
   elements.birdCount.value = String(birdCountPerJava);
   elements.javaCount.value = String(javaCount);
   elements.crateType.value = crateTypeId;
@@ -2745,41 +3372,110 @@ function renderEntryDefaults() {
 function renderEntryProviderSelection() {
   const origin = getOriginById(state.entryDefaults?.originId);
   const hasOrigin = Boolean(origin);
+  const currentPlate = normalizeTruckPlate(state.entryDefaults?.truckPlate || elements.truckPlate.value);
 
-  elements.selectedProviderName.textContent = origin?.name || "Seleccionar origen";
+  elements.selectedProviderName.textContent = origin?.name || "Selecciona un camión de la lista";
   elements.selectProviderBtn.classList.toggle("is-empty", !hasOrigin);
-  updateTruckPlateField(origin, elements.truckPlate, elements.truckPlateField);
+  updateTruckPlateField(
+    origin,
+    elements.truckPlate,
+    elements.truckPlateField,
+    elements.truckPlateHelp,
+    { currentPlate }
+  );
+
+  const selectedPlate = isWarehouseOrigin(origin)
+    ? "Origen interno · No requiere placa"
+    : normalizeTruckPlate(elements.truckPlate.value);
+  state.entryDefaults.truckPlate = isWarehouseOrigin(origin) ? "" : selectedPlate;
+  elements.selectedProviderPlateLabel.textContent = selectedPlate
+    || (origin ? "Selecciona una placa de la lista" : "Proveedor y placa pendientes");
 }
 
 function renderEditProviderSelection() {
   const originName = String(editSelectedOrigin?.name || "").trim();
   elements.editSelectedProviderName.textContent = originName || "Sin origen registrado";
   elements.editSelectProviderBtn.classList.toggle("is-empty", !originName);
-  updateTruckPlateField(editSelectedOrigin, elements.editTruckPlate, elements.editTruckPlateField);
+  updateTruckPlateField(
+    editSelectedOrigin,
+    elements.editTruckPlate,
+    elements.editTruckPlateField,
+    elements.editTruckPlateHelp,
+    {
+      allowHistoricalPlate: Boolean(editingContext),
+      currentPlate: elements.editTruckPlate.dataset.historicalPlate
+        || elements.editTruckPlate.value
+    }
+  );
 }
 
-function updateTruckPlateField(origin, input, field) {
+function updateTruckPlateField(origin, select, field, help, options = {}) {
   const warehouse = isWarehouseOrigin(origin);
   field.hidden = warehouse;
-  input.disabled = warehouse;
-  input.required = !warehouse;
+  select.required = !warehouse;
 
   if (warehouse) {
-    input.value = "";
+    select.disabled = true;
+    select.innerHTML = '<option value="">No aplica para almacenes</option>';
+    select.value = "";
+    return;
   }
-}
 
-function renderGeneralPrices() {
-  state.generalPricesKg = normalizePricesKg(state.generalPricesKg, DEFAULT_GENERAL_PRICES_KG);
+  const currentPlate = normalizeTruckPlate(options.currentPlate || select.value);
+  const vehicles = getProviderVehicles(origin);
+  const activePlate = getProviderVehicleByPlate(origin, currentPlate);
+  const historicalPlate = options.allowHistoricalPlate && currentPlate && !activePlate;
+  const optionMarkup = [];
 
-  DISPATCH_CHICKEN_TYPES.forEach((type) => {
-    const input = elements.generalPriceInputs[type.id];
-    if (!input) {
-      return;
-    }
+  if (!origin) {
+    select.disabled = true;
+    select.innerHTML = '<option value="">Selecciona primero un proveedor</option>';
+    help.textContent = "Selecciona un proveedor para consultar sus placas asignadas.";
+    return;
+  }
 
-    input.value = state.generalPricesKg[type.id].toFixed(2);
+  if (vehicles.length > 1) {
+    optionMarkup.push('<option value="">Selecciona una placa</option>');
+  }
+
+  vehicles.forEach((vehicle) => {
+    const alias = vehicle.alias ? ` · ${vehicle.alias}` : "";
+    optionMarkup.push(
+      `<option value="${escapeHtml(vehicle.plate)}">${escapeHtml(vehicle.plate + alias)}</option>`
+    );
   });
+
+  if (historicalPlate) {
+    optionMarkup.push(
+      `<option value="${escapeHtml(currentPlate)}">${escapeHtml(`${currentPlate} · placa histórica`)}</option>`
+    );
+  }
+
+  if (!optionMarkup.length) {
+    select.disabled = true;
+    select.innerHTML = '<option value="">Proveedor sin placas asignadas</option>';
+    help.textContent = "Asigna al menos una placa activa desde el detalle del proveedor.";
+    return;
+  }
+
+  select.disabled = false;
+  select.innerHTML = optionMarkup.join("");
+
+  if (activePlate || historicalPlate) {
+    select.value = currentPlate;
+  } else if (vehicles.length === 1) {
+    select.value = vehicles[0].plate;
+  } else {
+    select.value = "";
+  }
+
+  help.textContent = historicalPlate
+    ? "Esta pesada conserva una placa histórica; puedes mantenerla o elegir una placa activa."
+    : (
+      vehicles.length === 1
+        ? "Placa activa asignada a este proveedor."
+        : `Selecciona una de las ${vehicles.length} placas activas del proveedor.`
+    );
 }
 
 function renderScaleDisplays() {
@@ -2891,7 +3587,7 @@ function bindResponsiveLayout() {
 function renderTruckSelect() {
   const currentValue = elements.truckSelect.value || state.trucks[0]?.id;
   elements.truckSelect.innerHTML = state.trucks
-    .map((truck) => `<option value="${escapeHtml(truck.id)}">${escapeHtml(truck.name)}</option>`)
+    .map((truck) => `<option value="${escapeHtml(truck.id)}">${escapeHtml(getTruckTicketLabel(truck))}</option>`)
     .join("");
 
   const exists = state.trucks.some((truck) => truck.id === currentValue);
@@ -2904,9 +3600,6 @@ function renderWeightPreview() {
   elements.manualWeightField.hidden = !isManual;
 
   const grossWeight = getWeightFromSource(source);
-  const javaCount = normalizeJavaCount(elements.javaCount.value, state.entryDefaults?.javaCount || 1);
-  const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, state.entryDefaults?.birdCountPerJava || 1);
-  const totalBirds = birdsPerJava > 0 ? birdsPerJava * javaCount : 0;
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
 
@@ -2914,13 +3607,12 @@ function renderWeightPreview() {
 
   if (!Number.isFinite(grossWeight) || grossWeight < 0) {
     elements.selectedWeightValue.textContent = "--";
-    elements.selectedWeightBreakdown.textContent = "Bruto -- - Javas -- | Aves totales --";
+    elements.selectedWeightBreakdown.textContent = "";
     return;
   }
 
-  const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
-  elements.selectedWeightValue.textContent = formatWeight(Math.max(breakdown.netWeightKg, 0));
-  elements.selectedWeightBreakdown.textContent = formatWeightBreakdownDetail(breakdown, totalBirds);
+  elements.selectedWeightValue.textContent = formatWeight(Math.max(grossWeight, 0));
+  elements.selectedWeightBreakdown.textContent = "";
 }
 
 function renderClientList(truckId) {
@@ -2930,7 +3622,6 @@ function renderClientList(truckId) {
     return;
   }
 
-  const generalPricesKg = normalizePricesKg(state.generalPricesKg, DEFAULT_GENERAL_PRICES_KG);
   const query = String(elements.clientSearch?.value || "").trim().toLocaleLowerCase("es");
   const destinations = getClientCatalog().filter((client) => {
     if (!query) {
@@ -2955,7 +3646,7 @@ function renderClientList(truckId) {
     options.push(`
       <button class="client-option ${noneActive}" type="button" data-client-id="">
         <span class="client-option-name">Sin destino asignado</span>
-        <span class="client-option-price">Usa precios generales: ${formatPricesSummary(generalPricesKg)}</span>
+        <span class="client-option-detail">El ticket quedará pendiente de destino.</span>
       </button>
     `);
   }
@@ -2963,12 +3654,11 @@ function renderClientList(truckId) {
   destinations.forEach((client) => {
     const isActive = truck.clientId === client.id ? "is-active" : "";
     const warehouse = isWarehouseDestination(client);
-    const pricesKg = warehouse
-      ? generalPricesKg
-      : getClientPricesKg(client, generalPricesKg);
-    const detail = warehouse
-      ? `Destino interno · Usa precios generales: ${formatPricesSummary(pricesKg)}`
-      : `Precios cliente: ${formatPricesSummary(pricesKg)}`;
+    const detail = [
+      warehouse ? "Destino interno" : "Cliente registrado",
+      client.dni ? `DNI/RUC: ${client.dni}` : "",
+      client.direccion
+    ].filter(Boolean).join(" · ");
 
     options.push(`
       <button class="client-option ${warehouse ? "is-warehouse" : ""} ${isActive}" type="button" data-client-id="${escapeHtml(client.id)}">
@@ -2976,7 +3666,7 @@ function renderClientList(truckId) {
           <span class="client-option-name">${escapeHtml(client.name)}</span>
           <span class="client-option-kind">${escapeHtml(getDestinationTypeLabel(client))}</span>
         </span>
-        <span class="client-option-price">${escapeHtml(detail)}</span>
+        <span class="client-option-detail">${escapeHtml(detail)}</span>
       </button>
     `);
   });
@@ -3031,8 +3721,10 @@ function renderProviderList() {
   elements.providerList.innerHTML = origins.map((origin) => {
     const isActive = selectedOrigin?.id === origin.id ? "is-active" : "";
     const warehouse = isWarehouseOrigin(origin);
+    const plateCount = getProviderVehicles(origin).length;
     const details = [
       warehouse ? "Origen interno · No requiere placa" : "Proveedor registrado",
+      warehouse ? "" : `${plateCount} ${plateCount === 1 ? "placa asignada" : "placas asignadas"}`,
       origin.dni ? `DNI/RUC: ${origin.dni}` : "",
       origin.direccion
     ].filter(Boolean).join(" | ");
@@ -3044,6 +3736,125 @@ function renderProviderList() {
       </button>
     `;
   }).join("");
+}
+
+function getDailyProviderRows() {
+  if (dailyJourneyPlan === null) {
+    return [];
+  }
+
+  return getProviderCatalog().flatMap((origin) => {
+    const vehicles = getProviderVehicles(origin);
+    if (!vehicles.length) {
+      return [{
+        key: `${origin.id}:sin-placa`,
+        origin,
+        plate: "",
+        plateLabel: "SIN PLACA",
+        alias: "Configurar vehículo",
+        disabled: true
+      }];
+    }
+
+    return vehicles.map((vehicle) => ({
+      key: `${origin.id}:${vehicle.plate}`,
+      origin,
+      plate: vehicle.plate,
+      plateLabel: vehicle.plate,
+      alias: vehicle.alias,
+      disabled: false
+    }));
+  });
+}
+
+function renderDailyProviderList() {
+  if (!elements.dailyProviderList) {
+    return;
+  }
+
+  const rows = getDailyProviderRows();
+  const activeOrigin = getOriginById(state.entryDefaults?.originId);
+  const activePlate = normalizeTruckPlate(
+    state.entryDefaults?.truckPlate || elements.truckPlate.value
+  );
+  const selectableCount = rows.filter((row) => !row.disabled).length;
+
+  if (elements.dailyProviderCount) {
+    elements.dailyProviderCount.textContent = String(selectableCount);
+    elements.dailyProviderCount.title = `${selectableCount} camiones u orígenes disponibles`;
+  }
+
+  if (!rows.length) {
+    elements.dailyProviderList.innerHTML = `
+      <div class="daily-provider-empty">
+        No hay camiones seleccionados para esta jornada.
+        <a href="/jornada">Configurar jornada</a>
+      </div>
+    `;
+    return;
+  }
+
+  elements.dailyProviderList.innerHTML = rows.map((row, index) => {
+    const isActive = activeOrigin?.id === row.origin.id
+      && activePlate === row.plate;
+    const rowClass = [
+      "daily-provider-row",
+      isActive ? "is-active" : "",
+      row.disabled ? "is-disabled" : ""
+    ].filter(Boolean).join(" ");
+
+    return `
+      <button
+        class="${rowClass}"
+        type="button"
+        role="option"
+        aria-selected="${isActive ? "true" : "false"}"
+        data-origin-id="${escapeHtml(row.origin.id)}"
+        data-plate="${escapeHtml(row.plate)}"
+        ${row.disabled ? "disabled" : ""}
+      >
+        <span class="daily-provider-index">${String(index + 1).padStart(2, "0")}</span>
+        <span class="daily-provider-name">
+          <strong>${escapeHtml(row.origin.name)}</strong>
+          <small>${row.origin.dni ? `DNI/RUC ${row.origin.dni}` : "Proveedor"}</small>
+        </span>
+        <span class="daily-provider-plate">
+          <strong>${escapeHtml(row.plateLabel)}</strong>
+          <small>${escapeHtml(row.alias || "Camión activo")}</small>
+        </span>
+      </button>
+    `;
+  }).join("");
+}
+
+function selectDailyProviderVehicle(originId, plate) {
+  const origin = getOriginById(originId);
+  if (!origin) {
+    renderDailyProviderList();
+    return;
+  }
+
+  const warehouse = isWarehouseOrigin(origin);
+  const normalizedPlate = warehouse ? "" : normalizeTruckPlate(plate);
+  if (!warehouse && !getProviderVehicleByPlate(origin, normalizedPlate)) {
+    setFormMessage("La placa seleccionada ya no está activa para este proveedor.", true);
+    renderDailyProviderList();
+    return;
+  }
+
+  state.entryDefaults = {
+    ...(state.entryDefaults || {}),
+    originId: origin.id,
+    truckPlate: normalizedPlate
+  };
+  saveState();
+  renderEntryProviderSelection();
+  renderDailyProviderList();
+  setFormMessage(
+    warehouse
+      ? `Origen seleccionado: ${origin.name}. No requiere placa.`
+      : `Camión seleccionado: ${origin.name} · ${normalizedPlate}.`
+  );
 }
 
 function buildTruckTableRows(cages, truckId) {
@@ -3104,8 +3915,6 @@ function getCommonTicketValue(values, fallback = "--") {
 
 function buildDispatchTicketHtml(truck) {
   const totals = calculateTruckTotals(truck.cages);
-  const pricing = getTruckPricing(truck);
-  const totalAmount = calculateTotalAmountByType(totals.byType, pricing.pricesKg);
   const emittedAt = new Date();
   const originName = getCommonTicketValue(
     truck.cages.map((cage) => cage.origenNombre || cage.proveedorOrigenNombre)
@@ -3154,7 +3963,7 @@ function buildDispatchTicketHtml(truck) {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>${escapeHtml(truck.name)} - Ticket de despacho</title>
+  <title>${escapeHtml(getTruckTicketLabel(truck))} - Ticket de despacho</title>
   <style>
     @page {
       size: auto;
@@ -3284,10 +4093,6 @@ function buildDispatchTicketHtml(truck) {
       font-weight: 800;
     }
 
-    .amount {
-      font-size: 11px;
-    }
-
     .signature {
       margin-top: 7mm;
       display: grid;
@@ -3316,7 +4121,7 @@ function buildDispatchTicketHtml(truck) {
   <div class="separator"></div>
 
   <section class="info">
-    <strong>TICKET:</strong><span>${escapeHtml(truck.name)}</span>
+    <strong>TICKET:</strong><span>${escapeHtml(getTruckTicketLabel(truck))}</span>
     <strong>FECHA:</strong><span>${escapeHtml(emittedAt.toLocaleDateString("es-CO"))}</span>
     <strong>HORA:</strong><span>${escapeHtml(emittedAt.toLocaleTimeString("es-CO"))}</span>
     <strong>DESTINO:</strong><span>${escapeHtml(getTruckClientName(truck))}</span>
@@ -3365,7 +4170,6 @@ function buildDispatchTicketHtml(truck) {
   <div class="grand-total"><span>PESO BRUTO:</span><span>${totals.grossWeight.toFixed(2)} kg</span></div>
   <div class="grand-total"><span>TARA JAVAS:</span><span>${totals.tareWeight.toFixed(2)} kg</span></div>
   <div class="grand-total"><span>PESO NETO:</span><span>${totals.netWeight.toFixed(2)} kg</span></div>
-  <div class="grand-total amount"><span>TOTAL:</span><span>${escapeHtml(formatCurrency(totalAmount))}</span></div>
 
   <section class="signature">
     <div class="signature-line">NOMBRE</div>
@@ -3387,6 +4191,11 @@ function printDispatchTicket(truckId) {
 
   if (!truck.cages.length) {
     setFormMessage(`${truck.name} no tiene registros para imprimir.`, true);
+    return;
+  }
+
+  if (!isTruckRegistered(truck)) {
+    setFormMessage("Primero registra el ticket en la base de datos.", true);
     return;
   }
 
@@ -3431,18 +4240,179 @@ function printDispatchTicket(truckId) {
   document.body.appendChild(printFrame);
 }
 
-function buildSelectedTruckDetails(truck, totals, pricing) {
+function buildDispatchTicketPayload(truck) {
+  const destination = getClientById(truck.clientId);
+
+  if (!destination) {
+    throw new Error("Asigna un cliente o almacén de destino antes de registrar el ticket.");
+  }
+
+  const destinationId = isWarehouseDestination(destination)
+    ? Number(destination.databaseId)
+    : Number(destination.id);
+
+  if (!Number.isInteger(destinationId) || destinationId <= 0) {
+    throw new Error("El destino seleccionado no está vinculado con la base de datos.");
+  }
+
+  return {
+    draft_id: truck.draftId,
+    destination: {
+      type: isWarehouseDestination(destination) ? "ALMACEN" : "CLIENTE",
+      id: destinationId
+    },
+    weighings: truck.cages.map((cage) => {
+      const type = getTypeMeta(cage.tipo);
+      const crate = getCrateTypeMeta(cage.crateTypeId);
+      const origin = getOriginById(cage.origenId);
+      const warehouseOrigin = isWarehouseOrigin(origin)
+        || cage.tipoOrigen === "almacen";
+      const warehouseId = Number(
+        origin?.databaseId
+          || cage.almacenOrigenId
+          || cage.origen?.almacenId
+      );
+      const providerId = Number(
+        cage.proveedorOrigenId
+          || cage.origenId
+          || cage.proveedorOrigen?.id
+      );
+
+      if (warehouseOrigin && (!Number.isInteger(warehouseId) || warehouseId <= 0)) {
+        throw new Error(`El almacén de origen del registro #${cage.id} no está vinculado con la base de datos.`);
+      }
+
+      if (!warehouseOrigin && (!Number.isInteger(providerId) || providerId <= 0)) {
+        throw new Error(`El proveedor del registro #${cage.id} no está vinculado con la base de datos.`);
+      }
+
+      return {
+        local_id: Number(cage.id),
+        chicken_type_code: type.apiCode,
+        cage_type_code: crate.apiCode,
+        origin: warehouseOrigin
+          ? {
+              type: "ALMACEN",
+              warehouse_id: warehouseId
+            }
+          : {
+              type: "PROVEEDOR",
+              provider_id: providerId,
+              provider_vehicle_id: Number(cage.proveedorVehiculoId) || null,
+              vehicle_id: Number(cage.vehiculoId) || null,
+              plate: normalizeTruckPlate(cage.placaCamion)
+            },
+        weight_source: cage.origenPeso === "manual"
+          ? "MANUAL"
+          : `BALANZA_${Number(cage.balanza) === 2 ? 2 : 1}`,
+        birds_per_cage: normalizeBirdCountPerJava(
+          cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
+          0
+        ),
+        cage_count: normalizeJavaCount(cage.cantidadJavas, 1),
+        read_weight_kg: roundWeight(Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg)),
+        gross_weight_kg: roundWeight(Number(cage.pesoBrutoKg ?? cage.pesoKg)),
+        weighed_at: cage.timestamp
+      };
+    })
+  };
+}
+
+function getApiErrorPresentation(error) {
+  const validationErrors = error?.data?.errors || {};
+  const details = Object.entries(validationErrors)
+    .flatMap(([field, messages]) => {
+      const values = Array.isArray(messages) ? messages : [messages];
+      return values.map((message) => ({
+        label: field,
+        value: String(message || "")
+      }));
+    })
+    .filter((item) => item.value);
+
+  return {
+    message: details[0]?.value || error?.message || "No se pudo registrar el ticket.",
+    details
+  };
+}
+
+async function registerDispatchTicket(truckId) {
+  const truck = state.trucks.find((item) => item.id === truckId);
+
+  if (!truck) {
+    setFormMessage("No se encontró el ticket seleccionado.", true);
+    return;
+  }
+
+  if (isTruckRegistered(truck)) {
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado.`);
+    return;
+  }
+
+  if (!truck.cages.length) {
+    setFormMessage(`${truck.name} no tiene pesadas para registrar.`, true);
+    return;
+  }
+
+  if (pendingTicketRegistrations.has(truck.id)) {
+    return;
+  }
+
+  let payload;
+  try {
+    payload = buildDispatchTicketPayload(truck);
+  } catch (error) {
+    setFormMessage(error.message, true);
+    return;
+  }
+
+  pendingTicketRegistrations.add(truck.id);
+  renderSelectedTruckDetails();
+  setFormMessage(`Registrando ${truck.name} y sus ${truck.cages.length} pesadas...`);
+
+  try {
+    const response = await apiRequest("/operacion/tickets", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    truck.registration = normalizeTicketRegistration({
+      id: response.data?.id,
+      code: response.data?.code,
+      status: response.data?.status,
+      operating_date: response.data?.operating_date,
+      registered_at: response.data?.registered_at,
+      destination: response.data?.destination
+    });
+    saveState();
+    renderAll();
+    setFormMessage(
+      `${response.data?.code || truck.name} registrado con ${response.data?.weighing_count || truck.cages.length} pesadas.`
+    );
+  } catch (error) {
+    const presentation = getApiErrorPresentation(error);
+    setFormMessage(presentation.message, true, {
+      title: "No se registró el ticket",
+      details: presentation.details
+    });
+  } finally {
+    pendingTicketRegistrations.delete(truck.id);
+    renderSelectedTruckDetails();
+  }
+}
+
+function buildSelectedTruckDetails(truck, totals) {
+  const registration = normalizeTicketRegistration(truck.registration);
+  const isRegistering = pendingTicketRegistrations.has(truck.id);
+  const hasDestination = Boolean(getClientById(truck.clientId));
   const typeItems = totals.byType
     .map((item) => {
       const toneClass = `type-total-${item.id.replace(/_/g, "-")}`;
-      const priceKg = normalizePriceKg(pricing.pricesKg[item.id], 0);
-      const amount = roundWeight(item.weight * priceKg);
 
       return `
         <div class="selected-truck-type ${toneClass}">
           <span>${item.label}</span>
           <strong>${item.records} registros | ${item.javas} javas | ${item.birds} aves</strong>
-          <small>Neto ${item.weight.toFixed(2)} kg | ${formatCurrency(priceKg)}/kg | ${formatCurrency(amount)}</small>
+          <small>Neto ${item.weight.toFixed(2)} kg</small>
         </div>
       `;
     })
@@ -3452,12 +4422,8 @@ function buildSelectedTruckDetails(truck, totals, pricing) {
     <div class="selected-truck-bar-head">
       <div>
         <span>Ticket seleccionado</span>
-        <strong>${escapeHtml(truck.name)}</strong>
+        <strong>${escapeHtml(getTruckTicketLabel(truck))}</strong>
         <small>${escapeHtml(getTruckClientName(truck))}</small>
-      </div>
-      <div class="selected-truck-price">
-        <span>${pricing.sourceLabel}</span>
-        <strong>${formatPricesSummary(pricing.pricesKg)}</strong>
       </div>
     </div>
 
@@ -3486,10 +4452,6 @@ function buildSelectedTruckDetails(truck, totals, pricing) {
         <span>Neto kg</span>
         <strong>${totals.netWeight.toFixed(2)}</strong>
       </div>
-      <div class="selected-truck-stat selected-truck-total">
-        <span>Total S/</span>
-        <strong>${formatCurrency(pricing.totalAmount)}</strong>
-      </div>
     </div>
 
     <div class="selected-truck-types">
@@ -3497,12 +4459,23 @@ function buildSelectedTruckDetails(truck, totals, pricing) {
     </div>
 
     <div class="selected-truck-actions">
+      ${registration ? `
+        <span class="ticket-registration-status">
+          Registrado · ${escapeHtml(registration.code)}
+        </span>
+      ` : ""}
+      <button
+        class="register-ticket-btn"
+        type="button"
+        data-register-ticket="${escapeHtml(truck.id)}"
+        ${totals.records && hasDestination && !isRegistering && !registration ? "" : "disabled"}
+      >${isRegistering ? "Registrando..." : (registration ? "Ticket registrado" : "Registrar ticket")}</button>
       <button
         class="print-ticket-btn"
         type="button"
         data-print-ticket="${escapeHtml(truck.id)}"
-        ${totals.records ? "" : "disabled"}
-      >Generar ticket</button>
+        ${totals.records && registration ? "" : "disabled"}
+      >Imprimir ticket</button>
     </div>
   `;
 }
@@ -3523,13 +4496,7 @@ function renderSelectedTruckDetails() {
   }
 
   const totals = calculateTruckTotals(truck.cages);
-  const pricingBase = getTruckPricing(truck);
-  const pricing = {
-    ...pricingBase,
-    totalAmount: calculateTotalAmountByType(totals.byType, pricingBase.pricesKg)
-  };
-
-  elements.selectedTruckDetails.innerHTML = buildSelectedTruckDetails(truck, totals, pricing);
+  elements.selectedTruckDetails.innerHTML = buildSelectedTruckDetails(truck, totals);
 }
 
 function renderTruckColumns() {
@@ -3538,12 +4505,6 @@ function renderTruckColumns() {
   elements.trucksGrid.innerHTML = state.trucks
     .map((truck) => {
       const totals = calculateTruckTotals(truck.cages);
-      const pricingBase = getTruckPricing(truck);
-      const totalAmount = calculateTotalAmountByType(totals.byType, pricingBase.pricesKg);
-      const pricing = {
-        ...pricingBase,
-        totalAmount
-      };
 
       const tableContent = totals.cages
         ? `
@@ -3577,17 +4538,17 @@ function renderTruckColumns() {
 
       const isActive = truck.id === activeTruckId ? "active" : "";
       const clientName = escapeHtml(getTruckClientName(truck));
-      const priceLabel = pricing.sourceLabel;
+      const registration = normalizeTicketRegistration(truck.registration);
 
       return `
-        <article class="truck-card ${isActive}" data-truck-id="${escapeHtml(truck.id)}">
+        <article class="truck-card ${isActive} ${registration ? "is-registered" : ""}" data-truck-id="${escapeHtml(truck.id)}">
           <header class="truck-head">
             <div class="truck-head-top">
-              <h3>${escapeHtml(truck.name)}</h3>
-              <button class="assign-client-btn" type="button" data-assign-client="${escapeHtml(truck.id)}">Destino</button>
+              <h3>${escapeHtml(getTruckTicketLabel(truck))}</h3>
+              <button class="assign-client-btn" type="button" data-assign-client="${escapeHtml(truck.id)}" ${registration ? "disabled" : ""}>Destino</button>
             </div>
             <p class="truck-client-name">${clientName}</p>
-            <p class="truck-price-line">${priceLabel}: ${formatPricesSummary(pricing.pricesKg)}</p>
+            ${registration ? `<p class="truck-registration-line">Registrado en base de datos</p>` : ""}
           </header>
 
           <div class="truck-metrics">
@@ -3607,10 +4568,6 @@ function renderTruckColumns() {
               <span>Javas kg</span>
               <strong>${totals.tareWeight.toFixed(2)}</strong>
             </div>
-            <div class="metric">
-              <span>Total S/</span>
-              <strong>${totalAmount.toFixed(2)}</strong>
-            </div>
           </div>
 
           ${tableContent}
@@ -3624,46 +4581,32 @@ function renderGlobalStats() {
   const total = state.trucks.reduce(
     (acc, truck) => {
       const truckTotals = calculateTruckTotals(truck.cages);
-      const pricing = getTruckPricing(truck);
       acc.records += truckTotals.records;
       acc.javas += truckTotals.javas;
       acc.birds += truckTotals.birds;
       acc.grossWeight += truckTotals.grossWeight;
       acc.tareWeight += truckTotals.tareWeight;
       acc.netWeight += truckTotals.netWeight;
-      acc.amount += calculateTotalAmountByType(truckTotals.byType, pricing.pricesKg);
       return acc;
     },
-    { records: 0, javas: 0, birds: 0, grossWeight: 0, tareWeight: 0, netWeight: 0, amount: 0 }
+    { records: 0, javas: 0, birds: 0, grossWeight: 0, tareWeight: 0, netWeight: 0 }
   );
 
-  elements.globalStats.textContent = `Registros: ${total.records} | Javas: ${total.javas} | Javas kg: ${roundWeight(total.tareWeight).toFixed(2)} | Aves: ${total.birds} | Neto aves kg: ${roundWeight(total.netWeight).toFixed(2)} | Total S/: ${roundWeight(total.amount).toFixed(2)}`;
+  elements.globalStats.textContent = `Registros: ${total.records} | Javas: ${total.javas} | Javas kg: ${roundWeight(total.tareWeight).toFixed(2)} | Aves: ${total.birds} | Neto aves kg: ${roundWeight(total.netWeight).toFixed(2)}`;
 }
 
 function buildJsonPayload() {
-  const generalPricesKg = normalizePricesKg(state.generalPricesKg, DEFAULT_GENERAL_PRICES_KG);
-
   return {
     fechaCorte: new Date().toISOString(),
-    precioGeneralKg: generalPricesKg.pollo_vivo,
-    preciosGeneralesKg: generalPricesKg,
     tiposDisponibles: DISPATCH_CHICKEN_TYPES.map((type) => ({ id: type.id, nombre: type.label })),
     tiposJavasDisponibles: CRATE_TYPES.map((crate) => ({ id: crate.id, nombre: crate.label, pesoKg: crate.weightKg })),
-    clientesDisponibles: getClientCatalog().map((client) => {
-      const pricesKg = isWarehouseDestination(client)
-        ? generalPricesKg
-        : getClientPricesKg(client, generalPricesKg);
-
-      return {
-        id: client.id,
-        name: client.name,
-        nombre: client.name,
-        tipoDestino: client.destinationType,
-        numeroAlmacen: client.warehouseNumber,
-        priceKg: pricesKg.pollo_vivo,
-        pricesKg
-      };
-    }),
+    clientesDisponibles: getClientCatalog().map((client) => ({
+      id: client.id,
+      name: client.name,
+      nombre: client.name,
+      tipoDestino: client.destinationType,
+      numeroAlmacen: client.warehouseNumber
+    })),
     destinosDisponibles: getClientCatalog().map((destination) => ({
       id: destination.id,
       nombre: destination.name,
@@ -3697,21 +4640,14 @@ function buildJsonPayload() {
     },
     camiones: state.trucks.map((truck) => {
       const totals = calculateTruckTotals(truck.cages);
-      const pricing = getTruckPricing(truck);
-      const totalAmount = calculateTotalAmountByType(totals.byType, pricing.pricesKg);
       const client = getClientById(truck.clientId);
-      const clientPricesKg = client
-        ? (isWarehouseDestination(client) ? generalPricesKg : getClientPricesKg(client, generalPricesKg))
-        : null;
       const destination = client
         ? {
             id: client.id,
             name: client.name,
             nombre: client.name,
             tipo: client.destinationType,
-            numeroAlmacen: client.warehouseNumber,
-            priceKg: clientPricesKg.pollo_vivo,
-            pricesKg: clientPricesKg
+            numeroAlmacen: client.warehouseNumber
           }
         : null;
 
@@ -3721,10 +4657,6 @@ function buildJsonPayload() {
         cliente: destination,
         destino: destination,
         tipoDestino: client?.destinationType || null,
-        precioAplicadoKg: pricing.pricesKg.pollo_vivo,
-        preciosAplicadosKg: pricing.pricesKg,
-        origenPrecio: pricing.source,
-        totalImporte: totalAmount,
         totalRegistros: totals.records,
         totalJavas: totals.javas,
         totalAves: totals.birds,
@@ -3747,9 +4679,7 @@ function buildJsonPayload() {
           totalKgJavas: item.tareWeight,
           totalKgTara: item.tareWeight,
           totalKgNeto: item.weight,
-          totalKg: item.weight,
-          precioKgAplicado: normalizePriceKg(pricing.pricesKg[item.id], 0),
-          totalImporte: roundWeight(item.weight * normalizePriceKg(pricing.pricesKg[item.id], 0))
+          totalKg: item.weight
         })),
         jaulas: truck.cages
       };
@@ -3764,11 +4694,11 @@ function renderJson() {
 function renderAll() {
   ensureDefaultOriginSelection(true);
   renderTypeButtons();
-  renderGeneralPrices();
   renderScaleDisplays();
   renderScaleConnectionPanels();
   renderTruckSelect();
   renderEntryDefaults();
+  renderDailyProviderList();
   renderWeightPreview();
   renderTruckColumns();
   renderSelectedTruckDetails();
@@ -3778,8 +4708,7 @@ function renderAll() {
   if (!elements.clientModal.hidden && clientModalTruckId) {
     const truck = state.trucks.find((item) => item.id === clientModalTruckId);
     if (truck) {
-      const pricing = getTruckPricing(truck);
-      elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTruckClientName(truck)} (${pricing.sourceLabel}: ${formatPricesSummary(pricing.pricesKg)})`;
+      elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTruckClientName(truck)}`;
       renderClientList(clientModalTruckId);
     }
   }
@@ -3812,40 +4741,19 @@ function updateScale(scaleId) {
   setFormMessage(`Balanza ${scaleId} actualizada a ${formatWeight(weight)}.`);
 }
 
-function updateGeneralPrice(typeId) {
-  const input = elements.generalPriceInputs[typeId];
-  const typeMeta = getTypeMeta(typeId);
-
-  if (!input || !VALID_TYPES.has(typeId)) {
-    return;
-  }
-
-  const price = normalizePriceKg(input.value, 0);
-
-  if (price <= 0) {
-    setFormMessage(`Ingresa un precio general válido para ${typeMeta.label.toLowerCase()}.`, true);
-    renderGeneralPrices();
-    return;
-  }
-
-  state.generalPricesKg = normalizePricesKg(state.generalPricesKg, DEFAULT_GENERAL_PRICES_KG);
-  state.generalPricesKg[typeId] = price;
-  saveState();
-  renderAll();
-  setFormMessage(`Precio general de ${typeMeta.label.toLowerCase()} actualizado a ${formatCurrency(price)} por kg.`);
-}
-
 function updateEntryDefaults(showMessage = false) {
   const birdCountPerJava = normalizeBirdCountPerJava(elements.birdCount.value, state.entryDefaults?.birdCountPerJava || 1);
   const javaCount = normalizeJavaCount(elements.javaCount.value, state.entryDefaults?.javaCount || 1);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
+  const truckPlate = normalizeTruckPlate(elements.truckPlate.value || state.entryDefaults?.truckPlate);
 
   state.entryDefaults = {
     birdCountPerJava,
     javaCount,
     crateTypeId: crateMeta.id,
-    originId: normalizeOriginId(state.entryDefaults?.originId)
+    originId: normalizeOriginId(state.entryDefaults?.originId),
+    truckPlate
   };
 
   elements.birdCount.value = String(birdCountPerJava);
@@ -3888,6 +4796,7 @@ function addCage(event) {
   const origin = getOriginById(state.entryDefaults?.originId);
   const warehouseOrigin = isWarehouseOrigin(origin);
   const truckPlate = warehouseOrigin ? "" : normalizeTruckPlate(elements.truckPlate.value);
+  const providerVehicle = warehouseOrigin ? null : getProviderVehicleByPlate(origin, truckPlate);
   elements.truckPlate.value = truckPlate;
 
   if (!truckId) {
@@ -3900,8 +4809,13 @@ function addCage(event) {
     return;
   }
 
-  if (!warehouseOrigin && !isValidTruckPlate(truckPlate)) {
-    setFormMessage("Ingresa una placa válida con letras mayúsculas, números y guiones.", true);
+  if (!warehouseOrigin && !getProviderVehicles(origin).length) {
+    setFormMessage("El proveedor seleccionado no tiene placas activas asignadas.", true);
+    return;
+  }
+
+  if (!warehouseOrigin && !providerVehicle) {
+    setFormMessage("Selecciona una placa activa asignada al proveedor.", true);
     return;
   }
 
@@ -3931,6 +4845,11 @@ function addCage(event) {
     return;
   }
 
+  if (isTruckRegistered(truck)) {
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y no admite nuevas pesadas.`, true);
+    return;
+  }
+
   const now = new Date();
   const record = {
     id: ++state.lastId,
@@ -3957,7 +4876,9 @@ function addCage(event) {
     origenPeso: source,
     balanza: source === "manual" ? null : Number(source),
     ...buildOriginRecord(origin),
-    placaCamion: truckPlate
+    placaCamion: truckPlate,
+    proveedorVehiculoId: providerVehicle?.id || null,
+    vehiculoId: providerVehicle?.vehicleId || null
   };
 
   truck.cages.push(record);
@@ -3966,7 +4887,8 @@ function addCage(event) {
     birdCountPerJava: birdsPerJava,
     javaCount,
     crateTypeId: crateMeta.id,
-    originId: origin.id
+    originId: origin.id,
+    truckPlate
   };
 
   if (source === "manual") {
@@ -4003,6 +4925,7 @@ function openJsonModal() {
   closeAllScaleSettings();
   closeFontSidebar();
   closeNumericPad();
+  closeTouchSelect();
   renderJson();
   elements.jsonModal.hidden = false;
 }
@@ -4013,6 +4936,7 @@ function closeJsonModal() {
 
 function openClientModal(truckId) {
   closeNumericPad();
+  closeTouchSelect();
 
   const truck = state.trucks.find((item) => item.id === truckId);
   if (!truck) {
@@ -4020,12 +4944,16 @@ function openClientModal(truckId) {
     return;
   }
 
+  if (isTruckRegistered(truck)) {
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y su destino no puede modificarse.`, true);
+    return;
+  }
+
   clientModalTruckId = truck.id;
   if (elements.clientSearch) {
     elements.clientSearch.value = "";
   }
-  const pricing = getTruckPricing(truck);
-  elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTruckClientName(truck)} (${pricing.sourceLabel}: ${formatPricesSummary(pricing.pricesKg)})`;
+  elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTruckClientName(truck)}`;
   renderClientList(truck.id);
   elements.clientModal.hidden = false;
   window.setTimeout(() => elements.clientSearch?.focus(), 0);
@@ -4048,6 +4976,12 @@ function assignClientToTruck(clientId) {
     return;
   }
 
+  if (isTruckRegistered(truck)) {
+    closeClientModal();
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y su destino no puede modificarse.`, true);
+    return;
+  }
+
   const normalizedClientId = normalizeClientId(clientId);
   truck.clientId = normalizedClientId;
 
@@ -4061,16 +4995,13 @@ function assignClientToTruck(clientId) {
   }
 
   const client = getClientById(normalizedClientId);
-  const generalPricesKg = normalizePricesKg(state.generalPricesKg, DEFAULT_GENERAL_PRICES_KG);
-  const clientPricesKg = isWarehouseDestination(client)
-    ? generalPricesKg
-    : getClientPricesKg(client, generalPricesKg);
   const destinationLabel = isWarehouseDestination(client) ? "Almacén asignado" : "Cliente asignado";
-  setFormMessage(`${destinationLabel} a ${truck.name}: ${client ? client.name : normalizedClientId} (${formatPricesSummary(clientPricesKg)}).`);
+  setFormMessage(`${destinationLabel} a ${truck.name}: ${client ? client.name : normalizedClientId}.`);
 }
 
 function openProviderModal(context = "entry") {
   closeNumericPad();
+  closeTouchSelect();
   providerPickerContext = context === "edit" ? "edit" : "entry";
 
   if (providerPickerContext === "edit" && !editingContext) {
@@ -4102,6 +5033,10 @@ function selectOrigin(originId) {
   }
 
   if (providerPickerContext === "edit") {
+    if (String(editSelectedOrigin?.id || "") !== origin.id) {
+      elements.editTruckPlate.value = "";
+      delete elements.editTruckPlate.dataset.historicalPlate;
+    }
     editSelectedOrigin = { ...origin };
     renderEditProviderSelection();
     closeProviderModal();
@@ -4109,18 +5044,24 @@ function selectOrigin(originId) {
     return;
   }
 
+  if (String(state.entryDefaults?.originId || "") !== origin.id) {
+    elements.truckPlate.value = "";
+  }
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
-    originId: origin.id
+    originId: origin.id,
+    truckPlate: ""
   };
   saveState();
   renderEntryProviderSelection();
+  renderDailyProviderList();
   closeProviderModal();
   setFormMessage(`Origen seleccionado: ${origin.name}.${isWarehouseOrigin(origin) ? " No requiere placa." : ""}`);
 }
 
 function openCageModal(truckId, cageId) {
   closeNumericPad();
+  closeTouchSelect();
 
   const found = findTruckAndCage(truckId, cageId);
 
@@ -4130,6 +5071,11 @@ function openCageModal(truckId, cageId) {
   }
 
   const { truck, cage } = found;
+  if (isTruckRegistered(truck)) {
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado. Sus pesadas son de solo lectura.`, true);
+    return;
+  }
+
   editingContext = { truckId: truck.id, cageId: cage.id };
 
   elements.itemCageNumber.textContent = `#${cage.id}`;
@@ -4165,13 +5111,15 @@ function openCageModal(truckId, cageId) {
   const catalogOrigin = getOriginById(recordOriginId);
   editSelectedOrigin = recordOriginName
     ? {
+        ...(catalogOrigin || {}),
         id: recordOriginId,
         name: recordOriginName,
         originType: cage.tipoOrigen || cage.origen?.tipo || catalogOrigin?.originType || "proveedor",
         warehouseNumber: cage.numeroAlmacenOrigen || cage.origen?.numeroAlmacen || catalogOrigin?.warehouseNumber || null
       }
     : null;
-  elements.editTruckPlate.value = normalizeTruckPlate(cage.placaCamion || "");
+  elements.editTruckPlate.innerHTML = "";
+  elements.editTruckPlate.dataset.historicalPlate = normalizeTruckPlate(cage.placaCamion || "");
   renderEditProviderSelection();
 
   setItemFormMessage("");
@@ -4181,6 +5129,7 @@ function openCageModal(truckId, cageId) {
 function closeItemModal() {
   editingContext = null;
   editSelectedOrigin = null;
+  delete elements.editTruckPlate.dataset.historicalPlate;
   if (!elements.providerModal.hidden && providerPickerContext === "edit") {
     closeProviderModal();
   }
@@ -4205,6 +5154,12 @@ function saveCageChanges(event) {
   }
 
   const { truck, cage } = found;
+  if (isTruckRegistered(truck)) {
+    closeItemModal();
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado. Sus pesadas no pueden modificarse.`, true);
+    return;
+  }
+
   const type = normalizeType(elements.editType.value);
   const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
   const javaCount = normalizeJavaCount(elements.editJavaCount.value, 1);
@@ -4218,6 +5173,17 @@ function saveCageChanges(event) {
   const originName = String(editSelectedOrigin?.name || "").trim();
   const warehouseOrigin = isWarehouseOrigin(editSelectedOrigin);
   const truckPlate = warehouseOrigin ? "" : normalizeTruckPlate(elements.editTruckPlate.value);
+  const providerVehicle = warehouseOrigin
+    ? null
+    : getProviderVehicleByPlate(editSelectedOrigin, truckPlate);
+  const existingOriginId = String(
+    cage.origenId || cage.origen?.id || cage.proveedorOrigenId || cage.proveedorOrigen?.id || ""
+  ).trim();
+  const existingPlate = normalizeTruckPlate(cage.placaCamion || "");
+  const historicalPlateUnchanged = !warehouseOrigin
+    && originId === existingOriginId
+    && truckPlate === existingPlate
+    && isValidTruckPlate(truckPlate);
   elements.editTruckPlate.value = truckPlate;
 
   if (!VALID_TYPES.has(type)) {
@@ -4260,8 +5226,8 @@ function saveCageChanges(event) {
     return;
   }
 
-  if (!warehouseOrigin && !isValidTruckPlate(truckPlate)) {
-    setItemFormMessage("Ingresa una placa válida con letras mayúsculas, números y guiones.", true);
+  if (!warehouseOrigin && !providerVehicle && !historicalPlateUnchanged) {
+    setItemFormMessage("Selecciona una placa activa asignada al proveedor.", true);
     return;
   }
 
@@ -4287,6 +5253,12 @@ function saveCageChanges(event) {
     name: originName
   }));
   cage.placaCamion = truckPlate;
+  cage.proveedorVehiculoId = providerVehicle?.id
+    || (historicalPlateUnchanged ? cage.proveedorVehiculoId : null)
+    || null;
+  cage.vehiculoId = providerVehicle?.vehicleId
+    || (historicalPlateUnchanged ? cage.vehiculoId : null)
+    || null;
 
   saveState();
   renderAll();
@@ -4310,6 +5282,12 @@ function deleteCageRecord() {
   }
 
   const { truck, cage } = found;
+  if (isTruckRegistered(truck)) {
+    closeItemModal();
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado. Sus pesadas no pueden eliminarse.`, true);
+    return;
+  }
+
   const confirmed = window.confirm(`Se eliminará el registro #${cage.id} de ${truck.name}. ¿Continuar?`);
   if (!confirmed) {
     return;
@@ -4345,7 +5323,7 @@ function resetDay() {
   }
 
   SCALE_IDS.forEach((scaleId) => {
-    disconnectScale(scaleId, false);
+    disconnectScale(scaleId, false, true);
   });
   state = createDefaultState();
   elements.truckPlate.value = "";
@@ -4356,6 +5334,7 @@ function resetDay() {
   closeProviderModal();
   closeErrorModal();
   closeNumericPad();
+  closeTouchSelect();
   closeConfigMenu();
   closeAllScaleSettings();
   closeFontSidebar();
@@ -4365,6 +5344,7 @@ function resetDay() {
 function bindEvents() {
   elements.backToMenuBtn?.addEventListener("click", () => {
     closeNumericPad();
+    closeTouchSelect();
     closeConfigMenu();
     closeAllScaleSettings();
     closeFontSidebar();
@@ -4379,8 +5359,16 @@ function bindEvents() {
 
     refreshClientsFromDirectory();
   });
-  window.addEventListener("pageshow", refreshClientsFromDirectory);
-  window.addEventListener("focus", refreshClientsFromDirectory);
+  window.addEventListener("pageshow", () => {
+    void loadCurrentDirectoryData();
+    void restoreScaleConnections();
+  });
+  window.addEventListener("focus", () => {
+    void loadCurrentDirectoryData();
+    void restoreScaleConnections();
+  });
+  navigator.serial?.addEventListener?.("connect", scheduleScaleConnectionRestore);
+  navigator.bluetooth?.addEventListener?.("availabilitychanged", scheduleScaleConnectionRestore);
 
   elements.typeButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -4403,17 +5391,28 @@ function bindEvents() {
   elements.scaleConnectBleButtons[2]?.addEventListener("click", () => connectBleScale(2));
   elements.scaleConnectSerialButtons[1]?.addEventListener("click", () => connectSerialScale(1));
   elements.scaleConnectSerialButtons[2]?.addEventListener("click", () => connectSerialScale(2));
-  elements.scaleDisconnectButtons[1]?.addEventListener("click", () => disconnectScale(1));
-  elements.scaleDisconnectButtons[2]?.addEventListener("click", () => disconnectScale(2));
+  elements.scaleDisconnectButtons[1]?.addEventListener("click", () => disconnectScale(1, true, true));
+  elements.scaleDisconnectButtons[2]?.addEventListener("click", () => disconnectScale(2, true, true));
 
   elements.weightSource.addEventListener("change", renderWeightPreview);
   elements.selectProviderBtn.addEventListener("click", () => openProviderModal("entry"));
   elements.editSelectProviderBtn.addEventListener("click", () => openProviderModal("edit"));
-  elements.truckPlate.addEventListener("input", () => {
-    elements.truckPlate.value = normalizeTruckPlate(elements.truckPlate.value);
+  elements.truckPlate.addEventListener("change", () => {
+    state.entryDefaults = {
+      ...(state.entryDefaults || {}),
+      truckPlate: normalizeTruckPlate(elements.truckPlate.value)
+    };
+    saveState();
+    renderEntryProviderSelection();
+    renderDailyProviderList();
   });
-  elements.editTruckPlate.addEventListener("input", () => {
-    elements.editTruckPlate.value = normalizeTruckPlate(elements.editTruckPlate.value);
+  elements.dailyProviderList?.addEventListener("click", (event) => {
+    const row = event.target.closest(".daily-provider-row");
+    if (!row || row.disabled) {
+      return;
+    }
+
+    selectDailyProviderVehicle(row.dataset.originId, row.dataset.plate);
   });
   elements.truckSelect.addEventListener("change", () => {
     renderWeightPreview();
@@ -4426,15 +5425,6 @@ function bindEvents() {
   elements.javaCount.addEventListener("input", renderWeightPreview);
   elements.javaCount.addEventListener("change", () => updateEntryDefaults(true));
   elements.crateType.addEventListener("change", () => updateEntryDefaults(true));
-  DISPATCH_CHICKEN_TYPES.forEach((type) => {
-    const input = elements.generalPriceInputs[type.id];
-    if (!input) {
-      return;
-    }
-
-    input.addEventListener("change", () => updateGeneralPrice(type.id));
-  });
-
   elements.form.addEventListener("submit", addCage);
   elements.configMenuBtn?.addEventListener("click", toggleConfigMenu);
   elements.closeConfigMenuBtn?.addEventListener("click", closeConfigMenu);
@@ -4505,6 +5495,14 @@ function bindEvents() {
   elements.numericPadClearBtn.addEventListener("click", () => handleNumericKeyPress("clear"));
   elements.numericPadOkBtn.addEventListener("click", confirmNumericPadValue);
   elements.numericPadCloseBtn.addEventListener("click", closeNumericPad);
+  elements.touchSelectCloseBtn?.addEventListener("click", closeTouchSelect);
+  elements.touchSelectOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-touch-select-index]");
+    if (!option || option.disabled) {
+      return;
+    }
+    selectTouchOption(option.dataset.touchSelectIndex);
+  });
 
   elements.jsonModal.addEventListener("click", (event) => {
     if (event.target === elements.jsonModal) {
@@ -4542,6 +5540,12 @@ function bindEvents() {
     }
   });
 
+  elements.touchSelectModal?.addEventListener("click", (event) => {
+    if (event.target === elements.touchSelectModal) {
+      closeTouchSelect();
+    }
+  });
+
   elements.fontSidebarOverlay?.addEventListener("click", (event) => {
     if (event.target === elements.fontSidebarOverlay) {
       closeFontSidebar();
@@ -4575,6 +5579,11 @@ function bindEvents() {
 
     if (!elements.numericPadModal.hidden) {
       closeNumericPad();
+      return;
+    }
+
+    if (elements.touchSelectModal && !elements.touchSelectModal.hidden) {
+      closeTouchSelect();
       return;
     }
 
@@ -4620,6 +5629,12 @@ function bindEvents() {
   });
 
   elements.selectedTruckDetails.addEventListener("click", (event) => {
+    const registerBtn = event.target.closest(".register-ticket-btn");
+    if (registerBtn) {
+      void registerDispatchTicket(registerBtn.dataset.registerTicket);
+      return;
+    }
+
     const printBtn = event.target.closest(".print-ticket-btn");
     if (!printBtn) {
       return;
@@ -4674,6 +5689,7 @@ function bindEvents() {
 renderEditTypeOptions();
 renderCrateTypeOptions();
 bindNumericInputs();
+bindTouchSelects();
 applyFontSizePreference(loadFontSizePreference(), false);
 applyCustomFontSizes();
 renderFontSizeControls();
@@ -4681,7 +5697,17 @@ bindEvents();
 bindResponsiveLayout();
 initializeMobilePanelFromHash();
 renderAll();
-setFormMessage(`Sistema listo. Conecta una balanza Bluetooth o actualiza una lectura manual.${getScaleFeatureWarning() ? ` ${getScaleFeatureWarning()}` : ""}`);
+const hasRememberedScaleConnection = SCALE_IDS.some((scaleId) => {
+  return Boolean(getScaleState(scaleId).autoConnectMode);
+});
+setFormMessage(
+  `${hasRememberedScaleConnection
+    ? "Sistema listo. Restaurando la última conexión de balanza..."
+    : "Sistema listo. Conecta una balanza Bluetooth o actualiza una lectura manual."
+  }${getScaleFeatureWarning() ? ` ${getScaleFeatureWarning()}` : ""}`
+);
+void restoreScaleConnections();
+void loadCurrentDirectoryData();
 
 
 

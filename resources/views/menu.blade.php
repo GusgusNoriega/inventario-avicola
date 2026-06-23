@@ -84,6 +84,25 @@
           <span class="menu-status">Disponible</span>
         </a>
 
+        <a class="menu-tile menu-tile-primary" href="{{ route('jornada') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 5h16v15H4z"></path>
+              <path d="M8 3v4"></path>
+              <path d="M16 3v4"></path>
+              <path d="M7 11h4"></path>
+              <path d="M13 11h4"></path>
+              <path d="M7 15h4"></path>
+              <path d="M13 15h4"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Jornada de proveedores</strong>
+            <small>Camiones habilitados y precios del día</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
         <a class="menu-tile" href="#ingresos-despachos" data-future-view="Ingresos y despachos de pollos">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

@@ -68,16 +68,6 @@
               <span>Menú</span>
             </a>
           </div>
-          <div class="price-grid">
-            <label class="price-control">
-              Precio general pollo vivo (kg)
-              <input id="generalPriceVivoKg" type="number" min="0.01" step="0.01" value="8.50" readonly inputmode="none" data-keypad-label="Precio general pollo vivo por kg">
-            </label>
-            <label class="price-control">
-              Precio general pollo pelado (kg)
-              <input id="generalPricePeladoKg" type="number" min="0.01" step="0.01" value="8.50" readonly inputmode="none" data-keypad-label="Precio general pollo pelado por kg">
-            </label>
-          </div>
         </div>
       </header>
 
@@ -118,48 +108,48 @@
 
           <div class="form-grid">
             <label class="field dispatch-truck-field">
-              Ticket de despacho (columna)
-              <select id="truckSelect"></select>
+              Ticket
+              <select id="truckSelect" data-touch-label="Ticket"></select>
             </label>
 
-            <div class="field">
-              <span>Origen de la mercadería</span>
-              <button id="selectProviderBtn" class="provider-select-btn" type="button" aria-haspopup="dialog" aria-controls="providerModal">
-                <span class="provider-select-copy">
-                  <small>Proveedor o almacén seleccionado</small>
-                  <strong id="selectedProviderName">Seleccionar origen</strong>
-                </span>
-                <span class="provider-select-action">Buscar</span>
-              </button>
+            <div class="selected-origin-summary">
+              <span>Camión de origen seleccionado</span>
+              <strong id="selectedProviderName">Selecciona un camión de la lista</strong>
+              <small id="selectedProviderPlateLabel">Proveedor y placa pendientes</small>
             </div>
 
-            <label id="truckPlateField" class="field">
-              Placa del camión de origen
-              <input id="truckPlate" type="text" maxlength="15" placeholder="Ej: ABC-123" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
-              <small class="field-help">Obligatoria cuando el origen es un proveedor.</small>
+            <div class="entry-origin-controls" aria-hidden="true">
+              <button id="selectProviderBtn" type="button" tabindex="-1">Seleccionar origen</button>
+              <label id="truckPlateField">
+                Placa del camión de origen
+                <select id="truckPlate" required tabindex="-1">
+                  <option value="">Selecciona primero un proveedor</option>
+                </select>
+                <small id="truckPlateHelp">Selecciona una placa activa asignada al proveedor.</small>
+              </label>
+            </div>
+
+            <label class="field">
+              Aves / java
+              <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 25" required readonly inputmode="none" data-keypad-label="Aves por java" data-keypad-decimal="false">
             </label>
 
             <label class="field">
-              Cantidad de aves por java (fijo)
-              <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 25" required readonly inputmode="none" data-keypad-label="Cantidad fija de aves por java" data-keypad-decimal="false">
-            </label>
-
-            <label class="field">
-              Cantidad de javas (fijo)
-              <input id="javaCount" type="number" min="1" step="1" value="1" required readonly inputmode="none" data-keypad-label="Cantidad de javas" data-keypad-decimal="false">
+              Javas
+              <input id="javaCount" type="number" min="1" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
             </label>
 
             <label class="field">
               Tipo de java
-              <select id="crateType">
+              <select id="crateType" data-touch-label="Tipo de java">
                 <option value="java_700">Java 7.00 kg</option>
                 <option value="java_690">Java 6.90 kg</option>
               </select>
             </label>
 
             <label class="field">
-              Origen del peso
-              <select id="weightSource">
+              Balanza / peso
+              <select id="weightSource" data-touch-label="Balanza o peso manual">
                 <option value="1">Balanza 1</option>
                 <option value="2">Balanza 2</option>
                 <option value="manual">Manual</option>
@@ -171,10 +161,10 @@
               <input id="manualWeight" type="number" min="0" step="0.01" placeholder="Ej: 49.50" readonly inputmode="none" data-keypad-label="Peso bruto manual (kg)">
             </label>
 
-            <div class="weight-preview">
-              <span>Peso neto a registrar</span>
+            <div class="weight-preview weight-preview-gross">
+              <span>Peso bruto a registrar</span>
               <strong id="selectedWeightValue">0.00 kg</strong>
-              <small id="selectedWeightBreakdown">Bruto 0.00 - Javas 0.00 | Aves totales 0</small>
+              <small id="selectedWeightBreakdown" hidden></small>
             </div>
           </div>
 
@@ -183,6 +173,25 @@
             <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
           </div>
         </form>
+      </section>
+
+      <section class="daily-provider-panel card" aria-labelledby="dailyProviderTitle">
+        <div class="daily-provider-head">
+          <div>
+            <p class="daily-provider-caption">Selección directa</p>
+            <h2 id="dailyProviderTitle">Camiones del día</h2>
+          </div>
+          <div class="daily-provider-actions">
+            <a class="btn btn-ghost" href="{{ route('jornada') }}">Configurar jornada</a>
+            <strong id="dailyProviderCount" class="daily-provider-count">0</strong>
+          </div>
+        </div>
+        <p class="daily-provider-help">Cada fila representa un proveedor con una de sus placas activas.</p>
+        <div class="daily-provider-table-head" aria-hidden="true">
+          <span>Proveedor</span>
+          <span>Placa</span>
+        </div>
+        <div id="dailyProviderList" class="daily-provider-list" role="listbox" aria-label="Camiones disponibles para la jornada"></div>
       </section>
     </section>
 
@@ -344,13 +353,13 @@
           </label>
 
           <label class="field">
-            Cantidad de aves por java
-            <input id="editBirdCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Cantidad de aves por java" data-keypad-decimal="false">
+            Aves / java
+            <input id="editBirdCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Aves por java" data-keypad-decimal="false">
           </label>
 
           <label class="field">
-            Cantidad de javas
-            <input id="editJavaCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Cantidad de javas" data-keypad-decimal="false">
+            Javas
+            <input id="editJavaCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
           </label>
 
           <label class="field">
@@ -364,8 +373,8 @@
           </label>
 
           <label class="field">
-            Origen del peso
-            <select id="editWeightSource">
+            Balanza / peso
+            <select id="editWeightSource" data-touch-label="Balanza o peso manual">
               <option value="1">Balanza 1</option>
               <option value="2">Balanza 2</option>
               <option value="manual">Manual</option>
@@ -385,8 +394,10 @@
 
           <label id="editTruckPlateField" class="field">
             Placa del camión de origen
-            <input id="editTruckPlate" type="text" maxlength="15" placeholder="Ej: ABC-123" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
-            <small class="field-help">Obligatoria cuando el origen es un proveedor.</small>
+            <select id="editTruckPlate" required>
+              <option value="">Selecciona primero un proveedor</option>
+            </select>
+            <small id="editTruckPlateHelp" class="field-help">Selecciona una placa activa asignada al proveedor.</small>
           </label>
         </div>
 
@@ -434,6 +445,23 @@
     </div>
   </div>
 
+  <div id="touchSelectModal" class="modal touch-select-modal" hidden>
+    <div class="touch-select-card card" role="dialog" aria-modal="true" aria-labelledby="touchSelectTitle">
+      <div class="touch-select-head">
+        <div>
+          <p class="touch-select-caption">Selección táctil</p>
+          <h2 id="touchSelectTitle">Seleccionar opción</h2>
+        </div>
+        <button id="touchSelectCloseBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <div class="touch-select-current">
+        <span>Opción actual</span>
+        <strong id="touchSelectCurrentValue">--</strong>
+      </div>
+      <div id="touchSelectOptions" class="touch-select-options" role="listbox" aria-label="Opciones disponibles"></div>
+    </div>
+  </div>
+
   <div id="numericPadModal" class="modal numeric-pad-modal" hidden>
     <div class="numeric-pad-card card" role="dialog" aria-modal="true" aria-labelledby="numericPadTitle">
       <div class="numeric-pad-head">
@@ -469,7 +497,7 @@
     </div>
   </div>
 
-  <script src="{{ asset('js/app.js') }}"></script>
+  <script type="module" src="{{ asset('js/app.js') }}"></script>
 </body>
 </html>
 

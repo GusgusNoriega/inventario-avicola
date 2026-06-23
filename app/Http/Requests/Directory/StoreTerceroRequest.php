@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Directory;
 
+use App\Models\TerceroRole;
 use App\Models\TipoPollo;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -17,21 +18,23 @@ class StoreTerceroRequest extends FormRequest
      */
     public function rules(): array
     {
+        $priceCodes = [
+            TipoPollo::CHICKEN_LIVE,
+            TipoPollo::CHICKEN_DRESSED,
+            TipoPollo::CHICKEN_PROCESSED,
+        ];
+        $pricesAreRequired = $this->route('directory_role') === TerceroRole::PROVIDER;
+
         return [
             'nombre_razon_social' => ['required', 'string', 'max:180'],
             'numero_documento' => ['required', 'string', 'regex:/^(?:\d{8}|\d{11})$/'],
             'direccion' => ['required', 'string', 'max:250'],
-            'precios' => [
-                'required',
-                'array:'.implode(',', [
-                    TipoPollo::CHICKEN_LIVE,
-                    TipoPollo::CHICKEN_DRESSED,
-                    TipoPollo::CHICKEN_PROCESSED,
-                ]),
-            ],
-            'precios.'.TipoPollo::CHICKEN_LIVE => ['required', 'numeric', 'gt:0', 'max:99999999.9999'],
-            'precios.'.TipoPollo::CHICKEN_DRESSED => ['required', 'numeric', 'gt:0', 'max:99999999.9999'],
-            'precios.'.TipoPollo::CHICKEN_PROCESSED => ['required', 'numeric', 'gt:0', 'max:99999999.9999'],
+            'precios' => $pricesAreRequired
+                ? ['required', 'array:'.implode(',', $priceCodes)]
+                : ['sometimes', 'array:'.implode(',', $priceCodes)],
+            'precios.'.TipoPollo::CHICKEN_LIVE => $this->priceRules($pricesAreRequired),
+            'precios.'.TipoPollo::CHICKEN_DRESSED => $this->priceRules($pricesAreRequired),
+            'precios.'.TipoPollo::CHICKEN_PROCESSED => $this->priceRules($pricesAreRequired),
         ];
     }
 
@@ -53,5 +56,15 @@ class StoreTerceroRequest extends FormRequest
             'numero_documento' => preg_replace('/\D+/', '', (string) $this->input('numero_documento')),
             'direccion' => trim((string) $this->input('direccion')),
         ]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function priceRules(bool $required): array
+    {
+        return $required
+            ? ['required', 'numeric', 'gt:0', 'max:99999999.9999']
+            : ['sometimes', 'nullable', 'numeric', 'gt:0', 'max:99999999.9999'];
     }
 }

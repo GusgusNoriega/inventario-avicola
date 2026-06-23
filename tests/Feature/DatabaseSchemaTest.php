@@ -10,19 +10,24 @@ class DatabaseSchemaTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_every_table_has_its_own_migration(): void
+    public function test_every_migration_has_one_schema_operation(): void
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(43, $migrationFiles);
+        $this->assertCount(44, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
+            $upContents = explode('public function down', $contents, 2)[0];
+            $schemaOperations = preg_match_all(
+                "/Schema::(?:create|table)\\('([^']+)'/",
+                $upContents
+            );
 
             $this->assertSame(
                 1,
-                preg_match_all("/Schema::create\\('([^']+)'/", $contents),
-                basename($migrationFile).' debe crear exactamente una tabla.'
+                $schemaOperations,
+                basename($migrationFile).' debe contener exactamente una operación de esquema en up().'
             );
         }
     }
@@ -86,7 +91,7 @@ class DatabaseSchemaTest extends TestCase
             'usuarios' => ['empresa_id', 'sucursal_id', 'nombre', 'email', 'password_hash', 'estado'],
             'precios_historial' => ['lista_precio_id', 'tipo_pollo_id', 'precio_kg', 'vigente_desde', 'vigente_hasta'],
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
-            'tickets_despacho' => ['jornada_id', 'codigo', 'canal', 'cliente_destino_id', 'almacen_destino_id'],
+            'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'cliente_destino_id', 'almacen_destino_id'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'tipo_java_id', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
             'comprobantes' => ['operacion', 'codigo', 'origen_codigo', 'total', 'saldo_pendiente'],

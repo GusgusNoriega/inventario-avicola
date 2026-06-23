@@ -3,6 +3,9 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\DirectoryController;
+use App\Http\Controllers\Api\V1\DispatchTicketController;
+use App\Http\Controllers\Api\V1\JourneyPlanController;
+use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
 use App\Models\TerceroRole;
@@ -21,9 +24,35 @@ Route::prefix('v1')->group(function (): void {
     $directoryMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'permission:TERCEROS_GESTIONAR'];
+    $operationCatalogMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:DESPACHOS_VER'];
+    $operationWriteMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR'];
+    $journeyWriteMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR', 'permission:PRECIOS_GESTIONAR'];
     $priceMiddleware = config('directory.public_access')
         ? []
         : ['permission:PRECIOS_GESTIONAR'];
+
+    Route::middleware($operationCatalogMiddleware)->group(function (): void {
+        Route::get('/operacion/catalogo', [OperationCatalogController::class, 'index']);
+        Route::get('/operacion/jornada', [JourneyPlanController::class, 'show']);
+
+        foreach ([
+            'clientes' => TerceroRole::CLIENT,
+            'proveedores' => TerceroRole::PROVIDER,
+        ] as $path => $role) {
+            Route::get("/operacion/{$path}", [DirectoryController::class, 'index'])
+                ->defaults('directory_role', $role);
+        }
+    });
+    Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
+        ->middleware($operationWriteMiddleware);
+    Route::put('/operacion/jornada', [JourneyPlanController::class, 'update'])
+        ->middleware($journeyWriteMiddleware);
 
     Route::middleware($directoryMiddleware)->group(function () use ($priceMiddleware): void {
         Route::get('/clientes/{tercero}/historial', [CustomerHistoryController::class, 'show'])

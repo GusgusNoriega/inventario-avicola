@@ -14,6 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 class TerceroDirectoryService
 {
+    public function __construct(
+        private readonly ClientJourneyPriceService $clientJourneyPriceService
+    ) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -50,8 +54,13 @@ class TerceroDirectoryService
                 $tercero->roles()->create(['rol' => $role]);
             }
 
-            $priceList = $this->ensurePriceList($tercero, $role, $actorId);
-            $this->applyPrices($priceList, $data['precios'], $actorId, 'Precio inicial del directorio');
+            $this->syncDirectoryPrices(
+                $tercero,
+                $role,
+                $actorId,
+                $data['precios'] ?? [],
+                'Precio inicial del directorio'
+            );
 
             return $this->loadForDirectory($tercero, $role);
         });
@@ -82,9 +91,21 @@ class TerceroDirectoryService
             }
 
             $tercero->update($this->thirdPartyAttributes($tercero->empresa_id, $data));
-            $priceList = $this->ensurePriceList($tercero, $role, $actorId);
-            $priceList->update(['nombre' => $this->priceListName($tercero, $role)]);
-            $this->applyPrices($priceList, $data['precios'], $actorId, 'Actualización desde el directorio');
+            $this->syncDirectoryPrices(
+                $tercero,
+                $role,
+                $actorId,
+                $data['precios'] ?? [],
+                'Actualización desde el directorio'
+            );
+
+            if ($role === TerceroRole::CLIENT && array_key_exists('precios', $data)) {
+                $this->clientJourneyPriceService->refresh(
+                    $tercero,
+                    $actorId,
+                    array_keys($data['precios'])
+                );
+            }
 
             return $this->loadForDirectory($tercero, $role);
         });
@@ -159,6 +180,14 @@ class TerceroDirectoryService
                     $actorId,
                     'Ajuste global desde el directorio'
                 );
+
+                if ($role === TerceroRole::CLIENT && $list->tercero) {
+                    $this->clientJourneyPriceService->refresh(
+                        $list->tercero,
+                        $actorId,
+                        [$chickenTypeCode]
+                    );
+                }
             }
 
             return $changes->count();
@@ -228,6 +257,80 @@ class TerceroDirectoryService
         $prefix = $role === TerceroRole::PROVIDER ? 'Compra' : 'Venta';
 
         return "{$prefix} - {$tercero->nombre_razon_social}";
+    }
+
+    /**
+     * @param  array<string, float|int|string|null>  $prices
+     */
+    private function syncDirectoryPrices(
+        Tercero $tercero,
+        string $role,
+        int $actorId,
+        array $prices,
+        string $reason
+    ): void {
+        if ($role === TerceroRole::PROVIDER) {
+            $priceList = $this->ensurePriceList($tercero, $role, $actorId);
+            $priceList->update(['nombre' => $this->priceListName($tercero, $role)]);
+            $this->applyPrices($priceList, $prices, $actorId, $reason);
+
+            return;
+        }
+
+        $operation = $this->operationForRole($role);
+        $priceList = ListaPrecio::query()
+            ->where('empresa_id', $tercero->empresa_id)
+            ->where('tercero_id', $tercero->id)
+            ->where('operacion', $operation)
+            ->where('estado', ListaPrecio::STATUS_ACTIVE)
+            ->first();
+        $definedPrices = array_filter(
+            $prices,
+            fn ($value) => $value !== null && $value !== ''
+        );
+
+        if ($definedPrices && ! $priceList) {
+            $priceList = $this->ensurePriceList($tercero, $role, $actorId);
+        }
+
+        if (! $priceList) {
+            return;
+        }
+
+        $priceList->update(['nombre' => $this->priceListName($tercero, $role)]);
+        $types = TipoPollo::query()
+            ->whereIn('codigo', array_keys($prices))
+            ->where('estado', TipoPollo::STATUS_ACTIVE)
+            ->get()
+            ->keyBy('codigo');
+
+        foreach ($prices as $code => $value) {
+            if ($value !== null && $value !== '') {
+                continue;
+            }
+
+            $type = $types->get($code);
+            if (! $type) {
+                continue;
+            }
+
+            $current = PrecioHistorial::query()
+                ->where('lista_precio_id', $priceList->id)
+                ->where('tipo_pollo_id', $type->id)
+                ->whereNull('vigente_hasta')
+                ->lockForUpdate()
+                ->first();
+
+            if ($current) {
+                $current->update([
+                    'vigente_hasta' => $this->nextEffectiveAt($current->vigente_desde),
+                ]);
+            }
+        }
+
+        if ($definedPrices) {
+            $this->applyPrices($priceList, $definedPrices, $actorId, $reason);
+        }
     }
 
     /**

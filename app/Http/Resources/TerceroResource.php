@@ -24,7 +24,7 @@ class TerceroResource extends JsonResource
             ->mapWithKeys(fn ($price) => [$price->tipoPollo->codigo => (float) $price->precio_kg])
             ?? collect();
 
-        return [
+        $data = [
             'id' => $this->id,
             'type' => $role === TerceroRole::PROVIDER ? 'proveedores' : 'clientes',
             'name' => $this->nombre_razon_social,
@@ -35,12 +35,30 @@ class TerceroResource extends JsonResource
             'direccion' => $this->direccion,
             'roles' => $this->roles->pluck('rol')->values(),
             'pricesKg' => [
-                'pollo_vivo' => $prices->get(TipoPollo::CHICKEN_LIVE, 0),
-                'pollo_pelado' => $prices->get(TipoPollo::CHICKEN_DRESSED, 0),
-                'pollo_beneficiado' => $prices->get(TipoPollo::CHICKEN_PROCESSED, 0),
+                'pollo_vivo' => $prices->get(TipoPollo::CHICKEN_LIVE),
+                'pollo_pelado' => $prices->get(TipoPollo::CHICKEN_DRESSED),
+                'pollo_beneficiado' => $prices->get(TipoPollo::CHICKEN_PROCESSED),
             ],
             'createdAt' => $this->created_at?->toISOString(),
             'updatedAt' => $this->updated_at?->toISOString(),
         ];
+
+        if ($role === TerceroRole::PROVIDER) {
+            $data['vehicles'] = $this->relationLoaded('vehiculosProveedor')
+                ? $this->vehiculosProveedor
+                    ->map(fn ($association) => [
+                        'id' => $association->id,
+                        'vehicle_id' => $association->vehiculo_id,
+                        'plate' => $association->vehiculo?->placa,
+                        'alias' => $association->alias,
+                        'valid_from' => $association->vigente_desde?->format('Y-m-d'),
+                        'status' => $association->estado,
+                    ])
+                    ->filter(fn (array $vehicle) => filled($vehicle['plate']))
+                    ->values()
+                : [];
+        }
+
+        return $data;
     }
 }

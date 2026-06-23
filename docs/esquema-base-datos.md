@@ -185,7 +185,7 @@ anteriores.
 |---|---|
 | `listas_precios` | Identifica una tarifa general o una tarifa propia de un cliente/proveedor. |
 | `precios_historial` | Conserva cada precio por tipo de pollo con fecha y hora de inicio y fin de vigencia. |
-| `ticket_precios` | Copia inmutable del precio aplicado y referencia el registro histórico que lo originó. |
+| `ticket_precios` | Copia del precio aplicado y referencia el registro histórico que lo originó. Puede revalorizarse mientras su jornada sea la vigente. |
 
 Cada cliente puede tener su propia lista de precios. Si no existe un precio
 específico vigente para ese cliente y tipo de pollo, se utiliza el precio
@@ -223,11 +223,11 @@ Al cambiar un precio se ejecuta una transacción:
 El valor histórico de `precio_kg` no se sobrescribe ni se elimina. Si hubo un
 error, se inserta una nueva versión correctiva.
 
-No debe consultarse el precio actual para recalcular un ticket existente. En la
-primera pesada del ticket, los precios aplicables se copian en
-`ticket_precios`. Así, un cambio posterior no altera el total del ticket. Si el
-negocio necesita actualizar un ticket todavía abierto, debe existir una acción
-explícita que reemplace sus precios y quede registrada en auditoría.
+En la primera pesada del ticket, los precios aplicables se copian en
+`ticket_precios`. Si después se actualiza el precio específico del cliente
+dentro de la misma jornada operativa, los tickets de ese cliente y jornada se
+revalorizan con la última versión. Las jornadas anteriores no cambian y cada
+revalorización se registra en `auditoria_eventos`.
 
 ### Operación diaria
 
@@ -384,8 +384,10 @@ una balanza. El dato comercial principal sigue siendo `peso_kg`.
     cierra la versión actual e inserta otra.
 16. Para obtener el precio de un cliente se busca primero su precio específico
     vigente y, si no existe, se usa el precio general vigente.
-17. El precio del ticket se congela en su primera pesada. Los cambios globales
-    o del cliente no deben recalcularlo automáticamente.
+17. El precio del ticket se congela en su primera pesada. Un cambio posterior
+    del precio específico del cliente lo recalcula únicamente si el ticket
+    pertenece a la jornada operativa vigente; las jornadas anteriores son
+    inmutables.
 18. Una programación publicada no se elimina. Los cambios de última hora se
     registran como cancelación, sustitución o una nueva versión auditada.
 19. El vehículo seleccionado en una recepción debe pertenecer a la asociación
