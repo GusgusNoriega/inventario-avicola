@@ -51,12 +51,19 @@ class DatabaseSeeder extends Seeder
 
         collect([
             ['codigo' => 'POLLO_VIVO', 'nombre' => 'Pollo vivo', 'permite_despacho' => true],
+            ['codigo' => 'POLLO_MUERTO', 'nombre' => 'Pollo muerto', 'permite_despacho' => true],
             ['codigo' => 'POLLO_PELADO', 'nombre' => 'Pollo pelado', 'permite_despacho' => true],
             ['codigo' => 'POLLO_BENEFICIADO', 'nombre' => 'Pollo beneficiado', 'permite_despacho' => true],
         ])->each(fn (array $tipo) => DB::table('tipos_pollo')->updateOrInsert(
             ['codigo' => $tipo['codigo']],
             [...$tipo, 'estado' => 'ACTIVO', 'created_at' => now(), 'updated_at' => now()]
         ));
+        $polloVivoId = DB::table('tipos_pollo')
+            ->where('codigo', 'POLLO_VIVO')
+            ->value('id');
+        DB::table('tipos_pollo')
+            ->where('codigo', 'POLLO_MUERTO')
+            ->update(['precio_fuente_tipo_pollo_id' => $polloVivoId]);
 
         collect([
             ['codigo' => 'JAVA_700', 'nombre' => 'Java 7.00 kg', 'peso_kg' => 7.000],

@@ -269,6 +269,15 @@ class DispatchTicketApiTest extends TestCase
         $liveTypeId = DB::table('tipos_pollo')
             ->where('codigo', TipoPollo::CHICKEN_LIVE)
             ->value('id');
+        $deadTypeId = DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::CHICKEN_DEAD)
+            ->value('id');
+        $livePriceHistoryId = DB::table('precios_historial')
+            ->join('listas_precios', 'listas_precios.id', '=', 'precios_historial.lista_precio_id')
+            ->where('listas_precios.tercero_id', $this->clientId)
+            ->where('precios_historial.tipo_pollo_id', $liveTypeId)
+            ->whereNull('precios_historial.vigente_hasta')
+            ->value('precios_historial.id');
 
         $this->postJson('/api/v1/operacion/tickets', $payload)
             ->assertCreated()
@@ -283,9 +292,16 @@ class DispatchTicketApiTest extends TestCase
             'cliente_destino_id' => $this->clientId,
             'almacen_destino_id' => null,
         ]);
-        $this->assertDatabaseCount('ticket_precios', 1);
+        $this->assertDatabaseCount('ticket_precios', 2);
         $this->assertDatabaseHas('ticket_precios', [
             'tipo_pollo_id' => $liveTypeId,
+            'precio_historial_id' => $livePriceHistoryId,
+            'precio_kg' => 8.5,
+            'origen_precio' => 'CLIENTE',
+        ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'tipo_pollo_id' => $deadTypeId,
+            'precio_historial_id' => $livePriceHistoryId,
             'precio_kg' => 8.5,
             'origen_precio' => 'CLIENTE',
         ]);
@@ -299,7 +315,7 @@ class DispatchTicketApiTest extends TestCase
         ]);
         $this->assertDatabaseHas('pesadas', [
             'numero' => 2,
-            'tipo_pollo_id' => $liveTypeId,
+            'tipo_pollo_id' => $deadTypeId,
             'condicion_pollo' => Pesada::CHICKEN_CONDITION_DEAD,
             'cantidad_aves' => 15,
         ]);
@@ -343,6 +359,10 @@ class DispatchTicketApiTest extends TestCase
             '/api/v1/operacion/tickets',
             $this->ticketPayload()
         )->assertCreated()->json('data.id');
+        $currentReturnTicketId = $this->postJson(
+            '/api/v1/operacion/tickets',
+            $this->returnTicketPayload()
+        )->assertCreated()->json('data.id');
 
         Carbon::setTestNow(Carbon::parse('2026-06-23 10:00:00', 'America/Lima'));
         $this->putJson("/api/v1/clientes/{$this->clientId}", $this->partyPayload(
@@ -353,6 +373,9 @@ class DispatchTicketApiTest extends TestCase
 
         $liveTypeId = DB::table('tipos_pollo')
             ->where('codigo', TipoPollo::CHICKEN_LIVE)
+            ->value('id');
+        $deadTypeId = DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::CHICKEN_DEAD)
             ->value('id');
         $latestHistoryId = DB::table('precios_historial')
             ->join('listas_precios', 'listas_precios.id', '=', 'precios_historial.lista_precio_id')
@@ -369,6 +392,14 @@ class DispatchTicketApiTest extends TestCase
         $this->assertDatabaseHas('ticket_precios', [
             'ticket_id' => $currentTicketId,
             'tipo_pollo_id' => $liveTypeId,
+            'precio_historial_id' => $latestHistoryId,
+            'precio_kg' => 9.25,
+            'origen_precio' => 'CLIENTE',
+            'congelado_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $currentReturnTicketId,
+            'tipo_pollo_id' => $deadTypeId,
             'precio_historial_id' => $latestHistoryId,
             'precio_kg' => 9.25,
             'origen_precio' => 'CLIENTE',

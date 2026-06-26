@@ -40,7 +40,11 @@ class StoreDispatchTicketRequest extends FormRequest
             'weighings.*.local_id' => ['required', 'integer', 'min:1', 'distinct'],
             'weighings.*.chicken_type_code' => [
                 'required',
-                Rule::in([TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DRESSED]),
+                Rule::in([
+                    TipoPollo::CHICKEN_LIVE,
+                    TipoPollo::CHICKEN_DEAD,
+                    TipoPollo::CHICKEN_DRESSED,
+                ]),
             ],
             'weighings.*.chicken_condition' => [
                 'sometimes',
@@ -113,18 +117,22 @@ class StoreDispatchTicketRequest extends FormRequest
                     );
                 }
 
+                $condition = mb_strtoupper(
+                    trim((string) ($weighing['chicken_condition'] ?? Pesada::CHICKEN_CONDITION_LIVE)),
+                    'UTF-8'
+                );
+
                 return [
                     ...$weighing,
                     'chicken_type_code' => $operationType === TicketDespacho::OPERATION_RETURN
-                        ? TipoPollo::CHICKEN_LIVE
+                        ? ($condition === Pesada::CHICKEN_CONDITION_DEAD
+                            ? TipoPollo::CHICKEN_DEAD
+                            : TipoPollo::CHICKEN_LIVE)
                         : mb_strtoupper(
                             trim((string) ($weighing['chicken_type_code'] ?? '')),
                             'UTF-8'
                         ),
-                    'chicken_condition' => mb_strtoupper(
-                        trim((string) ($weighing['chicken_condition'] ?? Pesada::CHICKEN_CONDITION_LIVE)),
-                        'UTF-8'
-                    ),
+                    'chicken_condition' => $condition,
                     'cage_type_code' => mb_strtoupper(
                         trim((string) ($weighing['cage_type_code'] ?? '')),
                         'UTF-8'
@@ -181,6 +189,13 @@ class StoreDispatchTicketRequest extends FormRequest
             foreach ($this->input('weighings', []) as $index => $weighing) {
                 if (! is_array($weighing)) {
                     continue;
+                }
+
+                if (($weighing['chicken_type_code'] ?? null) === TipoPollo::CHICKEN_DEAD) {
+                    $validator->errors()->add(
+                        "weighings.{$index}.chicken_type_code",
+                        'El pollo muerto solo aplica para devoluciones.'
+                    );
                 }
 
                 $origin = $weighing['origin'] ?? null;

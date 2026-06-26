@@ -3,6 +3,14 @@ import { apiRequest } from "./api-client.js";
 const root = document.querySelector("[data-client-history]");
 const clientId = root?.dataset.clientId;
 const PERU_TIME_ZONE = "America/Lima";
+const OPERATION_LABELS = {
+  DESPACHO: "Despacho",
+  DEVOLUCION: "Devolucion"
+};
+const CHICKEN_CONDITION_LABELS = {
+  VIVO: "Pollo vivo",
+  MUERTO: "Pollo muerto"
+};
 
 const elements = {
   name: document.getElementById("customerName"),
@@ -64,6 +72,20 @@ function formatDate(value, includeTime = false) {
   ).format(date);
 }
 
+function normalizeCode(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function operationLabel(value) {
+  const code = normalizeCode(value);
+  return OPERATION_LABELS[code] || code || "Despacho";
+}
+
+function chickenConditionLabel(value) {
+  const code = normalizeCode(value);
+  return CHICKEN_CONDITION_LABELS[code] || code || "Pollo vivo";
+}
+
 function getErrorMessage(error) {
   const firstValidationError = error?.data?.errors
     ? Object.values(error.data.errors).flat().find(Boolean)
@@ -113,12 +135,30 @@ function renderSummary(summary) {
 }
 
 function renderTicket(ticket) {
+  const operationType = normalizeCode(ticket.operation_type);
+  const operationClass = operationType === "DEVOLUCION"
+    ? "customer-operation-return"
+    : "customer-operation-dispatch";
   const records = ticket.records.length
-    ? ticket.records.map((record) => `
+    ? ticket.records.map((record) => {
+        const condition = normalizeCode(record.chicken_condition);
+        const typeContent = condition === "MUERTO"
+          ? `
+              <span class="customer-chicken-condition customer-chicken-condition-muerto">
+                ${escapeHtml(chickenConditionLabel(record.chicken_condition))}
+              </span>
+            `
+          : `<strong>${escapeHtml(record.chicken_type.name)}</strong>`;
+
+        return `
         <tr class="${record.status === "ACTIVA" ? "" : "is-inactive"}">
           <td>#${escapeHtml(record.number)}</td>
           <td>${escapeHtml(formatDate(record.weighed_at, true))}</td>
-          <td>${escapeHtml(record.chicken_type.name)}</td>
+          <td>
+            <span class="customer-record-type">
+              ${typeContent}
+            </span>
+          </td>
           <td>${formatNumber(record.cages)}</td>
           <td>${formatNumber(record.birds)}</td>
           <td>${formatWeight(record.gross_weight_kg)}</td>
@@ -128,7 +168,8 @@ function renderTicket(ticket) {
           <td><strong>${formatCurrency(record.amount)}</strong></td>
           <td><span class="customer-status customer-status-${escapeHtml(record.status.toLowerCase())}">${escapeHtml(record.status)}</span></td>
         </tr>
-      `).join("")
+      `;
+      }).join("")
     : `
         <tr>
           <td colspan="11" class="customer-history-empty-cell">Este ticket todavía no tiene registros.</td>
@@ -145,7 +186,10 @@ function renderTicket(ticket) {
     <article class="customer-ticket card">
       <header class="customer-ticket-head">
         <div>
-          <span class="directory-record-tag">${escapeHtml(ticket.status)}</span>
+          <div class="customer-ticket-badges">
+            <span class="directory-record-tag">${escapeHtml(ticket.status)}</span>
+            <span class="customer-operation-tag ${operationClass}">${escapeHtml(operationLabel(ticket.operation_type))}</span>
+          </div>
           <h3>${escapeHtml(ticket.code)}</h3>
           <p>${escapeHtml(formatDate(ticket.operating_date))} · Canal ${escapeHtml(ticket.channel)}</p>
         </div>

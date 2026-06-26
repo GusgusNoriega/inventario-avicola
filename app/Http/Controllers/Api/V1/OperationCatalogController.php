@@ -42,6 +42,7 @@ class OperationCatalogController extends Controller
                 'chicken_types' => TipoPollo::query()
                     ->where('estado', TipoPollo::STATUS_ACTIVE)
                     ->where('permite_despacho', true)
+                    ->where('codigo', '!=', TipoPollo::CHICKEN_DEAD)
                     ->orderBy('id')
                     ->get(['id', 'codigo', 'nombre'])
                     ->map(fn (TipoPollo $type) => [

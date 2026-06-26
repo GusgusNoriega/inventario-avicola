@@ -4372,6 +4372,13 @@ body.customer-history-page {
   overflow: hidden;
 }
 
+.customer-ticket-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .customer-ticket-head {
   display: flex;
   justify-content: space-between;
@@ -4425,6 +4432,59 @@ body.customer-history-page {
 
 .customer-ticket-prices {
   background: rgba(76, 175, 80, 0.06);
+}
+
+.customer-operation-tag,
+.customer-chicken-condition {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.customer-operation-tag {
+  padding: 5px 8px;
+  background: #0e1727;
+  color: #c9daf2;
+}
+
+.customer-operation-return {
+  border-color: rgba(255, 91, 91, 0.5);
+  background: rgba(255, 91, 91, 0.14);
+  color: #ffb3b3;
+}
+
+.customer-operation-dispatch {
+  border-color: rgba(43, 199, 255, 0.35);
+  background: rgba(43, 199, 255, 0.1);
+  color: var(--primary);
+}
+
+.customer-record-type {
+  display: inline-grid;
+  gap: 5px;
+  min-width: 110px;
+}
+
+.customer-record-type strong {
+  color: var(--text-main);
+}
+
+.customer-chicken-condition {
+  padding: 4px 7px;
+  color: #c9daf2;
+  background: #0e1727;
+}
+
+.customer-chicken-condition-muerto {
+  border-color: rgba(255, 91, 91, 0.46);
+  background: rgba(255, 91, 91, 0.14);
+  color: #ffb3b3;
 }
 
 .customer-history-table-wrap {

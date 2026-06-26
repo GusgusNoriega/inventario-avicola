@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Permission;
+use App\Models\Pesada;
 use App\Models\Role;
+use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -116,9 +118,34 @@ class CustomerHistoryApiTest extends TestCase
             ->assertJsonPath('data.summary.net_weight_kg', 10)
             ->assertJsonPath('data.summary.amount', 85)
             ->assertJsonPath('data.tickets.0.code', 'T-20260620-001')
+            ->assertJsonPath('data.tickets.0.operation_type', TicketDespacho::OPERATION_DISPATCH)
+            ->assertJsonPath('data.tickets.0.records.0.chicken_condition', Pesada::CHICKEN_CONDITION_LIVE)
             ->assertJsonPath('data.tickets.0.records.0.price_kg', 8.5)
             ->assertJsonPath('data.tickets.0.records.0.amount', 85)
             ->assertJsonCount(4, 'data.price_history');
+    }
+
+    public function test_customer_history_marks_return_tickets_and_dead_chicken_records(): void
+    {
+        $this->createTicket(
+            'D-20260620-001',
+            '2026-06-20',
+            10,
+            8.5,
+            TicketDespacho::OPERATION_RETURN,
+            Pesada::CHICKEN_CONDITION_DEAD
+        );
+
+        $this->getJson("/api/v1/clientes/{$this->customerId}/historial")
+            ->assertOk()
+            ->assertJsonPath('data.summary.tickets', 1)
+            ->assertJsonPath('data.summary.amount', 85)
+            ->assertJsonPath('data.tickets.0.code', 'D-20260620-001')
+            ->assertJsonPath('data.tickets.0.operation_type', TicketDespacho::OPERATION_RETURN)
+            ->assertJsonPath('data.tickets.0.records.0.chicken_type.code', TipoPollo::CHICKEN_DEAD)
+            ->assertJsonPath('data.tickets.0.records.0.chicken_condition', Pesada::CHICKEN_CONDITION_DEAD)
+            ->assertJsonPath('data.tickets.0.records.0.price_kg', 8.5)
+            ->assertJsonPath('data.tickets.0.records.0.amount', 85);
     }
 
     public function test_customer_history_filters_by_ticket_and_operating_date(): void
@@ -143,8 +170,16 @@ class CustomerHistoryApiTest extends TestCase
         string $code,
         string $operatingDate,
         float $netWeight,
-        float $price
+        float $price,
+        string $operationType = TicketDespacho::OPERATION_DISPATCH,
+        string $chickenCondition = Pesada::CHICKEN_CONDITION_LIVE
     ): void {
+        $recordTypeCode = $chickenCondition === Pesada::CHICKEN_CONDITION_DEAD
+            ? TipoPollo::CHICKEN_DEAD
+            : TipoPollo::CHICKEN_LIVE;
+        $recordTypeId = (int) DB::table('tipos_pollo')
+            ->where('codigo', $recordTypeCode)
+            ->value('id');
         $journeyId = DB::table('jornadas_operativas')->insertGetId([
             'sucursal_id' => $this->branchId,
             'fecha_operativa' => $operatingDate,
@@ -159,6 +194,7 @@ class CustomerHistoryApiTest extends TestCase
             'jornada_id' => $journeyId,
             'codigo' => $code,
             'canal' => 'MAYORISTA',
+            'tipo_operacion' => $operationType,
             'cliente_destino_id' => $this->customerId,
             'estado' => 'CERRADO',
             'cerrado_por' => $this->user->id,
@@ -176,7 +212,7 @@ class CustomerHistoryApiTest extends TestCase
 
         DB::table('ticket_precios')->insert([
             'ticket_id' => $ticketId,
-            'tipo_pollo_id' => $this->chickenTypeId,
+            'tipo_pollo_id' => $recordTypeId,
             'precio_historial_id' => $priceHistoryId,
             'precio_kg' => $price,
             'origen_precio' => 'CLIENTE',
@@ -186,7 +222,8 @@ class CustomerHistoryApiTest extends TestCase
         DB::table('pesadas')->insert([
             'ticket_id' => $ticketId,
             'numero' => 1,
-            'tipo_pollo_id' => $this->chickenTypeId,
+            'tipo_pollo_id' => $recordTypeId,
+            'condicion_pollo' => $chickenCondition,
             'tipo_java_id' => $this->cageTypeId,
             'origen_peso' => 'MANUAL',
             'aves_por_java' => 10,

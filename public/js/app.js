@@ -4595,6 +4595,9 @@ function buildDispatchTicketPayload(truck) {
     },
     weighings: truck.cages.map((cage) => {
       const type = getTypeMeta(isReturn ? "pollo_vivo" : cage.tipo);
+      const returnCondition = isReturn
+        ? getReturnConditionMeta(cage.chickenCondition)
+        : null;
       const crate = getCrateTypeMeta(cage.crateTypeId);
       const origin = getOriginById(cage.origenId);
       const warehouseOrigin = isWarehouseOrigin(origin)
@@ -4620,9 +4623,11 @@ function buildDispatchTicketPayload(truck) {
 
       const payload = {
         local_id: Number(cage.id),
-        chicken_type_code: type.apiCode,
+        chicken_type_code: isReturn && returnCondition?.id === "muerto"
+          ? "POLLO_MUERTO"
+          : type.apiCode,
         chicken_condition: isReturn
-          ? getReturnConditionMeta(cage.chickenCondition).apiCode
+          ? returnCondition.apiCode
           : "VIVO",
         cage_type_code: crate.apiCode,
         weight_source: cage.origenPeso === "manual"

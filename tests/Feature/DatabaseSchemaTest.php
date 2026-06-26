@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(46, $migrationFiles);
+        $this->assertCount(47, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -89,6 +89,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $expectations = [
             'usuarios' => ['empresa_id', 'sucursal_id', 'nombre', 'email', 'password_hash', 'estado'],
+            'tipos_pollo' => ['codigo', 'nombre', 'permite_despacho', 'precio_fuente_tipo_pollo_id', 'estado'],
             'precios_historial' => ['lista_precio_id', 'tipo_pollo_id', 'precio_kg', 'vigente_desde', 'vigente_hasta'],
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
             'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id'],

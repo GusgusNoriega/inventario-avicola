@@ -69,8 +69,9 @@ class DispatchTicketService
                 $data['destination'],
                 $operationType
             );
+            $requiredTypeCodes = $this->requiredTypeCodes($operationType, $weighings);
             $types = TipoPollo::query()
-                ->whereIn('codigo', $this->requiredTypeCodes($operationType, $weighings))
+                ->whereIn('codigo', $requiredTypeCodes)
                 ->where('estado', TipoPollo::STATUS_ACTIVE)
                 ->where('permite_despacho', true)
                 ->get()
@@ -82,7 +83,7 @@ class DispatchTicketService
                 ->get()
                 ->keyBy('codigo');
 
-            $this->assertCatalogsComplete($weighings, $types, $cageTypes);
+            $this->assertCatalogsComplete($weighings, $requiredTypeCodes, $types, $cageTypes);
 
             $ticket = TicketDespacho::query()->create([
                 'jornada_id' => $journey->id,
@@ -189,7 +190,10 @@ class DispatchTicketService
     private function requiredTypeCodes(string $operationType, Collection $weighings): Collection
     {
         if ($operationType === TicketDespacho::OPERATION_RETURN) {
-            return collect([TipoPollo::CHICKEN_LIVE]);
+            return $weighings
+                ->map(fn (array $weighing): string => $this->weighingTypeCode($operationType, $weighing))
+                ->unique()
+                ->values();
         }
 
         return $weighings->pluck('chicken_type_code')->unique()->values();
@@ -200,9 +204,13 @@ class DispatchTicketService
      */
     private function weighingTypeCode(string $operationType, array $weighing): string
     {
-        return $operationType === TicketDespacho::OPERATION_RETURN
-            ? TipoPollo::CHICKEN_LIVE
-            : (string) $weighing['chicken_type_code'];
+        if ($operationType !== TicketDespacho::OPERATION_RETURN) {
+            return (string) $weighing['chicken_type_code'];
+        }
+
+        return ($weighing['chicken_condition'] ?? null) === Pesada::CHICKEN_CONDITION_DEAD
+            ? TipoPollo::CHICKEN_DEAD
+            : TipoPollo::CHICKEN_LIVE;
     }
 
     /**
@@ -285,19 +293,22 @@ class DispatchTicketService
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
             ->value('hora_corte_operativo') ?: '21:00:00';
-        $journey = JornadaOperativa::query()->firstOrCreate(
-            [
+        $journey = JornadaOperativa::query()
+            ->where('sucursal_id', $branch->id)
+            ->whereDate('fecha_operativa', $operatingDate->format('Y-m-d'))
+            ->lockForUpdate()
+            ->first();
+
+        if (! $journey) {
+            $journey = JornadaOperativa::query()->create([
                 'sucursal_id' => $branch->id,
                 'fecha_operativa' => $operatingDate->format('Y-m-d'),
-            ],
-            [
                 'estado' => JornadaOperativa::STATUS_OPEN,
                 'abierta_por' => $actor->id,
                 'inicio_at' => $operatingDate->subDay()->setTimeFromTimeString($cutoff),
                 'cierre_programado_at' => $operatingDate->setTimeFromTimeString($cutoff),
-            ]
-        );
-        $journey = JornadaOperativa::query()->lockForUpdate()->findOrFail($journey->id);
+            ]);
+        }
 
         if ($journey->estado !== JornadaOperativa::STATUS_OPEN) {
             throw ValidationException::withMessages([
@@ -356,15 +367,17 @@ class DispatchTicketService
     }
 
     /**
+     * @param  Collection<int, string>  $requiredTypeCodes
      * @param  Collection<string, TipoPollo>  $types
      * @param  Collection<string, object>  $cageTypes
      */
     private function assertCatalogsComplete(
         Collection $weighings,
+        Collection $requiredTypeCodes,
         Collection $types,
         Collection $cageTypes
     ): void {
-        if ($types->count() !== $weighings->pluck('chicken_type_code')->unique()->count()) {
+        if ($types->count() !== $requiredTypeCodes->count()) {
             throw ValidationException::withMessages([
                 'weighings' => 'Uno o más tipos de pollo no están disponibles para despacho.',
             ]);
@@ -407,6 +420,7 @@ class DispatchTicketService
         ?int $clientId,
         Collection $types
     ): array {
+        $sourceTypes = $this->priceSourceTypes($types);
         $specificPrices = collect();
 
         if ($clientId) {
@@ -420,7 +434,7 @@ class DispatchTicketService
             if ($specificListId) {
                 $specificPrices = PrecioHistorial::query()
                     ->where('lista_precio_id', $specificListId)
-                    ->whereIn('tipo_pollo_id', $types->pluck('id'))
+                    ->whereIn('tipo_pollo_id', $sourceTypes->pluck('id'))
                     ->whereNull('vigente_hasta')
                     ->lockForUpdate()
                     ->get()
@@ -428,7 +442,7 @@ class DispatchTicketService
             }
         }
 
-        $missingTypes = $types->filter(
+        $missingTypes = $sourceTypes->filter(
             fn (TipoPollo $type) => ! $specificPrices->has($type->id)
         );
         $generalPrices = $missingTypes->isEmpty()
@@ -437,8 +451,9 @@ class DispatchTicketService
         $result = [];
 
         foreach ($types as $type) {
-            $specific = $specificPrices->get($type->id);
-            $history = $specific ?: $generalPrices->get($type->id);
+            $sourceType = $sourceTypes->get($type->priceSourceTypeId());
+            $specific = $sourceType ? $specificPrices->get($sourceType->id) : null;
+            $history = $sourceType ? ($specific ?: $generalPrices->get($sourceType->id)) : null;
 
             if (! $history) {
                 throw ValidationException::withMessages([
@@ -453,6 +468,31 @@ class DispatchTicketService
         }
 
         return $result;
+    }
+
+    /**
+     * @param  Collection<string, TipoPollo>  $types
+     * @return Collection<int, TipoPollo>
+     */
+    private function priceSourceTypes(Collection $types): Collection
+    {
+        $sourceIds = $types
+            ->map(fn (TipoPollo $type): int => $type->priceSourceTypeId())
+            ->unique()
+            ->values();
+        $sourceTypes = TipoPollo::query()
+            ->whereIn('id', $sourceIds)
+            ->where('estado', TipoPollo::STATUS_ACTIVE)
+            ->get()
+            ->keyBy('id');
+
+        if ($sourceTypes->count() !== $sourceIds->count()) {
+            throw ValidationException::withMessages([
+                'destination.id' => 'La configuracion interna de precios esta incompleta.',
+            ]);
+        }
+
+        return $sourceTypes;
     }
 
     /**

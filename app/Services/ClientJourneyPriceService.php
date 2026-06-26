@@ -34,8 +34,9 @@ class ClientJourneyPriceService
             return 0;
         }
 
+        $typeCodes = $this->expandTypeCodes($chickenTypeCodes);
         $types = TipoPollo::query()
-            ->whereIn('codigo', array_values(array_unique($chickenTypeCodes)))
+            ->whereIn('codigo', $typeCodes)
             ->where('estado', TipoPollo::STATUS_ACTIVE)
             ->get()
             ->keyBy('id');
@@ -131,6 +132,7 @@ class ClientJourneyPriceService
      */
     private function applicablePrices(Tercero $client, Collection $types): Collection
     {
+        $sourceTypes = $this->priceSourceTypes($types);
         $specificListId = ListaPrecio::query()
             ->where('empresa_id', $client->empresa_id)
             ->where('tercero_id', $client->id)
@@ -140,13 +142,13 @@ class ClientJourneyPriceService
         $specificPrices = $specificListId
             ? PrecioHistorial::query()
                 ->where('lista_precio_id', $specificListId)
-                ->whereIn('tipo_pollo_id', $types->keys())
+                ->whereIn('tipo_pollo_id', $sourceTypes->pluck('id'))
                 ->whereNull('vigente_hasta')
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('tipo_pollo_id')
             : collect();
-        $missingTypeIds = $types->keys()->diff($specificPrices->keys());
+        $missingTypeIds = $sourceTypes->pluck('id')->diff($specificPrices->keys());
         $generalListId = $missingTypeIds->isEmpty()
             ? null
             : ListaPrecio::query()
@@ -166,11 +168,13 @@ class ClientJourneyPriceService
             : collect();
 
         return $types->mapWithKeys(function (TipoPollo $type) use (
+            $sourceTypes,
             $specificPrices,
             $generalPrices
         ): array {
-            $specific = $specificPrices->get($type->id);
-            $history = $specific ?: $generalPrices->get($type->id);
+            $sourceType = $sourceTypes->get($type->priceSourceTypeId());
+            $specific = $sourceType ? $specificPrices->get($sourceType->id) : null;
+            $history = $sourceType ? ($specific ?: $generalPrices->get($sourceType->id)) : null;
 
             return $history
                 ? [$type->id => [
@@ -179,6 +183,40 @@ class ClientJourneyPriceService
                 ]]
                 : [];
         });
+    }
+
+    /**
+     * @param  array<int, string>  $chickenTypeCodes
+     * @return array<int, string>
+     */
+    private function expandTypeCodes(array $chickenTypeCodes): array
+    {
+        return collect($chickenTypeCodes)
+            ->map(fn (string $code): string => $code)
+            ->flatMap(fn (string $code): array => $code === TipoPollo::CHICKEN_LIVE
+                ? [TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DEAD]
+                : [$code])
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, TipoPollo>  $types
+     * @return Collection<int, TipoPollo>
+     */
+    private function priceSourceTypes(Collection $types): Collection
+    {
+        $sourceIds = $types
+            ->map(fn (TipoPollo $type): int => $type->priceSourceTypeId())
+            ->unique()
+            ->values();
+
+        return TipoPollo::query()
+            ->whereIn('id', $sourceIds)
+            ->where('estado', TipoPollo::STATUS_ACTIVE)
+            ->get()
+            ->keyBy('id');
     }
 
     /**
