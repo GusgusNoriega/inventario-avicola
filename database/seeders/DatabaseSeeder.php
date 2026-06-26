@@ -105,6 +105,7 @@ class DatabaseSeeder extends Seeder
             'RECEPCIONES_VER',
             'RECEPCIONES_CREAR',
             'DESPACHOS_VER',
+            'TICKETS_DIA_VER',
             'DESPACHOS_CREAR',
             'PROGRAMACION_GESTIONAR',
             'RECEPCION_NO_PROGRAMADA',
@@ -137,6 +138,7 @@ class DatabaseSeeder extends Seeder
                     'RECEPCIONES_VER',
                     'RECEPCIONES_CREAR',
                     'DESPACHOS_VER',
+                    'TICKETS_DIA_VER',
                     'DESPACHOS_CREAR',
                 ])
                 ->pluck('id')

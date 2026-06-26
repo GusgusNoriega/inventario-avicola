@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'menu')->name('menu');
 Route::view('/operacion', 'operacion')->name('operacion');
+Route::view('/tickets-dia', 'tickets-dia')->name('tickets-dia');
 Route::view('/jornada', 'jornada')->name('jornada');
 Route::view('/directorio', 'directorio')->name('directorio');
 Route::view('/directorio/clientes/{tercero}', 'cliente-detalle')

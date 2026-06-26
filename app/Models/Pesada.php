@@ -69,6 +69,22 @@ class Pesada extends Model
     }
 
     /**
+     * @return BelongsTo<Tercero, $this>
+     */
+    public function proveedorOrigen(): BelongsTo
+    {
+        return $this->belongsTo(Tercero::class, 'proveedor_origen_id');
+    }
+
+    /**
+     * @return BelongsTo<Almacen, $this>
+     */
+    public function almacenOrigen(): BelongsTo
+    {
+        return $this->belongsTo(Almacen::class, 'almacen_origen_id');
+    }
+
+    /**
      * @return BelongsTo<Vehiculo, $this>
      */
     public function vehiculo(): BelongsTo

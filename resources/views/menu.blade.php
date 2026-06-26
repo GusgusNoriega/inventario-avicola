@@ -52,6 +52,24 @@
           <span class="menu-status">Disponible</span>
         </a>
 
+        <a class="menu-tile menu-tile-primary" href="{{ route('tickets-dia') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h12v18H6z"></path>
+              <path d="M9 7h6"></path>
+              <path d="M9 11h6"></path>
+              <path d="M9 15h4"></path>
+              <path d="M4 7h2"></path>
+              <path d="M18 7h2"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Tickets del dia</strong>
+            <small>Resumen operativo para despacho</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
         <a class="menu-tile" href="#facturacion" data-future-view="Registro de facturación">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

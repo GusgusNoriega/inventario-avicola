@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
+use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
@@ -27,6 +28,9 @@ Route::prefix('v1')->group(function (): void {
     $operationCatalogMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'permission:DESPACHOS_VER'];
+    $dailyTicketsMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:TICKETS_DIA_VER'];
     $operationWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR'];
@@ -49,6 +53,8 @@ Route::prefix('v1')->group(function (): void {
                 ->defaults('directory_role', $role);
         }
     });
+    Route::get('/operacion/tickets-dia', [DailyDispatchTicketController::class, 'index'])
+        ->middleware($dailyTicketsMiddleware);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
         ->middleware($operationWriteMiddleware);
     Route::put('/operacion/jornada', [JourneyPlanController::class, 'update'])

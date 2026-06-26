@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(47, $migrationFiles);
+        $this->assertCount(48, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -23,11 +23,14 @@ class DatabaseSchemaTest extends TestCase
                 "/Schema::(?:create|table)\\('([^']+)'/",
                 $upContents
             );
+            $expectedOperations = basename($migrationFile) === '2026_06_26_000004_add_tickets_dia_permission.php'
+                ? 0
+                : 1;
 
             $this->assertSame(
-                1,
+                $expectedOperations,
                 $schemaOperations,
-                basename($migrationFile).' debe contener exactamente una operación de esquema en up().'
+                basename($migrationFile)." debe contener exactamente {$expectedOperations} operacion(es) de esquema en up()."
             );
         }
     }

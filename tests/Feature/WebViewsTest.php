@@ -12,6 +12,7 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Menú principal')
             ->assertSee(route('operacion'), false)
+            ->assertSee(route('tickets-dia'), false)
             ->assertSee(route('jornada'), false)
             ->assertSee(route('directorio'), false);
     }
@@ -46,6 +47,18 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Clientes y proveedores')
             ->assertSee(asset('js/clientes.js'), false);
+    }
+
+    public function test_daily_tickets_view_is_available_without_database_queries(): void
+    {
+        $this->get('/tickets-dia')
+            ->assertOk()
+            ->assertSee('Tickets del dia')
+            ->assertSee('dailyOperationSummary', false)
+            ->assertSee('dailyTicketList', false)
+            ->assertSee(asset('js/tickets-dia.js'), false)
+            ->assertDontSee('Importe')
+            ->assertDontSee('Precio/kg');
     }
 
     public function test_journey_configuration_view_is_available_without_database_queries(): void
