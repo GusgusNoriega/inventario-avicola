@@ -1,5 +1,7 @@
 import { apiRequest } from "./api-client.js";
 
+const PERU_TIME_ZONE = "America/Lima";
+
 const elements = {
   date: document.getElementById("journeyDate"),
   window: document.getElementById("journeyWindow"),
@@ -36,7 +38,10 @@ function formatDate(value, options) {
     return "--";
   }
 
-  return new Intl.DateTimeFormat("es-CO", options).format(date);
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TIME_ZONE,
+    ...options
+  }).format(date);
 }
 
 function setMessage(message, isError = false) {

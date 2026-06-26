@@ -3,6 +3,10 @@
 import { apiRequest } from "./api-client.js";
 
 const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
+const PERU_LOCALE = "es-PE";
+const PERU_TIME_ZONE = "America/Lima";
+const PERU_UTC_OFFSET = "-05:00";
+const PERU_UTC_OFFSET_MINUTES = -5 * 60;
 
 const FONT_SIZE_STORAGE_KEY = "sistema-pollos-font-size-v1";
 const CUSTOM_FONT_SIZE_STORAGE_KEY = "sistema-pollos-custom-font-sizes-v1";
@@ -411,6 +415,7 @@ function createDefaultTruck(index) {
     draftId: createDraftId(),
     registration: null,
     clientId: null,
+    destination: null,
     cages: []
   };
 }
@@ -584,6 +589,66 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function padDatePart(value) {
+  return String(value).padStart(2, "0");
+}
+
+function getPeruDateTimeParts(date) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: PERU_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+    return {
+      year: values.year,
+      month: values.month,
+      day: values.day,
+      hour: values.hour === "24" ? "00" : values.hour,
+      minute: values.minute,
+      second: values.second
+    };
+  } catch {
+    const shifted = new Date(date.getTime() + PERU_UTC_OFFSET_MINUTES * 60000);
+
+    return {
+      year: String(shifted.getUTCFullYear()),
+      month: padDatePart(shifted.getUTCMonth() + 1),
+      day: padDatePart(shifted.getUTCDate()),
+      hour: padDatePart(shifted.getUTCHours()),
+      minute: padDatePart(shifted.getUTCMinutes()),
+      second: padDatePart(shifted.getUTCSeconds())
+    };
+  }
+}
+
+function formatPeruIsoString(date = new Date()) {
+  const parts = getPeruDateTimeParts(date);
+
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${PERU_UTC_OFFSET}`;
+}
+
+function formatPeruTime(date, options = {}) {
+  return date.toLocaleTimeString(PERU_LOCALE, {
+    timeZone: PERU_TIME_ZONE,
+    ...options
+  });
+}
+
+function formatPeruDate(date, options = {}) {
+  return date.toLocaleDateString(PERU_LOCALE, {
+    timeZone: PERU_TIME_ZONE,
+    ...options
+  });
+}
+
 function normalizeCatalogClient(record, source = "directory") {
   const id = String(record?.id || "").trim();
   const name = String(record?.name || record?.nombre || "").trim();
@@ -611,6 +676,72 @@ function normalizeCatalogClient(record, source = "directory") {
       : "",
     updatedAt: record?.updatedAt || record?.createdAt || ""
   };
+}
+
+function normalizeDestinationType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "almacen" || normalized === "warehouse" ? "almacen" : "cliente";
+}
+
+function normalizeStoredDestination(record, fallbackId = null) {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+
+  const destinationType = normalizeDestinationType(
+    record.destinationType || record.tipoDestino || record.tipo || record.type
+  );
+  const warehouseNumber = Number(
+    record.warehouseNumber || record.numeroAlmacen || record.numero_almacen
+  );
+  const id = String(
+    record.id
+      || record.clientId
+      || record.clienteId
+      || fallbackId
+      || (
+        destinationType === "almacen" && Number.isInteger(warehouseNumber) && warehouseNumber > 0
+          ? `destino-almacen-${warehouseNumber}`
+          : ""
+      )
+  ).trim();
+  const name = String(record.name || record.nombre || "").trim();
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    nombre: name,
+    dni: String(record.dni || record.numero_documento || "").trim(),
+    direccion: String(record.direccion || record.address || "").trim(),
+    source: record.source || "saved",
+    destinationType,
+    databaseId: String(
+      record.databaseId
+        || record.database_id
+        || record.terceroId
+        || record.tercero_id
+        || (
+          destinationType === "almacen"
+            ? record.warehouseId || record.almacenId || record.almacen_id || ""
+            : record.id || fallbackId || ""
+        )
+    ).trim() || null,
+    warehouseNumber: destinationType === "almacen" && Number.isInteger(warehouseNumber) && warehouseNumber > 0
+      ? warehouseNumber
+      : null,
+    warehouseCode: destinationType === "almacen"
+      ? String(record.warehouseCode || record.codigoAlmacen || record.warehouse_code || "").trim()
+      : "",
+    updatedAt: record.updatedAt || record.updated_at || record.createdAt || ""
+  };
+}
+
+function snapshotDestination(destination) {
+  return normalizeStoredDestination(destination, destination?.id);
 }
 
 function getClientCatalog() {
@@ -669,6 +800,15 @@ function getClientById(clientId) {
   return getClientCatalog().find((client) => client.id === clientId) || null;
 }
 
+function getTruckDestination(truck) {
+  if (!truck) {
+    return null;
+  }
+
+  return getClientById(truck.clientId)
+    || normalizeStoredDestination(truck.destination, truck.clientId);
+}
+
 function normalizeClientId(clientId) {
   if (!clientId) {
     return null;
@@ -683,7 +823,7 @@ function normalizeClientId(clientId) {
 }
 
 function getTruckClientName(truck) {
-  const client = getClientById(truck.clientId);
+  const client = getTruckDestination(truck);
   return client?.name
     || normalizeTicketRegistration(truck?.registration)?.destination?.name
     || "Sin destino asignado";
@@ -1035,7 +1175,7 @@ function normalizeCageRecord(cage, fallbackId) {
 
   return {
     id,
-    timestamp: cage?.timestamp || new Date().toISOString(),
+    timestamp: cage?.timestamp || formatPeruIsoString(),
     hora: cage?.hora || "--:--:--",
     tipo: normalizeType(cage?.tipo),
     cantidadAvesPorJava: birdsPerJava,
@@ -1588,16 +1728,27 @@ function loadState() {
     }
 
     const loadedTrucks = Array.isArray(parsed.trucks) && parsed.trucks.length
-      ? parsed.trucks.map((truck, index) => ({
-          id: truck.id || `camion-${index + 1}`,
-          name: normalizeDispatchTicketName(truck.name, index),
-          draftId: String(truck.draftId || truck.draft_id || "").trim() || createDraftId(),
-          registration: normalizeTicketRegistration(truck.registration || truck.registroTicket),
-          clientId: normalizeClientId(truck.clientId || truck.clienteId || truck?.cliente?.id),
-          cages: Array.isArray(truck.cages)
-            ? truck.cages.map((cage, cageIndex) => normalizeCageRecord(cage, cageIndex + 1))
-            : []
-        }))
+      ? parsed.trucks.map((truck, index) => {
+          const destination = normalizeStoredDestination(
+            truck.destination || truck.destino || truck.cliente,
+            truck.clientId || truck.clienteId || truck?.cliente?.id
+          );
+          const clientId = normalizeClientId(
+            truck.clientId || truck.clienteId || truck?.cliente?.id || destination?.id
+          );
+
+          return {
+            id: truck.id || `camion-${index + 1}`,
+            name: normalizeDispatchTicketName(truck.name, index),
+            draftId: String(truck.draftId || truck.draft_id || "").trim() || createDraftId(),
+            registration: normalizeTicketRegistration(truck.registration || truck.registroTicket),
+            clientId,
+            destination: clientId ? destination : null,
+            cages: Array.isArray(truck.cages)
+              ? truck.cages.map((cage, cageIndex) => normalizeCageRecord(cage, cageIndex + 1))
+              : []
+          };
+        })
       : fallback.trucks;
     const trucks = ensureTruckSlots(loadedTrucks);
 
@@ -1947,8 +2098,35 @@ function reconcileTruckClientAssignments(shouldSave = false) {
   let changed = false;
 
   state.trucks.forEach((truck) => {
+    const catalogDestination = getClientById(truck.clientId);
+    const savedDestination = normalizeStoredDestination(truck.destination, truck.clientId);
+
+    if (truck.clientId && catalogDestination) {
+      const nextDestination = snapshotDestination(catalogDestination);
+      if (JSON.stringify(truck.destination || null) !== JSON.stringify(nextDestination || null)) {
+        truck.destination = nextDestination;
+        changed = true;
+      }
+      return;
+    }
+
+    if (truck.clientId && savedDestination) {
+      if (JSON.stringify(truck.destination || null) !== JSON.stringify(savedDestination)) {
+        truck.destination = savedDestination;
+        changed = true;
+      }
+      return;
+    }
+
     if (!isTruckRegistered(truck) && truck.clientId && !validClientIds.has(truck.clientId)) {
       truck.clientId = null;
+      truck.destination = null;
+      changed = true;
+      return;
+    }
+
+    if (!truck.clientId && truck.destination) {
+      truck.destination = null;
       changed = true;
     }
   });
@@ -2253,7 +2431,7 @@ function formatScaleTime(timestamp) {
     return "Lectura guardada";
   }
 
-  return `Leído ${date.toLocaleTimeString("es-CO", {
+  return `Leído ${formatPeruTime(date, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
@@ -4122,8 +4300,8 @@ function buildDispatchTicketHtml(truck) {
 
   <section class="info">
     <strong>TICKET:</strong><span>${escapeHtml(getTruckTicketLabel(truck))}</span>
-    <strong>FECHA:</strong><span>${escapeHtml(emittedAt.toLocaleDateString("es-CO"))}</span>
-    <strong>HORA:</strong><span>${escapeHtml(emittedAt.toLocaleTimeString("es-CO"))}</span>
+    <strong>FECHA:</strong><span>${escapeHtml(formatPeruDate(emittedAt))}</span>
+    <strong>HORA:</strong><span>${escapeHtml(formatPeruTime(emittedAt))}</span>
     <strong>DESTINO:</strong><span>${escapeHtml(getTruckClientName(truck))}</span>
     <strong>ORIGEN:</strong><span>${escapeHtml(originName)}</span>
     <strong>PLACA:</strong><span>${escapeHtml(truckPlate)}</span>
@@ -4241,7 +4419,7 @@ function printDispatchTicket(truckId) {
 }
 
 function buildDispatchTicketPayload(truck) {
-  const destination = getClientById(truck.clientId);
+  const destination = getTruckDestination(truck);
 
   if (!destination) {
     throw new Error("Asigna un cliente o almacén de destino antes de registrar el ticket.");
@@ -4403,7 +4581,7 @@ async function registerDispatchTicket(truckId) {
 function buildSelectedTruckDetails(truck, totals) {
   const registration = normalizeTicketRegistration(truck.registration);
   const isRegistering = pendingTicketRegistrations.has(truck.id);
-  const hasDestination = Boolean(getClientById(truck.clientId));
+  const hasDestination = Boolean(getTruckDestination(truck));
   const typeItems = totals.byType
     .map((item) => {
       const toneClass = `type-total-${item.id.replace(/_/g, "-")}`;
@@ -4597,7 +4775,7 @@ function renderGlobalStats() {
 
 function buildJsonPayload() {
   return {
-    fechaCorte: new Date().toISOString(),
+    fechaCorte: formatPeruIsoString(),
     tiposDisponibles: DISPATCH_CHICKEN_TYPES.map((type) => ({ id: type.id, nombre: type.label })),
     tiposJavasDisponibles: CRATE_TYPES.map((crate) => ({ id: crate.id, nombre: crate.label, pesoKg: crate.weightKg })),
     clientesDisponibles: getClientCatalog().map((client) => ({
@@ -4640,7 +4818,7 @@ function buildJsonPayload() {
     },
     camiones: state.trucks.map((truck) => {
       const totals = calculateTruckTotals(truck.cages);
-      const client = getClientById(truck.clientId);
+      const client = getTruckDestination(truck);
       const destination = client
         ? {
             id: client.id,
@@ -4853,8 +5031,8 @@ function addCage(event) {
   const now = new Date();
   const record = {
     id: ++state.lastId,
-    timestamp: now.toISOString(),
-    hora: now.toLocaleTimeString("es-CO", {
+    timestamp: formatPeruIsoString(now),
+    hora: formatPeruTime(now, {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
@@ -4984,6 +5162,9 @@ function assignClientToTruck(clientId) {
 
   const normalizedClientId = normalizeClientId(clientId);
   truck.clientId = normalizedClientId;
+  truck.destination = normalizedClientId
+    ? snapshotDestination(getClientById(normalizedClientId))
+    : null;
 
   saveState();
   renderAll();
@@ -4994,7 +5175,7 @@ function assignClientToTruck(clientId) {
     return;
   }
 
-  const client = getClientById(normalizedClientId);
+  const client = getTruckDestination(truck);
   const destinationLabel = isWarehouseDestination(client) ? "Almacén asignado" : "Cliente asignado";
   setFormMessage(`${destinationLabel} a ${truck.name}: ${client ? client.name : normalizedClientId}.`);
 }
@@ -5708,9 +5889,6 @@ setFormMessage(
 );
 void restoreScaleConnections();
 void loadCurrentDirectoryData();
-
-
-
 
 
 

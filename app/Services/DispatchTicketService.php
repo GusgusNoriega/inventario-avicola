@@ -156,7 +156,7 @@ class DispatchTicketService
                     'peso_bruto_kg' => $grossWeight,
                     'tara_total_kg' => $tareWeight,
                     'peso_neto_kg' => $netWeight,
-                    'pesada_at' => $weighedAt->get($index)->utc(),
+                    'pesada_at' => $weighedAt->get($index),
                     'estado' => Pesada::STATUS_ACTIVE,
                     'created_by' => $actor->id,
                 ]);

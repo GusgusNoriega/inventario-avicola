@@ -82,7 +82,7 @@ class DispatchTicketApiTest extends TestCase
             'empresa_id' => $this->user->empresa_id,
             'codigo' => 'PRINCIPAL',
             'nombre' => 'Sucursal principal',
-            'zona_horaria' => 'America/Bogota',
+            'zona_horaria' => 'America/Lima',
             'estado' => 'ACTIVO',
             'created_at' => now(),
             'updated_at' => now(),
@@ -128,7 +128,7 @@ class DispatchTicketApiTest extends TestCase
     public function test_ticket_and_all_weighings_are_registered_in_one_transaction(): void
     {
         $payload = $this->ticketPayload();
-        $localNow = now('America/Bogota');
+        $localNow = now('America/Lima');
         $operatingDate = $localNow->format('H:i:s') >= '21:00:00'
             ? $localNow->copy()->addDay()
             : $localNow;
@@ -194,7 +194,7 @@ class DispatchTicketApiTest extends TestCase
 
     public function test_published_journey_rejects_a_truck_that_was_not_selected(): void
     {
-        $localNow = now('America/Bogota');
+        $localNow = now('America/Lima');
         $operatingDate = $localNow->format('H:i:s') >= '21:00:00'
             ? $localNow->copy()->addDay()->format('Y-m-d')
             : $localNow->format('Y-m-d');
@@ -284,19 +284,19 @@ class DispatchTicketApiTest extends TestCase
 
     public function test_client_price_update_revalues_only_tickets_from_the_current_journey(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-06-22 20:00:00', 'America/Bogota'));
+        Carbon::setTestNow(Carbon::parse('2026-06-22 20:00:00', 'America/Lima'));
         $previousTicketId = $this->postJson(
             '/api/v1/operacion/tickets',
             $this->ticketPayload()
         )->assertCreated()->json('data.id');
 
-        Carbon::setTestNow(Carbon::parse('2026-06-22 22:00:00', 'America/Bogota'));
+        Carbon::setTestNow(Carbon::parse('2026-06-22 22:00:00', 'America/Lima'));
         $currentTicketId = $this->postJson(
             '/api/v1/operacion/tickets',
             $this->ticketPayload()
         )->assertCreated()->json('data.id');
 
-        Carbon::setTestNow(Carbon::parse('2026-06-23 10:00:00', 'America/Bogota'));
+        Carbon::setTestNow(Carbon::parse('2026-06-23 10:00:00', 'America/Lima'));
         $this->putJson("/api/v1/clientes/{$this->clientId}", $this->partyPayload(
             'Cliente destino',
             '20111111111',
@@ -381,12 +381,33 @@ class DispatchTicketApiTest extends TestCase
             ->assertJsonMissingPath('data.general_prices');
     }
 
+    public function test_weighing_time_is_stored_in_peru_timezone(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-26 12:00:00', 'America/Lima'));
+
+        $payload = $this->ticketPayload();
+        $payload['weighings'][0]['weighed_at'] = '2026-06-26T10:15:30-05:00';
+        $payload['weighings'][1]['weighed_at'] = '2026-06-26T10:16:30-05:00';
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated();
+
+        $this->assertDatabaseHas('pesadas', [
+            'numero' => 1,
+            'pesada_at' => '2026-06-26 10:15:30',
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'numero' => 2,
+            'pesada_at' => '2026-06-26 10:16:30',
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
     private function ticketPayload(): array
     {
-        $weighedAt = now('America/Bogota')->subMinute()->toISOString();
+        $weighedAt = now('America/Lima')->subMinute()->toIso8601String();
 
         return [
             'draft_id' => (string) Str::uuid(),

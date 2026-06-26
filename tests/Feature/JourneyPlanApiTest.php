@@ -37,7 +37,7 @@ class JourneyPlanApiTest extends TestCase
         DB::table('empresas')
             ->where('id', $this->user->empresa_id)
             ->update([
-                'zona_horaria' => 'America/Bogota',
+                'zona_horaria' => 'America/Lima',
                 'hora_corte_operativo' => '21:00:00',
             ]);
         $permissions = collect([
@@ -74,7 +74,7 @@ class JourneyPlanApiTest extends TestCase
             'empresa_id' => $this->user->empresa_id,
             'codigo' => 'PRINCIPAL',
             'nombre' => 'Sucursal principal',
-            'zona_horaria' => 'America/Bogota',
+            'zona_horaria' => 'America/Lima',
             'estado' => 'ACTIVO',
             'created_at' => now(),
             'updated_at' => now(),

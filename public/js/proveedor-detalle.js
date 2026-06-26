@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client.js";
 
 const root = document.querySelector("[data-provider-history]");
 const providerId = root?.dataset.providerId;
+const PERU_TIME_ZONE = "America/Lima";
 
 const elements = {
   name: document.getElementById("providerName"),
@@ -57,7 +58,8 @@ function formatDateTime(value) {
 
   return new Intl.DateTimeFormat("es-PE", {
     dateStyle: "short",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: PERU_TIME_ZONE
   }).format(new Date(value));
 }
 
