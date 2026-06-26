@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Permission;
+use App\Models\Pesada;
 use App\Models\Role;
+use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -257,6 +259,52 @@ class DispatchTicketApiTest extends TestCase
         ]);
     }
 
+    public function test_return_ticket_freezes_live_chicken_price_and_tracks_dead_condition(): void
+    {
+        $payload = $this->returnTicketPayload();
+        $localNow = now('America/Lima');
+        $operatingDate = $localNow->format('H:i:s') >= '21:00:00'
+            ? $localNow->copy()->addDay()
+            : $localNow;
+        $liveTypeId = DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::CHICKEN_LIVE)
+            ->value('id');
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.operation_type', TicketDespacho::OPERATION_RETURN)
+            ->assertJsonPath('data.code', 'D-'.$operatingDate->format('Ymd').'-001')
+            ->assertJsonPath('data.destination.type', 'CLIENTE')
+            ->assertJsonPath('data.weighing_count', 2)
+            ->assertJsonPath('data.weighings.1.chicken_condition', Pesada::CHICKEN_CONDITION_DEAD);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'tipo_operacion' => TicketDespacho::OPERATION_RETURN,
+            'cliente_destino_id' => $this->clientId,
+            'almacen_destino_id' => null,
+        ]);
+        $this->assertDatabaseCount('ticket_precios', 1);
+        $this->assertDatabaseHas('ticket_precios', [
+            'tipo_pollo_id' => $liveTypeId,
+            'precio_kg' => 8.5,
+            'origen_precio' => 'CLIENTE',
+        ]);
+        $this->assertDatabaseCount('pesadas', 2);
+        $this->assertDatabaseHas('pesadas', [
+            'numero' => 1,
+            'tipo_pollo_id' => $liveTypeId,
+            'condicion_pollo' => Pesada::CHICKEN_CONDITION_LIVE,
+            'proveedor_origen_id' => null,
+            'almacen_origen_id' => null,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'numero' => 2,
+            'tipo_pollo_id' => $liveTypeId,
+            'condicion_pollo' => Pesada::CHICKEN_CONDITION_DEAD,
+            'cantidad_aves' => 15,
+        ]);
+    }
+
     public function test_client_without_specific_prices_uses_global_prices(): void
     {
         $this->createGeneralPrices();
@@ -447,6 +495,49 @@ class DispatchTicketApiTest extends TestCase
                     'cage_count' => 1,
                     'read_weight_kg' => 20,
                     'gross_weight_kg' => 20,
+                    'weighed_at' => $weighedAt,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function returnTicketPayload(): array
+    {
+        $weighedAt = now('America/Lima')->subMinute()->toIso8601String();
+
+        return [
+            'draft_id' => (string) Str::uuid(),
+            'operation_type' => TicketDespacho::OPERATION_RETURN,
+            'destination' => [
+                'type' => 'CLIENTE',
+                'id' => $this->clientId,
+            ],
+            'weighings' => [
+                [
+                    'local_id' => 1,
+                    'chicken_type_code' => TipoPollo::CHICKEN_LIVE,
+                    'chicken_condition' => Pesada::CHICKEN_CONDITION_LIVE,
+                    'cage_type_code' => 'JAVA_700',
+                    'weight_source' => 'BALANZA_1',
+                    'birds_per_cage' => 10,
+                    'cage_count' => 1,
+                    'read_weight_kg' => 22,
+                    'gross_weight_kg' => 22,
+                    'weighed_at' => $weighedAt,
+                ],
+                [
+                    'local_id' => 2,
+                    'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
+                    'chicken_condition' => Pesada::CHICKEN_CONDITION_DEAD,
+                    'cage_type_code' => 'JAVA_700',
+                    'weight_source' => 'MANUAL',
+                    'birds_per_cage' => 15,
+                    'cage_count' => 1,
+                    'read_weight_kg' => 25,
+                    'gross_weight_kg' => 25,
                     'weighed_at' => $weighedAt,
                 ],
             ],

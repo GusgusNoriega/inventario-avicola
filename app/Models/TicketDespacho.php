@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'codigo',
     'referencia_externa',
     'canal',
+    'tipo_operacion',
     'cliente_destino_id',
     'almacen_destino_id',
     'estado',
@@ -22,6 +23,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class TicketDespacho extends Model
 {
+    public const OPERATION_DISPATCH = 'DESPACHO';
+
+    public const OPERATION_RETURN = 'DEVOLUCION';
+
     public const STATUS_OPEN = 'ABIERTO';
 
     public const STATUS_CLOSED = 'CERRADO';

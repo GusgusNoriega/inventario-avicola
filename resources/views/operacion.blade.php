@@ -175,21 +175,14 @@
         </form>
       </section>
 
-      <section class="daily-provider-panel card" aria-labelledby="dailyProviderTitle">
+      <button id="returnTicketBtn" class="return-ticket-btn" type="button">Devolución</button>
+
+      <section class="daily-provider-panel card" aria-label="Camiones del día">
         <div class="daily-provider-head">
-          <div>
-            <p class="daily-provider-caption">Selección directa</p>
-            <h2 id="dailyProviderTitle">Camiones del día</h2>
-          </div>
           <div class="daily-provider-actions">
             <a class="btn btn-ghost" href="{{ route('jornada') }}">Configurar jornada</a>
             <strong id="dailyProviderCount" class="daily-provider-count">0</strong>
           </div>
-        </div>
-        <p class="daily-provider-help">Cada fila representa un proveedor con una de sus placas activas.</p>
-        <div class="daily-provider-table-head" aria-hidden="true">
-          <span>Proveedor</span>
-          <span>Placa</span>
         </div>
         <div id="dailyProviderList" class="daily-provider-list" role="listbox" aria-label="Camiones disponibles para la jornada"></div>
       </section>
@@ -197,7 +190,6 @@
 
     <section class="columns-section card" data-mobile-panel="camiones">
       <div class="section-head">
-        <h2>Tickets de Despacho en Paralelo</h2>
         <p id="globalStats" class="global-stats"></p>
       </div>
       <div id="trucksGrid" class="truck-grid"></div>

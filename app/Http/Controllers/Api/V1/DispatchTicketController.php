@@ -44,6 +44,7 @@ class DispatchTicketController extends Controller
             'id' => $ticket->id,
             'draft_id' => $ticket->referencia_externa,
             'code' => $ticket->codigo,
+            'operation_type' => $ticket->tipo_operacion,
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
@@ -63,6 +64,7 @@ class DispatchTicketController extends Controller
                 ->map(fn ($weighing) => [
                     'id' => $weighing->id,
                     'number' => $weighing->numero,
+                    'chicken_condition' => $weighing->condicion_pollo,
                 ])
                 ->values(),
         ];

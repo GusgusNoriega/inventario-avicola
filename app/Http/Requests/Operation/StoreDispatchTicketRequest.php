@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\Operation;
 
+use App\Models\Pesada;
+use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreDispatchTicketRequest extends FormRequest
 {
@@ -20,6 +23,10 @@ class StoreDispatchTicketRequest extends FormRequest
     {
         return [
             'draft_id' => ['required', 'uuid'],
+            'operation_type' => ['sometimes', Rule::in([
+                TicketDespacho::OPERATION_DISPATCH,
+                TicketDespacho::OPERATION_RETURN,
+            ])],
             'general_prices' => ['prohibited'],
             'prices' => ['prohibited'],
             'destination' => ['required', 'array:type,id'],
@@ -28,19 +35,26 @@ class StoreDispatchTicketRequest extends FormRequest
             'weighings' => ['required', 'array', 'min:1', 'max:500'],
             'weighings.*' => [
                 'required',
-                'array:local_id,chicken_type_code,cage_type_code,origin,weight_source,birds_per_cage,cage_count,read_weight_kg,gross_weight_kg,weighed_at',
+                'array:local_id,chicken_type_code,chicken_condition,cage_type_code,origin,weight_source,birds_per_cage,cage_count,read_weight_kg,gross_weight_kg,weighed_at',
             ],
             'weighings.*.local_id' => ['required', 'integer', 'min:1', 'distinct'],
             'weighings.*.chicken_type_code' => [
                 'required',
                 Rule::in([TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DRESSED]),
             ],
+            'weighings.*.chicken_condition' => [
+                'sometimes',
+                Rule::in([
+                    Pesada::CHICKEN_CONDITION_LIVE,
+                    Pesada::CHICKEN_CONDITION_DEAD,
+                ]),
+            ],
             'weighings.*.cage_type_code' => ['required', 'string', 'max:40'],
             'weighings.*.origin' => [
-                'required',
+                'nullable',
                 'array:type,provider_id,warehouse_id,provider_vehicle_id,vehicle_id,plate',
             ],
-            'weighings.*.origin.type' => ['required', Rule::in(['PROVEEDOR', 'ALMACEN'])],
+            'weighings.*.origin.type' => ['nullable', Rule::in(['PROVEEDOR', 'ALMACEN'])],
             'weighings.*.origin.provider_id' => ['nullable', 'integer', 'min:1'],
             'weighings.*.origin.warehouse_id' => ['nullable', 'integer', 'min:1'],
             'weighings.*.origin.provider_vehicle_id' => ['nullable', 'integer', 'min:1'],
@@ -78,8 +92,12 @@ class StoreDispatchTicketRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $operationType = mb_strtoupper(
+            trim((string) ($this->input('operation_type') ?: TicketDespacho::OPERATION_DISPATCH)),
+            'UTF-8'
+        );
         $weighings = collect($this->input('weighings', []))
-            ->map(function ($weighing): mixed {
+            ->map(function ($weighing) use ($operationType): mixed {
                 if (! is_array($weighing)) {
                     return $weighing;
                 }
@@ -97,8 +115,14 @@ class StoreDispatchTicketRequest extends FormRequest
 
                 return [
                     ...$weighing,
-                    'chicken_type_code' => mb_strtoupper(
-                        trim((string) ($weighing['chicken_type_code'] ?? '')),
+                    'chicken_type_code' => $operationType === TicketDespacho::OPERATION_RETURN
+                        ? TipoPollo::CHICKEN_LIVE
+                        : mb_strtoupper(
+                            trim((string) ($weighing['chicken_type_code'] ?? '')),
+                            'UTF-8'
+                        ),
+                    'chicken_condition' => mb_strtoupper(
+                        trim((string) ($weighing['chicken_condition'] ?? Pesada::CHICKEN_CONDITION_LIVE)),
                         'UTF-8'
                     ),
                     'cage_type_code' => mb_strtoupper(
@@ -125,6 +149,7 @@ class StoreDispatchTicketRequest extends FormRequest
             : [];
 
         $this->merge([
+            'operation_type' => $operationType,
             'destination' => [
                 ...$destination,
                 'type' => mb_strtoupper(
@@ -134,5 +159,38 @@ class StoreDispatchTicketRequest extends FormRequest
             ],
             'weighings' => $weighings,
         ]);
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $operationType = $this->input('operation_type', TicketDespacho::OPERATION_DISPATCH);
+            $destinationType = $this->input('destination.type');
+
+            if ($operationType === TicketDespacho::OPERATION_RETURN && $destinationType !== 'CLIENTE') {
+                $validator->errors()->add(
+                    'destination.type',
+                    'Las devoluciones deben registrarse contra un cliente.'
+                );
+            }
+
+            if ($operationType !== TicketDespacho::OPERATION_DISPATCH) {
+                return;
+            }
+
+            foreach ($this->input('weighings', []) as $index => $weighing) {
+                if (! is_array($weighing)) {
+                    continue;
+                }
+
+                $origin = $weighing['origin'] ?? null;
+                if (! is_array($origin) || ! in_array($origin['type'] ?? null, ['PROVEEDOR', 'ALMACEN'], true)) {
+                    $validator->errors()->add(
+                        "weighings.{$index}.origin.type",
+                        'El origen de la mercadería es obligatorio para despacho.'
+                    );
+                }
+            }
+        });
     }
 }

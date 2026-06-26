@@ -33,6 +33,7 @@ class DispatchTicketService
         array $data
     ): array {
         return DB::transaction(function () use ($companyId, $branch, $actor, $data): array {
+            $operationType = $this->operationType($data['operation_type'] ?? null);
             $existing = TicketDespacho::query()
                 ->where('referencia_externa', $data['draft_id'])
                 ->whereHas(
@@ -65,10 +66,11 @@ class DispatchTicketService
             $destination = $this->resolveDestination(
                 $companyId,
                 (int) $branch->id,
-                $data['destination']
+                $data['destination'],
+                $operationType
             );
             $types = TipoPollo::query()
-                ->whereIn('codigo', $weighings->pluck('chicken_type_code')->unique())
+                ->whereIn('codigo', $this->requiredTypeCodes($operationType, $weighings))
                 ->where('estado', TipoPollo::STATUS_ACTIVE)
                 ->where('permite_despacho', true)
                 ->get()
@@ -84,9 +86,10 @@ class DispatchTicketService
 
             $ticket = TicketDespacho::query()->create([
                 'jornada_id' => $journey->id,
-                'codigo' => $this->nextTicketCode($journey, $operatingDate),
+                'codigo' => $this->nextTicketCode($journey, $operatingDate, $operationType),
                 'referencia_externa' => $data['draft_id'],
                 'canal' => 'MAYORISTA',
+                'tipo_operacion' => $operationType,
                 'cliente_destino_id' => $destination['client_id'],
                 'almacen_destino_id' => $destination['warehouse_id'],
                 'estado' => TicketDespacho::STATUS_CLOSED,
@@ -112,15 +115,17 @@ class DispatchTicketService
             }
 
             foreach ($weighings->values() as $index => $weighing) {
-                $type = $types->get($weighing['chicken_type_code']);
+                $type = $types->get($this->weighingTypeCode($operationType, $weighing));
                 $cageType = $cageTypes->get($weighing['cage_type_code']);
-                $origin = $this->resolveOrigin(
-                    $companyId,
-                    (int) $branch->id,
-                    $operatingDate,
-                    $weighing['origin'],
-                    "weighings.{$index}.origin"
-                );
+                $origin = $operationType === TicketDespacho::OPERATION_RETURN
+                    ? $this->emptyOrigin()
+                    : $this->resolveOrigin(
+                        $companyId,
+                        (int) $branch->id,
+                        $operatingDate,
+                        $weighing['origin'],
+                        "weighings.{$index}.origin"
+                    );
                 $cageCount = (int) $weighing['cage_count'];
                 $birdsPerCage = (int) $weighing['birds_per_cage'];
                 $cageWeight = round((float) $cageType->peso_kg, 3);
@@ -139,6 +144,7 @@ class DispatchTicketService
                     'ticket_id' => $ticket->id,
                     'numero' => $index + 1,
                     'tipo_pollo_id' => $type->id,
+                    'condicion_pollo' => $this->weighingCondition($operationType, $weighing),
                     'tipo_java_id' => $cageType->id,
                     'proveedor_origen_id' => $origin['provider_id'],
                     'almacen_origen_id' => $origin['warehouse_id'],
@@ -167,6 +173,50 @@ class DispatchTicketService
                 'already_registered' => false,
             ];
         }, 3);
+    }
+
+    private function operationType(?string $operationType): string
+    {
+        return $operationType === TicketDespacho::OPERATION_RETURN
+            ? TicketDespacho::OPERATION_RETURN
+            : TicketDespacho::OPERATION_DISPATCH;
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $weighings
+     * @return Collection<int, string>
+     */
+    private function requiredTypeCodes(string $operationType, Collection $weighings): Collection
+    {
+        if ($operationType === TicketDespacho::OPERATION_RETURN) {
+            return collect([TipoPollo::CHICKEN_LIVE]);
+        }
+
+        return $weighings->pluck('chicken_type_code')->unique()->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $weighing
+     */
+    private function weighingTypeCode(string $operationType, array $weighing): string
+    {
+        return $operationType === TicketDespacho::OPERATION_RETURN
+            ? TipoPollo::CHICKEN_LIVE
+            : (string) $weighing['chicken_type_code'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $weighing
+     */
+    private function weighingCondition(string $operationType, array $weighing): string
+    {
+        if ($operationType !== TicketDespacho::OPERATION_RETURN) {
+            return Pesada::CHICKEN_CONDITION_LIVE;
+        }
+
+        return ($weighing['chicken_condition'] ?? null) === Pesada::CHICKEN_CONDITION_DEAD
+            ? Pesada::CHICKEN_CONDITION_DEAD
+            : Pesada::CHICKEN_CONDITION_LIVE;
     }
 
     /**
@@ -265,7 +315,8 @@ class DispatchTicketService
     private function resolveDestination(
         int $companyId,
         int $branchId,
-        array $destination
+        array $destination,
+        string $operationType
     ): array {
         if ($destination['type'] === 'CLIENTE') {
             $client = Tercero::query()
@@ -281,6 +332,12 @@ class DispatchTicketService
             }
 
             return ['client_id' => $client->id, 'warehouse_id' => null];
+        }
+
+        if ($operationType === TicketDespacho::OPERATION_RETURN) {
+            throw ValidationException::withMessages([
+                'destination.type' => 'Las devoluciones deben registrarse contra un cliente.',
+            ]);
         }
 
         $warehouseId = DB::table('almacenes')
@@ -322,9 +379,11 @@ class DispatchTicketService
 
     private function nextTicketCode(
         JornadaOperativa $journey,
-        CarbonImmutable $operatingDate
+        CarbonImmutable $operatingDate,
+        string $operationType
     ): string {
-        $prefix = 'T-'.$operatingDate->format('Ymd').'-';
+        $prefix = ($operationType === TicketDespacho::OPERATION_RETURN ? 'D-' : 'T-')
+            .$operatingDate->format('Ymd').'-';
         $next = TicketDespacho::query()
             ->where('jornada_id', $journey->id)
             ->where('codigo', 'like', $prefix.'%')
@@ -523,6 +582,20 @@ class DispatchTicketService
             'vehicle_id' => $association->vehiculo_id,
             'plate' => $association->vehiculo->placa,
             'program_detail_id' => $programDetailId ? (int) $programDetailId : null,
+        ];
+    }
+
+    /**
+     * @return array{provider_id: null, warehouse_id: null, vehicle_id: null, plate: null, program_detail_id: null}
+     */
+    private function emptyOrigin(): array
+    {
+        return [
+            'provider_id' => null,
+            'warehouse_id' => null,
+            'vehicle_id' => null,
+            'plate' => null,
+            'program_detail_id' => null,
         ];
     }
 

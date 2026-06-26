@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'ticket_id',
     'numero',
     'tipo_pollo_id',
+    'condicion_pollo',
     'tipo_java_id',
     'lectura_balanza_id',
     'proveedor_origen_id',
@@ -35,6 +36,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class Pesada extends Model
 {
+    public const CHICKEN_CONDITION_LIVE = 'VIVO';
+
+    public const CHICKEN_CONDITION_DEAD = 'MUERTO';
+
     public const STATUS_ACTIVE = 'ACTIVA';
 
     protected $table = 'pesadas';

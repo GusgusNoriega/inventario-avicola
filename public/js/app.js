@@ -74,6 +74,15 @@ const CHICKEN_TYPES = [
   { id: "pollo_beneficiado", apiCode: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "Benef.", tagClass: "tag-pollo-beneficiado" }
 ];
 const DISPATCH_CHICKEN_TYPES = CHICKEN_TYPES.filter((type) => type.id !== "pollo_beneficiado");
+const TICKET_OPERATIONS = {
+  DISPATCH: "DESPACHO",
+  RETURN: "DEVOLUCION"
+};
+const RETURN_CONDITIONS = [
+  { id: "vivo", apiCode: "VIVO", label: "Pollo vivo", shortLabel: "Vivo", tagClass: "tag-pollo-vivo" },
+  { id: "muerto", apiCode: "MUERTO", label: "Pollo muerto", shortLabel: "Muerto", tagClass: "tag-pollo-muerto" }
+];
+const VALID_RETURN_CONDITIONS = new Set(RETURN_CONDITIONS.map((condition) => condition.id));
 
 const LEGACY_TYPE_MAP = {
   vivo: "pollo_vivo",
@@ -221,6 +230,7 @@ const elements = {
   selectedWeightValue: document.getElementById("selectedWeightValue"),
   selectedWeightBreakdown: document.getElementById("selectedWeightBreakdown"),
   formMessage: document.getElementById("formMessage"),
+  returnTicketBtn: document.getElementById("returnTicketBtn"),
   trucksGrid: document.getElementById("trucksGrid"),
   selectedTruckDetails: document.getElementById("selectedTruckDetails"),
   globalStats: document.getElementById("globalStats"),
@@ -243,6 +253,7 @@ const elements = {
   resetFontSizesBtn: document.getElementById("resetFontSizesBtn"),
   fontSizeControls: document.getElementById("fontSizeControls"),
   clientModal: document.getElementById("clientModal"),
+  clientModalTitle: document.getElementById("clientModalTitle"),
   closeClientModalBtn: document.getElementById("closeClientModalBtn"),
   clientModalTruckLabel: document.getElementById("clientModalTruckLabel"),
   clientSearch: document.getElementById("clientSearch"),
@@ -351,6 +362,7 @@ const elements = {
 
 let editingContext = null;
 let clientModalTruckId = null;
+let clientModalMode = "destination";
 let providerPickerContext = null;
 let editSelectedOrigin = null;
 let scaleTextDecoder = new TextDecoder("utf-8");
@@ -384,6 +396,49 @@ function createDraftId() {
   });
 }
 
+function normalizeTicketOperation(operationType) {
+  const normalized = String(operationType || "").trim().toUpperCase();
+  return normalized === TICKET_OPERATIONS.RETURN
+    ? TICKET_OPERATIONS.RETURN
+    : TICKET_OPERATIONS.DISPATCH;
+}
+
+function normalizeReturnCondition(condition) {
+  const normalized = String(condition || "").trim().toLowerCase();
+  if (VALID_RETURN_CONDITIONS.has(normalized)) {
+    return normalized;
+  }
+
+  if (["muerto", "dead", "pollo_muerto", "pm"].includes(normalized)) {
+    return "muerto";
+  }
+
+  return "vivo";
+}
+
+function getReturnConditionMeta(condition) {
+  const normalizedCondition = normalizeReturnCondition(condition);
+  return RETURN_CONDITIONS.find((item) => item.id === normalizedCondition) || RETURN_CONDITIONS[0];
+}
+
+function getTruckOperationType(truck) {
+  return normalizeTicketRegistration(truck?.registration)?.operationType
+    || normalizeTicketOperation(truck?.operationType || truck?.tipoOperacion || truck?.tipo_operacion);
+}
+
+function isReturnTicket(truck) {
+  return getTruckOperationType(truck) === TICKET_OPERATIONS.RETURN;
+}
+
+function getSelectedTruck() {
+  const activeTruckId = elements.truckSelect?.value || state?.trucks?.[0]?.id;
+  return state?.trucks?.find((truck) => truck.id === activeTruckId) || null;
+}
+
+function getTicketOperationLabel(truck) {
+  return isReturnTicket(truck) ? "Devolución" : "Despacho";
+}
+
 function normalizeTicketRegistration(registration) {
   const id = Number(registration?.id);
   const code = String(registration?.code || "").trim();
@@ -395,6 +450,7 @@ function normalizeTicketRegistration(registration) {
   return {
     id,
     code,
+    operationType: normalizeTicketOperation(registration?.operationType || registration?.operation_type),
     status: String(registration?.status || "CERRADO"),
     operatingDate: String(registration?.operatingDate || registration?.operating_date || ""),
     registeredAt: String(registration?.registeredAt || registration?.registered_at || ""),
@@ -413,6 +469,7 @@ function createDefaultTruck(index) {
     id: `camion-${index + 1}`,
     name: `Ticket ${index + 1}`,
     draftId: createDraftId(),
+    operationType: TICKET_OPERATIONS.DISPATCH,
     registration: null,
     clientId: null,
     destination: null,
@@ -426,6 +483,15 @@ function isTruckRegistered(truck) {
 
 function getTruckTicketLabel(truck) {
   return normalizeTicketRegistration(truck?.registration)?.code || truck?.name || "Ticket";
+}
+
+function resetTruckColumn(truck) {
+  truck.draftId = createDraftId();
+  truck.operationType = TICKET_OPERATIONS.DISPATCH;
+  truck.registration = null;
+  truck.clientId = null;
+  truck.destination = null;
+  truck.cages = [];
 }
 
 function normalizeDispatchTicketName(name, index) {
@@ -1047,7 +1113,10 @@ function normalizeWeightSource(source) {
   return numeric === "2" ? "2" : "1";
 }
 
-function normalizeCageRecord(cage, fallbackId) {
+function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS.DISPATCH) {
+  const ticketOperation = normalizeTicketOperation(
+    cage?.operationType || cage?.tipoOperacion || cage?.tipo_operacion || operationType
+  );
   const id = Number.isFinite(cage?.id) ? cage.id : fallbackId;
   const rawProvider = cage?.proveedorOrigen || cage?.provider || {};
   const rawOrigin = cage?.origen || {};
@@ -1175,9 +1244,15 @@ function normalizeCageRecord(cage, fallbackId) {
 
   return {
     id,
+    operationType: ticketOperation,
     timestamp: cage?.timestamp || formatPeruIsoString(),
     hora: cage?.hora || "--:--:--",
-    tipo: normalizeType(cage?.tipo),
+    tipo: ticketOperation === TICKET_OPERATIONS.RETURN
+      ? "pollo_vivo"
+      : normalizeType(cage?.tipo),
+    chickenCondition: ticketOperation === TICKET_OPERATIONS.RETURN
+      ? normalizeReturnCondition(cage?.chickenCondition || cage?.condicionPollo || cage?.condicion_pollo || cage?.tipo)
+      : "vivo",
     cantidadAvesPorJava: birdsPerJava,
     cantidadPollosPorJava: birdsPerJava,
     cantidadAves: birdsTotal,
@@ -1206,6 +1281,7 @@ function createDefaultState() {
   return {
     lastId: 0,
     selectedType: DISPATCH_CHICKEN_TYPES[0].id,
+    selectedReturnCondition: RETURN_CONDITIONS[0].id,
     entryDefaults: {
       birdCountPerJava: 1,
       javaCount: 1,
@@ -1646,9 +1722,13 @@ function bindTouchSelects() {
   });
 }
 
-function calculateTruckTotals(cages) {
+function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH) {
+  const normalizedOperation = normalizeTicketOperation(operationType);
+  const typeCatalog = normalizedOperation === TICKET_OPERATIONS.RETURN
+    ? RETURN_CONDITIONS
+    : DISPATCH_CHICKEN_TYPES;
   const byTypeMap = {};
-  DISPATCH_CHICKEN_TYPES.forEach((type) => {
+  typeCatalog.forEach((type) => {
     byTypeMap[type.id] = {
       id: type.id,
       label: type.label,
@@ -1664,8 +1744,13 @@ function calculateTruckTotals(cages) {
   });
 
   cages.forEach((cage) => {
-    const typeId = normalizeType(cage.tipo);
+    const typeId = normalizedOperation === TICKET_OPERATIONS.RETURN
+      ? normalizeReturnCondition(cage.chickenCondition)
+      : normalizeType(cage.tipo);
     const bucket = byTypeMap[typeId];
+    if (!bucket) {
+      return;
+    }
     const javas = normalizeJavaCount(cage.cantidadJavas, 1);
     const avesPorJava = normalizeBirdCountPerJava(cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava, 0);
     const aves = avesPorJava > 0
@@ -1685,7 +1770,7 @@ function calculateTruckTotals(cages) {
     bucket.weight += netWeight;
   });
 
-  const byType = DISPATCH_CHICKEN_TYPES.map((type) => ({
+  const byType = typeCatalog.map((type) => ({
     ...byTypeMap[type.id],
     grossWeight: roundWeight(byTypeMap[type.id].grossWeight),
     tareWeight: roundWeight(byTypeMap[type.id].tareWeight),
@@ -1729,6 +1814,13 @@ function loadState() {
 
     const loadedTrucks = Array.isArray(parsed.trucks) && parsed.trucks.length
       ? parsed.trucks.map((truck, index) => {
+          const registration = normalizeTicketRegistration(truck.registration || truck.registroTicket);
+          const operationType = normalizeTicketOperation(
+            truck.operationType
+              || truck.tipoOperacion
+              || truck.tipo_operacion
+              || registration?.operationType
+          );
           const destination = normalizeStoredDestination(
             truck.destination || truck.destino || truck.cliente,
             truck.clientId || truck.clienteId || truck?.cliente?.id
@@ -1741,11 +1833,12 @@ function loadState() {
             id: truck.id || `camion-${index + 1}`,
             name: normalizeDispatchTicketName(truck.name, index),
             draftId: String(truck.draftId || truck.draft_id || "").trim() || createDraftId(),
-            registration: normalizeTicketRegistration(truck.registration || truck.registroTicket),
+            operationType,
+            registration,
             clientId,
             destination: clientId ? destination : null,
             cages: Array.isArray(truck.cages)
-              ? truck.cages.map((cage, cageIndex) => normalizeCageRecord(cage, cageIndex + 1))
+              ? truck.cages.map((cage, cageIndex) => normalizeCageRecord(cage, cageIndex + 1, operationType))
               : []
           };
         })
@@ -1792,6 +1885,7 @@ function loadState() {
     return {
       lastId: Math.max(Number(parsed.lastId) || 0, maxId),
       selectedType: normalizeType(parsed.selectedType),
+      selectedReturnCondition: normalizeReturnCondition(parsed.selectedReturnCondition),
       entryDefaults,
       scales: {
         1: normalizeScaleState(parsed?.scales?.[1], 1),
@@ -3512,13 +3606,31 @@ function setItemFormMessage(message, isError = false, options = {}) {
 }
 
 function renderTypeButtons() {
+  const activeTruck = getSelectedTruck();
+  const isReturn = isReturnTicket(activeTruck);
+  const options = isReturn ? RETURN_CONDITIONS : DISPATCH_CHICKEN_TYPES;
+  const activeValue = isReturn
+    ? normalizeReturnCondition(state.selectedReturnCondition)
+    : normalizeType(state.selectedType);
+
+  elements.form?.classList.toggle("is-return-mode", isReturn);
+
   elements.typeButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.type === state.selectedType);
+    const option = options[Number(button.dataset.optionIndex) || Array.from(elements.typeButtons).indexOf(button)] || options[0];
+    button.dataset.type = option.id;
+    button.dataset.optionIndex = String(options.indexOf(option));
+    button.textContent = option.label;
+    button.classList.toggle("is-active", option.id === activeValue);
+    button.classList.toggle("is-return-option", isReturn);
   });
 }
 
-function renderEditTypeOptions() {
-  elements.editType.innerHTML = DISPATCH_CHICKEN_TYPES
+function renderEditTypeOptions(operationType = TICKET_OPERATIONS.DISPATCH) {
+  const options = normalizeTicketOperation(operationType) === TICKET_OPERATIONS.RETURN
+    ? RETURN_CONDITIONS
+    : DISPATCH_CHICKEN_TYPES;
+
+  elements.editType.innerHTML = options
     .map((type) => `<option value="${type.id}">${type.label}</option>`)
     .join("");
 }
@@ -3548,6 +3660,20 @@ function renderEntryDefaults() {
 }
 
 function renderEntryProviderSelection() {
+  const activeTruck = getSelectedTruck();
+  if (isReturnTicket(activeTruck)) {
+    elements.selectedProviderName.textContent = getTruckClientName(activeTruck);
+    elements.selectProviderBtn.classList.add("is-empty");
+    elements.truckPlateField.hidden = true;
+    elements.truckPlate.disabled = true;
+    elements.truckPlate.required = false;
+    elements.truckPlate.innerHTML = '<option value="">No aplica para devoluciones</option>';
+    elements.truckPlate.value = "";
+    elements.truckPlateHelp.textContent = "La devolución no requiere proveedor ni placa de origen.";
+    elements.selectedProviderPlateLabel.textContent = "Devolución: no requiere proveedor ni placa";
+    return;
+  }
+
   const origin = getOriginById(state.entryDefaults?.originId);
   const hasOrigin = Boolean(origin);
   const currentPlate = normalizeTruckPlate(state.entryDefaults?.truckPlate || elements.truckPlate.value);
@@ -3800,8 +3926,13 @@ function renderClientList(truckId) {
     return;
   }
 
+  const isReturnMode = clientModalMode === "return";
   const query = String(elements.clientSearch?.value || "").trim().toLocaleLowerCase("es");
   const destinations = getClientCatalog().filter((client) => {
+    if (isReturnMode && isWarehouseDestination(client)) {
+      return false;
+    }
+
     if (!query) {
       return true;
     }
@@ -3820,7 +3951,7 @@ function renderClientList(truckId) {
   const noneActive = !truck.clientId ? "is-active" : "";
   const options = [];
 
-  if (!query) {
+  if (!query && !isReturnMode) {
     options.push(`
       <button class="client-option ${noneActive}" type="button" data-client-id="">
         <span class="client-option-name">Sin destino asignado</span>
@@ -3851,7 +3982,7 @@ function renderClientList(truckId) {
 
   elements.clientList.innerHTML = options.length
     ? options.join("")
-    : `<div class="client-empty">No hay clientes o almacenes que coincidan con la búsqueda.</div>`;
+    : `<div class="client-empty">${isReturnMode ? "No hay clientes que coincidan con la búsqueda." : "No hay clientes o almacenes que coincidan con la búsqueda."}</div>`;
 }
 
 function getActiveProviderSelection() {
@@ -3965,8 +4096,7 @@ function renderDailyProviderList() {
   if (!rows.length) {
     elements.dailyProviderList.innerHTML = `
       <div class="daily-provider-empty">
-        No hay camiones seleccionados para esta jornada.
-        <a href="/jornada">Configurar jornada</a>
+        Sin camiones disponibles.
       </div>
     `;
     return;
@@ -3994,11 +4124,9 @@ function renderDailyProviderList() {
         <span class="daily-provider-index">${String(index + 1).padStart(2, "0")}</span>
         <span class="daily-provider-name">
           <strong>${escapeHtml(row.origin.name)}</strong>
-          <small>${row.origin.dni ? `DNI/RUC ${row.origin.dni}` : "Proveedor"}</small>
         </span>
         <span class="daily-provider-plate">
           <strong>${escapeHtml(row.plateLabel)}</strong>
-          <small>${escapeHtml(row.alias || "Camión activo")}</small>
         </span>
       </button>
     `;
@@ -4035,13 +4163,19 @@ function selectDailyProviderVehicle(originId, plate) {
   );
 }
 
-function buildTruckTableRows(cages, truckId) {
-  return cages
+function buildTruckTableRows(truck) {
+  const isReturn = isReturnTicket(truck);
+
+  return truck.cages
     .map((cage) => {
-      const typeMeta = getTypeMeta(cage.tipo);
+      const typeMeta = isReturn
+        ? getReturnConditionMeta(cage.chickenCondition)
+        : getTypeMeta(cage.tipo);
       const typeTag = `<span class="tag ${typeMeta.tagClass}">${typeMeta.label}</span>`;
       const weightSourceText = cage.origenPeso === "manual" ? "Manual" : `B${cage.balanza}`;
-      const merchandiseOrigin = String(cage.origenNombre || cage.proveedorOrigenNombre || "").trim();
+      const merchandiseOrigin = isReturn
+        ? "Devolución cliente"
+        : String(cage.origenNombre || cage.proveedorOrigenNombre || "").trim();
       const sourceText = merchandiseOrigin
         ? `${merchandiseOrigin} · ${weightSourceText}`
         : weightSourceText;
@@ -4055,7 +4189,7 @@ function buildTruckTableRows(cages, truckId) {
       const netWeight = Number(cage.pesoNetoKg ?? cage.pesoKg) || 0;
 
       return `
-        <tr class="cage-row" data-truck-id="${escapeHtml(truckId)}" data-cage-id="${escapeHtml(cage.id)}" tabindex="0" role="button" aria-label="Editar registro ${escapeHtml(cage.id)}">
+        <tr class="cage-row" data-truck-id="${escapeHtml(truck.id)}" data-cage-id="${escapeHtml(cage.id)}" tabindex="0" role="button" aria-label="Editar registro ${escapeHtml(cage.id)}">
           <td class="truck-cell-id">${escapeHtml(cage.id)}</td>
           <td class="truck-cell-type">${typeTag}</td>
           <td class="truck-cell-count">${avesPorJava}</td>
@@ -4072,7 +4206,11 @@ function buildTruckTableRows(cages, truckId) {
     .join("");
 }
 
-function getTicketTypeCode(typeId) {
+function getTicketTypeCode(typeId, condition = "vivo", operationType = TICKET_OPERATIONS.DISPATCH) {
+  if (normalizeTicketOperation(operationType) === TICKET_OPERATIONS.RETURN) {
+    return normalizeReturnCondition(condition || typeId) === "muerto" ? "PM" : "PV";
+  }
+
   const normalizedType = normalizeType(typeId);
   return normalizedType === "pollo_pelado" ? "PP" : "PV";
 }
@@ -4092,15 +4230,22 @@ function getCommonTicketValue(values, fallback = "--") {
 }
 
 function buildDispatchTicketHtml(truck) {
-  const totals = calculateTruckTotals(truck.cages);
+  const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
+  const operationType = getTruckOperationType(truck);
+  const isReturn = operationType === TICKET_OPERATIONS.RETURN;
   const emittedAt = new Date();
-  const originName = getCommonTicketValue(
-    truck.cages.map((cage) => cage.origenNombre || cage.proveedorOrigenNombre)
-  );
-  const truckPlate = getCommonTicketValue(
-    truck.cages.map((cage) => cage.placaCamion),
-    "ORIGEN INTERNO"
-  );
+  const documentTitle = isReturn ? "TICKET DE DEVOLUCION" : "TICKET DE DESPACHO";
+  const originName = isReturn
+    ? "DEVOLUCION DE CLIENTE"
+    : getCommonTicketValue(
+        truck.cages.map((cage) => cage.origenNombre || cage.proveedorOrigenNombre)
+      );
+  const truckPlate = isReturn
+    ? "NO APLICA"
+    : getCommonTicketValue(
+        truck.cages.map((cage) => cage.placaCamion),
+        "ORIGEN INTERNO"
+      );
   const rows = truck.cages.map((cage) => {
     const birdsPerJava = normalizeBirdCountPerJava(
       cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
@@ -4113,7 +4258,7 @@ function buildDispatchTicketHtml(truck) {
 
     return `
       <tr>
-        <td>${escapeHtml(getTicketTypeCode(cage.tipo))}</td>
+        <td>${escapeHtml(getTicketTypeCode(cage.tipo, cage.chickenCondition, operationType))}</td>
         <td class="number">${birdsPerJava}</td>
         <td class="number">${javaCount}</td>
         <td class="number">${grossWeight.toFixed(2)}</td>
@@ -4126,7 +4271,7 @@ function buildDispatchTicketHtml(truck) {
     .filter((item) => item.records > 0)
     .map((item) => `
       <tr>
-        <td>${escapeHtml(getTicketTypeCode(item.id))}</td>
+        <td>${escapeHtml(getTicketTypeCode(item.id, item.id, operationType))}</td>
         <td>${item.records}</td>
         <td>${item.javas}</td>
         <td>${item.birds}</td>
@@ -4141,7 +4286,7 @@ function buildDispatchTicketHtml(truck) {
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>${escapeHtml(getTruckTicketLabel(truck))} - Ticket de despacho</title>
+  <title>${escapeHtml(getTruckTicketLabel(truck))} - ${escapeHtml(documentTitle)}</title>
   <style>
     @page {
       size: auto;
@@ -4293,7 +4438,7 @@ function buildDispatchTicketHtml(truck) {
 <body>
   <header class="center">
     <h1 class="business-name">SISTEMA POLLOS</h1>
-    <h2 class="document-title">TICKET DE DESPACHO</h2>
+    <h2 class="document-title">${escapeHtml(documentTitle)}</h2>
   </header>
 
   <div class="separator"></div>
@@ -4302,7 +4447,7 @@ function buildDispatchTicketHtml(truck) {
     <strong>TICKET:</strong><span>${escapeHtml(getTruckTicketLabel(truck))}</span>
     <strong>FECHA:</strong><span>${escapeHtml(formatPeruDate(emittedAt))}</span>
     <strong>HORA:</strong><span>${escapeHtml(formatPeruTime(emittedAt))}</span>
-    <strong>DESTINO:</strong><span>${escapeHtml(getTruckClientName(truck))}</span>
+    <strong>${isReturn ? "CLIENTE:" : "DESTINO:"}</strong><span>${escapeHtml(getTruckClientName(truck))}</span>
     <strong>ORIGEN:</strong><span>${escapeHtml(originName)}</span>
     <strong>PLACA:</strong><span>${escapeHtml(truckPlate)}</span>
   </section>
@@ -4420,9 +4565,17 @@ function printDispatchTicket(truckId) {
 
 function buildDispatchTicketPayload(truck) {
   const destination = getTruckDestination(truck);
+  const operationType = getTruckOperationType(truck);
+  const isReturn = operationType === TICKET_OPERATIONS.RETURN;
 
   if (!destination) {
-    throw new Error("Asigna un cliente o almacén de destino antes de registrar el ticket.");
+    throw new Error(isReturn
+      ? "Selecciona el cliente de la devolución antes de registrar el ticket."
+      : "Asigna un cliente o almacén de destino antes de registrar el ticket.");
+  }
+
+  if (isReturn && isWarehouseDestination(destination)) {
+    throw new Error("Las devoluciones deben registrarse contra un cliente.");
   }
 
   const destinationId = isWarehouseDestination(destination)
@@ -4435,12 +4588,13 @@ function buildDispatchTicketPayload(truck) {
 
   return {
     draft_id: truck.draftId,
+    operation_type: operationType,
     destination: {
       type: isWarehouseDestination(destination) ? "ALMACEN" : "CLIENTE",
       id: destinationId
     },
     weighings: truck.cages.map((cage) => {
-      const type = getTypeMeta(cage.tipo);
+      const type = getTypeMeta(isReturn ? "pollo_vivo" : cage.tipo);
       const crate = getCrateTypeMeta(cage.crateTypeId);
       const origin = getOriginById(cage.origenId);
       const warehouseOrigin = isWarehouseOrigin(origin)
@@ -4456,30 +4610,21 @@ function buildDispatchTicketPayload(truck) {
           || cage.proveedorOrigen?.id
       );
 
-      if (warehouseOrigin && (!Number.isInteger(warehouseId) || warehouseId <= 0)) {
+      if (!isReturn && warehouseOrigin && (!Number.isInteger(warehouseId) || warehouseId <= 0)) {
         throw new Error(`El almacén de origen del registro #${cage.id} no está vinculado con la base de datos.`);
       }
 
-      if (!warehouseOrigin && (!Number.isInteger(providerId) || providerId <= 0)) {
+      if (!isReturn && !warehouseOrigin && (!Number.isInteger(providerId) || providerId <= 0)) {
         throw new Error(`El proveedor del registro #${cage.id} no está vinculado con la base de datos.`);
       }
 
-      return {
+      const payload = {
         local_id: Number(cage.id),
         chicken_type_code: type.apiCode,
+        chicken_condition: isReturn
+          ? getReturnConditionMeta(cage.chickenCondition).apiCode
+          : "VIVO",
         cage_type_code: crate.apiCode,
-        origin: warehouseOrigin
-          ? {
-              type: "ALMACEN",
-              warehouse_id: warehouseId
-            }
-          : {
-              type: "PROVEEDOR",
-              provider_id: providerId,
-              provider_vehicle_id: Number(cage.proveedorVehiculoId) || null,
-              vehicle_id: Number(cage.vehiculoId) || null,
-              plate: normalizeTruckPlate(cage.placaCamion)
-            },
         weight_source: cage.origenPeso === "manual"
           ? "MANUAL"
           : `BALANZA_${Number(cage.balanza) === 2 ? 2 : 1}`,
@@ -4492,6 +4637,23 @@ function buildDispatchTicketPayload(truck) {
         gross_weight_kg: roundWeight(Number(cage.pesoBrutoKg ?? cage.pesoKg)),
         weighed_at: cage.timestamp
       };
+
+      if (!isReturn) {
+        payload.origin = warehouseOrigin
+          ? {
+              type: "ALMACEN",
+              warehouse_id: warehouseId
+            }
+          : {
+              type: "PROVEEDOR",
+              provider_id: providerId,
+              provider_vehicle_id: Number(cage.proveedorVehiculoId) || null,
+              vehicle_id: Number(cage.vehiculoId) || null,
+              plate: normalizeTruckPlate(cage.placaCamion)
+            };
+      }
+
+      return payload;
     })
   };
 }
@@ -4556,6 +4718,7 @@ async function registerDispatchTicket(truckId) {
     truck.registration = normalizeTicketRegistration({
       id: response.data?.id,
       code: response.data?.code,
+      operation_type: response.data?.operation_type,
       status: response.data?.status,
       operating_date: response.data?.operating_date,
       registered_at: response.data?.registered_at,
@@ -4582,6 +4745,7 @@ function buildSelectedTruckDetails(truck, totals) {
   const registration = normalizeTicketRegistration(truck.registration);
   const isRegistering = pendingTicketRegistrations.has(truck.id);
   const hasDestination = Boolean(getTruckDestination(truck));
+  const isReturn = isReturnTicket(truck);
   const typeItems = totals.byType
     .map((item) => {
       const toneClass = `type-total-${item.id.replace(/_/g, "-")}`;
@@ -4601,7 +4765,7 @@ function buildSelectedTruckDetails(truck, totals) {
       <div>
         <span>Ticket seleccionado</span>
         <strong>${escapeHtml(getTruckTicketLabel(truck))}</strong>
-        <small>${escapeHtml(getTruckClientName(truck))}</small>
+        <small>${escapeHtml(`${getTicketOperationLabel(truck)} · ${getTruckClientName(truck)}`)}</small>
       </div>
     </div>
 
@@ -4647,7 +4811,7 @@ function buildSelectedTruckDetails(truck, totals) {
         type="button"
         data-register-ticket="${escapeHtml(truck.id)}"
         ${totals.records && hasDestination && !isRegistering && !registration ? "" : "disabled"}
-      >${isRegistering ? "Registrando..." : (registration ? "Ticket registrado" : "Registrar ticket")}</button>
+      >${isRegistering ? "Registrando..." : (registration ? "Ticket registrado" : (isReturn ? "Registrar devolución" : "Registrar ticket"))}</button>
       <button
         class="print-ticket-btn"
         type="button"
@@ -4673,7 +4837,7 @@ function renderSelectedTruckDetails() {
     return;
   }
 
-  const totals = calculateTruckTotals(truck.cages);
+  const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
   elements.selectedTruckDetails.innerHTML = buildSelectedTruckDetails(truck, totals);
 }
 
@@ -4682,7 +4846,8 @@ function renderTruckColumns() {
 
   elements.trucksGrid.innerHTML = state.trucks
     .map((truck) => {
-      const totals = calculateTruckTotals(truck.cages);
+      const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
+      const isReturn = isReturnTicket(truck);
 
       const tableContent = totals.cages
         ? `
@@ -4703,7 +4868,7 @@ function renderTruckColumns() {
                 </tr>
               </thead>
               <tbody>
-                ${buildTruckTableRows(truck.cages, truck.id)}
+                ${buildTruckTableRows(truck)}
               </tbody>
             </table>
           </div>
@@ -4719,12 +4884,15 @@ function renderTruckColumns() {
       const registration = normalizeTicketRegistration(truck.registration);
 
       return `
-        <article class="truck-card ${isActive} ${registration ? "is-registered" : ""}" data-truck-id="${escapeHtml(truck.id)}">
+        <article class="truck-card ${isActive} ${registration ? "is-registered" : ""} ${isReturn ? "is-return" : ""}" data-truck-id="${escapeHtml(truck.id)}">
           <header class="truck-head">
             <div class="truck-head-top">
               <h3>${escapeHtml(getTruckTicketLabel(truck))}</h3>
-              <button class="assign-client-btn" type="button" data-assign-client="${escapeHtml(truck.id)}" ${registration ? "disabled" : ""}>Destino</button>
+              ${registration
+                ? `<button class="clear-column-btn" type="button" data-clear-column="${escapeHtml(truck.id)}">Limpiar columna</button>`
+                : `<button class="assign-client-btn" type="button" data-assign-client="${escapeHtml(truck.id)}">${isReturn ? "Cliente" : "Destino"}</button>`}
             </div>
+            <p class="truck-operation-line">${escapeHtml(getTicketOperationLabel(truck))}</p>
             <p class="truck-client-name">${clientName}</p>
             ${registration ? `<p class="truck-registration-line">Registrado en base de datos</p>` : ""}
           </header>
@@ -4758,7 +4926,7 @@ function renderTruckColumns() {
 function renderGlobalStats() {
   const total = state.trucks.reduce(
     (acc, truck) => {
-      const truckTotals = calculateTruckTotals(truck.cages);
+      const truckTotals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
       acc.records += truckTotals.records;
       acc.javas += truckTotals.javas;
       acc.birds += truckTotals.birds;
@@ -4817,7 +4985,7 @@ function buildJsonPayload() {
       }
     },
     camiones: state.trucks.map((truck) => {
-      const totals = calculateTruckTotals(truck.cages);
+      const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
       const client = getTruckDestination(truck);
       const destination = client
         ? {
@@ -4832,6 +5000,7 @@ function buildJsonPayload() {
       return {
         id: truck.id,
         nombre: truck.name,
+        tipoOperacion: getTruckOperationType(truck),
         cliente: destination,
         destino: destination,
         tipoDestino: client?.destinationType || null,
@@ -4859,7 +5028,10 @@ function buildJsonPayload() {
           totalKgNeto: item.weight,
           totalKg: item.weight
         })),
-        jaulas: truck.cages
+        jaulas: truck.cages.map((cage) => ({
+          ...cage,
+          condicionPollo: cage.chickenCondition || "vivo"
+        }))
       };
     })
   };
@@ -4886,7 +5058,12 @@ function renderAll() {
   if (!elements.clientModal.hidden && clientModalTruckId) {
     const truck = state.trucks.find((item) => item.id === clientModalTruckId);
     if (truck) {
-      elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTruckClientName(truck)}`;
+      if (elements.clientModalTitle) {
+        elements.clientModalTitle.textContent = clientModalMode === "return"
+          ? "Cliente de devolución"
+          : "Asignar destino";
+      }
+      elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTicketOperationLabel(truck)} - ${getTruckClientName(truck)}`;
       renderClientList(clientModalTruckId);
     }
   }
@@ -4971,9 +5148,11 @@ function addCage(event) {
   const rawWeight = getWeightFromSource(source);
   const grossWeight = roundWeight(rawWeight);
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
-  const origin = getOriginById(state.entryDefaults?.originId);
+  const truck = state.trucks.find((item) => item.id === truckId);
+  const isReturn = isReturnTicket(truck);
+  const origin = isReturn ? null : getOriginById(state.entryDefaults?.originId);
   const warehouseOrigin = isWarehouseOrigin(origin);
-  const truckPlate = warehouseOrigin ? "" : normalizeTruckPlate(elements.truckPlate.value);
+  const truckPlate = isReturn || warehouseOrigin ? "" : normalizeTruckPlate(elements.truckPlate.value);
   const providerVehicle = warehouseOrigin ? null : getProviderVehicleByPlate(origin, truckPlate);
   elements.truckPlate.value = truckPlate;
 
@@ -4982,17 +5161,27 @@ function addCage(event) {
     return;
   }
 
-  if (!origin) {
+  if (!truck) {
+    setFormMessage("El ticket seleccionado no existe.", true);
+    return;
+  }
+
+  if (isReturn && !getTruckDestination(truck)) {
+    setFormMessage("Selecciona el cliente de la devolución antes de agregar pesadas.", true);
+    return;
+  }
+
+  if (!isReturn && !origin) {
     setFormMessage("Selecciona un proveedor o almacén de origen antes de agregar la pesada.", true);
     return;
   }
 
-  if (!warehouseOrigin && !getProviderVehicles(origin).length) {
+  if (!isReturn && !warehouseOrigin && !getProviderVehicles(origin).length) {
     setFormMessage("El proveedor seleccionado no tiene placas activas asignadas.", true);
     return;
   }
 
-  if (!warehouseOrigin && !providerVehicle) {
+  if (!isReturn && !warehouseOrigin && !providerVehicle) {
     setFormMessage("Selecciona una placa activa asignada al proveedor.", true);
     return;
   }
@@ -5017,27 +5206,24 @@ function addCage(event) {
     return;
   }
 
-  const truck = state.trucks.find((item) => item.id === truckId);
-  if (!truck) {
-    setFormMessage("El ticket seleccionado no existe.", true);
-    return;
-  }
-
   if (isTruckRegistered(truck)) {
     setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y no admite nuevas pesadas.`, true);
     return;
   }
 
   const now = new Date();
+  const returnCondition = normalizeReturnCondition(state.selectedReturnCondition);
   const record = {
     id: ++state.lastId,
+    operationType: getTruckOperationType(truck),
     timestamp: formatPeruIsoString(now),
     hora: formatPeruTime(now, {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit"
     }),
-    tipo: normalizeType(state.selectedType),
+    tipo: isReturn ? "pollo_vivo" : normalizeType(state.selectedType),
+    chickenCondition: isReturn ? returnCondition : "vivo",
     cantidadAvesPorJava: birdsPerJava,
     cantidadPollosPorJava: birdsPerJava,
     cantidadAves: totalBirds,
@@ -5054,20 +5240,27 @@ function addCage(event) {
     origenPeso: source,
     balanza: source === "manual" ? null : Number(source),
     ...buildOriginRecord(origin),
-    placaCamion: truckPlate,
-    proveedorVehiculoId: providerVehicle?.id || null,
-    vehiculoId: providerVehicle?.vehicleId || null
+    placaCamion: isReturn ? "" : truckPlate,
+    proveedorVehiculoId: isReturn ? null : (providerVehicle?.id || null),
+    vehiculoId: isReturn ? null : (providerVehicle?.vehicleId || null)
   };
 
   truck.cages.push(record);
 
-  state.entryDefaults = {
-    birdCountPerJava: birdsPerJava,
-    javaCount,
-    crateTypeId: crateMeta.id,
-    originId: origin.id,
-    truckPlate
-  };
+  state.entryDefaults = isReturn
+    ? {
+        ...(state.entryDefaults || {}),
+        birdCountPerJava: birdsPerJava,
+        javaCount,
+        crateTypeId: crateMeta.id
+      }
+    : {
+        birdCountPerJava: birdsPerJava,
+        javaCount,
+        crateTypeId: crateMeta.id,
+        originId: origin.id,
+        truckPlate
+      };
 
   if (source === "manual") {
     elements.manualWeight.value = "";
@@ -5078,9 +5271,13 @@ function addCage(event) {
   saveState();
   renderAll();
 
-  const typeLabel = getTypeMeta(record.tipo).label;
+  const typeLabel = isReturn
+    ? getReturnConditionMeta(record.chickenCondition).label
+    : getTypeMeta(record.tipo).label;
   setFormMessage(
-    `Registro #${record.id} en ${truck.name}: ${typeLabel}, origen ${origin.name}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
+    isReturn
+      ? `Registro #${record.id} en ${truck.name}: devolución ${typeLabel}, cliente ${getTruckClientName(truck)}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
+      : `Registro #${record.id} en ${truck.name}: ${typeLabel}, origen ${origin.name}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
   );
 }
 
@@ -5112,7 +5309,36 @@ function closeJsonModal() {
   elements.jsonModal.hidden = true;
 }
 
-function openClientModal(truckId) {
+function openReturnClientModal() {
+  const truck = getSelectedTruck();
+
+  if (!truck) {
+    setFormMessage("Selecciona una columna para registrar la devolución.", true);
+    return;
+  }
+
+  if (isTruckRegistered(truck)) {
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y no puede convertirse en devolución.`, true);
+    return;
+  }
+
+  if (!isReturnTicket(truck) && truck.cages.length) {
+    const confirmed = window.confirm("Esta columna tiene registros de despacho sin guardar. Para convertirla en devolución se limpiarán esos registros. ¿Continuar?");
+    if (!confirmed) {
+      return;
+    }
+    truck.cages = [];
+  }
+
+  truck.operationType = TICKET_OPERATIONS.RETURN;
+  truck.clientId = null;
+  truck.destination = null;
+  saveState();
+  renderAll();
+  openClientModal(truck.id, "return");
+}
+
+function openClientModal(truckId, mode = "destination") {
   closeNumericPad();
   closeTouchSelect();
 
@@ -5127,11 +5353,21 @@ function openClientModal(truckId) {
     return;
   }
 
+  clientModalMode = mode === "return" ? "return" : "destination";
+  if (clientModalMode === "return") {
+    truck.operationType = TICKET_OPERATIONS.RETURN;
+  }
+
   clientModalTruckId = truck.id;
   if (elements.clientSearch) {
     elements.clientSearch.value = "";
   }
-  elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTruckClientName(truck)}`;
+  if (elements.clientModalTitle) {
+    elements.clientModalTitle.textContent = clientModalMode === "return"
+      ? "Cliente de devolución"
+      : "Asignar destino";
+  }
+  elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTicketOperationLabel(truck)} - ${getTruckClientName(truck)}`;
   renderClientList(truck.id);
   elements.clientModal.hidden = false;
   window.setTimeout(() => elements.clientSearch?.focus(), 0);
@@ -5139,6 +5375,7 @@ function openClientModal(truckId) {
 
 function closeClientModal() {
   clientModalTruckId = null;
+  clientModalMode = "destination";
   elements.clientModal.hidden = true;
 }
 
@@ -5160,7 +5397,22 @@ function assignClientToTruck(clientId) {
     return;
   }
 
+  const currentModalMode = clientModalMode;
   const normalizedClientId = normalizeClientId(clientId);
+  if (currentModalMode === "return" && !normalizedClientId) {
+    setFormMessage("Selecciona un cliente para la devolución.", true);
+    return;
+  }
+
+  if (currentModalMode === "return") {
+    const destination = getClientById(normalizedClientId);
+    if (!destination || isWarehouseDestination(destination)) {
+      setFormMessage("Las devoluciones deben registrarse contra un cliente.", true);
+      return;
+    }
+    truck.operationType = TICKET_OPERATIONS.RETURN;
+  }
+
   truck.clientId = normalizedClientId;
   truck.destination = normalizedClientId
     ? snapshotDestination(getClientById(normalizedClientId))
@@ -5176,7 +5428,9 @@ function assignClientToTruck(clientId) {
   }
 
   const client = getTruckDestination(truck);
-  const destinationLabel = isWarehouseDestination(client) ? "Almacén asignado" : "Cliente asignado";
+  const destinationLabel = currentModalMode === "return"
+    ? "Cliente de devolución"
+    : (isWarehouseDestination(client) ? "Almacén asignado" : "Cliente asignado");
   setFormMessage(`${destinationLabel} a ${truck.name}: ${client ? client.name : normalizedClientId}.`);
 }
 
@@ -5263,7 +5517,10 @@ function openCageModal(truckId, cageId) {
   elements.itemTruckName.textContent = truck.name;
   elements.itemHour.textContent = cage.hora || "--:--:--";
 
-  elements.editType.value = normalizeType(cage.tipo);
+  renderEditTypeOptions(getTruckOperationType(truck));
+  elements.editType.value = isReturnTicket(truck)
+    ? normalizeReturnCondition(cage.chickenCondition)
+    : normalizeType(cage.tipo);
   const editJavaCount = normalizeJavaCount(cage.cantidadJavas, 1);
   const editBirdsPerJava = normalizeBirdCountPerJava(
     cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
@@ -5341,7 +5598,9 @@ function saveCageChanges(event) {
     return;
   }
 
-  const type = normalizeType(elements.editType.value);
+  const isReturn = isReturnTicket(truck);
+  const type = isReturn ? "pollo_vivo" : normalizeType(elements.editType.value);
+  const returnCondition = isReturn ? normalizeReturnCondition(elements.editType.value) : "vivo";
   const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
   const javaCount = normalizeJavaCount(elements.editJavaCount.value, 1);
   const totalBirds = birdsPerJava * javaCount;
@@ -5350,10 +5609,10 @@ function saveCageChanges(event) {
   const grossWeight = roundWeight(Number(elements.editWeight.value));
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
   const source = elements.editWeightSource.value;
-  const originId = String(editSelectedOrigin?.id || "").trim() || null;
-  const originName = String(editSelectedOrigin?.name || "").trim();
-  const warehouseOrigin = isWarehouseOrigin(editSelectedOrigin);
-  const truckPlate = warehouseOrigin ? "" : normalizeTruckPlate(elements.editTruckPlate.value);
+  const originId = isReturn ? null : (String(editSelectedOrigin?.id || "").trim() || null);
+  const originName = isReturn ? "Devolución cliente" : String(editSelectedOrigin?.name || "").trim();
+  const warehouseOrigin = !isReturn && isWarehouseOrigin(editSelectedOrigin);
+  const truckPlate = isReturn || warehouseOrigin ? "" : normalizeTruckPlate(elements.editTruckPlate.value);
   const providerVehicle = warehouseOrigin
     ? null
     : getProviderVehicleByPlate(editSelectedOrigin, truckPlate);
@@ -5367,8 +5626,13 @@ function saveCageChanges(event) {
     && isValidTruckPlate(truckPlate);
   elements.editTruckPlate.value = truckPlate;
 
-  if (!VALID_TYPES.has(type)) {
+  if (!isReturn && !VALID_TYPES.has(type)) {
     setItemFormMessage("Selecciona un tipo de pollo válido.", true);
+    return;
+  }
+
+  if (isReturn && !VALID_RETURN_CONDITIONS.has(returnCondition)) {
+    setItemFormMessage("Selecciona una condición de devolución válida.", true);
     return;
   }
 
@@ -5402,17 +5666,19 @@ function saveCageChanges(event) {
     return;
   }
 
-  if (!originName) {
+  if (!isReturn && !originName) {
     setItemFormMessage("Selecciona el proveedor o almacén de origen del registro.", true);
     return;
   }
 
-  if (!warehouseOrigin && !providerVehicle && !historicalPlateUnchanged) {
+  if (!isReturn && !warehouseOrigin && !providerVehicle && !historicalPlateUnchanged) {
     setItemFormMessage("Selecciona una placa activa asignada al proveedor.", true);
     return;
   }
 
+  cage.operationType = getTruckOperationType(truck);
   cage.tipo = type;
+  cage.chickenCondition = returnCondition;
   cage.cantidadAvesPorJava = birdsPerJava;
   cage.cantidadPollosPorJava = birdsPerJava;
   cage.cantidadAves = totalBirds;
@@ -5428,24 +5694,28 @@ function saveCageChanges(event) {
   cage.lecturaBalanzaComoNeto = false;
   cage.origenPeso = source;
   cage.balanza = source === "manual" ? null : Number(source);
-  Object.assign(cage, buildOriginRecord({
-    ...editSelectedOrigin,
-    id: originId,
-    name: originName
-  }));
+  Object.assign(cage, isReturn
+    ? buildOriginRecord(null)
+    : buildOriginRecord({
+        ...editSelectedOrigin,
+        id: originId,
+        name: originName
+      }));
   cage.placaCamion = truckPlate;
-  cage.proveedorVehiculoId = providerVehicle?.id
+  cage.proveedorVehiculoId = isReturn ? null : (providerVehicle?.id
     || (historicalPlateUnchanged ? cage.proveedorVehiculoId : null)
-    || null;
-  cage.vehiculoId = providerVehicle?.vehicleId
+    || null);
+  cage.vehiculoId = isReturn ? null : (providerVehicle?.vehicleId
     || (historicalPlateUnchanged ? cage.vehiculoId : null)
-    || null;
+    || null);
 
   saveState();
   renderAll();
   closeItemModal();
 
-  setFormMessage(`Registro #${cage.id} actualizado en ${truck.name}. Origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`);
+  setFormMessage(isReturn
+    ? `Registro #${cage.id} actualizado en ${truck.name}. Devolución ${getReturnConditionMeta(cage.chickenCondition).label}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`
+    : `Registro #${cage.id} actualizado en ${truck.name}. Origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`);
 }
 
 function deleteCageRecord() {
@@ -5483,6 +5753,38 @@ function deleteCageRecord() {
   setFormMessage(`Registro #${cage.id} eliminado de ${truck.name}.`);
 }
 
+function clearRegisteredTruckColumn(truckId) {
+  const truck = state.trucks.find((item) => item.id === truckId);
+
+  if (!truck) {
+    setFormMessage("No se encontró la columna seleccionada.", true);
+    return;
+  }
+
+  const registration = normalizeTicketRegistration(truck.registration);
+  if (!registration) {
+    setFormMessage(`${truck.name} todavía no tiene un ticket guardado para limpiar.`, true);
+    return;
+  }
+
+  if (pendingTicketRegistrations.has(truck.id)) {
+    setFormMessage(`${truck.name} todavía se está registrando.`, true);
+    return;
+  }
+
+  const previousCode = registration.code;
+  resetTruckColumn(truck);
+  saveState();
+  renderAll();
+  closeItemModal();
+
+  if (clientModalTruckId === truck.id) {
+    closeClientModal();
+  }
+
+  setFormMessage(`${previousCode} ya quedó guardado. ${truck.name} está limpia y lista para otro ticket.`);
+}
+
 function handleCageRowActivation(row) {
   const truckId = row.dataset.truckId;
   const cageId = row.dataset.cageId;
@@ -5492,6 +5794,8 @@ function handleCageRowActivation(row) {
   }
 
   elements.truckSelect.value = truckId;
+  renderTypeButtons();
+  renderEntryProviderSelection();
   renderTruckColumns();
   renderSelectedTruckDetails();
   openCageModal(truckId, cageId);
@@ -5553,7 +5857,12 @@ function bindEvents() {
 
   elements.typeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      state.selectedType = normalizeType(button.dataset.type);
+      const activeTruck = getSelectedTruck();
+      if (isReturnTicket(activeTruck)) {
+        state.selectedReturnCondition = normalizeReturnCondition(button.dataset.type);
+      } else {
+        state.selectedType = normalizeType(button.dataset.type);
+      }
       saveState();
       renderTypeButtons();
     });
@@ -5596,6 +5905,8 @@ function bindEvents() {
     selectDailyProviderVehicle(row.dataset.originId, row.dataset.plate);
   });
   elements.truckSelect.addEventListener("change", () => {
+    renderTypeButtons();
+    renderEntryProviderSelection();
     renderWeightPreview();
     renderTruckColumns();
     renderSelectedTruckDetails();
@@ -5631,6 +5942,7 @@ function bindEvents() {
   elements.openJsonBtn.addEventListener("click", openJsonModal);
   elements.closeJsonBtn.addEventListener("click", closeJsonModal);
   elements.resetDayBtn.addEventListener("click", resetDay);
+  elements.returnTicketBtn?.addEventListener("click", openReturnClientModal);
   elements.fontDecreaseBtn?.addEventListener("click", () => changeFontSize(-1));
   elements.fontIncreaseBtn?.addEventListener("click", () => changeFontSize(1));
   elements.fontResetBtn?.addEventListener("click", () => applyFontSizePreference("normal"));
@@ -5833,7 +6145,14 @@ function bindEvents() {
 
     const assignBtn = event.target.closest(".assign-client-btn");
     if (assignBtn) {
-      openClientModal(assignBtn.dataset.assignClient);
+      const truck = state.trucks.find((item) => item.id === assignBtn.dataset.assignClient);
+      openClientModal(assignBtn.dataset.assignClient, isReturnTicket(truck) ? "return" : "destination");
+      return;
+    }
+
+    const clearBtn = event.target.closest(".clear-column-btn");
+    if (clearBtn) {
+      clearRegisteredTruckColumn(clearBtn.dataset.clearColumn);
       return;
     }
 
@@ -5848,6 +6167,8 @@ function bindEvents() {
     }
 
     elements.truckSelect.value = truckId;
+    renderTypeButtons();
+    renderEntryProviderSelection();
     renderTruckColumns();
     renderSelectedTruckDetails();
   });
@@ -5889,32 +6210,3 @@ setFormMessage(
 );
 void restoreScaleConnections();
 void loadCurrentDirectoryData();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
