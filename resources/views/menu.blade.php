@@ -52,7 +52,7 @@
           <span class="menu-status">Disponible</span>
         </a>
 
-        <a class="menu-tile menu-tile-primary" href="{{ route('tickets-dia') }}">
+        <a class="menu-tile menu-tile-primary" href="{{ Route::has('tickets-dia') ? route('tickets-dia') : '#' }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M6 3h12v18H6z"></path>
