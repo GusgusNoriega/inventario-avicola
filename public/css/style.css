@@ -4741,6 +4741,54 @@ body.customer-history-page {
   min-width: 900px;
 }
 
+.daily-client-table {
+  min-width: 1080px;
+}
+
+.daily-client-table th:not(:first-child),
+.daily-client-table td:not(:first-child) {
+  text-align: right;
+}
+
+.daily-client-table th:nth-child(2),
+.daily-client-table td:nth-child(2) {
+  text-align: left;
+}
+
+.daily-client-name {
+  min-width: 230px;
+}
+
+.daily-client-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 84px;
+}
+
+.daily-client-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 26px;
+  padding: 4px 7px;
+  border: 1px solid rgba(43, 199, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(43, 199, 255, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.daily-client-return strong {
+  color: #ff8f8f;
+}
+
+.daily-client-net strong {
+  color: var(--primary);
+}
+
 .daily-ticket-records {
   min-width: 1380px;
 }

@@ -194,6 +194,15 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.summary.by_operation.1.operation_type', TicketDespacho::OPERATION_RETURN)
             ->assertJsonPath('data.summary.by_operation.1.tickets', 1)
             ->assertJsonPath('data.summary.by_operation.1.net_weight_kg', 30)
+            ->assertJsonCount(1, 'data.summary.by_client')
+            ->assertJsonPath('data.summary.by_client.0.client.name', 'Cliente destino')
+            ->assertJsonPath('data.summary.by_client.0.cages', 2)
+            ->assertJsonPath('data.summary.by_client.0.birds', 50)
+            ->assertJsonPath('data.summary.by_client.0.gross_weight_kg', 114)
+            ->assertJsonPath('data.summary.by_client.0.tare_weight_kg', 14)
+            ->assertJsonPath('data.summary.by_client.0.dispatch_net_weight_kg', 100)
+            ->assertJsonPath('data.summary.by_client.0.return_net_weight_kg', 30)
+            ->assertJsonPath('data.summary.by_client.0.net_weight_kg', 70)
             ->assertJsonPath('data.tickets.0.destination.type', 'ALMACEN')
             ->assertJsonPath('data.tickets.0.records.0.origin.type', 'ALMACEN');
 

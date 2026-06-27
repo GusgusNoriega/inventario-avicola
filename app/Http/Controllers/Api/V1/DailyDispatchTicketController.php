@@ -94,6 +94,7 @@ class DailyDispatchTicketController extends Controller
                 'summary' => [
                     ...$this->summarizeRecords($records, $tickets->count()),
                     'by_operation' => $this->summarizeByOperation($tickets),
+                    'by_client' => $this->summarizeByClient($tickets),
                 ],
                 'tickets' => $tickets
                     ->map(fn (TicketDespacho $ticket) => $this->formatTicket($ticket))
@@ -233,6 +234,73 @@ class DailyDispatchTicketController extends Controller
                 ...$this->summarizeRecords($records, $operationTickets->count()),
             ];
         })->values()->all();
+    }
+
+    /**
+     * @param  Collection<int, TicketDespacho>  $tickets
+     * @return list<array<string, mixed>>
+     */
+    private function summarizeByClient(Collection $tickets): array
+    {
+        return $tickets
+            ->filter(fn (TicketDespacho $ticket) => $ticket->cliente_destino_id !== null)
+            ->groupBy('cliente_destino_id')
+            ->map(function (Collection $clientTickets): array {
+                /** @var TicketDespacho $firstTicket */
+                $firstTicket = $clientTickets->first();
+                $dispatchTickets = $clientTickets
+                    ->filter(fn (TicketDespacho $ticket) => $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH)
+                    ->values();
+                $returnTickets = $clientTickets
+                    ->filter(fn (TicketDespacho $ticket) => $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN)
+                    ->values();
+                $dispatchRecords = $this->activeRecords($dispatchTickets);
+                $returnRecords = $this->activeRecords($returnTickets);
+                $allRecords = $dispatchRecords->concat($returnRecords);
+                $dispatchNetWeight = (float) $dispatchRecords->sum('peso_neto_kg');
+                $returnNetWeight = (float) $returnRecords->sum('peso_neto_kg');
+
+                return [
+                    'client' => [
+                        'id' => $firstTicket->clienteDestino?->id,
+                        'name' => $firstTicket->clienteDestino?->nombre_razon_social ?? 'Cliente sin registrar',
+                    ],
+                    'chicken_types' => $allRecords
+                        ->map(fn (Pesada $record) => [
+                            'code' => $record->tipoPollo?->codigo,
+                            'name' => $record->tipoPollo?->nombre ?? 'Sin tipo registrado',
+                        ])
+                        ->unique('code')
+                        ->sortBy('name')
+                        ->values()
+                        ->all(),
+                    'tickets' => $clientTickets->count(),
+                    'dispatch_tickets' => $dispatchTickets->count(),
+                    'return_tickets' => $returnTickets->count(),
+                    'cages' => (int) $dispatchRecords->sum('cantidad_javas'),
+                    'birds' => (int) $dispatchRecords->sum('cantidad_aves'),
+                    'gross_weight_kg' => round((float) $dispatchRecords->sum('peso_bruto_kg'), 3),
+                    'tare_weight_kg' => round((float) $dispatchRecords->sum('tara_total_kg'), 3),
+                    'dispatch_net_weight_kg' => round($dispatchNetWeight, 3),
+                    'return_net_weight_kg' => round($returnNetWeight, 3),
+                    'net_weight_kg' => round($dispatchNetWeight - $returnNetWeight, 3),
+                ];
+            })
+            ->sortBy('client.name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, TicketDespacho>  $tickets
+     * @return Collection<int, Pesada>
+     */
+    private function activeRecords(Collection $tickets): Collection
+    {
+        return $tickets
+            ->flatMap(fn (TicketDespacho $ticket) => $ticket->pesadas)
+            ->filter(fn (Pesada $record) => $record->estado === Pesada::STATUS_ACTIVE)
+            ->values();
     }
 
     /**

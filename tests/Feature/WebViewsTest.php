@@ -55,6 +55,7 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Tickets del dia')
             ->assertSee('dailyOperationSummary', false)
+            ->assertSee('dailyClientTotals', false)
             ->assertSee('dailyTicketList', false)
             ->assertSee(asset('js/tickets-dia.js'), false)
             ->assertDontSee('Importe')

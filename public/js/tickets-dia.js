@@ -10,6 +10,12 @@ const CONDITION_LABELS = {
   VIVO: "Pollo vivo",
   MUERTO: "Pollo muerto"
 };
+const CHICKEN_TYPE_SHORT_LABELS = {
+  POLLO_VIVO: "P V",
+  POLLO_MUERTO: "P M",
+  POLLO_PELADO: "P P",
+  POLLO_BENEFICIADO: "P B"
+};
 
 const elements = {
   meta: document.getElementById("dailyTicketsMeta"),
@@ -29,6 +35,7 @@ const elements = {
   tareWeight: document.getElementById("dailyTareWeight"),
   netWeight: document.getElementById("dailyNetWeight"),
   operationSummary: document.getElementById("dailyOperationSummary"),
+  clientTotals: document.getElementById("dailyClientTotals"),
   typeTotals: document.getElementById("dailyTypeTotals"),
   resultCount: document.getElementById("dailyTicketsResultCount"),
   ticketList: document.getElementById("dailyTicketList")
@@ -160,6 +167,47 @@ function renderOperationSummary(operations) {
       </article>
     `;
   }).join("");
+}
+
+function renderClientTypes(types) {
+  const items = Array.isArray(types) ? types : [];
+
+  if (!items.length) {
+    return "--";
+  }
+
+  return items.map((type) => {
+    const code = normalizeCode(type.code);
+    const label = CHICKEN_TYPE_SHORT_LABELS[code] || type.name || code || "--";
+
+    return `<span class="daily-client-type" title="${escapeHtml(type.name || label)}">${escapeHtml(label)}</span>`;
+  }).join("");
+}
+
+function renderClientTotals(clients) {
+  const items = Array.isArray(clients) ? clients : [];
+
+  if (!items.length) {
+    elements.clientTotals.innerHTML = `
+      <tr>
+        <td colspan="8" class="customer-history-empty-cell">No hay movimientos de clientes para este rango.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.clientTotals.innerHTML = items.map((item) => `
+    <tr>
+      <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
+      <td><div class="daily-client-types">${renderClientTypes(item.chicken_types)}</div></td>
+      <td>${formatNumber(item.cages)}</td>
+      <td>${formatNumber(item.birds)}</td>
+      <td>${formatWeight(item.gross_weight_kg)}</td>
+      <td>${formatWeight(item.tare_weight_kg)}</td>
+      <td class="daily-client-return"><strong>${formatWeight(item.return_net_weight_kg)}</strong></td>
+      <td class="daily-client-net"><strong>${formatWeight(item.net_weight_kg)}</strong></td>
+    </tr>
+  `).join("");
 }
 
 function renderTypeTotals(types) {
@@ -328,6 +376,7 @@ async function loadDailyTickets() {
     renderMeta(response.data);
     renderSummary(response.data.summary);
     renderOperationSummary(response.data.summary.by_operation || []);
+    renderClientTotals(response.data.summary.by_client || []);
     renderTypeTotals(response.data.summary.by_type || []);
     renderTickets(response.data.tickets || []);
     setMessage("");
@@ -343,6 +392,7 @@ async function loadDailyTickets() {
       net_weight_kg: 0
     });
     renderOperationSummary([]);
+    renderClientTotals([]);
     renderTypeTotals([]);
     renderTickets([]);
   } finally {

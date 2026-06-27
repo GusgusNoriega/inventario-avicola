@@ -77,6 +77,32 @@
 
     <section id="dailyOperationSummary" class="daily-operation-summary" aria-label="Resumen por operacion"></section>
 
+    <section class="customer-history-section" aria-labelledby="dailyClientTotalsTitle">
+      <div class="customer-history-section-head">
+        <div>
+          <p class="eyebrow">Movimientos netos</p>
+          <h2 id="dailyClientTotalsTitle">Resumen por cliente</h2>
+        </div>
+      </div>
+      <div class="customer-history-table-wrap card">
+        <table class="customer-history-table daily-client-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Ave</th>
+              <th>Num. jabas</th>
+              <th>Cant. aves</th>
+              <th>Peso bruto</th>
+              <th>Tara</th>
+              <th>Devoluciones</th>
+              <th>Peso neto</th>
+            </tr>
+          </thead>
+          <tbody id="dailyClientTotals"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="customer-history-section" aria-labelledby="dailyTypeTotalsTitle">
       <div class="customer-history-section-head">
         <div>
