@@ -366,7 +366,8 @@ una balanza. El dato comercial principal sigue siendo `peso_kg`.
    `almacen_origen_id`, nunca ambos.
 5. Si el origen es un proveedor, debe existir una placa válida en
    `placa_snapshot`. Para un origen interno puede quedar vacía.
-6. `cantidad_aves = aves_por_java * cantidad_javas`.
+6. `cantidad_aves = aves_por_java * cantidad_javas`; cuando `cantidad_javas = 0`,
+   `aves_por_java` representa el total de aves y se guarda como `cantidad_aves`.
 7. `tara_total_kg = cantidad_javas * peso_java_kg_snapshot`.
 8. `peso_neto_kg = peso_bruto_kg - tara_total_kg`, y debe ser mayor que cero.
 9. Los pesos deben almacenarse como `DECIMAL`, nunca como `FLOAT`.

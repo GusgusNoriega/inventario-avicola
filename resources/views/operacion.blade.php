@@ -130,13 +130,13 @@
             </div>
 
             <label class="field">
-              Aves / java
-              <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 25" required readonly inputmode="none" data-keypad-label="Aves por java" data-keypad-decimal="false">
+              Aves / java (o total sin javas)
+              <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 25" required readonly inputmode="none" data-keypad-label="Aves por java o total sin javas" data-keypad-decimal="false">
             </label>
 
             <label class="field">
               Javas
-              <input id="javaCount" type="number" min="1" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
+              <input id="javaCount" type="number" min="0" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
             </label>
 
             <label class="field">
@@ -345,13 +345,13 @@
           </label>
 
           <label class="field">
-            Aves / java
-            <input id="editBirdCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Aves por java" data-keypad-decimal="false">
+            Aves / java (o total sin javas)
+            <input id="editBirdCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Aves por java o total sin javas" data-keypad-decimal="false">
           </label>
 
           <label class="field">
             Javas
-            <input id="editJavaCount" type="number" min="1" step="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
+            <input id="editJavaCount" type="number" min="0" step="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
           </label>
 
           <label class="field">

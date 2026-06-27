@@ -157,7 +157,7 @@ class DispatchTicketService
                         : 'BALANZA',
                     'aves_por_java' => $birdsPerCage,
                     'cantidad_javas' => $cageCount,
-                    'cantidad_aves' => $birdsPerCage * $cageCount,
+                    'cantidad_aves' => $birdsPerCage * max($cageCount, 1),
                     'peso_java_kg_snapshot' => $cageWeight,
                     'peso_leido_kg' => $readWeight,
                     'peso_bruto_kg' => $grossWeight,

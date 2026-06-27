@@ -75,7 +75,7 @@ class StoreDispatchTicketRequest extends FormRequest
                 Rule::in(['MANUAL', 'BALANZA_1', 'BALANZA_2']),
             ],
             'weighings.*.birds_per_cage' => ['required', 'integer', 'min:1', 'max:1000'],
-            'weighings.*.cage_count' => ['required', 'integer', 'min:1', 'max:10000'],
+            'weighings.*.cage_count' => ['required', 'integer', 'min:0', 'max:10000'],
             'weighings.*.read_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
             'weighings.*.gross_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
             'weighings.*.weighed_at' => ['required', 'date'],

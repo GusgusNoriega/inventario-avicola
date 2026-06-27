@@ -1194,7 +1194,7 @@ function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS
     ? rawBirdsPerJava
     : normalizeBirdCountPerJava(Math.round(legacyTotalBirds / Math.max(javaCount, 1)), 0);
   const birdsTotal = rawBirdsPerJava > 0
-    ? rawBirdsPerJava * javaCount
+    ? calculateBirdTotal(rawBirdsPerJava, javaCount)
     : legacyTotalBirds;
   const defaultTare = roundWeight(javaCount * crateMeta.weightKg);
 
@@ -1306,12 +1306,20 @@ function formatWeight(value) {
 }
 
 function normalizeJavaCount(value, fallback = 1) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return fallback;
+  }
+
   const parsed = Math.trunc(Number(value));
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  if (!Number.isInteger(parsed) || parsed < 0) {
     return fallback;
   }
 
   return parsed;
+}
+
+function calculateBirdTotal(birdsPerJava, javaCount) {
+  return birdsPerJava * Math.max(javaCount, 1);
 }
 
 function normalizeBirdCountPerJava(value, fallback = 0) {
@@ -1754,7 +1762,7 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
     const javas = normalizeJavaCount(cage.cantidadJavas, 1);
     const avesPorJava = normalizeBirdCountPerJava(cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava, 0);
     const aves = avesPorJava > 0
-      ? avesPorJava * javas
+      ? calculateBirdTotal(avesPorJava, javas)
       : (Number(cage.cantidadAves ?? cage.cantidadPollos) || 0);
     const grossWeight = Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0;
     const tareWeight = Number(cage.taraTotalKg) || 0;
@@ -4182,7 +4190,7 @@ function buildTruckTableRows(truck) {
       const javas = normalizeJavaCount(cage.cantidadJavas, 1);
       const avesPorJava = normalizeBirdCountPerJava(cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava, 0);
       const aves = avesPorJava > 0
-        ? avesPorJava * javas
+        ? calculateBirdTotal(avesPorJava, javas)
         : (Number(cage.cantidadAves ?? cage.cantidadPollos) || 0);
       const grossWeight = Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0;
       const tareWeight = Number(cage.taraTotalKg) || 0;
@@ -5147,7 +5155,7 @@ function addCage(event) {
   const source = normalizeWeightSource(elements.weightSource.value === "manual" ? "manual" : elements.weightSource.value);
   const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, state.entryDefaults?.birdCountPerJava || 1);
   const javaCount = normalizeJavaCount(elements.javaCount.value, state.entryDefaults?.javaCount || 1);
-  const totalBirds = birdsPerJava * javaCount;
+  const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
   const rawWeight = getWeightFromSource(source);
@@ -5196,7 +5204,7 @@ function addCage(event) {
     return;
   }
 
-  if (!Number.isInteger(javaCount) || javaCount <= 0) {
+  if (!Number.isInteger(javaCount) || javaCount < 0) {
     setFormMessage("Ingresa una cantidad de javas válida.", true);
     return;
   }
@@ -5608,7 +5616,7 @@ function saveCageChanges(event) {
   const returnCondition = isReturn ? normalizeReturnCondition(elements.editType.value) : "vivo";
   const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
   const javaCount = normalizeJavaCount(elements.editJavaCount.value, 1);
-  const totalBirds = birdsPerJava * javaCount;
+  const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.editCrateType.value, DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
   const grossWeight = roundWeight(Number(elements.editWeight.value));
@@ -5646,7 +5654,7 @@ function saveCageChanges(event) {
     return;
   }
 
-  if (!Number.isInteger(javaCount) || javaCount <= 0) {
+  if (!Number.isInteger(javaCount) || javaCount < 0) {
     setItemFormMessage("Ingresa una cantidad válida de javas.", true);
     return;
   }

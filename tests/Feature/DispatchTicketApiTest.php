@@ -173,6 +173,39 @@ class DispatchTicketApiTest extends TestCase
         ]);
     }
 
+    public function test_weighing_without_cages_uses_no_tare_and_keeps_the_entered_bird_count(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'] = [$payload['weighings'][0]];
+        $payload['weighings'][0]['birds_per_cage'] = 15;
+        $payload['weighings'][0]['cage_count'] = 0;
+        $payload['weighings'][0]['read_weight_kg'] = 30;
+        $payload['weighings'][0]['gross_weight_kg'] = 30;
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated();
+
+        $this->assertDatabaseHas('pesadas', [
+            'cantidad_javas' => 0,
+            'cantidad_aves' => 15,
+            'tara_total_kg' => 0,
+            'peso_bruto_kg' => 30,
+            'peso_neto_kg' => 30,
+        ]);
+    }
+
+    public function test_weighing_rejects_a_negative_cage_count(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][0]['cage_count'] = -1;
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.cage_count');
+
+        $this->assertDatabaseCount('pesadas', 0);
+    }
+
     public function test_invalid_weighing_rolls_back_ticket_and_every_weighing(): void
     {
         $payload = $this->ticketPayload();
