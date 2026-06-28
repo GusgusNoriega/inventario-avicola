@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(48, $migrationFiles);
+        $this->assertCount(49, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -23,7 +23,10 @@ class DatabaseSchemaTest extends TestCase
                 "/Schema::(?:create|table)\\('([^']+)'/",
                 $upContents
             );
-            $expectedOperations = basename($migrationFile) === '2026_06_26_000004_add_tickets_dia_permission.php'
+            $expectedOperations = in_array(basename($migrationFile), [
+                '2026_06_26_000004_add_tickets_dia_permission.php',
+                '2026_06_27_000001_add_pesadas_gestionar_permission.php',
+            ], true)
                 ? 0
                 : 1;
 

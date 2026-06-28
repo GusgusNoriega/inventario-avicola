@@ -19,22 +19,6 @@
       </header>
 
       <nav class="menu-grid" aria-label="Vistas del sistema">
-        <a class="menu-tile menu-tile-primary" href="{{ route('operacion') }}#recepcion">
-          <span class="menu-tile-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M3 7h11v9H3z"></path>
-              <path d="M14 10h3l3 3v3h-6z"></path>
-              <path d="M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
-              <path d="M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
-            </svg>
-          </span>
-          <span class="menu-tile-text">
-            <strong>Recepción</strong>
-            <small>Registro de pesadas y balanzas</small>
-          </span>
-          <span class="menu-status">Disponible</span>
-        </a>
-
         <a class="menu-tile menu-tile-primary" href="{{ route('operacion') }}#despacho">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -64,8 +48,24 @@
             </svg>
           </span>
           <span class="menu-tile-text">
-            <strong>Tickets del dia</strong>
-            <small>Resumen operativo para despacho</small>
+            <strong>Resumen de la jornada</strong>
+            <small>Consolidado diario por cliente</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
+        <a class="menu-tile menu-tile-primary" href="{{ route('gestion-pesadas') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h12v18H6z"></path>
+              <path d="M9 7h6"></path>
+              <path d="M9 11h4"></path>
+              <path d="M14.5 15.5l4-4 2 2-4 4-3 1z"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Gestión de pesadas</strong>
+            <small>Buscar tickets, editar o eliminar pesadas</small>
           </span>
           <span class="menu-status">Disponible</span>
         </a>

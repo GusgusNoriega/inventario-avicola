@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">Planeación operativa</p>
         <h1>Proveedores de la jornada</h1>
-        <p>Selecciona las placas habilitadas. Los precios de proveedor se muestran solo como referencia.</p>
+        <p>Selecciona las placas habilitadas para la operación.</p>
       </div>
       <div class="journey-header-actions">
         <a class="menu-return-btn" href="{{ route('menu') }}">Menú</a>
@@ -89,7 +89,7 @@
           </thead>
           <tbody id="journeyRows">
             <tr>
-              <td colspan="6" class="journey-loading">Cargando proveedores y camiones...</td>
+              <td colspan="3" class="journey-loading">Cargando proveedores y camiones...</td>
             </tr>
           </tbody>
         </table>

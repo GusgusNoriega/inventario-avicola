@@ -85,7 +85,6 @@ function applySearch() {
 }
 
 function renderJourney() {
-  const types = Array.isArray(journey.chicken_types) ? journey.chicken_types : [];
   const trucks = Array.isArray(journey.trucks) ? journey.trucks : [];
 
   elements.date.textContent = formatDate(`${journey.operating_date}T12:00:00`, {
@@ -118,18 +117,12 @@ function renderJourney() {
     <th scope="col">Elegir</th>
     <th scope="col">Proveedor</th>
     <th scope="col">Placa</th>
-    ${types.map((type) => `
-      <th scope="col">
-        <span>${escapeHtml(type.name)}</span>
-        <small>Precio proveedor/kg</small>
-      </th>
-    `).join("")}
   `;
 
   if (!trucks.length) {
     elements.rows.innerHTML = `
       <tr>
-        <td colspan="${3 + types.length}" class="journey-loading">
+        <td colspan="3" class="journey-loading">
           No hay proveedores con placas activas. Asigna placas desde el directorio de proveedores.
         </td>
       </tr>
@@ -169,16 +162,6 @@ function renderJourney() {
           <strong class="journey-plate">${escapeHtml(truck.plate)}</strong>
           <small>${escapeHtml(truck.alias || "Camión activo")}</small>
         </td>
-        ${types.map((type) => {
-          const price = truck.prices?.[type.code];
-          return `
-            <td class="journey-price-cell">
-              <strong class="journey-price-value">
-                ${price === null || price === undefined ? "Sin precio" : Number(price).toFixed(2)}
-              </strong>
-            </td>
-          `;
-        }).join("")}
       </tr>
     `;
   }).join("");
@@ -260,7 +243,7 @@ apiRequest("/operacion/jornada")
   .catch((error) => {
     elements.rows.innerHTML = `
       <tr>
-        <td colspan="6" class="journey-loading">No se pudo cargar la jornada.</td>
+        <td colspan="3" class="journey-loading">No se pudo cargar la jornada.</td>
       </tr>
     `;
     setMessage(error.message, true);

@@ -4867,6 +4867,409 @@ body.customer-history-page {
   }
 }
 
+/* Gestión de pesadas registradas */
+.weighing-management-view {
+  width: min(1700px, calc(100% - 28px));
+  padding-top: 14px;
+}
+
+.weighing-search-card {
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.weighing-search-form {
+  display: grid;
+  grid-template-columns: auto minmax(300px, 1fr) auto auto auto;
+  grid-template-areas: "title search submit clear menu";
+  gap: 10px;
+  align-items: end;
+}
+
+.weighing-search-form h1 {
+  grid-area: title;
+  min-height: 42px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  color: var(--text-main);
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+
+.weighing-search-form .field {
+  grid-area: search;
+}
+
+.weighing-search-form > .btn-primary {
+  grid-area: submit;
+}
+
+.weighing-search-form > .btn-ghost {
+  grid-area: clear;
+}
+
+.weighing-search-form input,
+.weighing-search-form > .btn,
+.weighing-menu-btn {
+  min-height: 42px;
+}
+
+.weighing-menu-btn {
+  grid-area: menu;
+  padding: 8px 12px;
+}
+
+.weighing-search-message {
+  min-height: 0;
+  margin: 9px 0 0;
+}
+
+.weighing-search-message[hidden] {
+  display: none;
+}
+
+.weighing-management-layout {
+  display: grid;
+  grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.weighing-ticket-results {
+  position: sticky;
+  top: 14px;
+  padding: 18px;
+}
+
+.weighing-panel-head,
+.weighing-ticket-detail-head,
+.weighing-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.weighing-panel-head h2,
+.weighing-ticket-detail-head h2,
+.weighing-modal-head h2 {
+  margin: 2px 0 0;
+}
+
+.weighing-ticket-list {
+  max-height: calc(100vh - 280px);
+  margin-top: 14px;
+  overflow-y: auto;
+  display: grid;
+  gap: 9px;
+  scrollbar-color: var(--secondary) #080808;
+}
+
+.weighing-ticket-list.is-loading,
+.weighing-selected-panel.is-loading {
+  opacity: 0.58;
+  pointer-events: none;
+}
+
+.weighing-ticket-option {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px;
+  background: var(--bg-card-soft);
+  color: var(--text-main);
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.weighing-ticket-option:hover,
+.weighing-ticket-option:focus-visible {
+  border-color: var(--primary);
+  background: rgba(43, 199, 255, 0.09);
+}
+
+.weighing-ticket-option.is-active {
+  border-color: var(--secondary);
+  box-shadow: inset 4px 0 0 var(--secondary);
+  background: rgba(255, 208, 42, 0.08);
+}
+
+.weighing-ticket-option.is-readonly:not(.is-active) {
+  opacity: 0.78;
+}
+
+.weighing-ticket-option > span:not(.weighing-ticket-option-head),
+.weighing-ticket-option > small,
+.weighing-ticket-option-head small {
+  color: var(--text-muted);
+}
+
+.weighing-ticket-option-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.weighing-ticket-option-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 6px;
+}
+
+.weighing-ticket-option-head strong {
+  color: var(--secondary);
+}
+
+.weighing-results-empty {
+  padding: 26px 12px;
+  display: grid;
+  gap: 5px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.weighing-results-empty strong {
+  color: var(--text-main);
+}
+
+.weighing-ticket-detail {
+  overflow: hidden;
+}
+
+.weighing-ticket-detail-head {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.weighing-ticket-detail-head p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+}
+
+.weighing-readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 208, 42, 0.48);
+  border-radius: 999px;
+  background: rgba(255, 208, 42, 0.1);
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.weighing-readonly-notice {
+  padding: 10px 22px;
+  border-bottom: 1px solid rgba(255, 208, 42, 0.3);
+  background: rgba(255, 208, 42, 0.08);
+  color: #f5dc87;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.weighing-ticket-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.weighing-ticket-stats > span {
+  min-width: 120px;
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+}
+
+.weighing-ticket-stats > span:last-child {
+  border-right: 0;
+}
+
+.weighing-ticket-stats small {
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.weighing-ticket-stats strong {
+  font-size: 18px;
+}
+
+.weighing-ticket-stats .is-accent strong {
+  color: var(--success);
+}
+
+.weighing-table-wrap {
+  border-radius: 0;
+  scrollbar-color: var(--secondary) #080808;
+}
+
+.weighing-records-table {
+  min-width: 1450px;
+}
+
+.weighing-row-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.weighing-row-actions .btn {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.weighing-modal[hidden],
+.weighing-edit-form > [hidden] {
+  display: none;
+}
+
+.weighing-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.82);
+  display: grid;
+  place-items: center;
+}
+
+.weighing-modal-card {
+  width: min(900px, 100%);
+  max-height: calc(100vh - 36px);
+  padding: 22px;
+  overflow-y: auto;
+  scrollbar-color: var(--secondary) #080808;
+}
+
+.weighing-edit-form {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.weighing-edit-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weighing-edit-preview span {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg-input);
+  display: grid;
+  gap: 4px;
+}
+
+.weighing-edit-preview small {
+  color: var(--text-muted);
+}
+
+.weighing-edit-preview strong {
+  color: var(--secondary);
+  font-size: 20px;
+}
+
+.weighing-edit-preview .is-invalid strong {
+  color: var(--danger);
+}
+
+.weighing-edit-form > .form-message,
+.weighing-modal-actions {
+  grid-column: 1 / -1;
+}
+
+.weighing-modal-actions {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+}
+
+.weighing-delete-card {
+  width: min(580px, 100%);
+}
+
+.weighing-delete-copy {
+  color: var(--text-soft);
+}
+
+.weighing-delete-card textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+@media (max-width: 1000px) {
+  .weighing-search-form {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "title title title menu"
+      "search search submit clear";
+  }
+
+  .weighing-management-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .weighing-ticket-results {
+    position: static;
+  }
+
+  .weighing-ticket-list {
+    max-height: 340px;
+  }
+}
+
+@media (max-width: 700px) {
+  .weighing-management-view {
+    width: min(100% - 20px, 1700px);
+  }
+
+  .weighing-search-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title menu"
+      "search search"
+      "submit clear";
+  }
+
+  .weighing-search-form > .btn {
+    width: 100%;
+  }
+
+  .weighing-edit-form,
+  .weighing-edit-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .weighing-edit-form > .form-message,
+  .weighing-edit-preview,
+  .weighing-modal-actions {
+    grid-column: 1;
+  }
+
+  .weighing-modal {
+    padding: 8px;
+  }
+
+  .weighing-modal-card {
+    max-height: calc(100vh - 16px);
+    padding: 16px;
+  }
+}
+
 .directory-page {
   background:
     radial-gradient(circle at top left, rgba(43, 199, 255, 0.08), transparent 34rem),
@@ -5684,21 +6087,6 @@ body[data-directory-view="proveedores"] .directory-tab.is-active,
 .journey-check-cell {
   width: 70px;
   text-align: center;
-}
-
-.journey-price-cell {
-  min-width: 150px;
-}
-
-.journey-price-value {
-  display: inline-block;
-  min-width: 100px;
-  border: 1px solid #334762;
-  border-radius: 8px;
-  padding: 9px 12px;
-  background: #070b12;
-  color: #ffffff;
-  text-align: right;
 }
 
 .journey-loading {

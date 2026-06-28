@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
+use App\Http\Controllers\Api\V1\TicketWeighingManagementController;
 use App\Models\TerceroRole;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,9 @@ Route::prefix('v1')->group(function (): void {
     $operationWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR'];
+    $weighingManagementMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:PESADAS_GESTIONAR'];
     $journeyWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR', 'permission:PRECIOS_GESTIONAR'];
@@ -57,6 +61,15 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($dailyTicketsMiddleware);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
         ->middleware($operationWriteMiddleware);
+    Route::middleware($weighingManagementMiddleware)->group(function (): void {
+        Route::get('/operacion/gestion-pesadas', [TicketWeighingManagementController::class, 'index']);
+        Route::get('/operacion/tickets/{ticket}/pesadas', [TicketWeighingManagementController::class, 'show'])
+            ->whereNumber('ticket');
+        Route::put('/operacion/tickets/{ticket}/pesadas/{weighing}', [TicketWeighingManagementController::class, 'update'])
+            ->whereNumber(['ticket', 'weighing']);
+        Route::delete('/operacion/tickets/{ticket}/pesadas/{weighing}', [TicketWeighingManagementController::class, 'destroy'])
+            ->whereNumber(['ticket', 'weighing']);
+    });
     Route::put('/operacion/jornada', [JourneyPlanController::class, 'update'])
         ->middleware($journeyWriteMiddleware);
 

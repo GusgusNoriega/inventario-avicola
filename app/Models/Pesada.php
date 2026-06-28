@@ -42,6 +42,8 @@ class Pesada extends Model
 
     public const STATUS_ACTIVE = 'ACTIVA';
 
+    public const STATUS_VOIDED = 'ANULADA';
+
     protected $table = 'pesadas';
 
     /**

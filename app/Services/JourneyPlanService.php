@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\ListaPrecio;
-use App\Models\PrecioHistorial;
 use App\Models\ProgramacionRecepcion;
 use App\Models\ProgramacionRecepcionDetalle;
 use App\Models\ProveedorVehiculo;
@@ -43,12 +41,6 @@ class JourneyPlanService
                 ->all()
             : [];
         $selectedLookup = array_fill_keys($selectedIds, true);
-        $currentPrices = $this->currentProviderPrices(
-            $companyId,
-            $vehicles->pluck('proveedor_id')->unique()->values(),
-            $types->pluck('id')
-        );
-
         return [
             'program_id' => $program?->id,
             'configured' => (bool) $program,
@@ -65,23 +57,7 @@ class JourneyPlanService
                 'code' => $type->codigo,
                 'name' => $type->nombre,
             ])->values(),
-            'trucks' => $vehicles->map(function (ProveedorVehiculo $association) use (
-                $currentPrices,
-                $selectedLookup,
-                $types
-            ): array {
-                $prices = $types->mapWithKeys(function (TipoPollo $type) use (
-                    $association,
-                    $currentPrices
-                ): array {
-                    $key = "{$association->proveedor_id}:{$type->id}";
-                    $currentPrice = $currentPrices->get($key);
-
-                    return [
-                        $type->codigo => $currentPrice ? (float) $currentPrice->precio_kg : null,
-                    ];
-                });
-
+            'trucks' => $vehicles->map(function (ProveedorVehiculo $association) use ($selectedLookup): array {
                 return [
                     'provider_vehicle_id' => $association->id,
                     'vehicle_id' => $association->vehiculo_id,
@@ -91,7 +67,6 @@ class JourneyPlanService
                     'plate' => $association->vehiculo->placa,
                     'alias' => $association->alias,
                     'selected' => isset($selectedLookup[$association->id]),
-                    'prices' => $prices,
                 ];
             })->values(),
         ];
@@ -251,30 +226,4 @@ class JourneyPlanService
             ->values();
     }
 
-    /**
-     * @param  Collection<int, int>  $providerIds
-     * @param  Collection<int, int>  $typeIds
-     * @return Collection<string, PrecioHistorial>
-     */
-    private function currentProviderPrices(
-        int $companyId,
-        Collection $providerIds,
-        Collection $typeIds
-    ): Collection {
-        if ($providerIds->isEmpty() || $typeIds->isEmpty()) {
-            return collect();
-        }
-
-        return PrecioHistorial::query()
-            ->whereNull('vigente_hasta')
-            ->whereIn('tipo_pollo_id', $typeIds)
-            ->whereHas('listaPrecio', fn ($query) => $query
-                ->where('empresa_id', $companyId)
-                ->whereIn('tercero_id', $providerIds)
-                ->where('operacion', ListaPrecio::OPERATION_PURCHASE)
-                ->where('estado', ListaPrecio::STATUS_ACTIVE))
-            ->with('listaPrecio')
-            ->get()
-            ->keyBy(fn (PrecioHistorial $price) => "{$price->listaPrecio->tercero_id}:{$price->tipo_pollo_id}");
-    }
 }

@@ -11,8 +11,13 @@ class WebViewsTest extends TestCase
         $this->get('/')
             ->assertOk()
             ->assertSee('Menú principal')
-            ->assertSee(route('operacion'), false)
+            ->assertSee(route('operacion').'#despacho', false)
+            ->assertSee('Despacho mayorista')
+            ->assertDontSee('Registro de pesadas y balanzas')
             ->assertSee(route('tickets-dia'), false)
+            ->assertSee('Resumen de la jornada')
+            ->assertSee('Consolidado diario por cliente')
+            ->assertSee(route('gestion-pesadas'), false)
             ->assertSee(route('jornada'), false)
             ->assertSee(route('directorio'), false);
     }
@@ -53,11 +58,15 @@ class WebViewsTest extends TestCase
     {
         $this->get('/tickets-dia')
             ->assertOk()
-            ->assertSee('Tickets del dia')
-            ->assertSee('dailyOperationSummary', false)
+            ->assertSee('Resumen de la jornada')
             ->assertSee('dailyClientTotals', false)
-            ->assertSee('dailyTicketList', false)
+            ->assertSee(route('menu'), false)
+            ->assertSee('Menú')
             ->assertSee(asset('js/tickets-dia.js'), false)
+            ->assertDontSee('dailyOperationSummary', false)
+            ->assertDontSee('dailyTicketsFilters', false)
+            ->assertDontSee('dailyTypeTotals', false)
+            ->assertDontSee('dailyTicketList', false)
             ->assertDontSee('Importe')
             ->assertDontSee('Precio/kg');
     }
@@ -68,8 +77,24 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Proveedores de la jornada')
             ->assertSee('Precios globales')
-            ->assertSee('solo como referencia')
+            ->assertDontSee('precios de proveedor', false)
             ->assertSee(asset('js/jornada.js'), false);
+
+        $javascript = file_get_contents(public_path('js/jornada.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringNotContainsString('truck.prices', $javascript);
+        $this->assertStringNotContainsString('Precio proveedor/kg', $javascript);
+    }
+
+    public function test_weighing_management_view_is_available_without_database_queries(): void
+    {
+        $this->get('/gestion-pesadas')
+            ->assertOk()
+            ->assertSee('Gestión de pesadas')
+            ->assertSee('ticketSearchInput', false)
+            ->assertSee('selectedTicketPanel', false)
+            ->assertSee(asset('js/gestion-pesadas.js'), false);
     }
 
     public function test_customer_history_view_is_available_without_database_queries(): void

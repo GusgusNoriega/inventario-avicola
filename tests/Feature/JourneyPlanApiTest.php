@@ -126,7 +126,8 @@ class JourneyPlanApiTest extends TestCase
             ->assertJsonPath('data.trucks.0.plate', 'ABC-123')
             ->assertJsonPath('data.trucks.1.provider_name', 'PROVEEDOR CON DOS CAMIONES')
             ->assertJsonPath('data.trucks.1.plate', 'XYZ-999')
-            ->assertJsonPath('data.trucks.0.prices.POLLO_VIVO', 7.5);
+            ->assertJsonMissingPath('data.trucks.0.prices')
+            ->assertJsonMissingPath('data.trucks.1.prices');
     }
 
     public function test_selected_trucks_and_global_prices_are_persisted(): void
@@ -145,7 +146,7 @@ class JourneyPlanApiTest extends TestCase
             ->assertJsonPath('data.selected_count', 1)
             ->assertJsonPath('data.trucks.0.selected', false)
             ->assertJsonPath('data.trucks.1.selected', true)
-            ->assertJsonPath('data.trucks.1.prices.POLLO_VIVO', 7.5)
+            ->assertJsonMissingPath('data.trucks.1.prices')
             ->assertJsonPath('data.global_prices.POLLO_VIVO', 7.75)
             ->assertJsonPath('data.global_prices.POLLO_PELADO', 8.75)
             ->assertJsonPath('data.global_prices.POLLO_BENEFICIADO', 9.75);
