@@ -55,6 +55,7 @@ class CustomerHistoryController extends Controller
         $ticketCount = (clone $ticketQuery)->count();
         $ticketIds = (clone $ticketQuery)->select('tickets_despacho.id');
         $totals = DB::table('pesadas as p')
+            ->join('tickets_despacho as td', 'td.id', '=', 'p.ticket_id')
             ->leftJoin('ticket_precios as tp', function ($join): void {
                 $join->on('tp.ticket_id', '=', 'p.ticket_id')
                     ->on('tp.tipo_pollo_id', '=', 'p.tipo_pollo_id');
@@ -64,8 +65,14 @@ class CustomerHistoryController extends Controller
             ->selectRaw('COUNT(p.id) as registros')
             ->selectRaw('COALESCE(SUM(p.cantidad_javas), 0) as javas')
             ->selectRaw('COALESCE(SUM(p.cantidad_aves), 0) as aves')
-            ->selectRaw('COALESCE(SUM(p.peso_neto_kg), 0) as peso_neto_kg')
-            ->selectRaw('COALESCE(SUM(p.peso_neto_kg * tp.precio_kg), 0) as importe')
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN td.tipo_operacion = ? THEN -p.peso_neto_kg ELSE p.peso_neto_kg END), 0) as peso_neto_kg',
+                [TicketDespacho::OPERATION_RETURN]
+            )
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN td.tipo_operacion = ? THEN -(p.peso_neto_kg * tp.precio_kg) ELSE p.peso_neto_kg * tp.precio_kg END), 0) as importe',
+                [TicketDespacho::OPERATION_RETURN]
+            )
             ->first();
 
         $tickets = $ticketQuery
@@ -128,11 +135,12 @@ class CustomerHistoryController extends Controller
      */
     private function formatTicket(TicketDespacho $ticket): array
     {
+        $movementSign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
-        $records = $ticket->pesadas->map(function (Pesada $record) use ($prices): array {
+        $records = $ticket->pesadas->map(function (Pesada $record) use ($movementSign, $prices): array {
             $price = $prices->get($record->tipo_pollo_id);
             $amount = $record->estado === Pesada::STATUS_ACTIVE && $price
-                ? (float) $record->peso_neto_kg * (float) $price->precio_kg
+                ? $movementSign * (float) $record->peso_neto_kg * (float) $price->precio_kg
                 : 0;
 
             return [
@@ -150,6 +158,7 @@ class CustomerHistoryController extends Controller
                 'gross_weight_kg' => (float) $record->peso_bruto_kg,
                 'tare_weight_kg' => (float) $record->tara_total_kg,
                 'net_weight_kg' => (float) $record->peso_neto_kg,
+                'movement_net_weight_kg' => round($movementSign * (float) $record->peso_neto_kg, 3),
                 'price_kg' => $price ? (float) $price->precio_kg : null,
                 'amount' => round($amount, 2),
                 'weighed_at' => $record->pesada_at?->toISOString(),
@@ -171,7 +180,7 @@ class CustomerHistoryController extends Controller
                 'records' => $activeRecords->count(),
                 'cages' => $activeRecords->sum('cages'),
                 'birds' => $activeRecords->sum('birds'),
-                'net_weight_kg' => round((float) $activeRecords->sum('net_weight_kg'), 3),
+                'net_weight_kg' => round((float) $activeRecords->sum('movement_net_weight_kg'), 3),
                 'amount' => round((float) $activeRecords->sum('amount'), 2),
             ],
             'prices' => $ticket->precios->map(fn ($price) => [

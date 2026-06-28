@@ -4459,6 +4459,11 @@ body.customer-history-page {
   color: #ffb3b3;
 }
 
+.customer-ticket-total strong.customer-return-value,
+.customer-return-value {
+  color: #ff8f8f;
+}
+
 .customer-operation-dispatch {
   border-color: rgba(43, 199, 255, 0.35);
   background: rgba(43, 199, 255, 0.1);

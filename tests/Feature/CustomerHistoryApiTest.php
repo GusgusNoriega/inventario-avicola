@@ -139,13 +139,41 @@ class CustomerHistoryApiTest extends TestCase
         $this->getJson("/api/v1/clientes/{$this->customerId}/historial")
             ->assertOk()
             ->assertJsonPath('data.summary.tickets', 1)
-            ->assertJsonPath('data.summary.amount', 85)
+            ->assertJsonPath('data.summary.net_weight_kg', -10)
+            ->assertJsonPath('data.summary.amount', -85)
             ->assertJsonPath('data.tickets.0.code', 'D-20260620-001')
             ->assertJsonPath('data.tickets.0.operation_type', TicketDespacho::OPERATION_RETURN)
+            ->assertJsonPath('data.tickets.0.summary.net_weight_kg', -10)
+            ->assertJsonPath('data.tickets.0.summary.amount', -85)
             ->assertJsonPath('data.tickets.0.records.0.chicken_type.code', TipoPollo::CHICKEN_DEAD)
             ->assertJsonPath('data.tickets.0.records.0.chicken_condition', Pesada::CHICKEN_CONDITION_DEAD)
+            ->assertJsonPath('data.tickets.0.records.0.net_weight_kg', 10)
+            ->assertJsonPath('data.tickets.0.records.0.movement_net_weight_kg', -10)
             ->assertJsonPath('data.tickets.0.records.0.price_kg', 8.5)
-            ->assertJsonPath('data.tickets.0.records.0.amount', 85);
+            ->assertJsonPath('data.tickets.0.records.0.amount', -85);
+    }
+
+    public function test_customer_history_subtracts_returns_from_weight_and_amount_totals(): void
+    {
+        $this->createTicket('T-20260620-001', '2026-06-20', 100, 8.5);
+        $this->createTicket(
+            'D-20260621-001',
+            '2026-06-21',
+            10,
+            8.5,
+            TicketDespacho::OPERATION_RETURN,
+            Pesada::CHICKEN_CONDITION_DEAD
+        );
+
+        $this->getJson("/api/v1/clientes/{$this->customerId}/historial")
+            ->assertOk()
+            ->assertJsonPath('data.summary.tickets', 2)
+            ->assertJsonPath('data.summary.records', 2)
+            ->assertJsonPath('data.summary.net_weight_kg', 90)
+            ->assertJsonPath('data.summary.amount', 765)
+            ->assertJsonPath('data.tickets.0.operation_type', TicketDespacho::OPERATION_RETURN)
+            ->assertJsonPath('data.tickets.0.summary.net_weight_kg', -10)
+            ->assertJsonPath('data.tickets.0.summary.amount', -85);
     }
 
     public function test_customer_history_filters_by_ticket_and_operating_date(): void

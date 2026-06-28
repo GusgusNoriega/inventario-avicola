@@ -136,9 +136,11 @@ function renderSummary(summary) {
 
 function renderTicket(ticket) {
   const operationType = normalizeCode(ticket.operation_type);
-  const operationClass = operationType === "DEVOLUCION"
+  const isReturn = operationType === "DEVOLUCION";
+  const operationClass = isReturn
     ? "customer-operation-return"
     : "customer-operation-dispatch";
+  const returnValueClass = isReturn ? "customer-return-value" : "";
   const records = ticket.records.length
     ? ticket.records.map((record) => {
         const condition = normalizeCode(record.chicken_condition);
@@ -163,9 +165,9 @@ function renderTicket(ticket) {
           <td>${formatNumber(record.birds)}</td>
           <td>${formatWeight(record.gross_weight_kg)}</td>
           <td>${formatWeight(record.tare_weight_kg)}</td>
-          <td><strong>${formatWeight(record.net_weight_kg)}</strong></td>
+          <td><strong class="${returnValueClass}">${formatWeight(record.movement_net_weight_kg ?? record.net_weight_kg)}</strong></td>
           <td>${record.price_kg === null ? "—" : formatCurrency(record.price_kg)}</td>
-          <td><strong>${formatCurrency(record.amount)}</strong></td>
+          <td><strong class="${returnValueClass}">${formatCurrency(record.amount)}</strong></td>
           <td><span class="customer-status customer-status-${escapeHtml(record.status.toLowerCase())}">${escapeHtml(record.status)}</span></td>
         </tr>
       `;
@@ -195,14 +197,14 @@ function renderTicket(ticket) {
         </div>
         <div class="customer-ticket-total">
           <span>Total del ticket</span>
-          <strong>${formatCurrency(ticket.summary.amount)}</strong>
+          <strong class="${returnValueClass}">${formatCurrency(ticket.summary.amount)}</strong>
         </div>
       </header>
       <div class="customer-ticket-summary">
         <span><strong>${formatNumber(ticket.summary.records)}</strong> registros</span>
         <span><strong>${formatNumber(ticket.summary.cages)}</strong> javas</span>
         <span><strong>${formatNumber(ticket.summary.birds)}</strong> aves</span>
-        <span><strong>${formatWeight(ticket.summary.net_weight_kg)}</strong> netos</span>
+        <span><strong class="${returnValueClass}">${formatWeight(ticket.summary.net_weight_kg)}</strong> netos</span>
       </div>
       <div class="customer-ticket-prices">${prices}</div>
       <div class="customer-history-table-wrap">
