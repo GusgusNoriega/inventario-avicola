@@ -35,7 +35,7 @@ class StoreDispatchTicketRequest extends FormRequest
             'weighings' => ['required', 'array', 'min:1', 'max:500'],
             'weighings.*' => [
                 'required',
-                'array:local_id,chicken_type_code,chicken_condition,cage_type_code,origin,weight_source,birds_per_cage,cage_count,read_weight_kg,gross_weight_kg,weighed_at',
+                'array:local_id,chicken_type_code,chicken_condition,chicken_sex,cage_type_code,origin,weight_source,birds_per_cage,cage_count,read_weight_kg,gross_weight_kg,weighed_at',
             ],
             'weighings.*.local_id' => ['required', 'integer', 'min:1', 'distinct'],
             'weighings.*.chicken_type_code' => [
@@ -52,6 +52,10 @@ class StoreDispatchTicketRequest extends FormRequest
                     Pesada::CHICKEN_CONDITION_LIVE,
                     Pesada::CHICKEN_CONDITION_DEAD,
                 ]),
+            ],
+            'weighings.*.chicken_sex' => [
+                'required',
+                Rule::in([Pesada::SEX_MALE, Pesada::SEX_FEMALE]),
             ],
             'weighings.*.cage_type_code' => ['required', 'string', 'max:40'],
             'weighings.*.origin' => [
@@ -121,6 +125,10 @@ class StoreDispatchTicketRequest extends FormRequest
                     trim((string) ($weighing['chicken_condition'] ?? Pesada::CHICKEN_CONDITION_LIVE)),
                     'UTF-8'
                 );
+                $sex = mb_strtoupper(
+                    trim((string) ($weighing['chicken_sex'] ?? '')),
+                    'UTF-8'
+                );
 
                 return [
                     ...$weighing,
@@ -133,6 +141,7 @@ class StoreDispatchTicketRequest extends FormRequest
                             'UTF-8'
                         ),
                     'chicken_condition' => $condition,
+                    'chicken_sex' => $sex,
                     'cage_type_code' => mb_strtoupper(
                         trim((string) ($weighing['cage_type_code'] ?? '')),
                         'UTF-8'

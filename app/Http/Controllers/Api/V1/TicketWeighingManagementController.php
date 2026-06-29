@@ -116,6 +116,10 @@ class TicketWeighingManagementController extends Controller
                 Pesada::CHICKEN_CONDITION_LIVE,
                 Pesada::CHICKEN_CONDITION_DEAD,
             ])],
+            'chicken_sex' => ['required', Rule::in([
+                Pesada::SEX_MALE,
+                Pesada::SEX_FEMALE,
+            ])],
             'cage_type_code' => ['required', 'string', 'max:40'],
             'weight_source' => ['required', Rule::in(['MANUAL', 'BALANZA_1', 'BALANZA_2', 'BALANZA'])],
             'birds_per_cage' => ['required', 'integer', 'min:1', 'max:1000'],
@@ -197,6 +201,7 @@ class TicketWeighingManagementController extends Controller
             $record->update([
                 'tipo_pollo_id' => $type->id,
                 'condicion_pollo' => $condition,
+                'sexo' => $validated['chicken_sex'],
                 'tipo_java_id' => $cageType->id,
                 'origen_peso' => $validated['weight_source'],
                 'aves_por_java' => $birdsPerCage,
@@ -352,6 +357,7 @@ class TicketWeighingManagementController extends Controller
                     'name' => $record->tipoPollo?->nombre,
                 ],
                 'chicken_condition' => $record->condicion_pollo,
+                'chicken_sex' => $record->sexo,
                 'cage_type' => [
                     'code' => $record->tipoJava?->codigo,
                     'name' => $record->tipoJava?->nombre,
@@ -463,6 +469,7 @@ class TicketWeighingManagementController extends Controller
             'numero' => $record->numero,
             'tipo_pollo_id' => $record->tipo_pollo_id,
             'condicion_pollo' => $record->condicion_pollo,
+            'sexo' => $record->sexo,
             'tipo_java_id' => $record->tipo_java_id,
             'origen_peso' => $record->origen_peso,
             'aves_por_java' => $record->aves_por_java,

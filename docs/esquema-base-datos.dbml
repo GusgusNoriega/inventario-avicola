@@ -50,6 +50,11 @@ Enum estado_pesada {
   ANULADA
 }
 
+Enum sexo_pollo {
+  MACHO
+  HEMBRA
+}
+
 Enum tipo_movimiento {
   ENTRADA
   SALIDA
@@ -501,6 +506,8 @@ Table pesadas {
   ticket_id bigint [not null, ref: > tickets_despacho.id]
   numero bigint [not null]
   tipo_pollo_id bigint [not null, ref: > tipos_pollo.id]
+  condicion_pollo varchar(20) [not null, default: 'VIVO']
+  sexo sexo_pollo [not null, default: 'MACHO']
   tipo_java_id bigint [not null, ref: > tipos_java.id]
   lectura_balanza_id bigint [ref: - lecturas_balanza.id]
   proveedor_origen_id bigint [ref: > terceros.id]
@@ -532,6 +539,7 @@ Table pesadas {
     (proveedor_origen_id, pesada_at)
     (almacen_origen_id, pesada_at)
     (tipo_pollo_id, pesada_at)
+    (sexo, pesada_at)
   }
 }
 

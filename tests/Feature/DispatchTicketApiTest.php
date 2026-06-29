@@ -161,6 +161,7 @@ class DispatchTicketApiTest extends TestCase
             'proveedor_origen_id' => $this->providerId,
             'vehiculo_id' => $this->vehicleId,
             'placa_snapshot' => 'ABC-123',
+            'sexo' => Pesada::SEX_MALE,
             'cantidad_aves' => 20,
             'tara_total_kg' => 14,
             'peso_neto_kg' => 16,
@@ -168,6 +169,7 @@ class DispatchTicketApiTest extends TestCase
         $this->assertDatabaseHas('pesadas', [
             'numero' => 2,
             'almacen_origen_id' => $this->warehouseId,
+            'sexo' => Pesada::SEX_FEMALE,
             'cantidad_aves' => 12,
             'tara_total_kg' => 6.9,
             'peso_neto_kg' => 13.1,
@@ -203,6 +205,18 @@ class DispatchTicketApiTest extends TestCase
         $this->postJson('/api/v1/operacion/tickets', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('weighings.0.cage_count');
+
+        $this->assertDatabaseCount('pesadas', 0);
+    }
+
+    public function test_weighing_rejects_an_invalid_chicken_sex(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][0]['chicken_sex'] = 'OTRO';
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.chicken_sex');
 
         $this->assertDatabaseCount('pesadas', 0);
     }
@@ -560,6 +574,7 @@ class DispatchTicketApiTest extends TestCase
                 [
                     'local_id' => 1,
                     'chicken_type_code' => TipoPollo::CHICKEN_LIVE,
+                    'chicken_sex' => Pesada::SEX_MALE,
                     'cage_type_code' => 'JAVA_700',
                     'origin' => [
                         'type' => 'PROVEEDOR',
@@ -578,6 +593,7 @@ class DispatchTicketApiTest extends TestCase
                 [
                     'local_id' => 2,
                     'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
+                    'chicken_sex' => Pesada::SEX_FEMALE,
                     'cage_type_code' => 'JAVA_690',
                     'origin' => [
                         'type' => 'ALMACEN',
@@ -649,6 +665,7 @@ class DispatchTicketApiTest extends TestCase
                     'local_id' => 1,
                     'chicken_type_code' => TipoPollo::CHICKEN_LIVE,
                     'chicken_condition' => Pesada::CHICKEN_CONDITION_LIVE,
+                    'chicken_sex' => Pesada::SEX_MALE,
                     'cage_type_code' => 'JAVA_700',
                     'weight_source' => 'BALANZA_1',
                     'birds_per_cage' => 10,
@@ -661,6 +678,7 @@ class DispatchTicketApiTest extends TestCase
                     'local_id' => 2,
                     'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
                     'chicken_condition' => Pesada::CHICKEN_CONDITION_DEAD,
+                    'chicken_sex' => Pesada::SEX_FEMALE,
                     'cage_type_code' => 'JAVA_700',
                     'weight_source' => 'MANUAL',
                     'birds_per_cage' => 15,

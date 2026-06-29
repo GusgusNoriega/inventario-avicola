@@ -20,6 +20,7 @@ const elements = {
   chickenType: document.getElementById("editChickenType"),
   chickenConditionField: document.getElementById("editChickenConditionField"),
   chickenCondition: document.getElementById("editChickenCondition"),
+  chickenSexButtons: document.querySelectorAll("[data-management-sex]"),
   birdsPerCage: document.getElementById("editBirdsPerCage"),
   cages: document.getElementById("editCages"),
   cageType: document.getElementById("editCageType"),
@@ -40,6 +41,7 @@ const state = {
   selectedTicket: null,
   catalogs: { chicken_types: [], cage_types: [] },
   editingWeighing: null,
+  editingChickenSex: "MACHO",
   deletingWeighing: null,
   searchTimer: null,
   searching: false,
@@ -90,6 +92,40 @@ function formatDate(value, includeTime = false) {
 
 function operationLabel(value) {
   return value === "DEVOLUCION" ? "Devolución" : "Despacho";
+}
+
+function normalizeChickenSex(value) {
+  return String(value || "").toUpperCase() === "HEMBRA" ? "HEMBRA" : "MACHO";
+}
+
+function renderChickenSexButtons() {
+  const selectedSex = normalizeChickenSex(state.editingChickenSex);
+  elements.chickenSexButtons.forEach((button) => {
+    const selected = button.dataset.managementSex === selectedSex;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
+function selectChickenSex(value) {
+  state.editingChickenSex = normalizeChickenSex(value);
+  renderChickenSexButtons();
+}
+
+function applySuggestedChickenSex() {
+  const birdsPerCage = Number(elements.birdsPerCage.value);
+  if (birdsPerCage === 7) {
+    selectChickenSex("MACHO");
+  } else if (birdsPerCage === 9) {
+    selectChickenSex("HEMBRA");
+  }
+}
+
+function chickenSexBadge(value) {
+  const sex = normalizeChickenSex(value);
+  const female = sex === "HEMBRA";
+  const label = female ? "Hembra" : "Macho";
+  return `<span class="chicken-sex-badge chicken-sex-${female ? "hembra" : "macho"}" title="${label}" aria-label="${label}">${female ? "H" : "M"}</span>`;
 }
 
 function getPrintedTypeCode(weighing, operationType) {
@@ -220,6 +256,7 @@ function renderSelectedTicket() {
           <span class="customer-chicken-condition${weighing.chicken_condition === "MUERTO" ? " customer-chicken-condition-muerto" : ""}">${escapeHtml(weighing.chicken_condition || "VIVO")}</span>
         </div>
       </td>
+      <td>${chickenSexBadge(weighing.chicken_sex)}</td>
       <td>${escapeHtml(weighing.origin || "--")}<small>${weighing.plate ? `<br>${escapeHtml(weighing.plate)}` : ""}</small></td>
       <td>${escapeHtml(weighing.cage_type?.name || "--")}</td>
       <td>${formatNumber(weighing.cages)}</td>
@@ -272,10 +309,10 @@ function renderSelectedTicket() {
         <table class="customer-history-table weighing-records-table">
           <thead>
             <tr>
-              <th>N.º</th><th>Tipo</th><th>Origen</th><th>Java</th><th>Javas</th><th>Aves/java</th><th>Aves</th><th>Bruto</th><th>Tara</th><th>Neto</th><th>Fecha</th><th>Acciones</th>
+              <th>N.º</th><th>Tipo</th><th>Sexo</th><th>Origen</th><th>Java</th><th>Javas</th><th>Aves/java</th><th>Aves</th><th>Bruto</th><th>Tara</th><th>Neto</th><th>Fecha</th><th>Acciones</th>
             </tr>
           </thead>
-          <tbody>${rows || `<tr><td colspan="12" class="customer-history-empty-cell">Este ticket ya no tiene pesadas activas.</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="13" class="customer-history-empty-cell">Este ticket ya no tiene pesadas activas.</td></tr>`}</tbody>
         </table>
       </div>
     </article>
@@ -383,6 +420,8 @@ function openEditModal(weighingId) {
   elements.chickenConditionField.hidden = !isReturn;
   elements.chickenType.value = weighing.chicken_type?.code || "";
   elements.chickenCondition.value = weighing.chicken_condition || "VIVO";
+  state.editingChickenSex = normalizeChickenSex(weighing.chicken_sex);
+  renderChickenSexButtons();
   elements.birdsPerCage.value = weighing.birds_per_cage;
   elements.cages.value = weighing.cages;
   elements.cageType.value = weighing.cage_type?.code || "";
@@ -402,6 +441,7 @@ function closeEditModal() {
     return;
   }
   state.editingWeighing = null;
+  state.editingChickenSex = "MACHO";
   elements.editModal.hidden = true;
   setModalMessage(elements.editMessage, "");
 }
@@ -419,6 +459,7 @@ async function saveWeighing(event) {
   const payload = {
     chicken_type_code: elements.chickenType.value || state.editingWeighing.chicken_type?.code,
     chicken_condition: elements.chickenCondition.value,
+    chicken_sex: normalizeChickenSex(state.editingChickenSex),
     cage_type_code: elements.cageType.value,
     weight_source: elements.weightSource.value,
     birds_per_cage: Number(elements.birdsPerCage.value),
@@ -539,10 +580,14 @@ function bindEvents() {
     }
   });
   elements.editForm.addEventListener("submit", saveWeighing);
+  elements.chickenSexButtons.forEach((button) => {
+    button.addEventListener("click", () => selectChickenSex(button.dataset.managementSex));
+  });
   elements.editClose.addEventListener("click", closeEditModal);
   elements.editCancel.addEventListener("click", closeEditModal);
   elements.deleteForm.addEventListener("submit", deleteWeighing);
   elements.deleteCancel.addEventListener("click", closeDeleteModal);
+  elements.birdsPerCage.addEventListener("input", applySuggestedChickenSex);
   [elements.cages, elements.birdsPerCage, elements.grossWeight, elements.cageType]
     .forEach((control) => control.addEventListener("input", updateWeightPreview));
   elements.editModal.addEventListener("click", (event) => {

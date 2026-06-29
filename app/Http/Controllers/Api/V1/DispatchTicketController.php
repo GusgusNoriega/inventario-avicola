@@ -65,6 +65,7 @@ class DispatchTicketController extends Controller
                     'id' => $weighing->id,
                     'number' => $weighing->numero,
                     'chicken_condition' => $weighing->condicion_pollo,
+                    'chicken_sex' => $weighing->sexo,
                 ])
                 ->values(),
         ];

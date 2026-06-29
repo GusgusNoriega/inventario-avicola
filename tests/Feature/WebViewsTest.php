@@ -46,6 +46,43 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('response.data?.prices', $javascript);
     }
 
+    public function test_operation_weighing_has_an_exclusive_touch_sex_selector(): void
+    {
+        $view = file_get_contents(resource_path('views/operacion.blade.php'));
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($view);
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('data-sex="macho"', $view);
+        $this->assertStringContainsString('data-sex="hembra"', $view);
+        $this->assertStringContainsString('aria-pressed="true"', $view);
+        $this->assertStringContainsString('function getSuggestedChickenSex', $javascript);
+        $this->assertStringContainsString('birdCount === 7', $javascript);
+        $this->assertStringContainsString('birdCount === 9', $javascript);
+        $this->assertStringContainsString('chicken_sex: getChickenSexMeta(cage.chickenSex).apiCode', $javascript);
+        $this->assertStringContainsString('class="truck-head-sex">Sexo', $javascript);
+        $this->assertStringContainsString('chicken-sex-badge', $javascript);
+    }
+
+    public function test_all_operation_numeric_fields_use_the_touch_keypad(): void
+    {
+        $view = file_get_contents(resource_path('views/operacion.blade.php'));
+
+        $this->assertIsString($view);
+        preg_match_all('/<input\\b[^>]*\\btype="number"[^>]*>/i', $view, $matches);
+        $this->assertNotEmpty($matches[0]);
+
+        foreach ($matches[0] as $numericInput) {
+            $this->assertStringContainsString('readonly', $numericInput);
+            $this->assertStringContainsString('inputmode="none"', $numericInput);
+            $this->assertStringContainsString('data-keypad-label=', $numericInput);
+        }
+
+        $this->assertStringContainsString('id="numericPadMessage"', $view);
+        $this->assertStringNotContainsString('touch-number-open', $view);
+        $this->assertStringNotContainsString('data-keypad-target=', $view);
+    }
+
     public function test_operation_ticket_type_button_switches_between_dispatch_and_return(): void
     {
         $javascript = file_get_contents(public_path('js/app.js'));

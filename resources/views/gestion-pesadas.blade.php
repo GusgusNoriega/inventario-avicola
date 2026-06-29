@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión de pesadas | Sistema Pollos</title>
-  <link rel="stylesheet" href="{{ asset('css/style.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
 </head>
 <body class="customer-history-page weighing-management-page">
   <main class="customer-history-view weighing-management-view" data-weighing-management>
@@ -72,6 +72,13 @@
             <option value="MUERTO">Pollo muerto</option>
           </select>
         </label>
+        <fieldset class="sex-selector management-sex-selector" aria-label="Sexo de los pollos">
+          <legend>Sexo</legend>
+          <div class="sex-selector-buttons">
+            <button class="sex-btn sex-btn-male is-active" type="button" data-management-sex="MACHO" aria-pressed="true">Macho</button>
+            <button class="sex-btn sex-btn-female" type="button" data-management-sex="HEMBRA" aria-pressed="false">Hembra</button>
+          </div>
+        </fieldset>
         <label class="field">
           Aves por java (o total sin javas)
           <input id="editBirdsPerCage" type="number" min="1" max="1000" step="1" required>
@@ -134,6 +141,6 @@
     </div>
   </div>
 
-  <script type="module" src="{{ asset('js/gestion-pesadas.js') }}"></script>
+  <script type="module" src="{{ asset('js/gestion-pesadas.js') }}?v={{ filemtime(public_path('js/gestion-pesadas.js')) }}"></script>
 </body>
 </html>

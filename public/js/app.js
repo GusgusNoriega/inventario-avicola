@@ -84,6 +84,12 @@ const RETURN_CONDITIONS = [
   { id: "muerto", apiCode: "MUERTO", label: "Pollo muerto", shortLabel: "Muerto", tagClass: "tag-pollo-muerto" }
 ];
 const VALID_RETURN_CONDITIONS = new Set(RETURN_CONDITIONS.map((condition) => condition.id));
+const CHICKEN_SEXES = [
+  { id: "macho", apiCode: "MACHO", label: "Macho" },
+  { id: "hembra", apiCode: "HEMBRA", label: "Hembra" }
+];
+const DEFAULT_CHICKEN_SEX = CHICKEN_SEXES[0].id;
+const VALID_CHICKEN_SEXES = new Set(CHICKEN_SEXES.map((sex) => sex.id));
 
 const LEGACY_TYPE_MAP = {
   vivo: "pollo_vivo",
@@ -214,6 +220,7 @@ const elements = {
   addWeighingBtn: document.getElementById("addWeighingBtn"),
   mobileTabs: document.querySelectorAll("[data-mobile-panel-target]"),
   typeButtons: document.querySelectorAll(".type-btn"),
+  sexButtons: document.querySelectorAll("[data-sex]"),
   truckSelect: document.getElementById("truckSelect"),
   selectProviderBtn: document.getElementById("selectProviderBtn"),
   selectedProviderName: document.getElementById("selectedProviderName"),
@@ -271,6 +278,7 @@ const elements = {
   editType: document.getElementById("editType"),
   editBirdCount: document.getElementById("editBirdCount"),
   editJavaCount: document.getElementById("editJavaCount"),
+  editSexButtons: document.querySelectorAll("[data-edit-sex]"),
   editCrateType: document.getElementById("editCrateType"),
   editWeight: document.getElementById("editWeight"),
   editWeightSource: document.getElementById("editWeightSource"),
@@ -298,6 +306,7 @@ const elements = {
   numericPadModal: document.getElementById("numericPadModal"),
   numericPadTitle: document.getElementById("numericPadTitle"),
   numericPadValue: document.getElementById("numericPadValue"),
+  numericPadMessage: document.getElementById("numericPadMessage"),
   numericPadDotBtn: document.getElementById("numericPadDotBtn"),
   numericPadCloseBtn: document.getElementById("numericPadCloseBtn"),
   numericPadBackBtn: document.getElementById("numericPadBackBtn"),
@@ -367,6 +376,7 @@ let clientModalTruckId = null;
 let clientModalMode = "destination";
 let providerPickerContext = null;
 let editSelectedOrigin = null;
+let editingChickenSex = DEFAULT_CHICKEN_SEX;
 let scaleTextDecoder = new TextDecoder("utf-8");
 let scaleConnections = { 1: null, 2: null };
 let scaleRenderFrames = { 1: null, 2: null };
@@ -379,7 +389,8 @@ let keypadContext = {
   targetInput: null,
   value: "",
   allowDecimal: true,
-  fieldLabel: ""
+  fieldLabel: "",
+  validationMessage: ""
 };
 let touchSelectContext = {
   targetSelect: null,
@@ -610,6 +621,28 @@ function normalizeType(type) {
 function getTypeMeta(typeId) {
   const normalizedType = normalizeType(typeId);
   return DISPATCH_CHICKEN_TYPES.find((type) => type.id === normalizedType) || DISPATCH_CHICKEN_TYPES[0];
+}
+
+function normalizeChickenSex(value, fallback = DEFAULT_CHICKEN_SEX) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return VALID_CHICKEN_SEXES.has(normalized) ? normalized : fallback;
+}
+
+function getChickenSexMeta(value) {
+  const normalized = normalizeChickenSex(value);
+  return CHICKEN_SEXES.find((sex) => sex.id === normalized) || CHICKEN_SEXES[0];
+}
+
+function getSuggestedChickenSex(birdsPerJava, fallback = DEFAULT_CHICKEN_SEX) {
+  const birdCount = normalizeBirdCountPerJava(birdsPerJava, 0);
+  if (birdCount === 9) {
+    return "hembra";
+  }
+  if (birdCount === 7) {
+    return "macho";
+  }
+
+  return normalizeChickenSex(fallback);
 }
 
 function readPeopleDirectoryClients() {
@@ -1284,6 +1317,10 @@ function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS
     chickenCondition: ticketOperation === TICKET_OPERATIONS.RETURN
       ? normalizeReturnCondition(cage?.chickenCondition || cage?.condicionPollo || cage?.condicion_pollo || cage?.tipo)
       : "vivo",
+    chickenSex: normalizeChickenSex(
+      cage?.chickenSex || cage?.sexo,
+      getSuggestedChickenSex(birdsPerJava)
+    ),
     cantidadAvesPorJava: birdsPerJava,
     cantidadPollosPorJava: birdsPerJava,
     cantidadAves: birdsTotal,
@@ -1316,6 +1353,7 @@ function createDefaultState() {
     entryDefaults: {
       birdCountPerJava: 1,
       javaCount: 1,
+      chickenSex: DEFAULT_CHICKEN_SEX,
       crateTypeId: DEFAULT_CRATE_TYPE_ID,
       originId: null,
       journeyKey: "",
@@ -1476,7 +1514,8 @@ function resetKeypadContext() {
     targetInput: null,
     value: "",
     allowDecimal: true,
-    fieldLabel: ""
+    fieldLabel: "",
+    validationMessage: ""
   };
 }
 
@@ -1484,10 +1523,38 @@ function renderNumericPad() {
   elements.numericPadTitle.textContent = keypadContext.fieldLabel || "Campo numérico";
   elements.numericPadValue.textContent = keypadContext.value || "0";
   elements.numericPadDotBtn.disabled = !keypadContext.allowDecimal;
+  elements.numericPadMessage.textContent = keypadContext.validationMessage;
+}
+
+function clearNumericPadValidation() {
+  keypadContext.validationMessage = "";
+}
+
+function validateNumericPadValue(input, rawValue) {
+  if (!rawValue) {
+    return input.required ? "Este valor es obligatorio." : "";
+  }
+
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) {
+    return "Ingresa un número válido.";
+  }
+
+  const min = Number(input.getAttribute("min"));
+  if (input.hasAttribute("min") && Number.isFinite(min) && value < min) {
+    return `El valor mínimo es ${min}.`;
+  }
+
+  const max = Number(input.getAttribute("max"));
+  if (input.hasAttribute("max") && Number.isFinite(max) && value > max) {
+    return `El valor máximo es ${max}.`;
+  }
+
+  return "";
 }
 
 function openNumericPadForInput(input) {
-  if (!input) {
+  if (!input || input.disabled) {
     return;
   }
 
@@ -1501,13 +1568,18 @@ function openNumericPadForInput(input) {
   keypadContext.allowDecimal = inputAllowsDecimal(input);
   keypadContext.fieldLabel = getKeypadFieldLabel(input);
   keypadContext.value = sanitizeNumericBuffer(input.value, keypadContext.allowDecimal);
+  keypadContext.validationMessage = "";
 
   renderNumericPad();
   elements.numericPadModal.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  document.body.classList.add("numeric-pad-open");
 }
 
 function closeNumericPad() {
+  keypadContext.targetInput?.setAttribute("aria-expanded", "false");
   elements.numericPadModal.hidden = true;
+  document.body.classList.remove("numeric-pad-open");
   resetKeypadContext();
 }
 
@@ -1520,12 +1592,14 @@ function handleNumericKeyPress(key) {
 
   if (key === "clear") {
     keypadContext.value = "";
+    clearNumericPadValidation();
     renderNumericPad();
     return;
   }
 
   if (key === "backspace") {
     keypadContext.value = value.slice(0, -1);
+    clearNumericPadValidation();
     renderNumericPad();
     return;
   }
@@ -1536,6 +1610,7 @@ function handleNumericKeyPress(key) {
     }
 
     keypadContext.value = value ? `${value}.` : "0.";
+    clearNumericPadValidation();
     renderNumericPad();
     return;
   }
@@ -1549,6 +1624,7 @@ function handleNumericKeyPress(key) {
   }
 
   keypadContext.value = `${value}${key}`.slice(0, 14);
+  clearNumericPadValidation();
   renderNumericPad();
 }
 
@@ -1558,10 +1634,18 @@ function confirmNumericPadValue() {
     return;
   }
 
+  const targetInput = keypadContext.targetInput;
   const nextValue = keypadContext.value;
-  keypadContext.targetInput.value = nextValue;
-  keypadContext.targetInput.dispatchEvent(new Event("input", { bubbles: true }));
-  keypadContext.targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+  const validationMessage = validateNumericPadValue(targetInput, nextValue);
+  if (validationMessage) {
+    keypadContext.validationMessage = validationMessage;
+    renderNumericPad();
+    return;
+  }
+
+  targetInput.value = nextValue;
+  targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+  targetInput.dispatchEvent(new Event("change", { bubbles: true }));
 
   closeNumericPad();
 }
@@ -1570,13 +1654,21 @@ function bindNumericInputs() {
   const numericInputs = document.querySelectorAll('input[type="number"]');
 
   numericInputs.forEach((input) => {
+    if (input.dataset.keypadBound === "true") {
+      return;
+    }
+
+    input.dataset.keypadBound = "true";
     input.readOnly = true;
     input.setAttribute("inputmode", "none");
     input.classList.add("touch-number-control");
     input.setAttribute("role", "button");
     input.setAttribute("aria-haspopup", "dialog");
+    input.setAttribute("aria-controls", "numericPadModal");
+    input.setAttribute("aria-expanded", "false");
 
     let tapState = null;
+    let suppressNextClick = false;
 
     if (window.PointerEvent) {
       input.addEventListener("pointerdown", (event) => {
@@ -1584,6 +1676,7 @@ function bindNumericInputs() {
           return;
         }
 
+        suppressNextClick = false;
         tapState = {
           pointerId: event.pointerId,
           startX: event.clientX,
@@ -1607,6 +1700,7 @@ function bindNumericInputs() {
 
       input.addEventListener("pointercancel", () => {
         tapState = null;
+        suppressNextClick = true;
       });
 
       input.addEventListener("pointerup", (event) => {
@@ -1619,19 +1713,18 @@ function bindNumericInputs() {
         const maxHoldMs = isTouchLikePointer ? TOUCH_TAP_MAX_HOLD_MS : Number.POSITIVE_INFINITY;
         const shouldOpen = !tapState.moved && holdMs <= maxHoldMs;
         tapState = null;
-
-        if (!shouldOpen) {
-          return;
-        }
-
-        event.preventDefault();
-        openNumericPadForInput(input);
-      });
-    } else {
-      input.addEventListener("click", () => {
-        openNumericPadForInput(input);
+        suppressNextClick = !shouldOpen;
       });
     }
+
+    input.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      openNumericPadForInput(input);
+    });
 
     input.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") {
@@ -1642,6 +1735,7 @@ function bindNumericInputs() {
       openNumericPadForInput(input);
     });
   });
+
 }
 
 function getTouchSelectFieldLabel(select) {
@@ -1902,6 +1996,10 @@ function loadState() {
     const entryDefaults = {
       birdCountPerJava: normalizeBirdCountPerJava(legacyBirdCountPerJava, fallback.entryDefaults.birdCountPerJava),
       javaCount: normalizeJavaCount(parsedEntryDefaults.javaCount ?? parsed.cantidadJavasFija, 1),
+      chickenSex: normalizeChickenSex(
+        parsedEntryDefaults.chickenSex ?? parsedEntryDefaults.sexo,
+        getSuggestedChickenSex(legacyBirdCountPerJava)
+      ),
       crateTypeId: normalizeCrateTypeId(
         parsedEntryDefaults.crateTypeId
           || getCrateTypeIdByWeight(parsedEntryDefaults.pesoJavaKg)
@@ -3664,6 +3762,45 @@ function renderTypeButtons() {
   });
 }
 
+function renderChickenSexButtons(buttons, selectedSex) {
+  const normalizedSex = normalizeChickenSex(selectedSex);
+  buttons.forEach((button) => {
+    const buttonSex = normalizeChickenSex(button.dataset.sex || button.dataset.editSex);
+    const selected = buttonSex === normalizedSex;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
+function selectEntryChickenSex(sex) {
+  state.entryDefaults = {
+    ...(state.entryDefaults || {}),
+    chickenSex: normalizeChickenSex(sex)
+  };
+  saveState();
+  renderChickenSexButtons(elements.sexButtons, state.entryDefaults.chickenSex);
+}
+
+function handleEntryBirdCountInput() {
+  const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, 0);
+  if (birdsPerJava === 7 || birdsPerJava === 9) {
+    state.entryDefaults = {
+      ...(state.entryDefaults || {}),
+      chickenSex: getSuggestedChickenSex(birdsPerJava, state.entryDefaults?.chickenSex)
+    };
+    renderChickenSexButtons(elements.sexButtons, state.entryDefaults.chickenSex);
+  }
+  renderWeightPreview();
+}
+
+function handleEditBirdCountInput() {
+  const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
+  if (birdsPerJava === 7 || birdsPerJava === 9) {
+    editingChickenSex = getSuggestedChickenSex(birdsPerJava, editingChickenSex);
+    renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
+  }
+}
+
 function renderEditTypeOptions(operationType = TICKET_OPERATIONS.DISPATCH) {
   const options = normalizeTicketOperation(operationType) === TICKET_OPERATIONS.RETURN
     ? RETURN_CONDITIONS
@@ -3687,6 +3824,10 @@ function renderEntryDefaults() {
   const defaults = state.entryDefaults || {};
   const birdCountPerJava = normalizeBirdCountPerJava(defaults.birdCountPerJava, 1);
   const javaCount = normalizeJavaCount(defaults.javaCount, 1);
+  const chickenSex = normalizeChickenSex(
+    defaults.chickenSex,
+    getSuggestedChickenSex(birdCountPerJava)
+  );
   const crateTypeId = normalizeCrateTypeId(defaults.crateTypeId, DEFAULT_CRATE_TYPE_ID);
   const originId = normalizeOriginId(defaults.originId || defaults.providerId);
   const truckPlate = normalizeTruckPlate(defaults.truckPlate || defaults.plate || "");
@@ -3694,6 +3835,7 @@ function renderEntryDefaults() {
   state.entryDefaults = {
     birdCountPerJava,
     javaCount,
+    chickenSex,
     crateTypeId,
     originId,
     journeyKey: String(defaults.journeyKey || getJourneyKey()),
@@ -3702,6 +3844,7 @@ function renderEntryDefaults() {
   elements.birdCount.value = String(birdCountPerJava);
   elements.javaCount.value = String(javaCount);
   elements.crateType.value = crateTypeId;
+  renderChickenSexButtons(elements.sexButtons, chickenSex);
   renderEntryProviderSelection();
 }
 
@@ -3813,6 +3956,9 @@ function updateTruckPlateField(origin, select, field, help, options = {}) {
       `<option value="${escapeHtml(vehicle.plate)}">${escapeHtml(vehicle.plate + alias)}</option>`
     );
   });
+
+  elements.scaleSetButtons[1].addEventListener("click", () => updateScale(1));
+  elements.scaleSetButtons[2].addEventListener("click", () => updateScale(2));
 
   if (historicalPlate) {
     optionMarkup.push(
@@ -4247,7 +4393,9 @@ function buildTruckTableRows(truck) {
       const typeMeta = isReturn
         ? getReturnConditionMeta(cage.chickenCondition)
         : getTypeMeta(cage.tipo);
+      const sexMeta = getChickenSexMeta(cage.chickenSex);
       const typeTag = `<span class="tag ${typeMeta.tagClass}">${typeMeta.label}</span>`;
+      const sexBadge = `<span class="chicken-sex-badge chicken-sex-${sexMeta.id}" title="${sexMeta.label}" aria-label="${sexMeta.label}">${sexMeta.id === "hembra" ? "H" : "M"}</span>`;
       const weightSourceText = cage.origenPeso === "manual" ? "Manual" : `B${cage.balanza}`;
       const merchandiseOrigin = isReturn
         ? "Devolución cliente"
@@ -4268,6 +4416,7 @@ function buildTruckTableRows(truck) {
         <tr class="cage-row" data-truck-id="${escapeHtml(truck.id)}" data-cage-id="${escapeHtml(cage.id)}" tabindex="0" role="button" aria-label="Editar registro ${escapeHtml(cage.id)}">
           <td class="truck-cell-id">${escapeHtml(cage.id)}</td>
           <td class="truck-cell-type">${typeTag}</td>
+          <td class="truck-cell-sex">${sexBadge}</td>
           <td class="truck-cell-count">${avesPorJava}</td>
           <td class="truck-cell-count">${aves}</td>
           <td class="truck-cell-count">${javas}</td>
@@ -4408,6 +4557,7 @@ function buildDispatchTicketPayload(truck) {
         chicken_condition: isReturn
           ? returnCondition.apiCode
           : "VIVO",
+        chicken_sex: getChickenSexMeta(cage.chickenSex).apiCode,
         cage_type_code: crate.apiCode,
         weight_source: cage.origenPeso === "manual"
           ? "MANUAL"
@@ -4646,6 +4796,7 @@ function renderTruckColumns() {
                 <tr>
                   <th class="truck-head-id">#</th>
                   <th class="truck-head-type">Tipo</th>
+                  <th class="truck-head-sex">Sexo</th>
                   <th class="truck-head-count">Aves/Java</th>
                   <th class="truck-head-count">Aves</th>
                   <th class="truck-head-count">Javas</th>
@@ -4899,6 +5050,10 @@ function updateScale(scaleId) {
 function updateEntryDefaults(showMessage = false) {
   const birdCountPerJava = normalizeBirdCountPerJava(elements.birdCount.value, state.entryDefaults?.birdCountPerJava || 1);
   const javaCount = normalizeJavaCount(elements.javaCount.value, state.entryDefaults?.javaCount || 1);
+  const chickenSex = normalizeChickenSex(
+    state.entryDefaults?.chickenSex,
+    getSuggestedChickenSex(birdCountPerJava)
+  );
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
   const truckPlate = normalizeTruckPlate(elements.truckPlate.value || state.entryDefaults?.truckPlate);
@@ -4906,6 +5061,7 @@ function updateEntryDefaults(showMessage = false) {
   state.entryDefaults = {
     birdCountPerJava,
     javaCount,
+    chickenSex,
     crateTypeId: crateMeta.id,
     originId: normalizeOriginId(state.entryDefaults?.originId),
     journeyKey: String(state.entryDefaults?.journeyKey || getJourneyKey()),
@@ -4915,12 +5071,13 @@ function updateEntryDefaults(showMessage = false) {
   elements.birdCount.value = String(birdCountPerJava);
   elements.javaCount.value = String(javaCount);
   elements.crateType.value = crateMeta.id;
+  renderChickenSexButtons(elements.sexButtons, chickenSex);
 
   saveState();
   renderWeightPreview();
 
   if (showMessage) {
-    setFormMessage(`Configuración fija: ${birdCountPerJava} aves/java, ${javaCount} javas de ${crateMeta.weightKg.toFixed(2)} kg.`);
+    setFormMessage(`Configuración fija: ${birdCountPerJava} aves/java, ${javaCount} javas, ${getChickenSexMeta(chickenSex).label.toLowerCase()}, java de ${crateMeta.weightKg.toFixed(2)} kg.`);
   }
 }
 
@@ -4948,6 +5105,10 @@ function addCage(event) {
   const source = normalizeWeightSource(elements.weightSource.value === "manual" ? "manual" : elements.weightSource.value);
   const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, state.entryDefaults?.birdCountPerJava || 1);
   const javaCount = normalizeJavaCount(elements.javaCount.value, state.entryDefaults?.javaCount || 1);
+  const chickenSex = normalizeChickenSex(
+    state.entryDefaults?.chickenSex,
+    getSuggestedChickenSex(birdsPerJava)
+  );
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
@@ -5030,6 +5191,7 @@ function addCage(event) {
     }),
     tipo: isReturn ? "pollo_vivo" : normalizeType(state.selectedType),
     chickenCondition: isReturn ? returnCondition : "vivo",
+    chickenSex,
     cantidadAvesPorJava: birdsPerJava,
     cantidadPollosPorJava: birdsPerJava,
     cantidadAves: totalBirds,
@@ -5058,11 +5220,13 @@ function addCage(event) {
         ...(state.entryDefaults || {}),
         birdCountPerJava: birdsPerJava,
         javaCount,
+        chickenSex,
         crateTypeId: crateMeta.id
       }
     : {
         birdCountPerJava: birdsPerJava,
         javaCount,
+        chickenSex,
         crateTypeId: crateMeta.id,
         originId: origin.id,
         journeyKey: getJourneyKey(),
@@ -5081,10 +5245,11 @@ function addCage(event) {
   const typeLabel = isReturn
     ? getReturnConditionMeta(record.chickenCondition).label
     : getTypeMeta(record.tipo).label;
+  const sexLabel = getChickenSexMeta(record.chickenSex).label;
   setFormMessage(
     isReturn
-      ? `Registro #${record.id} en ${truck.name}: devolución ${typeLabel}, cliente ${getTruckClientName(truck)}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
-      : `Registro #${record.id} en ${truck.name}: ${typeLabel}, origen ${origin.name}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
+      ? `Registro #${record.id} en ${truck.name}: devolución ${typeLabel}, ${sexLabel.toLowerCase()}, cliente ${getTruckClientName(truck)}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
+      : `Registro #${record.id} en ${truck.name}: ${typeLabel}, ${sexLabel.toLowerCase()}, origen ${origin.name}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
   );
 }
 
@@ -5367,6 +5532,11 @@ function openCageModal(truckId, cageId) {
 
   elements.editBirdCount.value = editBirdsPerJava || "";
   elements.editJavaCount.value = editJavaCount;
+  editingChickenSex = normalizeChickenSex(
+    cage.chickenSex || cage.sexo,
+    getSuggestedChickenSex(editBirdsPerJava)
+  );
+  renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
   elements.editCrateType.value = normalizeCrateTypeId(cage.crateTypeId || getCrateTypeIdByWeight(cage.pesoJavaKg) || DEFAULT_CRATE_TYPE_ID);
   elements.editWeight.value = Number(cage.pesoBrutoKg ?? cage.pesoKg).toFixed(2);
   elements.editWeightSource.value = cage.origenPeso === "manual"
@@ -5405,6 +5575,7 @@ function openCageModal(truckId, cageId) {
 function closeItemModal() {
   editingContext = null;
   editSelectedOrigin = null;
+  editingChickenSex = DEFAULT_CHICKEN_SEX;
   delete elements.editTruckPlate.dataset.historicalPlate;
   if (!elements.providerModal.hidden && providerPickerContext === "edit") {
     closeProviderModal();
@@ -5441,6 +5612,10 @@ function saveCageChanges(event) {
   const returnCondition = isReturn ? normalizeReturnCondition(elements.editType.value) : "vivo";
   const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
   const javaCount = normalizeJavaCount(elements.editJavaCount.value, 1);
+  const chickenSex = normalizeChickenSex(
+    editingChickenSex,
+    getSuggestedChickenSex(birdsPerJava)
+  );
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.editCrateType.value, DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
@@ -5517,6 +5692,7 @@ function saveCageChanges(event) {
   cage.operationType = getTruckOperationType(truck);
   cage.tipo = type;
   cage.chickenCondition = returnCondition;
+  cage.chickenSex = chickenSex;
   cage.cantidadAvesPorJava = birdsPerJava;
   cage.cantidadPollosPorJava = birdsPerJava;
   cage.cantidadAves = totalBirds;
@@ -5551,9 +5727,10 @@ function saveCageChanges(event) {
   renderAll();
   closeItemModal();
 
+  const sexLabel = getChickenSexMeta(cage.chickenSex).label.toLowerCase();
   setFormMessage(isReturn
-    ? `Registro #${cage.id} actualizado en ${truck.name}. Devolución ${getReturnConditionMeta(cage.chickenCondition).label}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`
-    : `Registro #${cage.id} actualizado en ${truck.name}. Origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`);
+    ? `Registro #${cage.id} actualizado en ${truck.name}. Devolución ${getReturnConditionMeta(cage.chickenCondition).label}, ${sexLabel}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`
+    : `Registro #${cage.id} actualizado en ${truck.name}. ${sexLabel}, origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`);
 }
 
 function deleteCageRecord() {
@@ -5708,9 +5885,15 @@ function bindEvents() {
       renderTypeButtons();
     });
   });
-
-  elements.scaleSetButtons[1].addEventListener("click", () => updateScale(1));
-  elements.scaleSetButtons[2].addEventListener("click", () => updateScale(2));
+  elements.sexButtons.forEach((button) => {
+    button.addEventListener("click", () => selectEntryChickenSex(button.dataset.sex));
+  });
+  elements.editSexButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      editingChickenSex = normalizeChickenSex(button.dataset.editSex);
+      renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
+    });
+  });
 
   elements.scaleCaptureButtons[1].addEventListener("click", () => captureScale(1));
   elements.scaleCaptureButtons[2].addEventListener("click", () => captureScale(2));
@@ -5753,8 +5936,9 @@ function bindEvents() {
     renderSelectedTruckDetails();
   });
   elements.manualWeight.addEventListener("input", renderWeightPreview);
-  elements.birdCount.addEventListener("input", renderWeightPreview);
+  elements.birdCount.addEventListener("input", handleEntryBirdCountInput);
   elements.birdCount.addEventListener("change", () => updateEntryDefaults(true));
+  elements.editBirdCount.addEventListener("input", handleEditBirdCountInput);
   elements.javaCount.addEventListener("input", renderWeightPreview);
   elements.javaCount.addEventListener("change", () => updateEntryDefaults(true));
   elements.crateType.addEventListener("change", () => updateEntryDefaults(true));

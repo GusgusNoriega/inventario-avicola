@@ -649,6 +649,101 @@ body {
   grid-column: 1 / -1;
 }
 
+.entry-count-sex-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(180px, 0.9fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.sex-selector {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sex-selector legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: #ceddf2;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.sex-selector-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sex-btn {
+  min-height: 44px;
+  border: 1px solid #555555;
+  border-radius: 10px;
+  padding: 6px 9px;
+  background: linear-gradient(180deg, #191919, #0b0b0b);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 850;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sex-btn-male.is-active {
+  border-color: #55a7ff;
+  background: linear-gradient(180deg, #2385e6, #14579f);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.sex-btn-female.is-active {
+  border-color: #ff75bd;
+  background: linear-gradient(180deg, #e84c9e, #9e2869);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.sex-btn:active {
+  transform: translateY(1px);
+  filter: brightness(1.12);
+}
+
+.chicken-sex-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.chicken-sex-macho {
+  border-color: #55a7ff;
+  background: linear-gradient(180deg, #2385e6, #14579f);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.chicken-sex-hembra {
+  border-color: #ff75bd;
+  background: linear-gradient(180deg, #e84c9e, #9e2869);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.truck-cell-sex,
+.truck-head-sex {
+  width: 48px;
+  text-align: center !important;
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -1397,6 +1492,14 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .entry-count-sex-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry-count-sex-row .sex-selector {
+    grid-column: 1 / -1;
+  }
+
   .item-modal-card {
     width: min(98vw, 900px);
     width: min(98dvw, 900px);
@@ -2108,6 +2211,10 @@ button:focus-visible {
 }
 
 /* Teclado numerico tactil */
+body.numeric-pad-open {
+  overflow: hidden;
+}
+
 input[type="number"][readonly] {
   cursor: pointer;
 }
@@ -2128,7 +2235,7 @@ input[type="number"][readonly] {
   padding: 16px;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 10px;
 }
 
@@ -2171,6 +2278,15 @@ input[type="number"][readonly] {
   text-overflow: ellipsis;
 }
 
+.numeric-pad-message {
+  min-height: 20px;
+  margin: 0;
+  color: #ff9b9b;
+  font-size: 0.88rem;
+  font-weight: 850;
+  text-align: center;
+}
+
 .numeric-pad-grid {
   min-height: 0;
   display: grid;
@@ -2187,11 +2303,19 @@ input[type="number"][readonly] {
   font-size: 1.8rem;
   font-weight: 800;
   cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .numeric-key:hover {
   border-color: #6caeff;
   background: linear-gradient(180deg, #22406a, #18325a);
+}
+
+.numeric-key:active,
+.numeric-pad-actions .btn:active {
+  transform: translateY(1px);
+  filter: brightness(1.16);
 }
 
 .numeric-key:disabled {
@@ -2224,17 +2348,53 @@ input[type="number"][readonly] {
   }
 
   .numeric-key {
-    min-height: 66px;
+    min-height: clamp(48px, 8dvh, 66px);
   }
 
   .numeric-pad-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 
   .numeric-pad-actions .btn {
     min-height: 50px;
     font-size: 0.96rem;
+  }
+}
+
+@media (max-height: 680px) {
+  .numeric-pad-card {
+    padding: 10px;
+    gap: 6px;
+  }
+
+  .numeric-pad-caption {
+    display: none;
+  }
+
+  .numeric-pad-value {
+    min-height: 52px;
+    padding: 6px 12px;
+    font-size: 2rem;
+  }
+
+  .numeric-pad-message {
+    min-height: 18px;
+    font-size: 0.78rem;
+  }
+
+  .numeric-pad-grid,
+  .numeric-pad-actions {
+    gap: 6px;
+  }
+
+  .numeric-key {
+    min-height: 44px;
+    font-size: 1.45rem;
+  }
+
+  .numeric-pad-actions .btn {
+    min-height: 46px;
   }
 }
 
@@ -3640,6 +3800,7 @@ body.menu-page {
   text-align: center;
   cursor: pointer;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .touch-number-control:hover,
@@ -5189,6 +5350,10 @@ body.customer-history-page {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.management-sex-selector {
+  align-self: end;
 }
 
 .weighing-edit-preview {

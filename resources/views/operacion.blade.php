@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Entrada de Camiones | Sistema Pollos</title>
-  <link rel="stylesheet" href="{{ asset('css/style.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
 </head>
 <body>
   <section class="scale-strip-mobile card" aria-label="Pesos de balanzas">
@@ -129,15 +129,25 @@
               </label>
             </div>
 
-            <label class="field">
-              Aves / java (o total sin javas)
-              <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 25" required readonly inputmode="none" data-keypad-label="Aves por java o total sin javas" data-keypad-decimal="false">
-            </label>
+            <div class="entry-count-sex-row">
+              <label class="field">
+                Aves / java (o total sin javas)
+                <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 7" required readonly inputmode="none" data-keypad-label="Aves por java o total sin javas" data-keypad-decimal="false">
+              </label>
 
-            <label class="field">
-              Javas
-              <input id="javaCount" type="number" min="0" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
-            </label>
+              <label class="field">
+                Javas
+                <input id="javaCount" type="number" min="0" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
+              </label>
+
+              <fieldset class="sex-selector" aria-label="Sexo de los pollos">
+                <legend>Sexo</legend>
+                <div class="sex-selector-buttons">
+                  <button class="sex-btn sex-btn-male is-active" type="button" data-sex="macho" aria-pressed="true">Macho</button>
+                  <button class="sex-btn sex-btn-female" type="button" data-sex="hembra" aria-pressed="false">Hembra</button>
+                </div>
+              </fieldset>
+            </div>
 
             <label class="field">
               Tipo de java
@@ -238,13 +248,13 @@
 
         <section class="scale-settings-panel" aria-labelledby="scaleManualTitle1">
           <h3 id="scaleManualTitle1">Agregar valor manual</h3>
-          <label class="field">
-            Lectura manual (kg)
+          <div class="field">
+            <label for="input-scale-1">Lectura manual (kg)</label>
             <div class="inline-control">
-              <input id="input-scale-1" type="number" min="0" step="0.01" placeholder="Ej: 54.80" readonly inputmode="none" data-keypad-label="Lectura manual balanza 1 (kg)">
+              <input id="input-scale-1" type="number" min="0" step="0.01" placeholder="Ej: 54.80" required readonly inputmode="none" data-keypad-label="Lectura manual balanza 1 (kg)">
               <button id="set-scale-1" class="btn btn-primary" type="button">Actualizar</button>
             </div>
-          </label>
+          </div>
         </section>
       </div>
     </div>
@@ -275,13 +285,13 @@
 
         <section class="scale-settings-panel" aria-labelledby="scaleManualTitle2">
           <h3 id="scaleManualTitle2">Agregar valor manual</h3>
-          <label class="field">
-            Lectura manual (kg)
+          <div class="field">
+            <label for="input-scale-2">Lectura manual (kg)</label>
             <div class="inline-control">
-              <input id="input-scale-2" type="number" min="0" step="0.01" placeholder="Ej: 61.30" readonly inputmode="none" data-keypad-label="Lectura manual balanza 2 (kg)">
+              <input id="input-scale-2" type="number" min="0" step="0.01" placeholder="Ej: 61.30" required readonly inputmode="none" data-keypad-label="Lectura manual balanza 2 (kg)">
               <button id="set-scale-2" class="btn btn-primary" type="button">Actualizar</button>
             </div>
-          </label>
+          </div>
         </section>
       </div>
     </div>
@@ -353,6 +363,14 @@
             Javas
             <input id="editJavaCount" type="number" min="0" step="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
           </label>
+
+          <fieldset class="sex-selector edit-sex-selector" aria-label="Sexo de los pollos">
+            <legend>Sexo</legend>
+            <div class="sex-selector-buttons">
+              <button class="sex-btn sex-btn-male is-active" type="button" data-edit-sex="macho" aria-pressed="true">Macho</button>
+              <button class="sex-btn sex-btn-female" type="button" data-edit-sex="hembra" aria-pressed="false">Hembra</button>
+            </div>
+          </fieldset>
 
           <label class="field">
             Tipo de java
@@ -464,7 +482,8 @@
         <button id="numericPadCloseBtn" class="btn btn-primary" type="button">Cerrar</button>
       </div>
 
-      <p id="numericPadValue" class="numeric-pad-value">0</p>
+      <p id="numericPadValue" class="numeric-pad-value" aria-live="polite">0</p>
+      <p id="numericPadMessage" class="numeric-pad-message" role="status" aria-live="polite"></p>
 
       <div class="numeric-pad-grid">
         <button class="numeric-key" type="button" data-keypad-key="7">7</button>
@@ -489,7 +508,7 @@
     </div>
   </div>
 
-  <script type="module" src="{{ asset('js/app.js') }}"></script>
+  <script type="module" src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
 </body>
 </html>
 

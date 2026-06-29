@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'numero',
     'tipo_pollo_id',
     'condicion_pollo',
+    'sexo',
     'tipo_java_id',
     'lectura_balanza_id',
     'proveedor_origen_id',
@@ -39,6 +40,10 @@ class Pesada extends Model
     public const CHICKEN_CONDITION_LIVE = 'VIVO';
 
     public const CHICKEN_CONDITION_DEAD = 'MUERTO';
+
+    public const SEX_MALE = 'MACHO';
+
+    public const SEX_FEMALE = 'HEMBRA';
 
     public const STATUS_ACTIVE = 'ACTIVA';
 

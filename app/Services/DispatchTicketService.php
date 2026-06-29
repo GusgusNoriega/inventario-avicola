@@ -147,6 +147,7 @@ class DispatchTicketService
                     'numero' => $index + 1,
                     'tipo_pollo_id' => $type->id,
                     'condicion_pollo' => $this->weighingCondition($operationType, $weighing),
+                    'sexo' => $weighing['chicken_sex'],
                     'tipo_java_id' => $cageType->id,
                     'proveedor_origen_id' => $origin['provider_id'],
                     'almacen_origen_id' => $origin['warehouse_id'],

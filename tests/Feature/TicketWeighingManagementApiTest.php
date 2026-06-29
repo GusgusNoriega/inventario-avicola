@@ -97,6 +97,7 @@ class TicketWeighingManagementApiTest extends TestCase
             'numero' => 1,
             'tipo_pollo_id' => $liveTypeId,
             'condicion_pollo' => Pesada::CHICKEN_CONDITION_LIVE,
+            'sexo' => Pesada::SEX_MALE,
             'tipo_java_id' => $largeCageTypeId,
             'origen_peso' => 'BALANZA_1',
             'aves_por_java' => 10,
@@ -144,6 +145,7 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonPath('data.ticket.editable', true)
             ->assertJsonCount(1, 'data.ticket.weighings')
             ->assertJsonPath('data.ticket.weighings.0.id', $this->weighingId)
+            ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_MALE)
             ->assertJsonPath('data.ticket.summary.net_weight_kg', 26);
     }
 
@@ -155,6 +157,7 @@ class TicketWeighingManagementApiTest extends TestCase
         )
             ->assertOk()
             ->assertJsonPath('data.ticket.weighings.0.birds', 24)
+            ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_FEMALE)
             ->assertJsonPath('data.ticket.weighings.0.tare_weight_kg', 10)
             ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 20)
             ->assertJsonPath('data.ticket.weighings.0.weighed_at', '2026-06-27T10:30:00-05:00');
@@ -163,6 +166,7 @@ class TicketWeighingManagementApiTest extends TestCase
             'id' => $this->weighingId,
             'tipo_pollo_id' => $this->dressedTypeId,
             'tipo_java_id' => $this->smallCageTypeId,
+            'sexo' => Pesada::SEX_FEMALE,
             'cantidad_aves' => 24,
             'peso_neto_kg' => 20,
         ]);
@@ -171,6 +175,24 @@ class TicketWeighingManagementApiTest extends TestCase
             'entidad_id' => (string) $this->weighingId,
             'accion' => 'ACTUALIZAR',
             'usuario_id' => $this->user->id,
+        ]);
+    }
+
+    public function test_update_rejects_an_invalid_chicken_sex(): void
+    {
+        $payload = $this->updatePayload();
+        $payload['chicken_sex'] = 'OTRO';
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('chicken_sex');
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'sexo' => Pesada::SEX_MALE,
         ]);
     }
 
@@ -280,6 +302,7 @@ class TicketWeighingManagementApiTest extends TestCase
         return [
             'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
             'chicken_condition' => Pesada::CHICKEN_CONDITION_LIVE,
+            'chicken_sex' => Pesada::SEX_FEMALE,
             'cage_type_code' => 'JAVA_500',
             'weight_source' => 'MANUAL',
             'birds_per_cage' => 12,
