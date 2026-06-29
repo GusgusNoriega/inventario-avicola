@@ -1,6 +1,7 @@
 ﻿const STORAGE_KEY = "sistema-pollos-state-v1";
 
 import { apiRequest } from "./api-client.js";
+import { printWeightControlTicket } from "./ticket-printer.js";
 
 const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
 const PERU_LOCALE = "es-PE";
@@ -210,6 +211,7 @@ const elements = {
   backToMenuBtn: document.getElementById("backToMenuBtn"),
   appShell: document.getElementById("appShell"),
   form: document.getElementById("cageForm"),
+  addWeighingBtn: document.getElementById("addWeighingBtn"),
   mobileTabs: document.querySelectorAll("[data-mobile-panel-target]"),
   typeButtons: document.querySelectorAll(".type-btn"),
   truckSelect: document.getElementById("truckSelect"),
@@ -966,8 +968,8 @@ function getAllProviderCatalog() {
 
 function getProviderCatalog() {
   const providers = getAllProviderCatalog();
-  if (dailyJourneyPlan === null) {
-    return providers;
+  if (!isJourneyConfigured()) {
+    return [];
   }
 
   const selectedVehicleIds = new Set(
@@ -983,6 +985,35 @@ function getProviderCatalog() {
         .filter((vehicle) => selectedVehicleIds.has(String(vehicle.id)))
     }))
     .filter((provider) => provider.vehicles.length > 0);
+}
+
+function isJourneyConfigured() {
+  return dailyJourneyPlan?.configured === true
+    && dailyJourneyPlan?.status === "PUBLICADA";
+}
+
+function getJourneyKey() {
+  if (!isJourneyConfigured()) {
+    return "";
+  }
+
+  return `${dailyJourneyPlan.program_id || ""}:${dailyJourneyPlan.operating_date || ""}`;
+}
+
+function getConfiguredWarehouseOrigins() {
+  if (!isJourneyConfigured()) {
+    return [];
+  }
+
+  const selectedWarehouseIds = new Set(
+    (dailyJourneyPlan.warehouses || [])
+      .filter((warehouse) => warehouse.selected)
+      .map((warehouse) => String(warehouse.id))
+  );
+
+  return WAREHOUSE_ORIGINS.filter((origin) => (
+    selectedWarehouseIds.has(String(origin.databaseId))
+  ));
 }
 
 function getProviderById(providerId) {
@@ -1005,7 +1036,7 @@ function normalizeProviderId(providerId) {
 
 function getOriginCatalog() {
   return [
-    ...WAREHOUSE_ORIGINS,
+    ...getConfiguredWarehouseOrigins(),
     ...getProviderCatalog()
   ];
 }
@@ -1287,6 +1318,7 @@ function createDefaultState() {
       javaCount: 1,
       crateTypeId: DEFAULT_CRATE_TYPE_ID,
       originId: null,
+      journeyKey: "",
       truckPlate: ""
     },
     scales: {
@@ -1882,6 +1914,7 @@ function loadState() {
           || parsedEntryDefaults.proveedorId
           || parsedEntryDefaults.proveedorOrigenId
       ),
+      journeyKey: String(parsedEntryDefaults.journeyKey || ""),
       truckPlate: normalizeTruckPlate(
         parsedEntryDefaults.truckPlate
           || parsedEntryDefaults.plate
@@ -2241,30 +2274,28 @@ function reconcileTruckClientAssignments(shouldSave = false) {
 }
 
 function ensureDefaultOriginSelection(shouldSave = false) {
+  if (dailyJourneyPlan === null) {
+    return false;
+  }
+
   const origins = getOriginCatalog();
-  const providers = origins.filter((origin) => !isWarehouseOrigin(origin));
   const currentOriginId = String(
     state.entryDefaults?.originId || state.entryDefaults?.providerId || ""
   ).trim();
   const currentTruckPlate = normalizeTruckPlate(state.entryDefaults?.truckPlate || "");
-  const nextOriginId = dailyJourneyPlan !== null
-    ? (
-        providers.some((origin) => origin.id === currentOriginId)
-          ? currentOriginId
-          : providers[0]?.id || null
-      )
-    : (
-        providers.some((origin) => origin.id === currentOriginId)
-          ? currentOriginId
-          : providers[0]?.id
-            || (origins.some((origin) => origin.id === currentOriginId) ? currentOriginId : origins[0]?.id)
-            || null
-      );
-  const changed = currentOriginId !== String(nextOriginId || "");
+  const journeyKey = getJourneyKey();
+  const storedJourneyKey = String(state.entryDefaults?.journeyKey || "");
+  const selectionIsCurrent = Boolean(journeyKey)
+    && storedJourneyKey === journeyKey
+    && origins.some((origin) => origin.id === currentOriginId);
+  const nextOriginId = selectionIsCurrent ? currentOriginId : null;
+  const changed = currentOriginId !== String(nextOriginId || "")
+    || storedJourneyKey !== journeyKey;
 
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
     originId: nextOriginId,
+    journeyKey,
     truckPlate: changed ? "" : currentTruckPlate
   };
   delete state.entryDefaults.providerId;
@@ -3660,7 +3691,14 @@ function renderEntryDefaults() {
   const originId = normalizeOriginId(defaults.originId || defaults.providerId);
   const truckPlate = normalizeTruckPlate(defaults.truckPlate || defaults.plate || "");
 
-  state.entryDefaults = { birdCountPerJava, javaCount, crateTypeId, originId, truckPlate };
+  state.entryDefaults = {
+    birdCountPerJava,
+    javaCount,
+    crateTypeId,
+    originId,
+    journeyKey: String(defaults.journeyKey || getJourneyKey()),
+    truckPlate
+  };
   elements.birdCount.value = String(birdCountPerJava);
   elements.javaCount.value = String(javaCount);
   elements.crateType.value = crateTypeId;
@@ -3669,6 +3707,7 @@ function renderEntryDefaults() {
 
 function renderEntryProviderSelection() {
   const activeTruck = getSelectedTruck();
+  renderTicketOperationToggle(activeTruck);
   if (isReturnTicket(activeTruck)) {
     elements.selectedProviderName.textContent = getTruckClientName(activeTruck);
     elements.selectProviderBtn.classList.add("is-empty");
@@ -3702,6 +3741,24 @@ function renderEntryProviderSelection() {
   state.entryDefaults.truckPlate = isWarehouseOrigin(origin) ? "" : selectedPlate;
   elements.selectedProviderPlateLabel.textContent = selectedPlate
     || (origin ? "Selecciona una placa de la lista" : "Proveedor y placa pendientes");
+}
+
+function renderTicketOperationToggle(truck = getSelectedTruck()) {
+  if (!elements.returnTicketBtn) {
+    return;
+  }
+
+  const registered = isTruckRegistered(truck);
+  const isReturn = isReturnTicket(truck);
+  elements.returnTicketBtn.disabled = !truck || registered;
+  elements.returnTicketBtn.classList.toggle("is-dispatch-action", isReturn);
+  elements.returnTicketBtn.classList.toggle("is-return-action", !isReturn);
+  elements.returnTicketBtn.textContent = registered
+    ? (isReturn ? "Devolución registrada" : "Despacho registrado")
+    : (isReturn ? "Cambiar a despacho" : "Cambiar a devolución");
+  elements.returnTicketBtn.title = registered
+    ? "El tipo de un ticket registrado no puede modificarse."
+    : `Convertir este ticket en ${isReturn ? "despacho" : "devolución"}.`;
 }
 
 function renderEditProviderSelection() {
@@ -4060,7 +4117,15 @@ function getDailyProviderRows() {
     return [];
   }
 
-  return getProviderCatalog().flatMap((origin) => {
+  const warehouseRows = getConfiguredWarehouseOrigins().map((origin) => ({
+    key: `${origin.id}:interno`,
+    origin,
+    plate: "",
+    plateLabel: "INTERNO",
+    alias: "Almacén",
+    disabled: false
+  }));
+  const providerRows = getProviderCatalog().flatMap((origin) => {
     const vehicles = getProviderVehicles(origin);
     if (!vehicles.length) {
       return [{
@@ -4082,6 +4147,8 @@ function getDailyProviderRows() {
       disabled: false
     }));
   });
+
+  return [...warehouseRows, ...providerRows];
 }
 
 function renderDailyProviderList() {
@@ -4104,7 +4171,7 @@ function renderDailyProviderList() {
   if (!rows.length) {
     elements.dailyProviderList.innerHTML = `
       <div class="daily-provider-empty">
-        Sin camiones disponibles.
+        ${isJourneyConfigured() ? "Sin orígenes disponibles." : "Configura la jornada para habilitar orígenes y pesadas."}
       </div>
     `;
     return;
@@ -4159,6 +4226,7 @@ function selectDailyProviderVehicle(originId, plate) {
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
     originId: origin.id,
+    journeyKey: getJourneyKey(),
     truckPlate: normalizedPlate
   };
   saveState();
@@ -4223,293 +4291,25 @@ function getTicketTypeCode(typeId, condition = "vivo", operationType = TICKET_OP
   return normalizedType === "pollo_pelado" ? "PP" : "PV";
 }
 
-function getCommonTicketValue(values, fallback = "--") {
-  const uniqueValues = Array.from(new Set(
-    values
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-  ));
-
-  if (!uniqueValues.length) {
-    return fallback;
-  }
-
-  return uniqueValues.length === 1 ? uniqueValues[0] : "VARIOS";
-}
-
-function buildDispatchTicketHtml(truck) {
-  const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
+function buildDispatchTicketData(truck) {
   const operationType = getTruckOperationType(truck);
-  const isReturn = operationType === TICKET_OPERATIONS.RETURN;
-  const emittedAt = new Date();
-  const documentTitle = isReturn ? "TICKET DE DEVOLUCION" : "TICKET DE DESPACHO";
-  const originName = isReturn
-    ? "DEVOLUCION DE CLIENTE"
-    : getCommonTicketValue(
-        truck.cages.map((cage) => cage.origenNombre || cage.proveedorOrigenNombre)
-      );
-  const truckPlate = isReturn
-    ? "NO APLICA"
-    : getCommonTicketValue(
-        truck.cages.map((cage) => cage.placaCamion),
-        "ORIGEN INTERNO"
-      );
-  const rows = truck.cages.map((cage) => {
-    const birdsPerJava = normalizeBirdCountPerJava(
-      cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
-      0
-    );
-    const javaCount = normalizeJavaCount(cage.cantidadJavas, 1);
-    const grossWeight = Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0;
-    const tareWeight = Number(cage.taraTotalKg) || 0;
-    const netWeight = Number(cage.pesoNetoKg ?? cage.pesoKg) || 0;
 
-    return `
-      <tr>
-        <td>${escapeHtml(getTicketTypeCode(cage.tipo, cage.chickenCondition, operationType))}</td>
-        <td class="number">${birdsPerJava}</td>
-        <td class="number">${javaCount}</td>
-        <td class="number">${grossWeight.toFixed(2)}</td>
-        <td class="number">${tareWeight.toFixed(2)}</td>
-        <td class="number">${netWeight.toFixed(2)}</td>
-      </tr>
-    `;
-  }).join("");
-  const typeTotals = totals.byType
-    .filter((item) => item.records > 0)
-    .map((item) => `
-      <tr>
-        <td>${escapeHtml(getTicketTypeCode(item.id, item.id, operationType))}</td>
-        <td>${item.records}</td>
-        <td>${item.javas}</td>
-        <td>${item.birds}</td>
-        <td>${item.grossWeight.toFixed(2)}</td>
-        <td>${item.tareWeight.toFixed(2)}</td>
-        <td>${item.netWeight.toFixed(2)}</td>
-      </tr>
-    `)
-    .join("");
-
-  return `<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>${escapeHtml(getTruckTicketLabel(truck))} - ${escapeHtml(documentTitle)}</title>
-  <style>
-    @page {
-      size: auto;
-      margin: 0;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      background: #fff;
-      color: #000;
-    }
-
-    body {
-      width: 76mm;
-      margin: 0 auto;
-      padding: 3mm 2mm 8mm;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 9px;
-      line-height: 1.25;
-    }
-
-    h1,
-    h2,
-    p {
-      margin: 0;
-    }
-
-    .center {
-      text-align: center;
-    }
-
-    .business-name {
-      font-size: 15px;
-      font-weight: 900;
-      letter-spacing: 0.04em;
-    }
-
-    .document-title {
-      margin-top: 1mm;
-      font-size: 11px;
-      font-weight: 800;
-    }
-
-    .separator {
-      margin: 2mm 0;
-      border-top: 1px dashed #000;
-    }
-
-    .info {
-      display: grid;
-      grid-template-columns: 22mm 1fr;
-      gap: 0.7mm 1mm;
-    }
-
-    .info strong {
-      font-weight: 800;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: fixed;
-    }
-
-    th,
-    td {
-      padding: 0.75mm 0.35mm;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: clip;
-    }
-
-    th {
-      border-top: 1px solid #000;
-      border-bottom: 1px solid #000;
-      font-size: 7.5px;
-      text-align: right;
-    }
-
-    th:first-child,
-    td:first-child {
-      text-align: left;
-    }
-
-    td {
-      font-size: 8.5px;
-    }
-
-    .number {
-      text-align: right;
-    }
-
-    .detail-table th:nth-child(1) { width: 10%; }
-    .detail-table th:nth-child(2) { width: 12%; }
-    .detail-table th:nth-child(3) { width: 10%; }
-    .detail-table th:nth-child(4) { width: 23%; }
-    .detail-table th:nth-child(5) { width: 20%; }
-    .detail-table th:nth-child(6) { width: 25%; }
-
-    .summary-title {
-      margin-bottom: 1mm;
-      font-weight: 800;
-    }
-
-    .summary-table th,
-    .summary-table td {
-      text-align: right;
-      font-size: 7.5px;
-    }
-
-    .summary-table th:first-child,
-    .summary-table td:first-child {
-      text-align: left;
-    }
-
-    .grand-total {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 1mm;
-      padding: 0.8mm 0;
-      font-weight: 800;
-    }
-
-    .signature {
-      margin-top: 7mm;
-      display: grid;
-      gap: 5mm;
-    }
-
-    .signature-line {
-      border-top: 1px solid #000;
-      padding-top: 1mm;
-      text-align: center;
-    }
-
-    .footer {
-      margin-top: 4mm;
-      text-align: center;
-      font-size: 7px;
-    }
-  </style>
-</head>
-<body>
-  <header class="center">
-    <h1 class="business-name">SISTEMA POLLOS</h1>
-    <h2 class="document-title">${escapeHtml(documentTitle)}</h2>
-  </header>
-
-  <div class="separator"></div>
-
-  <section class="info">
-    <strong>TICKET:</strong><span>${escapeHtml(getTruckTicketLabel(truck))}</span>
-    <strong>FECHA:</strong><span>${escapeHtml(formatPeruDate(emittedAt))}</span>
-    <strong>HORA:</strong><span>${escapeHtml(formatPeruTime(emittedAt))}</span>
-    <strong>${isReturn ? "CLIENTE:" : "DESTINO:"}</strong><span>${escapeHtml(getTruckClientName(truck))}</span>
-    <strong>ORIGEN:</strong><span>${escapeHtml(originName)}</span>
-    <strong>PLACA:</strong><span>${escapeHtml(truckPlate)}</span>
-  </section>
-
-  <div class="separator"></div>
-
-  <table class="detail-table">
-    <thead>
-      <tr>
-        <th>TIPO</th>
-        <th>A/J</th>
-        <th>CJ</th>
-        <th>P.BRUTO</th>
-        <th>TARA</th>
-        <th>P.NETO</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-
-  <div class="separator"></div>
-
-  <p class="summary-title">TOTALES</p>
-  <table class="summary-table">
-    <thead>
-      <tr>
-        <th>TIPO</th>
-        <th>REG.</th>
-        <th>JAVAS</th>
-        <th>AVES</th>
-        <th>BRUTO</th>
-        <th>TARA</th>
-        <th>NETO</th>
-      </tr>
-    </thead>
-    <tbody>${typeTotals}</tbody>
-  </table>
-
-  <div class="separator"></div>
-
-  <div class="grand-total"><span>TOTAL AVES:</span><span>${totals.birds}</span></div>
-  <div class="grand-total"><span>TOTAL JAVAS:</span><span>${totals.javas}</span></div>
-  <div class="grand-total"><span>PESO BRUTO:</span><span>${totals.grossWeight.toFixed(2)} kg</span></div>
-  <div class="grand-total"><span>TARA JAVAS:</span><span>${totals.tareWeight.toFixed(2)} kg</span></div>
-  <div class="grand-total"><span>PESO NETO:</span><span>${totals.netWeight.toFixed(2)} kg</span></div>
-
-  <section class="signature">
-    <div class="signature-line">NOMBRE</div>
-    <div class="signature-line">FIRMA</div>
-  </section>
-
-  <p class="footer">Documento generado por Sistema Pollos</p>
-</body>
-</html>`;
+  return {
+    code: getTruckTicketLabel(truck),
+    operationType,
+    destinationName: getTruckClientName(truck),
+    records: truck.cages.map((cage) => ({
+      typeCode: getTicketTypeCode(cage.tipo, cage.chickenCondition, operationType),
+      birdsPerCage: normalizeBirdCountPerJava(
+        cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
+        0
+      ),
+      cages: normalizeJavaCount(cage.cantidadJavas, 1),
+      grossWeight: Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0,
+      tareWeight: Number(cage.taraTotalKg) || 0,
+      netWeight: Number(cage.pesoNetoKg ?? cage.pesoKg) || 0
+    }))
+  };
 }
 
 function printDispatchTicket(truckId) {
@@ -4530,45 +4330,16 @@ function printDispatchTicket(truckId) {
     return;
   }
 
-  const printFrame = document.createElement("iframe");
-  let cleanupTimer = null;
+  const ticketCode = getTruckTicketLabel(truck);
 
-  printFrame.className = "ticket-print-frame";
-  printFrame.title = `Impresión de ${truck.name}`;
-  printFrame.setAttribute("aria-hidden", "true");
-  printFrame.addEventListener("load", () => {
-    const printWindow = printFrame.contentWindow;
-
-    if (!printWindow) {
-      printFrame.remove();
-      setFormMessage("No se pudo abrir el servicio de impresión.", true);
-      return;
-    }
-
-    const cleanup = () => {
-      if (cleanupTimer) {
-        window.clearTimeout(cleanupTimer);
-      }
-      printFrame.remove();
-    };
-
-    printWindow.addEventListener("afterprint", cleanup, { once: true });
-    cleanupTimer = window.setTimeout(cleanup, 60000);
-
-    window.setTimeout(() => {
-      try {
-        printWindow.focus();
-        printWindow.print();
-        setFormMessage(`${truck.name} enviado a la ventana de impresión.`);
-      } catch {
-        cleanup();
-        setFormMessage("No se pudo iniciar la impresión del ticket.", true);
-      }
-    }, 150);
-  }, { once: true });
-
-  printFrame.srcdoc = buildDispatchTicketHtml(truck);
-  document.body.appendChild(printFrame);
+  printWeightControlTicket(buildDispatchTicketData(truck), {
+    frameTitle: `Impresión de ${truck.name}`,
+    onSuccess: () => clearRegisteredTruckColumn(
+      truck.id,
+      `${ticketCode} enviado a impresión. ${truck.name} está limpia y lista para otro ticket.`
+    ),
+    onError: () => setFormMessage("No se pudo iniciar la impresión del ticket.", true)
+  });
 }
 
 function buildDispatchTicketPayload(truck) {
@@ -4691,6 +4462,11 @@ function getApiErrorPresentation(error) {
 
 async function registerDispatchTicket(truckId) {
   const truck = state.trucks.find((item) => item.id === truckId);
+
+  if (!isJourneyConfigured()) {
+    setFormMessage("Configura la jornada antes de registrar el ticket y sus pesadas.", true);
+    return;
+  }
 
   if (!truck) {
     setFormMessage("No se encontró el ticket seleccionado.", true);
@@ -5067,6 +4843,7 @@ function renderAll() {
   renderSelectedTruckDetails();
   renderGlobalStats();
   renderJson();
+  renderJourneyAvailability();
 
   if (!elements.clientModal.hidden && clientModalTruckId) {
     const truck = state.trucks.find((item) => item.id === clientModalTruckId);
@@ -5083,6 +4860,16 @@ function renderAll() {
 
   if (!elements.providerModal.hidden) {
     renderProviderList();
+  }
+}
+
+function renderJourneyAvailability() {
+  const configured = isJourneyConfigured();
+  if (elements.addWeighingBtn) {
+    elements.addWeighingBtn.disabled = !configured;
+    elements.addWeighingBtn.title = configured
+      ? ""
+      : "Configura la jornada antes de agregar pesadas.";
   }
 }
 
@@ -5121,6 +4908,7 @@ function updateEntryDefaults(showMessage = false) {
     javaCount,
     crateTypeId: crateMeta.id,
     originId: normalizeOriginId(state.entryDefaults?.originId),
+    journeyKey: String(state.entryDefaults?.journeyKey || getJourneyKey()),
     truckPlate
   };
 
@@ -5150,6 +4938,11 @@ function captureScale(scaleId) {
 
 function addCage(event) {
   event.preventDefault();
+
+  if (!isJourneyConfigured()) {
+    setFormMessage("Configura la jornada antes de agregar pesadas.", true);
+    return;
+  }
 
   const truckId = elements.truckSelect.value;
   const source = normalizeWeightSource(elements.weightSource.value === "manual" ? "manual" : elements.weightSource.value);
@@ -5272,6 +5065,7 @@ function addCage(event) {
         javaCount,
         crateTypeId: crateMeta.id,
         originId: origin.id,
+        journeyKey: getJourneyKey(),
         truckPlate
       };
 
@@ -5322,32 +5116,56 @@ function closeJsonModal() {
   elements.jsonModal.hidden = true;
 }
 
-function openReturnClientModal() {
+function toggleTicketOperation() {
   const truck = getSelectedTruck();
 
   if (!truck) {
-    setFormMessage("Selecciona una columna para registrar la devolución.", true);
+    setFormMessage("Selecciona una columna para cambiar el tipo de ticket.", true);
     return;
   }
 
   if (isTruckRegistered(truck)) {
-    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y no puede convertirse en devolución.`, true);
+    setFormMessage(`${getTruckTicketLabel(truck)} ya está registrado y no puede cambiar de tipo.`, true);
     return;
   }
 
-  if (!isReturnTicket(truck) && truck.cages.length) {
-    const confirmed = window.confirm("Esta columna tiene registros de despacho sin guardar. Para convertirla en devolución se limpiarán esos registros. ¿Continuar?");
+  const convertingToDispatch = isReturnTicket(truck);
+  const currentTypeLabel = convertingToDispatch ? "devolución" : "despacho";
+  const nextTypeLabel = convertingToDispatch ? "despacho" : "devolución";
+
+  if (truck.cages.length) {
+    const confirmed = window.confirm(`Esta columna tiene registros de ${currentTypeLabel} sin guardar. Para convertirla en ${nextTypeLabel} se limpiarán esos registros. ¿Continuar?`);
     if (!confirmed) {
       return;
     }
-    truck.cages = [];
   }
 
-  truck.operationType = TICKET_OPERATIONS.RETURN;
+  truck.cages = [];
+  truck.operationType = convertingToDispatch
+    ? TICKET_OPERATIONS.DISPATCH
+    : TICKET_OPERATIONS.RETURN;
   truck.clientId = null;
   truck.destination = null;
+
+  if (convertingToDispatch) {
+    state.entryDefaults = {
+      ...(state.entryDefaults || {}),
+      originId: null,
+      journeyKey: getJourneyKey(),
+      truckPlate: ""
+    };
+    elements.truckPlate.value = "";
+  }
+
   saveState();
   renderAll();
+
+  if (convertingToDispatch) {
+    closeClientModal();
+    setFormMessage(`${truck.name} ahora es un ticket de despacho. Selecciona un origen antes de agregar una pesada.`);
+    return;
+  }
+
   openClientModal(truck.id, "return");
 }
 
@@ -5452,6 +5270,12 @@ function openProviderModal(context = "entry") {
   closeTouchSelect();
   providerPickerContext = context === "edit" ? "edit" : "entry";
 
+  if (providerPickerContext === "entry" && !isJourneyConfigured()) {
+    providerPickerContext = null;
+    setFormMessage("Configura la jornada antes de seleccionar un origen.", true);
+    return;
+  }
+
   if (providerPickerContext === "edit" && !editingContext) {
     providerPickerContext = null;
     setFormMessage("No hay un registro abierto para cambiar el origen.", true);
@@ -5498,6 +5322,7 @@ function selectOrigin(originId) {
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
     originId: origin.id,
+    journeyKey: getJourneyKey(),
     truckPlate: ""
   };
   saveState();
@@ -5766,7 +5591,7 @@ function deleteCageRecord() {
   setFormMessage(`Registro #${cage.id} eliminado de ${truck.name}.`);
 }
 
-function clearRegisteredTruckColumn(truckId) {
+function clearRegisteredTruckColumn(truckId, successMessage = "") {
   const truck = state.trucks.find((item) => item.id === truckId);
 
   if (!truck) {
@@ -5795,7 +5620,10 @@ function clearRegisteredTruckColumn(truckId) {
     closeClientModal();
   }
 
-  setFormMessage(`${previousCode} ya quedó guardado. ${truck.name} está limpia y lista para otro ticket.`);
+  setFormMessage(
+    successMessage
+      || `${previousCode} ya quedó guardado. ${truck.name} está limpia y lista para otro ticket.`
+  );
 }
 
 function handleCageRowActivation(row) {
@@ -5955,7 +5783,7 @@ function bindEvents() {
   elements.openJsonBtn.addEventListener("click", openJsonModal);
   elements.closeJsonBtn.addEventListener("click", closeJsonModal);
   elements.resetDayBtn.addEventListener("click", resetDay);
-  elements.returnTicketBtn?.addEventListener("click", openReturnClientModal);
+  elements.returnTicketBtn?.addEventListener("click", toggleTicketOperation);
   elements.fontDecreaseBtn?.addEventListener("click", () => changeFontSize(-1));
   elements.fontIncreaseBtn?.addEventListener("click", () => changeFontSize(1));
   elements.fontResetBtn?.addEventListener("click", () => applyFontSizePreference("normal"));

@@ -1,4 +1,5 @@
 import { apiRequest } from "./api-client.js";
+import { printWeightControlTicket } from "./ticket-printer.js";
 
 const root = document.querySelector("[data-weighing-management]");
 
@@ -89,6 +90,51 @@ function formatDate(value, includeTime = false) {
 
 function operationLabel(value) {
   return value === "DEVOLUCION" ? "Devolución" : "Despacho";
+}
+
+function getPrintedTypeCode(weighing, operationType) {
+  if (operationType === "DEVOLUCION") {
+    return weighing?.chicken_condition === "MUERTO" ? "PM" : "PV";
+  }
+
+  return weighing?.chicken_type?.code === "POLLO_PELADO" ? "PP" : "PV";
+}
+
+function buildSelectedTicketPrintData(ticket) {
+  return {
+    code: ticket.code,
+    operationType: ticket.operation_type,
+    destinationName: ticket.destination?.name || "Sin destino registrado",
+    emittedAt: ticket.closed_at,
+    records: (ticket.weighings || []).map((weighing) => ({
+      typeCode: getPrintedTypeCode(weighing, ticket.operation_type),
+      birdsPerCage: Number(weighing.birds_per_cage) || 0,
+      cages: Number(weighing.cages) || 0,
+      grossWeight: Number(weighing.gross_weight_kg) || 0,
+      tareWeight: Number(weighing.tare_weight_kg) || 0,
+      netWeight: Number(weighing.net_weight_kg) || 0
+    }))
+  };
+}
+
+function printSelectedTicket() {
+  const ticket = state.selectedTicket;
+
+  if (!ticket) {
+    setMessage("Selecciona un ticket para imprimir.", true);
+    return;
+  }
+
+  if (!ticket.weighings?.length) {
+    setMessage("El ticket seleccionado no tiene pesadas para imprimir.", true);
+    return;
+  }
+
+  printWeightControlTicket(buildSelectedTicketPrintData(ticket), {
+    frameTitle: `Impresión de ${ticket.code}`,
+    onSuccess: () => setMessage(`${ticket.code} enviado a la ventana de impresión.`),
+    onError: () => setMessage("No se pudo iniciar la impresión del ticket.", true)
+  });
 }
 
 function setMessage(text, isError = false) {
@@ -204,7 +250,10 @@ function renderSelectedTicket() {
           <h2>${escapeHtml(ticket.code)}</h2>
           <p>${escapeHtml(ticket.destination?.name || "Sin destino registrado")}</p>
         </div>
-        <button class="btn btn-ghost" type="button" data-refresh-ticket>Actualizar</button>
+        <div class="weighing-ticket-detail-actions">
+          <button class="btn btn-primary" type="button" data-print-selected-ticket ${(ticket.weighings || []).length ? "" : "disabled"}>Imprimir ticket</button>
+          <button class="btn btn-ghost" type="button" data-refresh-ticket>Actualizar</button>
+        </div>
       </header>
       ${ticket.editable ? "" : `
         <div class="weighing-readonly-notice" role="note">
@@ -476,9 +525,12 @@ function bindEvents() {
     }
   });
   elements.selectedPanel.addEventListener("click", (event) => {
+    const printButton = event.target.closest("[data-print-selected-ticket]");
     const editButton = event.target.closest("[data-edit-weighing]");
     const deleteButton = event.target.closest("[data-delete-weighing]");
-    if (editButton) {
+    if (printButton) {
+      printSelectedTicket();
+    } else if (editButton) {
       openEditModal(editButton.dataset.editWeighing);
     } else if (deleteButton) {
       openDeleteModal(deleteButton.dataset.deleteWeighing);

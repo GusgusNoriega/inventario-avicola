@@ -169,13 +169,13 @@
           </div>
 
           <div class="form-actions">
-            <button class="btn btn-success" type="submit">Agregar registro</button>
+            <button id="addWeighingBtn" class="btn btn-success" type="submit" disabled>Agregar registro</button>
             <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
           </div>
         </form>
       </section>
 
-      <button id="returnTicketBtn" class="return-ticket-btn" type="button">Devolución</button>
+      <button id="returnTicketBtn" class="return-ticket-btn" type="button">Cambiar a devolución</button>
 
       <section class="daily-provider-panel card" aria-label="Camiones del día">
         <div class="daily-provider-head">

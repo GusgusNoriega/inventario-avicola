@@ -552,6 +552,23 @@ body {
   background: linear-gradient(180deg, #ff5b5b, #b91f1f);
 }
 
+.return-ticket-btn.is-dispatch-action {
+  border-color: #3ddc84;
+  background: linear-gradient(180deg, #24b866, #11733f);
+}
+
+.return-ticket-btn.is-dispatch-action:hover,
+.return-ticket-btn.is-dispatch-action:focus-visible {
+  border-color: #76f0ab;
+  background: linear-gradient(180deg, #35d47b, #16894c);
+}
+
+.return-ticket-btn:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+  opacity: 0.62;
+}
+
 .global-stats {
   margin: 0;
   color: #a8b8d1;
@@ -5056,6 +5073,17 @@ body.customer-history-page {
   color: var(--text-muted);
 }
 
+.weighing-ticket-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.weighing-ticket-detail-actions .btn {
+  min-height: 42px;
+}
+
 .weighing-readonly-badge {
   display: inline-flex;
   align-items: center;
@@ -5251,6 +5279,16 @@ body.customer-history-page {
   }
 
   .weighing-search-form > .btn {
+    width: 100%;
+  }
+
+  .weighing-ticket-detail-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .weighing-ticket-detail-actions,
+  .weighing-ticket-detail-actions .btn {
     width: 100%;
   }
 

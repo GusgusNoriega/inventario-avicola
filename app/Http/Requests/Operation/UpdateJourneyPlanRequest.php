@@ -20,6 +20,8 @@ class UpdateJourneyPlanRequest extends FormRequest
         return [
             'provider_vehicle_ids' => ['present', 'array', 'max:500'],
             'provider_vehicle_ids.*' => ['required', 'integer', 'min:1', 'distinct'],
+            'warehouse_ids' => ['present', 'array', 'max:100'],
+            'warehouse_ids.*' => ['required', 'integer', 'min:1', 'distinct'],
             'prices' => ['prohibited'],
             'global_prices' => [
                 'required',

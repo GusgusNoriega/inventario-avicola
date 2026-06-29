@@ -51,16 +51,22 @@ function setMessage(message, isError = false) {
 
 function selectedVehicleIds() {
   return Array.from(
-    elements.rows.querySelectorAll(".journey-truck-check:checked")
+    elements.rows.querySelectorAll('.journey-origin-check[data-origin-kind="truck"]:checked')
+  ).map((checkbox) => Number(checkbox.value));
+}
+
+function selectedWarehouseIds() {
+  return Array.from(
+    elements.rows.querySelectorAll('.journey-origin-check[data-origin-kind="warehouse"]:checked')
   ).map((checkbox) => Number(checkbox.value));
 }
 
 function visibleChecks() {
-  return Array.from(elements.rows.querySelectorAll(".journey-truck-row:not([hidden]) .journey-truck-check"));
+  return Array.from(elements.rows.querySelectorAll(".journey-origin-row:not([hidden]) .journey-origin-check"));
 }
 
 function updateSelectionState() {
-  const selectedIds = selectedVehicleIds();
+  const selectedIds = [...selectedVehicleIds(), ...selectedWarehouseIds()];
   const visible = visibleChecks();
 
   elements.selectedCount.textContent = String(selectedIds.length);
@@ -68,8 +74,8 @@ function updateSelectionState() {
   elements.selectAll.indeterminate = visible.some((checkbox) => checkbox.checked)
     && !elements.selectAll.checked;
 
-  elements.rows.querySelectorAll(".journey-truck-row").forEach((row) => {
-    const checkbox = row.querySelector(".journey-truck-check");
+  elements.rows.querySelectorAll(".journey-origin-row").forEach((row) => {
+    const checkbox = row.querySelector(".journey-origin-check");
     row.classList.toggle("is-selected", Boolean(checkbox?.checked));
   });
 }
@@ -77,7 +83,7 @@ function updateSelectionState() {
 function applySearch() {
   const query = elements.search.value.trim().toLocaleLowerCase("es");
 
-  elements.rows.querySelectorAll(".journey-truck-row").forEach((row) => {
+  elements.rows.querySelectorAll(".journey-origin-row").forEach((row) => {
     row.hidden = Boolean(query) && !row.dataset.search.includes(query);
   });
 
@@ -86,6 +92,7 @@ function applySearch() {
 
 function renderJourney() {
   const trucks = Array.isArray(journey.trucks) ? journey.trucks : [];
+  const warehouses = Array.isArray(journey.warehouses) ? journey.warehouses : [];
 
   elements.date.textContent = formatDate(`${journey.operating_date}T12:00:00`, {
     weekday: "long",
@@ -105,7 +112,7 @@ function renderJourney() {
     minute: "2-digit"
   })}`;
   elements.status.textContent = String(journey.status || "SIN CONFIGURAR").replaceAll("_", " ");
-  elements.totalCount.textContent = String(trucks.length);
+  elements.totalCount.textContent = String(trucks.length + warehouses.length);
   Object.entries(elements.globalPrices).forEach(([code, input]) => {
     const price = journey.global_prices?.[code];
     input.value = price === null || price === undefined
@@ -115,11 +122,11 @@ function renderJourney() {
 
   elements.tableHead.innerHTML = `
     <th scope="col">Elegir</th>
-    <th scope="col">Proveedor</th>
-    <th scope="col">Placa</th>
+    <th scope="col">Origen</th>
+    <th scope="col">Detalle</th>
   `;
 
-  if (!trucks.length) {
+  if (!trucks.length && !warehouses.length) {
     elements.rows.innerHTML = `
       <tr>
         <td colspan="3" class="journey-loading">
@@ -131,7 +138,31 @@ function renderJourney() {
     return;
   }
 
-  elements.rows.innerHTML = trucks.map((truck) => {
+  const warehouseRows = warehouses.map((warehouse) => {
+    const search = [warehouse.name, warehouse.code, warehouse.address]
+      .join(" ")
+      .toLocaleLowerCase("es");
+
+    return `
+      <tr class="journey-origin-row journey-truck-row ${warehouse.selected ? "is-selected" : ""}" data-search="${escapeHtml(search)}">
+        <td class="journey-check-cell">
+          <input class="journey-origin-check journey-truck-check" type="checkbox" value="${Number(warehouse.id)}"
+            data-origin-kind="warehouse" aria-label="Seleccionar ${escapeHtml(warehouse.name)} como origen"
+            ${warehouse.selected ? "checked" : ""}>
+        </td>
+        <td>
+          <strong class="journey-provider-name">${escapeHtml(warehouse.name)}</strong>
+          <small>Almacén interno</small>
+        </td>
+        <td>
+          <strong class="journey-plate">${escapeHtml(warehouse.code || "ALMACÉN")}</strong>
+          <small>${escapeHtml(warehouse.address || "Sin dirección registrada")}</small>
+        </td>
+      </tr>
+    `;
+  });
+
+  const truckRows = trucks.map((truck) => {
     const search = [
       truck.provider_name,
       truck.document,
@@ -141,14 +172,15 @@ function renderJourney() {
 
     return `
       <tr
-        class="journey-truck-row ${truck.selected ? "is-selected" : ""}"
+        class="journey-origin-row journey-truck-row ${truck.selected ? "is-selected" : ""}"
         data-search="${escapeHtml(search)}"
       >
         <td class="journey-check-cell">
           <input
-            class="journey-truck-check"
+            class="journey-origin-check journey-truck-check"
             type="checkbox"
             value="${Number(truck.provider_vehicle_id)}"
+            data-origin-kind="truck"
             data-provider-id="${Number(truck.provider_id)}"
             aria-label="Seleccionar ${escapeHtml(truck.provider_name)} placa ${escapeHtml(truck.plate)}"
             ${truck.selected ? "checked" : ""}
@@ -164,7 +196,9 @@ function renderJourney() {
         </td>
       </tr>
     `;
-  }).join("");
+  });
+
+  elements.rows.innerHTML = [...warehouseRows, ...truckRows].join("");
 
   applySearch();
 }
@@ -183,6 +217,7 @@ function buildPayload() {
 
   return {
     provider_vehicle_ids: selectedVehicleIds(),
+    warehouse_ids: selectedWarehouseIds(),
     global_prices: globalPrices
   };
 }
@@ -224,7 +259,7 @@ elements.selectAll.addEventListener("change", () => {
   updateSelectionState();
 });
 elements.rows.addEventListener("change", (event) => {
-  if (event.target.matches(".journey-truck-check")) {
+  if (event.target.matches(".journey-origin-check")) {
     updateSelectionState();
   }
 });

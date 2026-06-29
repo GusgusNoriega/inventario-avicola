@@ -22,6 +22,9 @@ class JourneyPlanApiTest extends TestCase
 
     private int $providerId;
 
+    /** @var array<int, int> */
+    private array $warehouseIds;
+
     /**
      * @var array<int, int>
      */
@@ -81,6 +84,16 @@ class JourneyPlanApiTest extends TestCase
         ]);
         $this->user->update(['sucursal_id' => $this->branchId]);
 
+        $this->warehouseIds = collect([1, 2])->map(fn (int $number) => DB::table('almacenes')->insertGetId([
+            'sucursal_id' => $this->branchId,
+            'codigo' => "ALMACEN_{$number}",
+            'nombre' => "Almacén {$number}",
+            'permite_stock_negativo' => false,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]))->all();
+
         Sanctum::actingAs($this->user, ['api']);
 
         $this->providerId = $this->postJson('/api/v1/proveedores', [
@@ -122,6 +135,8 @@ class JourneyPlanApiTest extends TestCase
             ->assertJsonPath('data.starts_at', '2026-06-21T21:00:00-05:00')
             ->assertJsonPath('data.ends_at', '2026-06-22T21:00:00-05:00')
             ->assertJsonCount(2, 'data.trucks')
+            ->assertJsonCount(2, 'data.warehouses')
+            ->assertJsonPath('data.warehouses.0.selected', false)
             ->assertJsonPath('data.trucks.0.provider_name', 'PROVEEDOR CON DOS CAMIONES')
             ->assertJsonPath('data.trucks.0.plate', 'ABC-123')
             ->assertJsonPath('data.trucks.1.provider_name', 'PROVEEDOR CON DOS CAMIONES')
@@ -134,6 +149,7 @@ class JourneyPlanApiTest extends TestCase
     {
         $this->putJson('/api/v1/operacion/jornada', [
             'provider_vehicle_ids' => [$this->providerVehicleIds[1]],
+            'warehouse_ids' => [$this->warehouseIds[0]],
             'global_prices' => [
                 TipoPollo::CHICKEN_LIVE => 7.75,
                 TipoPollo::CHICKEN_DRESSED => 8.75,
@@ -144,8 +160,11 @@ class JourneyPlanApiTest extends TestCase
             ->assertJsonPath('data.configured', true)
             ->assertJsonPath('data.status', 'PUBLICADA')
             ->assertJsonPath('data.selected_count', 1)
+            ->assertJsonPath('data.selected_warehouse_count', 1)
             ->assertJsonPath('data.trucks.0.selected', false)
             ->assertJsonPath('data.trucks.1.selected', true)
+            ->assertJsonPath('data.warehouses.0.selected', true)
+            ->assertJsonPath('data.warehouses.1.selected', false)
             ->assertJsonMissingPath('data.trucks.1.prices')
             ->assertJsonPath('data.global_prices.POLLO_VIVO', 7.75)
             ->assertJsonPath('data.global_prices.POLLO_PELADO', 8.75)
@@ -159,6 +178,9 @@ class JourneyPlanApiTest extends TestCase
         $this->assertDatabaseHas('programacion_recepcion_detalles', [
             'proveedor_vehiculo_id' => $this->providerVehicleIds[1],
             'estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseHas('programacion_recepcion_almacenes', [
+            'almacen_id' => $this->warehouseIds[0],
         ]);
         $this->assertDatabaseHas('listas_precios', [
             'empresa_id' => $this->user->empresa_id,

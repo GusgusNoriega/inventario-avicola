@@ -11,8 +11,8 @@
     <header class="journey-hero card">
       <div>
         <p class="eyebrow">Planeación operativa</p>
-        <h1>Proveedores de la jornada</h1>
-        <p>Selecciona las placas habilitadas para la operación.</p>
+        <h1>Orígenes de la jornada</h1>
+        <p>Selecciona los camiones y almacenes habilitados como origen.</p>
       </div>
       <div class="journey-header-actions">
         <a class="menu-return-btn" href="{{ route('menu') }}">Menú</a>
@@ -30,7 +30,7 @@
         <strong id="journeyWindow">21:00 a 21:00</strong>
       </article>
       <article class="journey-summary-card card">
-        <span>Camiones seleccionados</span>
+        <span>Orígenes seleccionados</span>
         <strong><span id="journeySelectedCount">0</span> / <span id="journeyTotalCount">0</span></strong>
       </article>
       <article class="journey-summary-card card">
@@ -66,12 +66,12 @@
     <section class="journey-workspace card">
       <div class="journey-toolbar">
         <label class="journey-search">
-          <span>Buscar proveedor o placa</span>
-          <input id="journeySearch" type="search" placeholder="Nombre, documento o placa" autocomplete="off">
+          <span>Buscar origen</span>
+          <input id="journeySearch" type="search" placeholder="Proveedor, almacén, documento o placa" autocomplete="off">
         </label>
         <label class="journey-select-all">
           <input id="journeySelectAll" type="checkbox">
-          <span>Seleccionar camiones visibles</span>
+          <span>Seleccionar orígenes visibles</span>
         </label>
         <button id="journeySaveBtn" class="btn btn-success" type="button">Guardar jornada</button>
       </div>
@@ -83,13 +83,13 @@
           <thead>
             <tr id="journeyTableHead">
               <th scope="col">Elegir</th>
-              <th scope="col">Proveedor</th>
-              <th scope="col">Placa</th>
+              <th scope="col">Origen</th>
+              <th scope="col">Detalle</th>
             </tr>
           </thead>
           <tbody id="journeyRows">
             <tr>
-              <td colspan="3" class="journey-loading">Cargando proveedores y camiones...</td>
+              <td colspan="3" class="journey-loading">Cargando orígenes...</td>
             </tr>
           </tbody>
         </table>

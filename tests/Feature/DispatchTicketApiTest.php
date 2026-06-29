@@ -118,6 +118,7 @@ class DispatchTicketApiTest extends TestCase
         )->assertCreated()->json('data');
         $this->providerVehicleId = $vehicle['id'];
         $this->vehicleId = $vehicle['vehicle_id'];
+        $this->configureJourney();
     }
 
     protected function tearDown(): void
@@ -229,21 +230,9 @@ class DispatchTicketApiTest extends TestCase
 
     public function test_published_journey_rejects_a_truck_that_was_not_selected(): void
     {
-        $localNow = now('America/Lima');
-        $operatingDate = $localNow->format('H:i:s') >= '21:00:00'
-            ? $localNow->copy()->addDay()->format('Y-m-d')
-            : $localNow->format('Y-m-d');
-
-        DB::table('programaciones_recepcion')->insert([
-            'sucursal_id' => $this->branchId,
-            'fecha_operativa' => $operatingDate,
-            'estado' => 'PUBLICADA',
-            'publicada_por' => $this->user->id,
-            'publicada_at' => now(),
-            'created_by' => $this->user->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::table('programacion_recepcion_detalles')
+            ->where('proveedor_vehiculo_id', $this->providerVehicleId)
+            ->update(['estado' => 'CANCELADA']);
 
         $this->postJson('/api/v1/operacion/tickets', $this->ticketPayload())
             ->assertUnprocessable()
@@ -251,6 +240,43 @@ class DispatchTicketApiTest extends TestCase
 
         $this->assertDatabaseCount('jornadas_operativas', 0);
         $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pesadas', 0);
+    }
+
+    public function test_unconfigured_journey_rejects_weighings_without_creating_operational_records(): void
+    {
+        DB::table('programaciones_recepcion')->delete();
+
+        $this->postJson('/api/v1/operacion/tickets', $this->ticketPayload())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('journey');
+
+        $this->assertDatabaseCount('jornadas_operativas', 0);
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pesadas', 0);
+    }
+
+    public function test_dispatch_weighing_requires_an_origin(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][0]['origin'] = null;
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.origin.type');
+
+        $this->assertDatabaseCount('pesadas', 0);
+    }
+
+    public function test_warehouse_origin_must_be_selected_in_the_journey(): void
+    {
+        DB::table('programacion_recepcion_almacenes')->delete();
+
+        $this->postJson('/api/v1/operacion/tickets', $this->ticketPayload())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.1.origin.warehouse_id');
+
+        $this->assertDatabaseCount('jornadas_operativas', 0);
         $this->assertDatabaseCount('pesadas', 0);
     }
 
@@ -382,12 +408,14 @@ class DispatchTicketApiTest extends TestCase
     public function test_client_price_update_revalues_only_tickets_from_the_current_journey(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-22 20:00:00', 'America/Lima'));
+        $this->configureJourney();
         $previousTicketId = $this->postJson(
             '/api/v1/operacion/tickets',
             $this->ticketPayload()
         )->assertCreated()->json('data.id');
 
         Carbon::setTestNow(Carbon::parse('2026-06-22 22:00:00', 'America/Lima'));
+        $this->configureJourney();
         $currentTicketId = $this->postJson(
             '/api/v1/operacion/tickets',
             $this->ticketPayload()
@@ -496,6 +524,7 @@ class DispatchTicketApiTest extends TestCase
     public function test_weighing_time_is_stored_in_peru_timezone(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-26 12:00:00', 'America/Lima'));
+        $this->configureJourney();
 
         $payload = $this->ticketPayload();
         $payload['weighings'][0]['weighed_at'] = '2026-06-26T10:15:30-05:00';
@@ -563,6 +592,42 @@ class DispatchTicketApiTest extends TestCase
                 ],
             ],
         ];
+    }
+
+    private function configureJourney(): void
+    {
+        $localNow = now('America/Lima');
+        $operatingDate = $localNow->format('H:i:s') >= '21:00:00'
+            ? $localNow->copy()->addDay()->format('Y-m-d')
+            : $localNow->format('Y-m-d');
+        $programId = DB::table('programaciones_recepcion')->insertGetId([
+            'sucursal_id' => $this->branchId,
+            'fecha_operativa' => $operatingDate,
+            'estado' => 'PUBLICADA',
+            'publicada_por' => $this->user->id,
+            'publicada_at' => now(),
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('programacion_recepcion_detalles')->insert([
+            'programacion_id' => $programId,
+            'proveedor_vehiculo_id' => $this->providerVehicleId,
+            'numero_visita' => 1,
+            'orden_llegada' => 1,
+            'estado' => 'PENDIENTE',
+            'estado_actualizado_por' => $this->user->id,
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('programacion_recepcion_almacenes')->insert([
+            'programacion_id' => $programId,
+            'almacen_id' => $this->warehouseId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**

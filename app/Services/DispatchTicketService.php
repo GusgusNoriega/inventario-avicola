@@ -62,6 +62,7 @@ class DispatchTicketService
                 $weighedAt,
                 $branch->zona_horaria
             );
+            $program = $this->configuredProgram((int) $branch->id, $operatingDate);
             $journey = $this->openJourney($branch, $actor, $operatingDate, $companyId);
             $destination = $this->resolveDestination(
                 $companyId,
@@ -123,7 +124,7 @@ class DispatchTicketService
                     : $this->resolveOrigin(
                         $companyId,
                         (int) $branch->id,
-                        $operatingDate,
+                        $program,
                         $weighing['origin'],
                         "weighings.{$index}.origin"
                     );
@@ -317,6 +318,26 @@ class DispatchTicketService
         }
 
         return $journey;
+    }
+
+    private function configuredProgram(
+        int $branchId,
+        CarbonImmutable $operatingDate
+    ): ProgramacionRecepcion {
+        $program = ProgramacionRecepcion::query()
+            ->where('sucursal_id', $branchId)
+            ->whereDate('fecha_operativa', $operatingDate->format('Y-m-d'))
+            ->where('estado', ProgramacionRecepcion::STATUS_PUBLISHED)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $program) {
+            throw ValidationException::withMessages([
+                'journey' => 'Configura y publica la jornada antes de agregar pesadas.',
+            ]);
+        }
+
+        return $program;
     }
 
     /**
@@ -532,20 +553,27 @@ class DispatchTicketService
     private function resolveOrigin(
         int $companyId,
         int $branchId,
-        CarbonImmutable $operatingDate,
+        ProgramacionRecepcion $program,
         array $origin,
         string $field
     ): array {
         if ($origin['type'] === 'ALMACEN') {
             $warehouseId = DB::table('almacenes')
-                ->where('sucursal_id', $branchId)
-                ->where('estado', 'ACTIVO')
-                ->where('id', $origin['warehouse_id'] ?? 0)
-                ->value('id');
+                ->join(
+                    'programacion_recepcion_almacenes',
+                    'programacion_recepcion_almacenes.almacen_id',
+                    '=',
+                    'almacenes.id'
+                )
+                ->where('almacenes.sucursal_id', $branchId)
+                ->where('almacenes.estado', 'ACTIVO')
+                ->where('almacenes.id', $origin['warehouse_id'] ?? 0)
+                ->where('programacion_recepcion_almacenes.programacion_id', $program->id)
+                ->value('almacenes.id');
 
             if (! $warehouseId) {
                 throw ValidationException::withMessages([
-                    "{$field}.warehouse_id" => 'El almacén de origen no está disponible.',
+                    "{$field}.warehouse_id" => 'Este almacén no está seleccionado como origen para la jornada operativa.',
                 ]);
             }
 
@@ -595,25 +623,16 @@ class DispatchTicketService
             ]);
         }
 
-        $programId = ProgramacionRecepcion::query()
-            ->where('sucursal_id', $branchId)
-            ->whereDate('fecha_operativa', $operatingDate->format('Y-m-d'))
-            ->where('estado', ProgramacionRecepcion::STATUS_PUBLISHED)
+        $programDetailId = ProgramacionRecepcionDetalle::query()
+            ->where('programacion_id', $program->id)
+            ->where('proveedor_vehiculo_id', $association->id)
+            ->where('estado', '!=', ProgramacionRecepcionDetalle::STATUS_CANCELLED)
             ->value('id');
-        $programDetailId = null;
 
-        if ($programId) {
-            $programDetailId = ProgramacionRecepcionDetalle::query()
-                ->where('programacion_id', $programId)
-                ->where('proveedor_vehiculo_id', $association->id)
-                ->where('estado', '!=', ProgramacionRecepcionDetalle::STATUS_CANCELLED)
-                ->value('id');
-
-            if (! $programDetailId) {
-                throw ValidationException::withMessages([
-                    "{$field}.provider_vehicle_id" => 'Este camión no está seleccionado para la jornada operativa.',
-                ]);
-            }
+        if (! $programDetailId) {
+            throw ValidationException::withMessages([
+                "{$field}.provider_vehicle_id" => 'Este camión no está seleccionado para la jornada operativa.',
+            ]);
         }
 
         return [

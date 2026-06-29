@@ -46,6 +46,69 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('response.data?.prices', $javascript);
     }
 
+    public function test_operation_ticket_type_button_switches_between_dispatch_and_return(): void
+    {
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+        $toggleStart = strpos($javascript, 'function toggleTicketOperation()');
+        $toggleEnd = strpos($javascript, 'function openClientModal', $toggleStart);
+        $this->assertNotFalse($toggleStart);
+        $this->assertNotFalse($toggleEnd);
+
+        $toggle = substr($javascript, $toggleStart, $toggleEnd - $toggleStart);
+        $this->assertStringContainsString('TICKET_OPERATIONS.DISPATCH', $toggle);
+        $this->assertStringContainsString('TICKET_OPERATIONS.RETURN', $toggle);
+        $this->assertStringContainsString('originId: null', $toggle);
+        $this->assertStringContainsString('truck.cages = [];', $toggle);
+
+        $this->assertStringContainsString('is-dispatch-action', $javascript);
+        $this->assertStringContainsString('is-return-action', $javascript);
+    }
+
+    public function test_dispatch_print_template_uses_the_control_weight_format(): void
+    {
+        $javascript = file_get_contents(public_path('js/ticket-printer.js'));
+
+        $this->assertIsString($javascript);
+        $templateStart = strpos($javascript, 'function buildWeightControlTicketHtml');
+        $templateEnd = strpos($javascript, 'function printWeightControlTicket', $templateStart);
+        $this->assertNotFalse($templateStart);
+        $this->assertNotFalse($templateEnd);
+
+        $template = substr($javascript, $templateStart, $templateEnd - $templateStart);
+
+        $this->assertStringContainsString('DISTRIBUIDORA<br>DIEGO ALBERTO', $template);
+        $this->assertStringContainsString('CONTROL DE PESO', $template);
+        $this->assertStringContainsString('<th>C/A</th>', $template);
+        $this->assertStringContainsString('<th>CJ</th>', $template);
+        $this->assertStringContainsString('PESO<br>BRUTO', $template);
+        $this->assertStringContainsString('PESO<br>TARA', $template);
+        $this->assertStringContainsString('<p>OBSERV:</p>', $template);
+        $this->assertStringContainsString('font-size: 11px', $template);
+        $this->assertStringContainsString('font-weight: 700', $template);
+        $this->assertStringNotContainsString('CONTROL PESO', $template);
+        $this->assertStringNotContainsString('P.NETO', $template);
+        $this->assertStringNotContainsString('TOTAL AVES:', $template);
+        $this->assertStringNotContainsString('PLACA:', $template);
+        $this->assertStringNotContainsString('ORIGEN:', $template);
+    }
+
+    public function test_printing_a_registered_ticket_clears_its_dispatch_column(): void
+    {
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+        $printStart = strpos($javascript, 'function printDispatchTicket');
+        $printEnd = strpos($javascript, 'function buildDispatchTicketPayload', $printStart);
+        $this->assertNotFalse($printStart);
+        $this->assertNotFalse($printEnd);
+
+        $printFlow = substr($javascript, $printStart, $printEnd - $printStart);
+        $this->assertStringContainsString('onSuccess: () => clearRegisteredTruckColumn(', $printFlow);
+        $this->assertStringContainsString('onError:', $printFlow);
+    }
+
     public function test_directory_view_is_available_without_database_queries(): void
     {
         $this->get('/directorio')
@@ -75,7 +138,7 @@ class WebViewsTest extends TestCase
     {
         $this->get('/jornada')
             ->assertOk()
-            ->assertSee('Proveedores de la jornada')
+            ->assertSee('Orígenes de la jornada')
             ->assertSee('Precios globales')
             ->assertDontSee('precios de proveedor', false)
             ->assertSee(asset('js/jornada.js'), false);
@@ -95,6 +158,16 @@ class WebViewsTest extends TestCase
             ->assertSee('ticketSearchInput', false)
             ->assertSee('selectedTicketPanel', false)
             ->assertSee(asset('js/gestion-pesadas.js'), false);
+
+        $dispatchJavascript = file_get_contents(public_path('js/app.js'));
+        $managementJavascript = file_get_contents(public_path('js/gestion-pesadas.js'));
+
+        $this->assertIsString($dispatchJavascript);
+        $this->assertIsString($managementJavascript);
+        $this->assertStringContainsString('from "./ticket-printer.js"', $dispatchJavascript);
+        $this->assertStringContainsString('from "./ticket-printer.js"', $managementJavascript);
+        $this->assertStringContainsString('data-print-selected-ticket', $managementJavascript);
+        $this->assertStringContainsString('printWeightControlTicket(buildSelectedTicketPrintData(ticket)', $managementJavascript);
     }
 
     public function test_customer_history_view_is_available_without_database_queries(): void

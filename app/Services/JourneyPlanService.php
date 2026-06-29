@@ -41,6 +41,16 @@ class JourneyPlanService
                 ->all()
             : [];
         $selectedLookup = array_fill_keys($selectedIds, true);
+        $warehouses = $this->availableWarehouses((int) $branch->id);
+        $selectedWarehouseIds = $program
+            ? DB::table('programacion_recepcion_almacenes')
+                ->where('programacion_id', $program->id)
+                ->pluck('almacen_id')
+                ->map(fn ($id) => (int) $id)
+                ->all()
+            : [];
+        $selectedWarehouseLookup = array_fill_keys($selectedWarehouseIds, true);
+
         return [
             'program_id' => $program?->id,
             'configured' => (bool) $program,
@@ -51,6 +61,7 @@ class JourneyPlanService
             'cutoff' => $window['cutoff'],
             'timezone' => $branch->zona_horaria,
             'selected_count' => count($selectedIds),
+            'selected_warehouse_count' => count($selectedWarehouseIds),
             'global_prices' => $this->globalPrices->current($companyId),
             'chicken_types' => $types->map(fn (TipoPollo $type) => [
                 'id' => $type->id,
@@ -69,6 +80,13 @@ class JourneyPlanService
                     'selected' => isset($selectedLookup[$association->id]),
                 ];
             })->values(),
+            'warehouses' => $warehouses->map(fn (object $warehouse) => [
+                'id' => (int) $warehouse->id,
+                'code' => $warehouse->codigo,
+                'name' => $warehouse->nombre,
+                'address' => $warehouse->direccion,
+                'selected' => isset($selectedWarehouseLookup[$warehouse->id]),
+            ])->values(),
         ];
     }
 
@@ -90,10 +108,23 @@ class JourneyPlanService
         $vehicles = $this->availableVehicles($companyId)
             ->whereIn('id', $selectedIds)
             ->values();
+        $selectedWarehouseIds = collect($data['warehouse_ids'])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $warehouses = $this->availableWarehouses((int) $branch->id)
+            ->whereIn('id', $selectedWarehouseIds)
+            ->values();
 
         if ($vehicles->count() !== $selectedIds->count()) {
             throw ValidationException::withMessages([
                 'provider_vehicle_ids' => 'Uno o más camiones seleccionados ya no están disponibles.',
+            ]);
+        }
+
+        if ($warehouses->count() !== $selectedWarehouseIds->count()) {
+            throw ValidationException::withMessages([
+                'warehouse_ids' => 'Uno o más almacenes seleccionados ya no están disponibles.',
             ]);
         }
 
@@ -103,6 +134,7 @@ class JourneyPlanService
             $companyId,
             $data,
             $selectedIds,
+            $selectedWarehouseIds,
             $vehicles,
             $window
         ): void {
@@ -153,6 +185,28 @@ class JourneyPlanService
                 $detail->orden_llegada = $index + 1;
                 $detail->estado_actualizado_por = $actor->id;
                 $detail->save();
+            }
+
+            $warehouseSelection = DB::table('programacion_recepcion_almacenes')
+                ->where('programacion_id', $program->id);
+
+            if ($selectedWarehouseIds->isEmpty()) {
+                $warehouseSelection->delete();
+            } else {
+                $warehouseSelection
+                    ->whereNotIn('almacen_id', $selectedWarehouseIds)
+                    ->delete();
+
+                DB::table('programacion_recepcion_almacenes')->upsert(
+                    $selectedWarehouseIds->map(fn (int $warehouseId) => [
+                        'programacion_id' => $program->id,
+                        'almacen_id' => $warehouseId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ])->all(),
+                    ['programacion_id', 'almacen_id'],
+                    ['updated_at']
+                );
             }
 
             $this->globalPrices->save($companyId, $actor->id, $data['global_prices']);
@@ -224,6 +278,18 @@ class JourneyPlanService
                 fn (ProveedorVehiculo $vehicle) => $vehicle->vehiculo->placa,
             ])
             ->values();
+    }
+
+    /**
+     * @return Collection<int, object>
+     */
+    private function availableWarehouses(int $branchId): Collection
+    {
+        return DB::table('almacenes')
+            ->where('sucursal_id', $branchId)
+            ->where('estado', 'ACTIVO')
+            ->orderBy('id')
+            ->get(['id', 'codigo', 'nombre', 'direccion']);
     }
 
 }

@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(49, $migrationFiles);
+        $this->assertCount(50, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
