@@ -19,7 +19,9 @@ class WebViewsTest extends TestCase
             ->assertSee('Consolidado diario por cliente')
             ->assertSee(route('gestion-pesadas'), false)
             ->assertSee(route('jornada'), false)
-            ->assertSee(route('directorio'), false);
+            ->assertSee(route('directorio'), false)
+            ->assertSee(route('flota'), false)
+            ->assertSee('Mi flota y choferes');
     }
 
     public function test_operation_view_is_available_without_database_queries(): void
@@ -152,6 +154,29 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Clientes y proveedores')
             ->assertSee(asset('js/clientes.js'), false);
+    }
+
+    public function test_company_fleet_view_manages_only_own_trucks_and_drivers(): void
+    {
+        $this->get('/flota')
+            ->assertOk()
+            ->assertSee('Flota de la empresa')
+            ->assertSee('Camiones propios')
+            ->assertSee('Choferes de la empresa')
+            ->assertSee('Solo recursos de mi empresa')
+            ->assertSee('id="truckPlate"', false)
+            ->assertSee('id="driverName"', false)
+            ->assertSee(asset('js/flota.js'), false)
+            ->assertSee(route('menu'), false);
+
+        $javascript = file_get_contents(public_path('js/flota.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('apiRequest(`/${state.activeType}', $javascript);
+        $this->assertStringContainsString('camiones', $javascript);
+        $this->assertStringContainsString('choferes', $javascript);
+        $this->assertStringNotContainsString('/proveedores/', $javascript);
+        $this->assertStringNotContainsString('/clientes/', $javascript);
     }
 
     public function test_daily_tickets_view_is_available_without_database_queries(): void

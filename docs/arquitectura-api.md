@@ -20,6 +20,7 @@ proyecto.
 | `/` | `menu.blade.php` | Usa el comportamiento actual |
 | `/operacion` | `operacion.blade.php` | Usa `localStorage`; sin conexión a tablas |
 | `/directorio` | `directorio.blade.php` | Conectada a la API de clientes y proveedores |
+| `/flota` | `flota.blade.php` | Camiones y choferes propios de la empresa |
 | `/directorio/clientes/{id}` | `cliente-detalle.blade.php` | Tickets, pesadas e histórico de precios |
 | `/directorio/proveedores/{id}` | `proveedor-detalle.blade.php` | Pesadas, destinos y placas asignadas |
 
@@ -71,6 +72,10 @@ una sola vez durante el login.
 | `GET` | `/api/v1/proveedores/{id}/historial` | Token Bearer; acceso público temporal en local |
 | `POST` | `/api/v1/proveedores/{id}/vehiculos` | Token Bearer; acceso público temporal en local |
 | `DELETE` | `/api/v1/proveedores/{id}/vehiculos/{asignacion}` | Token Bearer; acceso público temporal en local |
+| `GET, POST` | `/api/v1/camiones` | `TERCEROS_GESTIONAR`; acceso público temporal en local |
+| `GET, PUT, PATCH, DELETE` | `/api/v1/camiones/{id}` | `TERCEROS_GESTIONAR`; acceso público temporal en local |
+| `GET, POST` | `/api/v1/choferes` | `TERCEROS_GESTIONAR`; acceso público temporal en local |
+| `GET, PUT, PATCH, DELETE` | `/api/v1/choferes/{id}` | `TERCEROS_GESTIONAR`; acceso público temporal en local |
 | `GET` | `/api/v1/operacion/catalogo` | `DESPACHOS_VER`; acceso público temporal en local |
 | `GET` | `/api/v1/operacion/clientes` | `DESPACHOS_VER`; acceso público temporal en local |
 | `GET` | `/api/v1/operacion/proveedores` | `DESPACHOS_VER`; acceso público temporal en local |
@@ -102,6 +107,14 @@ normaliza a mayúsculas, reutiliza el vehículo si ya existe y crea la relación
 en `proveedor_vehiculos`. Una placa no puede estar asignada activamente a dos
 proveedores al mismo tiempo. Al retirarla se desactiva la relación sin borrar
 el vehículo ni su historial.
+
+El catálogo de camiones propios recibe `placa` y, opcionalmente, `marca`,
+`modelo`, `color` y `descripcion`. El catálogo de choferes requiere únicamente
+`nombre_completo`; `tipo_documento`, `numero_documento` y `telefono` son
+opcionales. Si se proporciona alguno de los dos campos de documento, deben
+enviarse ambos. Los dos catálogos admiten búsqueda con `buscar`, paginación con
+`per_page` y eliminación lógica para conservar el historial operativo. Los
+choferes no tienen ninguna relación con los camiones.
 
 ## Registro transaccional de tickets
 

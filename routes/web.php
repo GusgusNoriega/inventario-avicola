@@ -8,6 +8,7 @@ Route::view('/tickets-dia', 'tickets-dia')->name('tickets-dia');
 Route::view('/gestion-pesadas', 'gestion-pesadas')->name('gestion-pesadas');
 Route::view('/jornada', 'jornada')->name('jornada');
 Route::view('/directorio', 'directorio')->name('directorio');
+Route::view('/flota', 'flota')->name('flota');
 Route::view('/directorio/clientes/{tercero}', 'cliente-detalle')
     ->whereNumber('tercero')
     ->name('clientes.detalle');

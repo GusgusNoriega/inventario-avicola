@@ -102,6 +102,22 @@
           <span class="menu-status">Disponible</span>
         </a>
 
+        <a class="menu-tile menu-tile-primary" href="{{ route('flota') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M3 7h11v9H3z"></path>
+              <path d="M14 10h3l3 3v3h-6z"></path>
+              <path d="M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+              <path d="M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Mi flota y choferes</strong>
+            <small>Camiones y personal propios de la empresa</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
         <a class="menu-tile menu-tile-primary" href="{{ route('jornada') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

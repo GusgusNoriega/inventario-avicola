@@ -5,11 +5,13 @@ use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
+use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
 use App\Http\Controllers\Api\V1\TicketWeighingManagementController;
+use App\Http\Controllers\Api\V1\TruckController;
 use App\Models\TerceroRole;
 use Illuminate\Support\Facades\Route;
 
@@ -74,6 +76,11 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($journeyWriteMiddleware);
 
     Route::middleware($directoryMiddleware)->group(function () use ($priceMiddleware): void {
+        Route::apiResource('camiones', TruckController::class)
+            ->parameters(['camiones' => 'camion']);
+        Route::apiResource('choferes', DriverController::class)
+            ->parameters(['choferes' => 'chofer']);
+
         Route::get('/clientes/{tercero}/historial', [CustomerHistoryController::class, 'show'])
             ->whereNumber('tercero');
         Route::get('/proveedores/{tercero}/historial', [ProviderHistoryController::class, 'show'])
