@@ -6,6 +6,7 @@ use App\Models\Pesada;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -32,6 +33,28 @@ class StoreDispatchTicketRequest extends FormRequest
             'destination' => ['required', 'array:type,id'],
             'destination.type' => ['required', Rule::in(['CLIENTE', 'ALMACEN'])],
             'destination.id' => ['required', 'integer', 'min:1'],
+            'delivery' => [
+                Rule::requiredIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH),
+                'nullable',
+                'array:vehicle_id,driver_id',
+            ],
+            'delivery.vehicle_id' => [
+                Rule::requiredIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH),
+                'nullable',
+                'integer',
+                Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
+                    ->where('empresa_id', $this->companyId())
+                    ->where('es_propio', true)
+                    ->where('estado', 'ACTIVO')),
+            ],
+            'delivery.driver_id' => [
+                Rule::requiredIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH),
+                'nullable',
+                'integer',
+                Rule::exists('conductores', 'id')->where(fn ($query) => $query
+                    ->where('empresa_id', $this->companyId())
+                    ->where('estado', 'ACTIVO')),
+            ],
             'weighings' => ['required', 'array', 'min:1', 'max:500'],
             'weighings.*' => [
                 'required',
@@ -95,6 +118,11 @@ class StoreDispatchTicketRequest extends FormRequest
             'weighings.min' => 'El ticket debe contener al menos una pesada.',
             'weighings.*.origin.plate.regex' => 'La placa solo puede contener letras, números y guiones.',
             'weighings.*.local_id.distinct' => 'Cada pesada debe tener un identificador local diferente.',
+            'delivery.required' => 'Selecciona el camión y el chofer que realizarán la entrega.',
+            'delivery.vehicle_id.required' => 'Selecciona un camión de la flota para la entrega.',
+            'delivery.vehicle_id.exists' => 'El camión seleccionado no pertenece a la flota activa de la empresa.',
+            'delivery.driver_id.required' => 'Selecciona un chofer de la flota para la entrega.',
+            'delivery.driver_id.exists' => 'El chofer seleccionado no pertenece a la flota activa de la empresa.',
         ];
     }
 
@@ -216,5 +244,11 @@ class StoreDispatchTicketRequest extends FormRequest
                 }
             }
         });
+    }
+
+    private function companyId(): int
+    {
+        return (int) ($this->user()?->empresa_id
+            ?? DB::table('empresas')->where('estado', 'ACTIVO')->orderBy('id')->value('id'));
     }
 }

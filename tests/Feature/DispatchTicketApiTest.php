@@ -33,6 +33,10 @@ class DispatchTicketApiTest extends TestCase
 
     private int $vehicleId;
 
+    private int $deliveryVehicleId;
+
+    private int $deliveryDriverId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -118,6 +122,17 @@ class DispatchTicketApiTest extends TestCase
         )->assertCreated()->json('data');
         $this->providerVehicleId = $vehicle['id'];
         $this->vehicleId = $vehicle['vehicle_id'];
+        $this->deliveryVehicleId = $this->postJson('/api/v1/camiones', [
+            'placa' => 'ENT-001',
+            'marca' => 'Hino',
+            'modelo' => '300',
+        ])->assertCreated()->json('data.id');
+        $this->deliveryDriverId = $this->postJson('/api/v1/choferes', [
+            'nombre_completo' => 'Chofer de reparto',
+            'tipo_documento' => 'CC',
+            'numero_documento' => '10990001',
+            'telefono' => '3001234567',
+        ])->assertCreated()->json('data.id');
         $this->configureJourney();
     }
 
@@ -145,11 +160,19 @@ class DispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.code', 'T-'.$operatingDate->format('Ymd').'-001')
             ->assertJsonPath('data.status', 'CERRADO')
             ->assertJsonPath('data.destination.id', $this->clientId)
+            ->assertJsonPath('data.delivery.vehicle.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.delivery.vehicle.plate', 'ENT-001')
+            ->assertJsonPath('data.delivery.driver.id', $this->deliveryDriverId)
+            ->assertJsonPath('data.delivery.driver.name', 'CHOFER DE REPARTO')
             ->assertJsonPath('data.weighing_count', 2)
             ->assertJsonMissingPath('data.prices');
 
         $this->assertDatabaseCount('jornadas_operativas', 1);
         $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseHas('tickets_despacho', [
+            'vehiculo_entrega_id' => $this->deliveryVehicleId,
+            'conductor_entrega_id' => $this->deliveryDriverId,
+        ]);
         $this->assertDatabaseCount('ticket_precios', 2);
         $this->assertDatabaseHas('ticket_precios', [
             'precio_kg' => 8.5,
@@ -532,7 +555,27 @@ class DispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.warehouses.0.code', 'ALMACEN_1')
             ->assertJsonPath('data.cage_types.0.code', 'JAVA_700')
             ->assertJsonPath('data.cage_types.0.weight_kg', 7)
+            ->assertJsonPath('data.delivery_trucks.0.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.delivery_trucks.0.plate', 'ENT-001')
+            ->assertJsonPath('data.delivery_drivers.0.id', $this->deliveryDriverId)
+            ->assertJsonPath('data.delivery_drivers.0.name', 'CHOFER DE REPARTO')
             ->assertJsonMissingPath('data.general_prices');
+    }
+
+    public function test_dispatch_requires_an_active_company_truck_and_driver(): void
+    {
+        $payload = $this->ticketPayload();
+        unset($payload['delivery']);
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'delivery',
+                'delivery.vehicle_id',
+                'delivery.driver_id',
+            ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
     public function test_weighing_time_is_stored_in_peru_timezone(): void
@@ -566,6 +609,10 @@ class DispatchTicketApiTest extends TestCase
 
         return [
             'draft_id' => (string) Str::uuid(),
+            'delivery' => [
+                'vehicle_id' => $this->deliveryVehicleId,
+                'driver_id' => $this->deliveryDriverId,
+            ],
             'destination' => [
                 'type' => 'CLIENTE',
                 'id' => $this->clientId,

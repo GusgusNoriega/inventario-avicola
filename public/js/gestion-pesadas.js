@@ -28,6 +28,14 @@ const elements = {
   weightSource: document.getElementById("editWeightSource"),
   weighedAt: document.getElementById("editWeighedAt"),
   weightPreview: document.getElementById("editWeightPreview"),
+  deliveryModal: document.getElementById("editTicketDeliveryModal"),
+  deliveryForm: document.getElementById("editTicketDeliveryForm"),
+  deliveryClose: document.getElementById("editTicketDeliveryClose"),
+  deliveryCancel: document.getElementById("editTicketDeliveryCancel"),
+  deliveryCode: document.getElementById("editTicketDeliveryCode"),
+  deliveryVehicle: document.getElementById("editTicketVehicle"),
+  deliveryDriver: document.getElementById("editTicketDriver"),
+  deliveryMessage: document.getElementById("editTicketDeliveryMessage"),
   deleteModal: document.getElementById("deleteWeighingModal"),
   deleteForm: document.getElementById("deleteWeighingForm"),
   deleteCopy: document.getElementById("deleteWeighingCopy"),
@@ -39,7 +47,7 @@ const elements = {
 const state = {
   tickets: [],
   selectedTicket: null,
-  catalogs: { chicken_types: [], cage_types: [] },
+  catalogs: { chicken_types: [], cage_types: [], delivery_trucks: [], delivery_drivers: [] },
   editingWeighing: null,
   editingChickenSex: "MACHO",
   deletingWeighing: null,
@@ -239,6 +247,7 @@ function renderSelectedTicket() {
   }
 
   const summary = ticket.summary || {};
+  const isDispatch = ticket.operation_type === "DESPACHO";
   const rows = (ticket.weighings || []).map((weighing) => {
     const actions = ticket.editable
       ? `
@@ -297,6 +306,21 @@ function renderSelectedTicket() {
           ${escapeHtml(ticket.edit_restriction || "Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.")}
         </div>
       `}
+      ${isDispatch ? `
+        <div class="weighing-ticket-delivery">
+          <span>
+            <small>Camión de entrega</small>
+            <strong>${escapeHtml(ticket.delivery?.vehicle?.plate || "Sin camión asignado")}</strong>
+          </span>
+          <span>
+            <small>Chofer de entrega</small>
+            <strong>${escapeHtml(ticket.delivery?.driver?.name || "Sin chofer asignado")}</strong>
+          </span>
+          ${ticket.editable
+            ? '<button class="btn btn-secondary" type="button" data-edit-ticket-delivery>Editar transporte</button>'
+            : ""}
+        </div>
+      ` : ""}
       <div class="weighing-ticket-stats">
         <span><small>Pesadas</small><strong>${formatNumber(summary.weighings)}</strong></span>
         <span><small>Javas</small><strong>${formatNumber(summary.cages)}</strong></span>
@@ -362,7 +386,12 @@ async function selectTicket(ticketId, showStatus = true) {
   try {
     const response = await apiRequest(`/operacion/tickets/${ticketId}/pesadas`);
     state.selectedTicket = response.data?.ticket || null;
-    state.catalogs = response.data?.catalogs || { chicken_types: [], cage_types: [] };
+    state.catalogs = response.data?.catalogs || {
+      chicken_types: [],
+      cage_types: [],
+      delivery_trucks: [],
+      delivery_drivers: []
+    };
     renderSelectedTicket();
     setMessage("");
   } catch (error) {
@@ -374,6 +403,73 @@ async function selectTicket(ticketId, showStatus = true) {
 
 function findSelectedWeighing(id) {
   return state.selectedTicket?.weighings?.find((item) => Number(item.id) === Number(id)) || null;
+}
+
+function renderDeliveryOptions() {
+  elements.deliveryVehicle.innerHTML = (state.catalogs.delivery_trucks || [])
+    .map((truck) => `<option value="${escapeHtml(truck.id)}">${escapeHtml(truck.plate)}${truck.detail ? ` · ${escapeHtml(truck.detail)}` : ""}</option>`)
+    .join("");
+  elements.deliveryDriver.innerHTML = (state.catalogs.delivery_drivers || [])
+    .map((driver) => `<option value="${escapeHtml(driver.id)}">${escapeHtml(driver.name)}${driver.document ? ` · ${escapeHtml(driver.document)}` : ""}</option>`)
+    .join("");
+}
+
+function openDeliveryModal() {
+  const ticket = state.selectedTicket;
+  if (!ticket || ticket.operation_type !== "DESPACHO") {
+    setMessage("Solo los tickets de despacho tienen transporte de entrega.", true);
+    return;
+  }
+
+  if (ticket.editable === false) {
+    setMessage("Este ticket pertenece a una jornada anterior y solo puede consultarse.", true);
+    return;
+  }
+
+  renderDeliveryOptions();
+  elements.deliveryCode.textContent = `${ticket.code} · ${ticket.destination?.name || "Sin destino"}`;
+  elements.deliveryVehicle.value = String(ticket.delivery?.vehicle?.id || "");
+  elements.deliveryDriver.value = String(ticket.delivery?.driver?.id || "");
+  setModalMessage(elements.deliveryMessage, "");
+  elements.deliveryModal.hidden = false;
+  elements.deliveryVehicle.focus();
+}
+
+function closeDeliveryModal() {
+  if (state.saving) {
+    return;
+  }
+  elements.deliveryModal.hidden = true;
+  setModalMessage(elements.deliveryMessage, "");
+}
+
+async function saveDelivery(event) {
+  event.preventDefault();
+  if (!state.selectedTicket || state.saving) {
+    return;
+  }
+
+  state.saving = true;
+  setModalMessage(elements.deliveryMessage, "Guardando transporte...");
+
+  try {
+    const response = await apiRequest(`/operacion/tickets/${state.selectedTicket.id}/transporte`, {
+      method: "PUT",
+      body: JSON.stringify({
+        vehicle_id: Number(elements.deliveryVehicle.value),
+        driver_id: Number(elements.deliveryDriver.value)
+      })
+    });
+    state.selectedTicket = response.data?.ticket || state.selectedTicket;
+    elements.deliveryModal.hidden = true;
+    renderSelectedTicket();
+    setMessage(response.message || "Transporte actualizado correctamente.");
+    await searchTickets(false);
+  } catch (error) {
+    setModalMessage(elements.deliveryMessage, getErrorMessage(error, "No se pudo actualizar el transporte."), true);
+  } finally {
+    state.saving = false;
+  }
 }
 
 function renderEditOptions() {
@@ -575,11 +671,16 @@ function bindEvents() {
       openEditModal(editButton.dataset.editWeighing);
     } else if (deleteButton) {
       openDeleteModal(deleteButton.dataset.deleteWeighing);
+    } else if (event.target.closest("[data-edit-ticket-delivery]")) {
+      openDeliveryModal();
     } else if (event.target.closest("[data-refresh-ticket]")) {
       void selectTicket(state.selectedTicket?.id);
     }
   });
   elements.editForm.addEventListener("submit", saveWeighing);
+  elements.deliveryForm.addEventListener("submit", saveDelivery);
+  elements.deliveryClose.addEventListener("click", closeDeliveryModal);
+  elements.deliveryCancel.addEventListener("click", closeDeliveryModal);
   elements.chickenSexButtons.forEach((button) => {
     button.addEventListener("click", () => selectChickenSex(button.dataset.managementSex));
   });
@@ -600,12 +701,19 @@ function bindEvents() {
       closeDeleteModal();
     }
   });
+  elements.deliveryModal.addEventListener("click", (event) => {
+    if (event.target === elements.deliveryModal) {
+      closeDeliveryModal();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") {
       return;
     }
     if (!elements.deleteModal.hidden) {
       closeDeleteModal();
+    } else if (!elements.deliveryModal.hidden) {
+      closeDeliveryModal();
     } else if (!elements.editModal.hidden) {
       closeEditModal();
     }

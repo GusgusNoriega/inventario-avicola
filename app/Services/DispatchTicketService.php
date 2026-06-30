@@ -94,6 +94,12 @@ class DispatchTicketService
                 'tipo_operacion' => $operationType,
                 'cliente_destino_id' => $destination['client_id'],
                 'almacen_destino_id' => $destination['warehouse_id'],
+                'vehiculo_entrega_id' => $operationType === TicketDespacho::OPERATION_DISPATCH
+                    ? $data['delivery']['vehicle_id']
+                    : null,
+                'conductor_entrega_id' => $operationType === TicketDespacho::OPERATION_DISPATCH
+                    ? $data['delivery']['driver_id']
+                    : null,
                 'estado' => TicketDespacho::STATUS_CLOSED,
                 'cerrado_por' => $actor->id,
                 'cerrado_at' => now(),
@@ -665,6 +671,8 @@ class DispatchTicketService
             'jornada',
             'clienteDestino',
             'almacenDestino',
+            'vehiculoEntrega',
+            'conductorEntrega',
             'pesadas',
         ]);
     }

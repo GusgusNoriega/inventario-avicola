@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(53, $migrationFiles);
+        $this->assertCount(54, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -100,7 +100,7 @@ class DatabaseSchemaTest extends TestCase
             'conductores' => ['empresa_id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'telefono', 'estado'],
             'vehiculos' => ['empresa_id', 'placa', 'marca', 'modelo', 'color', 'descripcion', 'es_propio', 'estado'],
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
-            'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id'],
+            'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'tipo_java_id', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
             'comprobantes' => ['operacion', 'codigo', 'origen_codigo', 'total', 'saldo_pendiente'],

@@ -18,6 +18,7 @@ class OperationCatalogController extends Controller
     public function index(Request $request): JsonResponse
     {
         $branch = $this->context->branch($request);
+        $companyId = $this->context->companyId($request);
 
         return response()->json([
             'data' => [
@@ -37,6 +38,34 @@ class OperationCatalogController extends Controller
                         'code' => $warehouse->codigo,
                         'name' => $warehouse->nombre,
                         'address' => $warehouse->direccion,
+                    ])
+                    ->values(),
+                'delivery_trucks' => DB::table('vehiculos')
+                    ->where('empresa_id', $companyId)
+                    ->where('es_propio', true)
+                    ->where('estado', 'ACTIVO')
+                    ->orderBy('placa')
+                    ->get(['id', 'placa', 'marca', 'modelo', 'color', 'descripcion'])
+                    ->map(fn (object $truck) => [
+                        'id' => $truck->id,
+                        'plate' => $truck->placa,
+                        'brand' => $truck->marca,
+                        'model' => $truck->modelo,
+                        'color' => $truck->color,
+                        'description' => $truck->descripcion,
+                    ])
+                    ->values(),
+                'delivery_drivers' => DB::table('conductores')
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', 'ACTIVO')
+                    ->orderBy('nombre_completo')
+                    ->get(['id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'telefono'])
+                    ->map(fn (object $driver) => [
+                        'id' => $driver->id,
+                        'name' => $driver->nombre_completo,
+                        'document_type' => $driver->tipo_documento,
+                        'document_number' => $driver->numero_documento,
+                        'phone' => $driver->telefono,
                     ])
                     ->values(),
                 'chicken_types' => TipoPollo::query()

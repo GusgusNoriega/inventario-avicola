@@ -118,6 +118,34 @@
     </div>
   </div>
 
+  <div id="editTicketDeliveryModal" class="weighing-modal" hidden>
+    <div class="weighing-modal-card weighing-delivery-card card" role="dialog" aria-modal="true" aria-labelledby="editTicketDeliveryTitle">
+      <div class="weighing-modal-head">
+        <div>
+          <p class="eyebrow">Transporte de entrega</p>
+          <h2 id="editTicketDeliveryTitle">Editar camión y chofer</h2>
+        </div>
+        <button id="editTicketDeliveryClose" class="btn btn-ghost" type="button" aria-label="Cerrar">Cerrar</button>
+      </div>
+      <p id="editTicketDeliveryCode" class="weighing-delivery-ticket">--</p>
+      <form id="editTicketDeliveryForm" class="weighing-delivery-form">
+        <label class="field">
+          Camión de la empresa
+          <select id="editTicketVehicle" required></select>
+        </label>
+        <label class="field">
+          Chofer de la empresa
+          <select id="editTicketDriver" required></select>
+        </label>
+        <p id="editTicketDeliveryMessage" class="form-message" role="status" aria-live="polite"></p>
+        <div class="weighing-modal-actions">
+          <button id="editTicketDeliveryCancel" class="btn btn-ghost" type="button">Cancelar</button>
+          <button class="btn btn-success" type="submit">Guardar transporte</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="deleteWeighingModal" class="weighing-modal" hidden>
     <div class="weighing-modal-card weighing-delete-card card" role="dialog" aria-modal="true" aria-labelledby="deleteWeighingTitle">
       <div class="weighing-modal-head">

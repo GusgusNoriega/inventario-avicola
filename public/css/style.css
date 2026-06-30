@@ -2339,6 +2339,68 @@ body[data-fleet-view="choferes"] .fleet-tab.is-active {
   box-shadow: 0 0 0 3px rgba(103, 167, 255, 0.14);
 }
 
+.delivery-fleet-modal {
+  z-index: 190;
+}
+
+.delivery-fleet-card {
+  width: min(700px, calc(100dvw - 16px));
+  height: min(78dvh, 640px);
+  max-height: calc(100dvh - 16px);
+  padding: 16px;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.delivery-fleet-caption {
+  margin: 0 0 3px;
+  color: var(--secondary);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.delivery-fleet-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.delivery-fleet-option {
+  min-height: 62px;
+  border: 1px solid #444444;
+  border-radius: 10px;
+  background: #090909;
+  color: var(--text-main);
+  padding: 10px 12px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.delivery-fleet-option:hover,
+.delivery-fleet-option:focus-visible {
+  border-color: var(--secondary);
+  background: #171717;
+}
+
+.delivery-fleet-option-name {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.delivery-fleet-option-detail {
+  color: #aebed3;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
 .client-option {
   border: 1px solid #2f4464;
   background: #0f1a2c;
@@ -3000,6 +3062,7 @@ input[type="number"][readonly] {
 .modal-card,
 .item-modal-card,
 .client-modal-card,
+.delivery-fleet-card,
 .error-modal-card,
 .numeric-pad-card {
   background: linear-gradient(180deg, #151515, #090909);
@@ -3579,6 +3642,15 @@ button:focus-visible {
   font-size: 1.18rem;
   line-height: 1.05;
   overflow-wrap: anywhere;
+}
+
+.selected-truck-sex-counts {
+  color: var(--secondary);
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .selected-truck-types {
@@ -5875,6 +5947,32 @@ body.customer-history-page {
   font-weight: 700;
 }
 
+.weighing-ticket-delivery {
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
+  gap: 14px;
+  align-items: center;
+  background: rgba(43, 199, 255, 0.05);
+}
+
+.weighing-ticket-delivery > span {
+  display: grid;
+  gap: 4px;
+}
+
+.weighing-ticket-delivery small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.weighing-ticket-delivery strong {
+  color: var(--text-main);
+}
+
 .weighing-ticket-stats {
   display: grid;
   grid-template-columns: repeat(6, minmax(120px, 1fr));
@@ -5911,6 +6009,13 @@ body.customer-history-page {
 .weighing-table-wrap {
   border-radius: 0;
   scrollbar-color: var(--secondary) #080808;
+}
+
+.weighing-table-wrap .weighing-records-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-card);
 }
 
 .weighing-records-table {
@@ -6005,6 +6110,32 @@ body.customer-history-page {
   width: min(580px, 100%);
 }
 
+.weighing-delivery-card {
+  width: min(720px, 100%);
+}
+
+.weighing-delivery-ticket {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-soft);
+  background: var(--bg-input);
+  font-weight: 750;
+}
+
+.weighing-delivery-form {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.weighing-delivery-form > .form-message,
+.weighing-delivery-form > .weighing-modal-actions {
+  grid-column: 1 / -1;
+}
+
 .weighing-delete-copy {
   color: var(--text-soft);
 }
@@ -6012,6 +6143,74 @@ body.customer-history-page {
 .weighing-delete-card textarea {
   width: 100%;
   resize: vertical;
+}
+
+@media (min-width: 1001px) {
+  html.weighing-management-root,
+  body.weighing-management-page {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body.weighing-management-page {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .weighing-management-view {
+    height: 100vh;
+    height: 100dvh;
+    padding-bottom: 14px;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .weighing-management-layout,
+  .weighing-ticket-results,
+  .weighing-selected-panel,
+  .weighing-ticket-detail,
+  .weighing-table-wrap {
+    min-height: 0;
+  }
+
+  .weighing-management-layout {
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .weighing-ticket-results {
+    position: static;
+    height: 100%;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .weighing-ticket-list {
+    max-height: none;
+    min-height: 0;
+    align-content: start;
+  }
+
+  .weighing-selected-panel,
+  .weighing-ticket-detail {
+    height: 100%;
+  }
+
+  .weighing-ticket-detail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .weighing-ticket-detail > :not(.weighing-table-wrap) {
+    flex: 0 0 auto;
+  }
+
+  .weighing-table-wrap {
+    flex: 1 1 auto;
+    overflow: auto;
+  }
 }
 
 @media (max-width: 1000px) {
@@ -6038,6 +6237,15 @@ body.customer-history-page {
 @media (max-width: 700px) {
   .weighing-management-view {
     width: min(100% - 20px, 1700px);
+  }
+
+  .weighing-ticket-delivery,
+  .weighing-delivery-form {
+    grid-template-columns: 1fr;
+  }
+
+  .weighing-ticket-delivery .btn {
+    width: 100%;
   }
 
   .weighing-search-form {

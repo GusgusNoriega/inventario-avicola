@@ -326,6 +326,42 @@
     </div>
   </div>
 
+  <div id="deliveryTruckModal" class="modal delivery-fleet-modal" hidden>
+    <div class="delivery-fleet-card card" role="dialog" aria-modal="true" aria-labelledby="deliveryTruckModalTitle">
+      <div class="section-head">
+        <div>
+          <p class="delivery-fleet-caption">Paso 1 de 2 · Entrega</p>
+          <h2 id="deliveryTruckModalTitle">Seleccionar camión</h2>
+        </div>
+        <button id="closeDeliveryTruckModalBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <p id="deliveryTruckTicketLabel" class="client-modal-truck">--</p>
+      <label class="client-search">
+        <span>Buscar en mi flota</span>
+        <input id="deliveryTruckSearch" type="search" placeholder="Placa, marca o modelo..." autocomplete="off">
+      </label>
+      <div id="deliveryTruckList" class="delivery-fleet-list" role="listbox" aria-label="Camiones propios disponibles"></div>
+    </div>
+  </div>
+
+  <div id="deliveryDriverModal" class="modal delivery-fleet-modal" hidden>
+    <div class="delivery-fleet-card card" role="dialog" aria-modal="true" aria-labelledby="deliveryDriverModalTitle">
+      <div class="section-head">
+        <div>
+          <p class="delivery-fleet-caption">Paso 2 de 2 · Entrega</p>
+          <h2 id="deliveryDriverModalTitle">Seleccionar chofer</h2>
+        </div>
+        <button id="closeDeliveryDriverModalBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+      <p id="deliveryDriverTicketLabel" class="client-modal-truck">--</p>
+      <label class="client-search">
+        <span>Buscar en mis choferes</span>
+        <input id="deliveryDriverSearch" type="search" placeholder="Nombre o documento..." autocomplete="off">
+      </label>
+      <div id="deliveryDriverList" class="delivery-fleet-list" role="listbox" aria-label="Choferes disponibles"></div>
+    </div>
+  </div>
+
   <div id="itemModal" class="modal" hidden>
     <div class="item-modal-card card" role="dialog" aria-modal="true" aria-labelledby="itemModalTitle">
       <div class="section-head">

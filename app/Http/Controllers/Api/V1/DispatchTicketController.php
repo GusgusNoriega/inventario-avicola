@@ -59,6 +59,18 @@ class DispatchTicketController extends Controller
                     'id' => $ticket->almacenDestino?->id,
                     'name' => $ticket->almacenDestino?->nombre,
                 ],
+            'delivery' => $ticket->vehiculoEntrega && $ticket->conductorEntrega
+                ? [
+                    'vehicle' => [
+                        'id' => $ticket->vehiculoEntrega->id,
+                        'plate' => $ticket->vehiculoEntrega->placa,
+                    ],
+                    'driver' => [
+                        'id' => $ticket->conductorEntrega->id,
+                        'name' => $ticket->conductorEntrega->nombre_completo,
+                    ],
+                ]
+                : null,
             'weighing_count' => $ticket->pesadas->count(),
             'weighings' => $ticket->pesadas
                 ->map(fn ($weighing) => [

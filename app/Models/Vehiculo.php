@@ -42,6 +42,14 @@ class Vehiculo extends Model
         return $this->hasMany(ProveedorVehiculo::class, 'vehiculo_id');
     }
 
+    /**
+     * @return HasMany<TicketDespacho, $this>
+     */
+    public function ticketsEntregados(): HasMany
+    {
+        return $this->hasMany(TicketDespacho::class, 'vehiculo_entrega_id');
+    }
+
     protected function casts(): array
     {
         return [

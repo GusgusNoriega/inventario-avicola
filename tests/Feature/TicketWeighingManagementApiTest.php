@@ -30,6 +30,14 @@ class TicketWeighingManagementApiTest extends TestCase
 
     private int $smallCageTypeId;
 
+    private int $deliveryVehicleId;
+
+    private int $deliveryDriverId;
+
+    private int $alternateDeliveryVehicleId;
+
+    private int $alternateDeliveryDriverId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -79,12 +87,18 @@ class TicketWeighingManagementApiTest extends TestCase
             'inicio_at' => '2026-06-27 06:00:00',
             'cierre_programado_at' => '2026-06-27 21:00:00',
         ]);
+        $this->deliveryVehicleId = $this->createDeliveryVehicle('ENT-001');
+        $this->alternateDeliveryVehicleId = $this->createDeliveryVehicle('ENT-002');
+        $this->deliveryDriverId = $this->createDeliveryDriver('CHOFER PRINCIPAL', '10001');
+        $this->alternateDeliveryDriverId = $this->createDeliveryDriver('CHOFER ALTERNO', '10002');
         $this->ticketId = DB::table('tickets_despacho')->insertGetId([
             'jornada_id' => $journeyId,
             'codigo' => 'T-20260627-001',
             'canal' => 'MAYORISTA',
             'tipo_operacion' => TicketDespacho::OPERATION_DISPATCH,
             'cliente_destino_id' => $clientId,
+            'vehiculo_entrega_id' => $this->deliveryVehicleId,
+            'conductor_entrega_id' => $this->deliveryDriverId,
             'estado' => TicketDespacho::STATUS_CLOSED,
             'cerrado_por' => $this->user->id,
             'cerrado_at' => '2026-06-27 10:00:00',
@@ -143,10 +157,79 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.ticket.code', 'T-20260627-001')
             ->assertJsonPath('data.ticket.editable', true)
+            ->assertJsonPath('data.ticket.delivery.vehicle.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.ticket.delivery.vehicle.plate', 'ENT-001')
+            ->assertJsonPath('data.ticket.delivery.driver.id', $this->deliveryDriverId)
+            ->assertJsonPath('data.ticket.delivery.driver.name', 'CHOFER PRINCIPAL')
+            ->assertJsonPath('data.catalogs.delivery_trucks.1.id', $this->alternateDeliveryVehicleId)
+            ->assertJsonCount(2, 'data.catalogs.delivery_drivers')
+            ->assertJsonFragment([
+                'id' => $this->alternateDeliveryDriverId,
+                'name' => 'CHOFER ALTERNO',
+                'document' => 'CC 10002',
+            ])
             ->assertJsonCount(1, 'data.ticket.weighings')
             ->assertJsonPath('data.ticket.weighings.0.id', $this->weighingId)
             ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_MALE)
             ->assertJsonPath('data.ticket.summary.net_weight_kg', 26);
+    }
+
+    public function test_current_journey_ticket_delivery_can_be_updated_and_is_audited(): void
+    {
+        $this->putJson("/api/v1/operacion/tickets/{$this->ticketId}/transporte", [
+            'vehicle_id' => $this->alternateDeliveryVehicleId,
+            'driver_id' => $this->alternateDeliveryDriverId,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.ticket.delivery.vehicle.id', $this->alternateDeliveryVehicleId)
+            ->assertJsonPath('data.ticket.delivery.vehicle.plate', 'ENT-002')
+            ->assertJsonPath('data.ticket.delivery.driver.id', $this->alternateDeliveryDriverId)
+            ->assertJsonPath('data.ticket.delivery.driver.name', 'CHOFER ALTERNO');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $this->ticketId,
+            'vehiculo_entrega_id' => $this->alternateDeliveryVehicleId,
+            'conductor_entrega_id' => $this->alternateDeliveryDriverId,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $this->ticketId,
+            'accion' => 'ACTUALIZAR_TRANSPORTE',
+            'usuario_id' => $this->user->id,
+        ]);
+    }
+
+    public function test_ticket_delivery_rejects_fleet_from_another_company(): void
+    {
+        $otherUser = User::factory()->create();
+        $otherVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $otherUser->empresa_id,
+            'placa' => 'OTR-001',
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $otherDriverId = DB::table('conductores')->insertGetId([
+            'empresa_id' => $otherUser->empresa_id,
+            'nombre_completo' => 'CHOFER EXTERNO',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->putJson("/api/v1/operacion/tickets/{$this->ticketId}/transporte", [
+            'vehicle_id' => $otherVehicleId,
+            'driver_id' => $otherDriverId,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['vehicle_id', 'driver_id']);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $this->ticketId,
+            'vehiculo_entrega_id' => $this->deliveryVehicleId,
+            'conductor_entrega_id' => $this->deliveryDriverId,
+        ]);
     }
 
     public function test_update_recalculates_the_weighing_and_writes_an_audit_event(): void
@@ -243,6 +326,16 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertStatus(409)
             ->assertJsonPath('message', 'Solo se pueden modificar pesadas de la jornada operativa actual.');
 
+        $this->putJson("/api/v1/operacion/tickets/{$this->ticketId}/transporte", [
+            'vehicle_id' => $this->alternateDeliveryVehicleId,
+            'driver_id' => $this->alternateDeliveryDriverId,
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath(
+                'message',
+                'Solo se puede modificar el transporte de tickets de la jornada operativa actual.'
+            );
+
         $this->deleteJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}", [
             'reason' => 'Intento sobre jornada anterior',
         ])
@@ -290,6 +383,33 @@ class TicketWeighingManagementApiTest extends TestCase
             'codigo' => $code,
             'nombre' => $name,
             'peso_kg' => $weight,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createDeliveryVehicle(string $plate): int
+    {
+        return DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => $plate,
+            'marca' => 'Hino',
+            'modelo' => '300',
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createDeliveryDriver(string $name, string $document): int
+    {
+        return DB::table('conductores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre_completo' => $name,
+            'tipo_documento' => 'CC',
+            'numero_documento' => $document,
             'estado' => 'ACTIVO',
             'created_at' => now(),
             'updated_at' => now(),

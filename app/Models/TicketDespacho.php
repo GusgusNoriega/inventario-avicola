@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'tipo_operacion',
     'cliente_destino_id',
     'almacen_destino_id',
+    'vehiculo_entrega_id',
+    'conductor_entrega_id',
     'estado',
     'observaciones',
     'cerrado_por',
@@ -55,6 +57,22 @@ class TicketDespacho extends Model
     public function almacenDestino(): BelongsTo
     {
         return $this->belongsTo(Almacen::class, 'almacen_destino_id');
+    }
+
+    /**
+     * @return BelongsTo<Vehiculo, $this>
+     */
+    public function vehiculoEntrega(): BelongsTo
+    {
+        return $this->belongsTo(Vehiculo::class, 'vehiculo_entrega_id');
+    }
+
+    /**
+     * @return BelongsTo<Conductor, $this>
+     */
+    public function conductorEntrega(): BelongsTo
+    {
+        return $this->belongsTo(Conductor::class, 'conductor_entrega_id');
     }
 
     /**

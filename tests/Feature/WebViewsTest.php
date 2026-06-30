@@ -66,6 +66,17 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('chicken-sex-badge', $javascript);
     }
 
+    public function test_selected_dispatch_totals_show_compact_bird_counts_by_sex(): void
+    {
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('maleBirds: birdsBySex.macho', $javascript);
+        $this->assertStringContainsString('femaleBirds: birdsBySex.hembra', $javascript);
+        $this->assertStringContainsString('M: ${totals.maleBirds} | H: ${totals.femaleBirds}', $javascript);
+        $this->assertStringContainsString('class="selected-truck-sex-counts"', $javascript);
+    }
+
     public function test_all_operation_numeric_fields_use_the_touch_keypad(): void
     {
         $view = file_get_contents(resource_path('views/operacion.blade.php'));
@@ -219,6 +230,9 @@ class WebViewsTest extends TestCase
             ->assertSee('Gestión de pesadas')
             ->assertSee('ticketSearchInput', false)
             ->assertSee('selectedTicketPanel', false)
+            ->assertSee('editTicketDeliveryModal', false)
+            ->assertSee('editTicketVehicle', false)
+            ->assertSee('editTicketDriver', false)
             ->assertSee(asset('js/gestion-pesadas.js'), false);
 
         $dispatchJavascript = file_get_contents(public_path('js/app.js'));
@@ -229,6 +243,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./ticket-printer.js"', $dispatchJavascript);
         $this->assertStringContainsString('from "./ticket-printer.js"', $managementJavascript);
         $this->assertStringContainsString('data-print-selected-ticket', $managementJavascript);
+        $this->assertStringContainsString('data-edit-ticket-delivery', $managementJavascript);
+        $this->assertStringContainsString('/transporte', $managementJavascript);
         $this->assertStringContainsString('printWeightControlTicket(buildSelectedTicketPrintData(ticket)', $managementJavascript);
     }
 

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'empresa_id',
@@ -28,5 +29,13 @@ class Conductor extends Model
     public function empresa(): BelongsTo
     {
         return $this->belongsTo(Empresa::class);
+    }
+
+    /**
+     * @return HasMany<TicketDespacho, $this>
+     */
+    public function ticketsEntregados(): HasMany
+    {
+        return $this->hasMany(TicketDespacho::class, 'conductor_entrega_id');
     }
 }

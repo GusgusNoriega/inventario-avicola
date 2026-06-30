@@ -96,8 +96,79 @@ class TicketWeighingManagementController extends Controller
                     $branch->zona_horaria,
                     $currentOperatingDate
                 ),
-                'catalogs' => $this->catalogsFor($selected),
+                'catalogs' => $this->catalogsFor($selected, (int) $branch->empresa_id),
             ],
+        ]);
+    }
+
+    public function updateDelivery(Request $request, int $ticket): JsonResponse
+    {
+        $selected = $this->ticketForBranch($request, $ticket);
+        $branch = $this->context->branch($request);
+        $companyId = (int) $branch->empresa_id;
+        $currentOperatingDate = $this->currentOperatingDate(
+            $companyId,
+            $branch->zona_horaria
+        );
+        $this->assertEditable(
+            $selected,
+            $currentOperatingDate,
+            'Solo se puede modificar el transporte de tickets de la jornada operativa actual.'
+        );
+        abort_unless(
+            $selected->tipo_operacion === TicketDespacho::OPERATION_DISPATCH,
+            422,
+            'Las devoluciones no tienen camión ni chofer de entrega.'
+        );
+
+        $validated = $request->validate([
+            'vehicle_id' => [
+                'required',
+                'integer',
+                Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
+                    ->where('empresa_id', $companyId)
+                    ->where('es_propio', true)
+                    ->where('estado', 'ACTIVO')),
+            ],
+            'driver_id' => [
+                'required',
+                'integer',
+                Rule::exists('conductores', 'id')->where(fn ($query) => $query
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', 'ACTIVO')),
+            ],
+        ], [
+            'vehicle_id.required' => 'Selecciona un camión de la flota para la entrega.',
+            'vehicle_id.exists' => 'El camión seleccionado no pertenece a la flota activa de la empresa.',
+            'driver_id.required' => 'Selecciona un chofer de la flota para la entrega.',
+            'driver_id.exists' => 'El chofer seleccionado no pertenece a la flota activa de la empresa.',
+        ]);
+
+        DB::transaction(function () use ($request, $selected, $validated, $companyId): void {
+            $before = $this->deliveryAuditValues($selected);
+            $selected->update([
+                'vehiculo_entrega_id' => $validated['vehicle_id'],
+                'conductor_entrega_id' => $validated['driver_id'],
+            ]);
+            $this->writeTicketAudit(
+                $companyId,
+                $this->context->actor($request, (int) $selected->jornada->sucursal_id)->id,
+                $selected->id,
+                $before,
+                $this->deliveryAuditValues($selected->refresh()),
+                $request->ip()
+            );
+        });
+
+        $this->loadTicket($selected);
+
+        return response()->json([
+            'message' => 'Camión y chofer del ticket actualizados correctamente.',
+            'data' => ['ticket' => $this->formatTicket(
+                $selected,
+                $branch->zona_horaria,
+                $currentOperatingDate
+            )],
         ]);
     }
 
@@ -310,6 +381,8 @@ class TicketWeighingManagementController extends Controller
             'jornada',
             'clienteDestino',
             'almacenDestino',
+            'vehiculoEntrega',
+            'conductorEntrega',
             'pesadas' => fn ($query) => $query
                 ->where('estado', Pesada::STATUS_ACTIVE)
                 ->orderBy('numero'),
@@ -340,6 +413,7 @@ class TicketWeighingManagementController extends Controller
                 ? null
                 : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.',
             'destination' => $this->formatDestination($ticket),
+            'delivery' => $this->formatDelivery($ticket),
             'closed_at' => $ticket->cerrado_at?->toISOString(),
             'summary' => [
                 'weighings' => $records->count(),
@@ -403,15 +477,43 @@ class TicketWeighingManagementController extends Controller
         return $ticket->jornada?->fecha_operativa?->format('Y-m-d') === $operatingDate;
     }
 
-    private function assertEditable(TicketDespacho $ticket, string $operatingDate): void
-    {
+    private function assertEditable(
+        TicketDespacho $ticket,
+        string $operatingDate,
+        string $message = 'Solo se pueden modificar pesadas de la jornada operativa actual.'
+    ): void {
         $ticket->loadMissing('jornada');
 
         abort_unless(
             $this->isFromOperatingDate($ticket, $operatingDate),
             409,
-            'Solo se pueden modificar pesadas de la jornada operativa actual.'
+            $message
         );
+    }
+
+    /** @return array<string, mixed>|null */
+    private function formatDelivery(TicketDespacho $ticket): ?array
+    {
+        if ($ticket->tipo_operacion !== TicketDespacho::OPERATION_DISPATCH) {
+            return null;
+        }
+
+        return [
+            'vehicle' => $ticket->vehiculoEntrega
+                ? [
+                    'id' => $ticket->vehiculoEntrega->id,
+                    'plate' => $ticket->vehiculoEntrega->placa,
+                    'description' => $ticket->vehiculoEntrega->descripcion,
+                ]
+                : null,
+            'driver' => $ticket->conductorEntrega
+                ? [
+                    'id' => $ticket->conductorEntrega->id,
+                    'name' => $ticket->conductorEntrega->nombre_completo,
+                    'document_number' => $ticket->conductorEntrega->numero_documento,
+                ]
+                : null,
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -433,13 +535,40 @@ class TicketWeighingManagementController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function catalogsFor(TicketDespacho $ticket): array
+    private function catalogsFor(TicketDespacho $ticket, int $companyId): array
     {
         $typeCodes = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN
             ? [TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DEAD]
             : [TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DRESSED, TipoPollo::CHICKEN_PROCESSED];
 
         return [
+            'delivery_trucks' => DB::table('vehiculos')
+                ->where('empresa_id', $companyId)
+                ->where('es_propio', true)
+                ->where('estado', 'ACTIVO')
+                ->orderBy('placa')
+                ->get(['id', 'placa', 'marca', 'modelo', 'descripcion'])
+                ->map(fn (object $truck) => [
+                    'id' => $truck->id,
+                    'plate' => $truck->placa,
+                    'detail' => collect([$truck->marca, $truck->modelo, $truck->descripcion])
+                        ->filter()
+                        ->implode(' · '),
+                ])
+                ->values(),
+            'delivery_drivers' => DB::table('conductores')
+                ->where('empresa_id', $companyId)
+                ->where('estado', 'ACTIVO')
+                ->orderBy('nombre_completo')
+                ->get(['id', 'nombre_completo', 'tipo_documento', 'numero_documento'])
+                ->map(fn (object $driver) => [
+                    'id' => $driver->id,
+                    'name' => $driver->nombre_completo,
+                    'document' => collect([$driver->tipo_documento, $driver->numero_documento])
+                        ->filter()
+                        ->implode(' '),
+                ])
+                ->values(),
             'chicken_types' => TipoPollo::query()
                 ->whereIn('codigo', $typeCodes)
                 ->where('estado', TipoPollo::STATUS_ACTIVE)
@@ -459,6 +588,37 @@ class TicketWeighingManagementController extends Controller
                 ])
                 ->values(),
         ];
+    }
+
+    /** @return array<string, ?int> */
+    private function deliveryAuditValues(TicketDespacho $ticket): array
+    {
+        return [
+            'vehiculo_entrega_id' => $ticket->vehiculo_entrega_id,
+            'conductor_entrega_id' => $ticket->conductor_entrega_id,
+        ];
+    }
+
+    /** @param array<string, ?int> $before @param array<string, ?int> $after */
+    private function writeTicketAudit(
+        int $companyId,
+        int $actorId,
+        int $ticketId,
+        array $before,
+        array $after,
+        ?string $ip
+    ): void {
+        DB::table('auditoria_eventos')->insert([
+            'empresa_id' => $companyId,
+            'usuario_id' => $actorId,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticketId,
+            'accion' => 'ACTUALIZAR_TRANSPORTE',
+            'datos_antes' => json_encode($before, JSON_THROW_ON_ERROR),
+            'datos_despues' => json_encode($after, JSON_THROW_ON_ERROR),
+            'direccion_ip' => $ip,
+            'created_at' => now(),
+        ]);
     }
 
     /** @return array<string, mixed> */

@@ -67,6 +67,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/operacion/gestion-pesadas', [TicketWeighingManagementController::class, 'index']);
         Route::get('/operacion/tickets/{ticket}/pesadas', [TicketWeighingManagementController::class, 'show'])
             ->whereNumber('ticket');
+        Route::put('/operacion/tickets/{ticket}/transporte', [TicketWeighingManagementController::class, 'updateDelivery'])
+            ->whereNumber('ticket');
         Route::put('/operacion/tickets/{ticket}/pesadas/{weighing}', [TicketWeighingManagementController::class, 'update'])
             ->whereNumber(['ticket', 'weighing']);
         Route::delete('/operacion/tickets/{ticket}/pesadas/{weighing}', [TicketWeighingManagementController::class, 'destroy'])

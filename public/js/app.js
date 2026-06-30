@@ -267,6 +267,16 @@ const elements = {
   clientModalTruckLabel: document.getElementById("clientModalTruckLabel"),
   clientSearch: document.getElementById("clientSearch"),
   clientList: document.getElementById("clientList"),
+  deliveryTruckModal: document.getElementById("deliveryTruckModal"),
+  closeDeliveryTruckModalBtn: document.getElementById("closeDeliveryTruckModalBtn"),
+  deliveryTruckTicketLabel: document.getElementById("deliveryTruckTicketLabel"),
+  deliveryTruckSearch: document.getElementById("deliveryTruckSearch"),
+  deliveryTruckList: document.getElementById("deliveryTruckList"),
+  deliveryDriverModal: document.getElementById("deliveryDriverModal"),
+  closeDeliveryDriverModalBtn: document.getElementById("closeDeliveryDriverModalBtn"),
+  deliveryDriverTicketLabel: document.getElementById("deliveryDriverTicketLabel"),
+  deliveryDriverSearch: document.getElementById("deliveryDriverSearch"),
+  deliveryDriverList: document.getElementById("deliveryDriverList"),
   itemModal: document.getElementById("itemModal"),
   itemEditForm: document.getElementById("itemEditForm"),
   closeItemModalBtn: document.getElementById("closeItemModalBtn"),
@@ -374,6 +384,7 @@ const elements = {
 let editingContext = null;
 let clientModalTruckId = null;
 let clientModalMode = "destination";
+let deliverySelectionContext = null;
 let providerPickerContext = null;
 let editSelectedOrigin = null;
 let editingChickenSex = DEFAULT_CHICKEN_SEX;
@@ -1861,6 +1872,10 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
   const typeCatalog = normalizedOperation === TICKET_OPERATIONS.RETURN
     ? RETURN_CONDITIONS
     : DISPATCH_CHICKEN_TYPES;
+  const birdsBySex = {
+    macho: 0,
+    hembra: 0
+  };
   const byTypeMap = {};
   typeCatalog.forEach((type) => {
     byTypeMap[type.id] = {
@@ -1893,6 +1908,7 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
     const grossWeight = Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0;
     const tareWeight = Number(cage.taraTotalKg) || 0;
     const netWeight = Number(cage.pesoNetoKg ?? cage.pesoKg) || 0;
+    const chickenSex = normalizeChickenSex(cage.chickenSex || cage.sexo);
 
     bucket.records += 1;
     bucket.cages += 1;
@@ -1902,6 +1918,7 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
     bucket.tareWeight += tareWeight;
     bucket.netWeight += netWeight;
     bucket.weight += netWeight;
+    birdsBySex[chickenSex] += aves;
   });
 
   const byType = typeCatalog.map((type) => ({
@@ -1927,6 +1944,8 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
     tareWeight: totalTareWeight,
     netWeight: totalNetWeight,
     weight: totalNetWeight,
+    maleBirds: birdsBySex.macho,
+    femaleBirds: birdsBySex.hembra,
     byType
   };
 }
@@ -4491,7 +4510,120 @@ function printDispatchTicket(truckId) {
   });
 }
 
-function buildDispatchTicketPayload(truck) {
+function getDeliveryTrucks() {
+  return Array.isArray(operationCatalog?.delivery_trucks)
+    ? operationCatalog.delivery_trucks
+    : [];
+}
+
+function getDeliveryDrivers() {
+  return Array.isArray(operationCatalog?.delivery_drivers)
+    ? operationCatalog.delivery_drivers
+    : [];
+}
+
+function renderDeliveryTruckList() {
+  const query = String(elements.deliveryTruckSearch?.value || "").trim().toLocaleLowerCase("es");
+  const trucks = getDeliveryTrucks().filter((truck) => [
+    truck.plate,
+    truck.brand,
+    truck.model,
+    truck.color,
+    truck.description
+  ].filter(Boolean).join(" ").toLocaleLowerCase("es").includes(query));
+
+  elements.deliveryTruckList.innerHTML = trucks.length
+    ? trucks.map((truck) => {
+        const detail = [truck.brand, truck.model, truck.color, truck.description]
+          .filter(Boolean)
+          .join(" · ");
+        return `
+          <button class="delivery-fleet-option" type="button" data-delivery-truck-id="${escapeHtml(truck.id)}">
+            <span class="delivery-fleet-option-name">${escapeHtml(truck.plate || "Sin placa")}</span>
+            <span class="delivery-fleet-option-detail">${escapeHtml(detail || "Camión propio")}</span>
+          </button>
+        `;
+      }).join("")
+    : `<div class="client-empty">${query
+        ? "No hay camiones que coincidan con la búsqueda."
+        : "No hay camiones propios activos. Registra uno en Mi flota y choferes."}</div>`;
+}
+
+function renderDeliveryDriverList() {
+  const query = String(elements.deliveryDriverSearch?.value || "").trim().toLocaleLowerCase("es");
+  const drivers = getDeliveryDrivers().filter((driver) => [
+    driver.name,
+    driver.document_type,
+    driver.document_number,
+    driver.phone
+  ].filter(Boolean).join(" ").toLocaleLowerCase("es").includes(query));
+
+  elements.deliveryDriverList.innerHTML = drivers.length
+    ? drivers.map((driver) => {
+        const document = [driver.document_type, driver.document_number].filter(Boolean).join(" ");
+        const detail = [document, driver.phone].filter(Boolean).join(" · ");
+        return `
+          <button class="delivery-fleet-option" type="button" data-delivery-driver-id="${escapeHtml(driver.id)}">
+            <span class="delivery-fleet-option-name">${escapeHtml(driver.name || "Chofer sin nombre")}</span>
+            <span class="delivery-fleet-option-detail">${escapeHtml(detail || "Chofer activo")}</span>
+          </button>
+        `;
+      }).join("")
+    : `<div class="client-empty">${query
+        ? "No hay choferes que coincidan con la búsqueda."
+        : "No hay choferes activos. Registra uno en Mi flota y choferes."}</div>`;
+}
+
+function openDeliveryTruckModal(truck) {
+  deliverySelectionContext = { truckId: truck.id, vehicleId: null };
+  elements.deliveryTruckSearch.value = "";
+  elements.deliveryTruckTicketLabel.textContent = `${truck.name} · ${getTruckClientName(truck)}`;
+  renderDeliveryTruckList();
+  elements.deliveryTruckModal.hidden = false;
+  window.setTimeout(() => elements.deliveryTruckSearch.focus(), 0);
+}
+
+function closeDeliverySelection() {
+  deliverySelectionContext = null;
+  elements.deliveryTruckModal.hidden = true;
+  elements.deliveryDriverModal.hidden = true;
+}
+
+function selectDeliveryTruck(vehicleId) {
+  const normalizedVehicleId = Number(vehicleId);
+  const truck = getDeliveryTrucks().find((item) => Number(item.id) === normalizedVehicleId);
+  if (!deliverySelectionContext || !truck) {
+    setFormMessage("El camión seleccionado ya no está disponible.", true);
+    return;
+  }
+
+  deliverySelectionContext.vehicleId = normalizedVehicleId;
+  elements.deliveryTruckModal.hidden = true;
+  elements.deliveryDriverSearch.value = "";
+  elements.deliveryDriverTicketLabel.textContent = `Camión ${truck.plate} · Selecciona el chofer`;
+  renderDeliveryDriverList();
+  elements.deliveryDriverModal.hidden = false;
+  window.setTimeout(() => elements.deliveryDriverSearch.focus(), 0);
+}
+
+function selectDeliveryDriver(driverId) {
+  const normalizedDriverId = Number(driverId);
+  const driver = getDeliveryDrivers().find((item) => Number(item.id) === normalizedDriverId);
+  if (!deliverySelectionContext || !driver) {
+    setFormMessage("El chofer seleccionado ya no está disponible.", true);
+    return;
+  }
+
+  const selection = {
+    truckId: deliverySelectionContext.truckId,
+    vehicleId: deliverySelectionContext.vehicleId,
+    driverId: normalizedDriverId
+  };
+  closeDeliverySelection();
+  void registerDispatchTicket(selection.truckId, selection);
+}
+
+function buildDispatchTicketPayload(truck, deliverySelection = null) {
   const destination = getTruckDestination(truck);
   const operationType = getTruckOperationType(truck);
   const isReturn = operationType === TICKET_OPERATIONS.RETURN;
@@ -4514,7 +4646,7 @@ function buildDispatchTicketPayload(truck) {
     throw new Error("El destino seleccionado no está vinculado con la base de datos.");
   }
 
-  return {
+  const ticketPayload = {
     draft_id: truck.draftId,
     operation_type: operationType,
     destination: {
@@ -4590,6 +4722,15 @@ function buildDispatchTicketPayload(truck) {
       return payload;
     })
   };
+
+  if (!isReturn) {
+    ticketPayload.delivery = {
+      vehicle_id: Number(deliverySelection?.vehicleId),
+      driver_id: Number(deliverySelection?.driverId)
+    };
+  }
+
+  return ticketPayload;
 }
 
 function getApiErrorPresentation(error) {
@@ -4610,7 +4751,7 @@ function getApiErrorPresentation(error) {
   };
 }
 
-async function registerDispatchTicket(truckId) {
+async function registerDispatchTicket(truckId, deliverySelection = null) {
   const truck = state.trucks.find((item) => item.id === truckId);
 
   if (!isJourneyConfigured()) {
@@ -4639,9 +4780,14 @@ async function registerDispatchTicket(truckId) {
 
   let payload;
   try {
-    payload = buildDispatchTicketPayload(truck);
+    payload = buildDispatchTicketPayload(truck, deliverySelection);
   } catch (error) {
     setFormMessage(error.message, true);
+    return;
+  }
+
+  if (!isReturnTicket(truck) && !deliverySelection) {
+    openDeliveryTruckModal(truck);
     return;
   }
 
@@ -4661,7 +4807,8 @@ async function registerDispatchTicket(truckId) {
       status: response.data?.status,
       operating_date: response.data?.operating_date,
       registered_at: response.data?.registered_at,
-      destination: response.data?.destination
+      destination: response.data?.destination,
+      delivery: response.data?.delivery
     });
     saveState();
     renderAll();
@@ -4720,6 +4867,11 @@ function buildSelectedTruckDetails(truck, totals) {
       <div class="selected-truck-stat">
         <span>Aves</span>
         <strong>${totals.birds}</strong>
+        <small
+          class="selected-truck-sex-counts"
+          aria-label="${totals.maleBirds} pollos machos y ${totals.femaleBirds} pollos hembras"
+          title="Machos: ${totals.maleBirds} | Hembras: ${totals.femaleBirds}"
+        >M: ${totals.maleBirds} | H: ${totals.femaleBirds}</small>
       </div>
       <div class="selected-truck-stat">
         <span>Bruto kg</span>
@@ -5987,6 +6139,23 @@ function bindEvents() {
     assignClientToTruck(option.dataset.clientId || null);
   });
 
+  elements.closeDeliveryTruckModalBtn?.addEventListener("click", closeDeliverySelection);
+  elements.closeDeliveryDriverModalBtn?.addEventListener("click", closeDeliverySelection);
+  elements.deliveryTruckSearch?.addEventListener("input", renderDeliveryTruckList);
+  elements.deliveryDriverSearch?.addEventListener("input", renderDeliveryDriverList);
+  elements.deliveryTruckList?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-delivery-truck-id]");
+    if (option) {
+      selectDeliveryTruck(option.dataset.deliveryTruckId);
+    }
+  });
+  elements.deliveryDriverList?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-delivery-driver-id]");
+    if (option) {
+      selectDeliveryDriver(option.dataset.deliveryDriverId);
+    }
+  });
+
   elements.closeProviderModalBtn.addEventListener("click", closeProviderModal);
   elements.providerSearch.addEventListener("input", renderProviderList);
   elements.providerList.addEventListener("click", (event) => {
@@ -6031,6 +6200,18 @@ function bindEvents() {
   elements.clientModal.addEventListener("click", (event) => {
     if (event.target === elements.clientModal) {
       closeClientModal();
+    }
+  });
+
+  elements.deliveryTruckModal?.addEventListener("click", (event) => {
+    if (event.target === elements.deliveryTruckModal) {
+      closeDeliverySelection();
+    }
+  });
+
+  elements.deliveryDriverModal?.addEventListener("click", (event) => {
+    if (event.target === elements.deliveryDriverModal) {
+      closeDeliverySelection();
     }
   });
 
@@ -6107,6 +6288,16 @@ function bindEvents() {
 
     if (elements.errorModal && !elements.errorModal.hidden) {
       closeErrorModal();
+      return;
+    }
+
+    if (elements.deliveryDriverModal && !elements.deliveryDriverModal.hidden) {
+      closeDeliverySelection();
+      return;
+    }
+
+    if (elements.deliveryTruckModal && !elements.deliveryTruckModal.hidden) {
+      closeDeliverySelection();
       return;
     }
 
