@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
+use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
@@ -43,6 +44,12 @@ Route::prefix('v1')->group(function (): void {
     $journeyWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR', 'permission:PRECIOS_GESTIONAR'];
+    $javaControlReadMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:DESPACHOS_VER'];
+    $javaControlWriteMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR'];
     $priceMiddleware = config('directory.public_access')
         ? []
         : ['permission:PRECIOS_GESTIONAR'];
@@ -76,6 +83,10 @@ Route::prefix('v1')->group(function (): void {
     });
     Route::put('/operacion/jornada', [JourneyPlanController::class, 'update'])
         ->middleware($journeyWriteMiddleware);
+    Route::get('/control-javas', [JavaControlController::class, 'index'])
+        ->middleware($javaControlReadMiddleware);
+    Route::post('/control-javas/recepciones', [JavaControlController::class, 'store'])
+        ->middleware($javaControlWriteMiddleware);
 
     Route::middleware($directoryMiddleware)->group(function () use ($priceMiddleware): void {
         Route::apiResource('camiones', TruckController::class)

@@ -118,6 +118,22 @@
           <span class="menu-status">Disponible</span>
         </a>
 
+        <a class="menu-tile menu-tile-primary" href="{{ route('control-javas') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 4h14v5H5z"></path>
+              <path d="M5 11h14v5H5z"></path>
+              <path d="M7 9v2"></path><path d="M17 9v2"></path>
+              <path d="M8 19h8"></path><path d="M12 16v3"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Control de javas</strong>
+            <small>Saldos y devoluciones por cliente</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
         <a class="menu-tile menu-tile-primary" href="{{ route('jornada') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

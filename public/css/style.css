@@ -50,6 +50,384 @@
   --fs-keypad-number: 29px;
 }
 
+/* Control de javas */
+html.java-control-root,
+body.java-control-page {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+}
+
+.java-control-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top right, rgba(37, 154, 99, 0.14), transparent 34rem),
+    radial-gradient(circle at bottom left, rgba(39, 125, 205, 0.1), transparent 30rem),
+    #070b12;
+  color: #eef5ff;
+  color-scheme: dark;
+}
+
+.java-control-shell {
+  width: min(1480px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 18px 0 48px;
+}
+
+.java-control-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px;
+  border-top: 4px solid #f0ae20;
+}
+
+.java-control-header h1,
+.java-section-head h2 {
+  margin: 0;
+  color: #ffffff;
+}
+
+.java-control-header p:last-child {
+  margin: 8px 0 0;
+  color: #a9bdd8;
+  font-weight: 700;
+}
+
+.java-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.java-summary-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 92px;
+  padding: 16px 18px;
+}
+
+.java-summary-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: #f0ae20;
+  content: "";
+}
+
+.java-summary-card:nth-child(2)::before { background: #4f9ae8; }
+.java-summary-card:nth-child(3)::before { background: #2ab66e; }
+
+.java-summary-card span,
+.java-summary-card small {
+  display: block;
+  color: #91a9c8;
+}
+
+.java-summary-card strong {
+  display: block;
+  margin: 4px 0;
+  color: #ffffff;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.java-summary-card strong.java-summary-debt.has-balance {
+  color: #ff6b6b;
+  text-shadow: 0 0 18px rgba(255, 91, 91, 0.18);
+}
+
+.java-summary-card strong.java-summary-debt.is-clear {
+  color: #82dfaa;
+  text-shadow: 0 0 18px rgba(42, 182, 110, 0.16);
+}
+
+.java-control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(360px, .8fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.java-balance-panel,
+.java-receipt-panel,
+.java-history-panel {
+  padding: 18px;
+}
+
+.java-history-panel { margin-top: 14px; }
+
+.java-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.java-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 270px;
+  padding: 0 12px;
+  border: 1px solid #354c6c;
+  border-radius: 10px;
+  background: #080e18;
+}
+
+.java-search svg {
+  width: 19px;
+  fill: none;
+  stroke: #7691b5;
+  stroke-width: 1.8;
+}
+
+.java-search input {
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ffffff;
+}
+
+.java-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #293e5d;
+  border-radius: 12px;
+}
+
+.java-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #090f1a;
+}
+
+.java-table th,
+.java-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #293e5d;
+  color: #dce7f5;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.java-table th {
+  background: #0d192a;
+  color: #91a9c8;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.java-table tbody tr:last-child td { border-bottom: 0; }
+.java-table tbody tr:hover { background: #101b2b; }
+
+.java-balance,
+.java-movement-badge,
+.java-entry-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.java-balance.has-balance {
+  border: 1px solid rgba(255, 91, 91, 0.5);
+  background: rgba(255, 91, 91, 0.14);
+  color: #ff7d7d;
+}
+
+.java-balance.is-clear {
+  border: 1px solid rgba(42, 182, 110, 0.42);
+  background: rgba(42, 182, 110, 0.12);
+  color: #82dfaa;
+}
+
+.java-action-cell { text-align: right !important; }
+
+.java-receive-btn {
+  padding: 8px 11px;
+  border: 1px solid #49698f;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #17263a, #0b1320);
+  color: #eef5ff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.java-receive-btn:hover:not(:disabled) {
+  border-color: #f0ae20;
+  background: linear-gradient(180deg, #2d2814, #151207);
+  color: #f8dd5a;
+}
+
+.java-receive-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+.java-entry-badge {
+  border: 1px solid rgba(42, 182, 110, 0.42);
+  background: rgba(42, 182, 110, 0.12);
+  color: #82dfaa;
+}
+
+.java-receipt-form {
+  display: grid;
+  gap: 14px;
+}
+
+.java-receipt-form .field {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  color: #c8d7eb;
+  font-weight: 700;
+}
+
+.java-receipt-form input,
+.java-receipt-form select,
+.java-receipt-form textarea,
+.java-history-filter select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #354c6c;
+  border-radius: 9px;
+  background: #080e18;
+  color: #ffffff;
+  font: inherit;
+}
+
+.java-receipt-form textarea { resize: vertical; }
+
+.java-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.java-required { color: #ff8f8f; }
+
+.java-balance-hint {
+  margin: -6px 0 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid #293e5d;
+  background: #0d192a;
+  color: #9eb4d1;
+  font-size: 13px;
+}
+
+.java-resource-hint {
+  margin: -4px 0 0;
+  color: #91a9c8;
+  font-size: 12px;
+}
+
+.java-resource-hint a {
+  color: #f8dd5a;
+  font-weight: 800;
+}
+
+.java-submit-btn {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.java-message {
+  min-height: 20px;
+  margin: 8px 0 0;
+  color: #82dfaa;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.java-message.is-error { color: #ff9b9b; }
+
+.java-history-filter {
+  display: grid;
+  gap: 5px;
+  min-width: 240px;
+  color: #b9cce5;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.java-movement-badge.is-dispatch {
+  border: 1px solid rgba(240, 174, 32, 0.45);
+  background: rgba(240, 174, 32, 0.12);
+  color: #f8dd5a;
+}
+
+.java-movement-badge.is-receipt {
+  border: 1px solid rgba(42, 182, 110, 0.42);
+  background: rgba(42, 182, 110, 0.12);
+  color: #82dfaa;
+}
+
+.java-quantity.is-positive { color: #f8dd5a; }
+.java-quantity.is-negative { color: #82dfaa; }
+.java-empty-cell { padding: 28px !important; text-align: center !important; color: #91a9c8; }
+
+@media (max-width: 1050px) {
+  .java-control-grid { grid-template-columns: 1fr; }
+  .java-receipt-panel { order: -1; }
+}
+
+@media (max-width: 720px) {
+  .java-control-shell { width: min(100% - 20px, 1480px); padding-top: 10px; }
+  .java-control-header,
+  .java-section-head { align-items: flex-start; flex-direction: column; }
+  .java-summary { grid-template-columns: 1fr; }
+  .java-summary-card { padding: 16px 20px; }
+  .java-summary-card strong { font-size: 28px; }
+  .java-balance-panel,
+  .java-receipt-panel,
+  .java-history-panel { padding: 16px; }
+  .java-search,
+  .java-history-filter { width: 100%; min-width: 0; }
+  .java-form-row { grid-template-columns: 1fr; }
+  .java-table-wrap { border: 0; overflow: visible; }
+  .java-table thead { display: none; }
+  .java-table,
+  .java-table tbody,
+  .java-table tr,
+  .java-table td { display: block; width: 100%; }
+  .java-table tr {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #293e5d;
+    border-radius: 10px;
+    background: #090f1a;
+  }
+  .java-table td {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 10px;
+    padding: 7px 0;
+    border: 0;
+  }
+  .java-table td::before {
+    color: #91a9c8;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    content: attr(data-label);
+  }
+  .java-action-cell { display: block !important; text-align: left !important; }
+  .java-action-cell::before,
+  .java-empty-cell::before { display: none; }
+  .java-receive-btn { width: 100%; }
+}
+
 html {
   font-size: 16px;
 }
@@ -1447,6 +1825,23 @@ button:focus-visible {
     font-size: 0.96rem;
   }
 }
+
+/* Superficie del control de javas alineada con el tema oscuro operativo. */
+.java-control-page .card {
+  border: 1px solid #3b4658;
+  background: linear-gradient(180deg, #151b25, #090e16);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.38);
+}
+
+.java-control-page input,
+.java-control-page select,
+.java-control-page textarea {
+  border-color: #354c6c;
+  background: #080e18;
+  color: #ffffff;
+}
+
+.java-control-page .eyebrow { color: #f8dd5a; }
 
 /* Flota propia de la empresa */
 html.fleet-root,
@@ -7171,4 +7566,13 @@ body[data-directory-view="proveedores"] .directory-tab.is-active,
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.java-control-page .java-receipt-form input,
+.java-control-page .java-receipt-form select,
+.java-control-page .java-receipt-form textarea,
+.java-control-page .java-history-filter select {
+  border-color: #354c6c;
+  background: #080e18;
+  color: #ffffff;
 }

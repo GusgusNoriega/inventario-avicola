@@ -179,6 +179,13 @@ class DispatchTicketApiTest extends TestCase
             'origen_precio' => 'CLIENTE',
         ]);
         $this->assertDatabaseCount('pesadas', 2);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'cliente_id' => $this->clientId,
+            'tipo' => 'DESPACHO',
+            'cantidad' => 3,
+            'vehiculo_id' => $this->deliveryVehicleId,
+            'conductor_id' => $this->deliveryDriverId,
+        ]);
         $this->assertDatabaseHas('pesadas', [
             'numero' => 1,
             'proveedor_origen_id' => $this->providerId,

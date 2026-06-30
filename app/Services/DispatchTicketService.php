@@ -22,6 +22,10 @@ use Illuminate\Validation\ValidationException;
 
 class DispatchTicketService
 {
+    public function __construct(
+        private readonly JavaControlService $javaControl
+    ) {}
+
     /**
      * @param  array<string, mixed>  $data
      * @return array{ticket: TicketDespacho, already_registered: bool}
@@ -176,6 +180,12 @@ class DispatchTicketService
                     'created_by' => $actor->id,
                 ]);
             }
+
+            $this->javaControl->syncDispatchMovement(
+                $ticket,
+                $companyId,
+                (int) $branch->id
+            );
 
             return [
                 'ticket' => $this->loadTicket($ticket),

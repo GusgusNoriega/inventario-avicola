@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'jornada_id',
@@ -89,6 +90,14 @@ class TicketDespacho extends Model
     public function precios(): HasMany
     {
         return $this->hasMany(TicketPrecio::class, 'ticket_id');
+    }
+
+    /**
+     * @return HasOne<MovimientoJava, $this>
+     */
+    public function movimientoJavas(): HasOne
+    {
+        return $this->hasOne(MovimientoJava::class, 'ticket_despacho_id');
     }
 
     protected function casts(): array

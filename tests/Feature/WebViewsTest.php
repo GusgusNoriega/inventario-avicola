@@ -21,6 +21,8 @@ class WebViewsTest extends TestCase
             ->assertSee(route('jornada'), false)
             ->assertSee(route('directorio'), false)
             ->assertSee(route('flota'), false)
+            ->assertSee(route('control-javas'), false)
+            ->assertSee('Control de javas')
             ->assertSee('Mi flota y choferes');
     }
 
@@ -188,6 +190,28 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('choferes', $javascript);
         $this->assertStringNotContainsString('/proveedores/', $javascript);
         $this->assertStringNotContainsString('/clientes/', $javascript);
+    }
+
+    public function test_java_control_view_is_available_without_database_queries(): void
+    {
+        $this->get('/control-javas')
+            ->assertOk()
+            ->assertSee('Control de javas por cliente')
+            ->assertSee('Javas de la empresa en clientes')
+            ->assertSee('Javas que debe devolver')
+            ->assertSee('Registrar devolución de javas')
+            ->assertSee('id="javaReceiptClient"', false)
+            ->assertSee('id="javaReceiptTruck"', false)
+            ->assertSee('id="javaReceiptDriver"', false)
+            ->assertDontSee('id="javaReceiptDate"', false)
+            ->assertSee('id="javaMovementRows"', false)
+            ->assertSee(asset('js/control-javas.js'), false)
+            ->assertSee(route('menu'), false);
+
+        $javascript = file_get_contents(public_path('js/control-javas.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringNotContainsString('received_at', $javascript);
     }
 
     public function test_daily_tickets_view_is_available_without_database_queries(): void

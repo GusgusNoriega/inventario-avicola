@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(54, $migrationFiles);
+        $this->assertCount(55, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -84,6 +84,7 @@ class DatabaseSchemaTest extends TestCase
             'pagos',
             'pago_aplicaciones',
             'auditoria_eventos',
+            'movimientos_javas',
         ];
 
         foreach ($tables as $table) {

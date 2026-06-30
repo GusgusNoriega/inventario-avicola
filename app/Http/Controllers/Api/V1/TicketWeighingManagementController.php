@@ -8,6 +8,7 @@ use App\Models\TicketDespacho;
 use App\Models\TipoJava;
 use App\Models\TipoPollo;
 use App\Services\OperationContextService;
+use App\Services\JavaControlService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,8 @@ use Illuminate\Validation\ValidationException;
 class TicketWeighingManagementController extends Controller
 {
     public function __construct(
-        private readonly OperationContextService $context
+        private readonly OperationContextService $context,
+        private readonly JavaControlService $javaControl
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -150,6 +152,11 @@ class TicketWeighingManagementController extends Controller
                 'vehiculo_entrega_id' => $validated['vehicle_id'],
                 'conductor_entrega_id' => $validated['driver_id'],
             ]);
+            $this->javaControl->syncDispatchMovement(
+                $selected->refresh(),
+                $companyId,
+                (int) $selected->jornada->sucursal_id
+            );
             $this->writeTicketAudit(
                 $companyId,
                 $this->context->actor($request, (int) $selected->jornada->sucursal_id)->id,
@@ -289,6 +296,12 @@ class TicketWeighingManagementController extends Controller
                 )->format('Y-m-d H:i:s'),
             ]);
 
+            $this->javaControl->syncDispatchMovement(
+                $selected,
+                (int) $branch->empresa_id,
+                (int) $branch->id
+            );
+
             $this->writeAudit(
                 (int) $branch->empresa_id,
                 $actor->id,
@@ -341,6 +354,12 @@ class TicketWeighingManagementController extends Controller
                 'anulada_at' => now(),
                 'motivo_anulacion' => trim($validated['reason']),
             ]);
+
+            $this->javaControl->syncDispatchMovement(
+                $selected,
+                (int) $branch->empresa_id,
+                (int) $branch->id
+            );
 
             $this->writeAudit(
                 (int) $branch->empresa_id,

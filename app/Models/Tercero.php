@@ -74,6 +74,14 @@ class Tercero extends Model
     }
 
     /**
+     * @return HasMany<MovimientoJava, $this>
+     */
+    public function movimientosJavas(): HasMany
+    {
+        return $this->hasMany(MovimientoJava::class, 'cliente_id');
+    }
+
+    /**
      * @param  Builder<Tercero>  $query
      * @return Builder<Tercero>
      */
