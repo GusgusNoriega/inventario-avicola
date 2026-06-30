@@ -7302,6 +7302,13 @@ body[data-directory-view="proveedores"] .directory-tab.is-active,
   text-align: center;
 }
 
+html.journey-root,
+body.journey-page {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+}
+
 .journey-page {
   min-height: 100vh;
   background:
