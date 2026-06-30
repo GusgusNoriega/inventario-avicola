@@ -107,15 +107,35 @@
           </div>
 
           <div class="form-grid">
-            <label class="field dispatch-truck-field">
-              Ticket
-              <select id="truckSelect" data-touch-label="Ticket"></select>
-            </label>
+            <div class="dispatch-primary-row">
+              <label class="field dispatch-truck-field">
+                Ticket
+                <select id="truckSelect" data-touch-label="Ticket"></select>
+              </label>
 
-            <div class="selected-origin-summary">
-              <span>Camión de origen seleccionado</span>
-              <strong id="selectedProviderName">Selecciona un camión de la lista</strong>
-              <small id="selectedProviderPlateLabel">Proveedor y placa pendientes</small>
+              <div class="selected-origin-summary">
+                <span>Camión origen</span>
+                <strong id="selectedProviderName">Selecciona un camión de la lista</strong>
+                <small id="selectedProviderPlateLabel">Proveedor y placa pendientes</small>
+              </div>
+
+              <label class="field dispatch-quantity-field">
+                <span title="Aves por java o total sin javas">Aves/J.</span>
+                <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 7" required readonly inputmode="none" data-keypad-label="Aves por java o total sin javas" data-keypad-decimal="false">
+              </label>
+
+              <label class="field dispatch-quantity-field">
+                <span title="Cantidad de javas">Javas</span>
+                <input id="javaCount" type="number" min="0" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
+              </label>
+
+              <fieldset class="sex-selector dispatch-sex-selector" aria-label="Sexo de los pollos">
+                <legend>Sexo</legend>
+                <div class="sex-selector-buttons">
+                  <button class="sex-btn sex-btn-male is-active" type="button" data-sex="macho" aria-pressed="true" aria-label="Macho" title="Macho">M</button>
+                  <button class="sex-btn sex-btn-female" type="button" data-sex="hembra" aria-pressed="false" aria-label="Hembra" title="Hembra">H</button>
+                </div>
+              </fieldset>
             </div>
 
             <div class="entry-origin-controls" aria-hidden="true">
@@ -127,26 +147,6 @@
                 </select>
                 <small id="truckPlateHelp">Selecciona una placa activa asignada al proveedor.</small>
               </label>
-            </div>
-
-            <div class="entry-count-sex-row">
-              <label class="field">
-                Aves / java (o total sin javas)
-                <input id="birdCount" type="number" min="1" step="1" placeholder="Ej: 7" required readonly inputmode="none" data-keypad-label="Aves por java o total sin javas" data-keypad-decimal="false">
-              </label>
-
-              <label class="field">
-                Javas
-                <input id="javaCount" type="number" min="0" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
-              </label>
-
-              <fieldset class="sex-selector" aria-label="Sexo de los pollos">
-                <legend>Sexo</legend>
-                <div class="sex-selector-buttons">
-                  <button class="sex-btn sex-btn-male is-active" type="button" data-sex="macho" aria-pressed="true">Macho</button>
-                  <button class="sex-btn sex-btn-female" type="button" data-sex="hembra" aria-pressed="false">Hembra</button>
-                </div>
-              </fieldset>
             </div>
 
             <label class="field">
@@ -176,10 +176,11 @@
               <strong id="selectedWeightValue">0.00 kg</strong>
               <small id="selectedWeightBreakdown" hidden></small>
             </div>
+
+            <button id="addWeighingBtn" class="btn btn-success weighing-submit-button" type="submit" disabled>Agregar registro</button>
           </div>
 
           <div class="form-actions">
-            <button id="addWeighingBtn" class="btn btn-success" type="submit" disabled>Agregar registro</button>
             <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
           </div>
         </form>
