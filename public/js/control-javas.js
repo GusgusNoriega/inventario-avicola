@@ -6,6 +6,7 @@ const elements = {
   receivedToday: document.getElementById("javaReceivedToday"),
   search: document.getElementById("javaClientSearch"),
   clientRows: document.getElementById("javaClientRows"),
+  clientPagination: document.getElementById("javaClientPagination"),
   balanceMessage: document.getElementById("javaBalanceMessage"),
   form: document.getElementById("javaReceiptForm"),
   client: document.getElementById("javaReceiptClient"),
@@ -24,8 +25,18 @@ const elements = {
 const state = {
   clients: [],
   movements: [],
-  loading: false
+  pagination: {
+    current_page: 1,
+    last_page: 1,
+    per_page: 12,
+    total: 0,
+    from: null,
+    to: null
+  },
+  requestId: 0
 };
+
+let searchTimer;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -85,17 +96,12 @@ function renderFleetOptions(trucks, drivers) {
 }
 
 function renderClients() {
-  const search = elements.search.value.trim().toLocaleLowerCase("es");
-  const clients = state.clients.filter((client) =>
-    `${client.name} ${client.document_number || ""}`.toLocaleLowerCase("es").includes(search)
-  );
-
-  if (!clients.length) {
+  if (!state.clients.length) {
     elements.clientRows.innerHTML = '<tr><td colspan="4" class="java-empty-cell">No hay clientes que coincidan con la búsqueda.</td></tr>';
     return;
   }
 
-  elements.clientRows.innerHTML = clients.map((client) => {
+  elements.clientRows.innerHTML = state.clients.map((client) => {
     const hasBalance = client.balance > 0;
     return `
       <tr>
@@ -113,6 +119,24 @@ function renderClients() {
         </td>
       </tr>`;
   }).join("");
+}
+
+function renderClientPagination() {
+  const pagination = state.pagination;
+  const hasPrevious = pagination.current_page > 1;
+  const hasNext = pagination.current_page < pagination.last_page;
+  const range = pagination.total > 0
+    ? `${pagination.from}–${pagination.to} de ${pagination.total} clientes`
+    : "0 clientes";
+
+  elements.clientPagination.innerHTML = `
+    <span class="java-pagination-total">${range}</span>
+    <div class="java-pagination-actions">
+      <button type="button" data-java-page="${pagination.current_page - 1}" ${hasPrevious ? "" : "disabled"}>Anterior</button>
+      <span>Página ${pagination.current_page} de ${pagination.last_page}</span>
+      <button type="button" data-java-page="${pagination.current_page + 1}" ${hasNext ? "" : "disabled"}>Siguiente</button>
+    </div>
+  `;
 }
 
 function renderMovements() {
@@ -161,9 +185,13 @@ function chooseClientForReceipt(clientId) {
   elements.form.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-async function loadControl({ keepMessages = false } = {}) {
+async function loadControl({ keepMessages = false, page = state.pagination.current_page } = {}) {
+  const requestId = ++state.requestId;
   const historyClientId = elements.historyClient.value;
-  const query = historyClientId ? `?client_id=${encodeURIComponent(historyClientId)}` : "";
+  const query = new URLSearchParams({ page: String(page) });
+  const search = elements.search.value.trim();
+  if (historyClientId) query.set("client_id", historyClientId);
+  if (search) query.set("search", search);
 
   if (!keepMessages) {
     setMessage(elements.balanceMessage, "Cargando javas pendientes de devolución...");
@@ -171,10 +199,12 @@ async function loadControl({ keepMessages = false } = {}) {
   }
 
   try {
-    const response = await apiRequest(`/control-javas${query}`);
+    const response = await apiRequest(`/control-javas?${query.toString()}`);
+    if (requestId !== state.requestId) return;
     const data = response.data;
     state.clients = data.clients || [];
     state.movements = data.movements || [];
+    state.pagination = data.clients_pagination || state.pagination;
     elements.totalPending.textContent = data.summary?.total_pending ?? 0;
     elements.totalPending.classList.toggle("has-balance", Number(data.summary?.total_pending ?? 0) > 0);
     elements.totalPending.classList.toggle("is-clear", Number(data.summary?.total_pending ?? 0) === 0);
@@ -183,6 +213,7 @@ async function loadControl({ keepMessages = false } = {}) {
     renderClientOptions();
     renderFleetOptions(data.trucks || [], data.drivers || []);
     renderClients();
+    renderClientPagination();
     renderMovements();
     setMessage(elements.balanceMessage);
     setMessage(elements.historyMessage);
@@ -234,7 +265,15 @@ async function submitReceipt(event) {
   }
 }
 
-elements.search.addEventListener("input", renderClients);
+elements.search.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadControl({ page: 1 }), 300);
+});
+elements.clientPagination.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-java-page]");
+  if (!button || button.disabled) return;
+  loadControl({ page: Number(button.dataset.javaPage) });
+});
 elements.client.addEventListener("change", updateBalanceHint);
 elements.historyClient.addEventListener("change", () => loadControl());
 elements.clientRows.addEventListener("click", (event) => {

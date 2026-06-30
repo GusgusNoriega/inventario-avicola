@@ -204,6 +204,7 @@ class WebViewsTest extends TestCase
             ->assertSee('id="javaReceiptTruck"', false)
             ->assertSee('id="javaReceiptDriver"', false)
             ->assertDontSee('id="javaReceiptDate"', false)
+            ->assertSee('id="javaClientPagination"', false)
             ->assertSee('id="javaMovementRows"', false)
             ->assertSee(asset('js/control-javas.js'), false)
             ->assertSee(route('menu'), false);
@@ -212,6 +213,8 @@ class WebViewsTest extends TestCase
 
         $this->assertIsString($javascript);
         $this->assertStringNotContainsString('received_at', $javascript);
+        $this->assertStringContainsString('data.clients_pagination', $javascript);
+        $this->assertStringContainsString('new URLSearchParams', $javascript);
     }
 
     public function test_daily_tickets_view_is_available_without_database_queries(): void

@@ -104,6 +104,8 @@ class JavaControlApiTest extends TestCase
             ->assertJsonPath('data.summary.clients_with_balance', 1)
             ->assertJsonPath('data.clients.0.id', $this->client->id)
             ->assertJsonPath('data.clients.0.balance', 10)
+            ->assertJsonPath('data.clients_pagination.per_page', 12)
+            ->assertJsonPath('data.clients_pagination.total', 1)
             ->assertJsonPath('data.trucks.0.id', $this->truck->id)
             ->assertJsonPath('data.drivers.0.id', $this->driver->id);
 
@@ -164,5 +166,49 @@ class JavaControlApiTest extends TestCase
             ->sole();
 
         $this->assertTrue($movement->fecha_movimiento->equalTo(now()));
+    }
+
+    public function test_clients_are_paginated_by_twelve_and_searched_on_the_server(): void
+    {
+        foreach (range(1, 13) as $index) {
+            $client = Tercero::query()->create([
+                'empresa_id' => $this->user->empresa_id,
+                'tipo_documento' => 'NIT',
+                'numero_documento' => '800000'.str_pad((string) $index, 3, '0', STR_PAD_LEFT),
+                'nombre_razon_social' => $index === 13
+                    ? 'CLIENTE PAGINADO ESPECIAL'
+                    : 'CLIENTE PAGINADO '.str_pad((string) $index, 2, '0', STR_PAD_LEFT),
+                'direccion' => 'Dirección cliente paginado',
+                'estado' => Tercero::STATUS_ACTIVE,
+            ]);
+            TerceroRole::query()->create([
+                'tercero_id' => $client->id,
+                'rol' => TerceroRole::CLIENT,
+            ]);
+        }
+
+        $this->getJson('/api/v1/control-javas?page=1')
+            ->assertOk()
+            ->assertJsonCount(12, 'data.clients')
+            ->assertJsonPath('data.clients_pagination.current_page', 1)
+            ->assertJsonPath('data.clients_pagination.last_page', 2)
+            ->assertJsonPath('data.clients_pagination.total', 14);
+
+        $this->getJson('/api/v1/control-javas?page=2')
+            ->assertOk()
+            ->assertJsonCount(2, 'data.clients')
+            ->assertJsonPath('data.clients_pagination.current_page', 2);
+
+        $this->getJson('/api/v1/control-javas?search=ESPECIAL')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.clients')
+            ->assertJsonPath('data.clients.0.name', 'CLIENTE PAGINADO ESPECIAL')
+            ->assertJsonPath('data.clients_pagination.total', 1)
+            ->assertJsonPath('data.summary.total_pending', 10);
+
+        $this->getJson('/api/v1/control-javas?search=800000013')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.clients')
+            ->assertJsonPath('data.clients.0.name', 'CLIENTE PAGINADO ESPECIAL');
     }
 }

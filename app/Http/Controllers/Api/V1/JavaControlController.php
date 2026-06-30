@@ -24,10 +24,15 @@ class JavaControlController extends Controller
     {
         $filters = $request->validate([
             'client_id' => ['nullable', 'integer'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
         ]);
         $branch = $this->context->branch($request);
         $companyId = $this->context->companyId($request);
         $clientId = isset($filters['client_id']) ? (int) $filters['client_id'] : null;
+        $search = trim((string) ($filters['search'] ?? ''));
+        $page = (int) ($filters['page'] ?? 1);
+        $perPage = 12;
         $balanceQuery = DB::table('movimientos_javas')
             ->where('empresa_id', $companyId)
             ->groupBy('cliente_id')
@@ -35,7 +40,7 @@ class JavaControlController extends Controller
                 "cliente_id, SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE -cantidad END) AS saldo"
             );
 
-        $clients = DB::table('terceros')
+        $clientBaseQuery = DB::table('terceros')
             ->join('tercero_roles', function ($join): void {
                 $join->on('tercero_roles.tercero_id', '=', 'terceros.id')
                     ->where('tercero_roles.rol', TerceroRole::CLIENT);
@@ -44,15 +49,31 @@ class JavaControlController extends Controller
                 $join->on('saldos_javas.cliente_id', '=', 'terceros.id');
             })
             ->where('terceros.empresa_id', $companyId)
-            ->where('terceros.estado', 'ACTIVO')
+            ->where('terceros.estado', 'ACTIVO');
+        $summary = (clone $clientBaseQuery)
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN saldos_javas.saldo ELSE 0 END), 0) AS total_pending'
+            )
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN 1 ELSE 0 END), 0) AS clients_with_balance'
+            )
+            ->first();
+        $clientPaginator = (clone $clientBaseQuery)
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($query) use ($search): void {
+                    $query->where('terceros.nombre_razon_social', 'like', "%{$search}%")
+                        ->orWhere('terceros.numero_documento', 'like', "%{$search}%");
+                });
+            })
             ->orderByDesc(DB::raw('COALESCE(saldos_javas.saldo, 0)'))
             ->orderBy('terceros.nombre_razon_social')
-            ->get([
+            ->paginate($perPage, [
                 'terceros.id',
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
                 DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
-            ])
+            ], 'page', $page);
+        $clients = $clientPaginator->getCollection()
             ->map(fn (object $client): array => [
                 'id' => (int) $client->id,
                 'name' => $client->nombre_razon_social,
@@ -88,11 +109,19 @@ class JavaControlController extends Controller
                 'timezone' => $branch->zona_horaria,
             ],
             'summary' => [
-                'total_pending' => (int) $clients->sum('balance'),
-                'clients_with_balance' => $clients->where('balance', '>', 0)->count(),
+                'total_pending' => (int) ($summary->total_pending ?? 0),
+                'clients_with_balance' => (int) ($summary->clients_with_balance ?? 0),
                 'received_today' => (int) $receivedToday,
             ],
             'clients' => $clients,
+            'clients_pagination' => [
+                'current_page' => $clientPaginator->currentPage(),
+                'last_page' => $clientPaginator->lastPage(),
+                'per_page' => $clientPaginator->perPage(),
+                'total' => $clientPaginator->total(),
+                'from' => $clientPaginator->firstItem(),
+                'to' => $clientPaginator->lastItem(),
+            ],
             'trucks' => DB::table('vehiculos')
                 ->where('empresa_id', $companyId)
                 ->where('es_propio', true)

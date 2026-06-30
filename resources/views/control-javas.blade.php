@@ -62,6 +62,7 @@
             <tbody id="javaClientRows"></tbody>
           </table>
         </div>
+        <nav id="javaClientPagination" class="java-pagination" aria-label="Paginación de clientes"></nav>
       </section>
 
       <section class="java-receipt-panel card" aria-labelledby="javaReceiptTitle">

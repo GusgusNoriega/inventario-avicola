@@ -226,6 +226,44 @@ body.java-control-page {
 .java-table tbody tr:last-child td { border-bottom: 0; }
 .java-table tbody tr:hover { background: #101b2b; }
 
+.java-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  margin-top: 12px;
+  color: #91a9c8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.java-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.java-pagination button {
+  padding: 8px 12px;
+  border: 1px solid #49698f;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #17263a, #0b1320);
+  color: #eef5ff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.java-pagination button:hover:not(:disabled) {
+  border-color: #f0ae20;
+  color: #f8dd5a;
+}
+
+.java-pagination button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
 .java-balance,
 .java-movement-badge,
 .java-entry-badge {
@@ -426,6 +464,8 @@ body.java-control-page {
   .java-action-cell::before,
   .java-empty-cell::before { display: none; }
   .java-receive-btn { width: 100%; }
+  .java-pagination { align-items: stretch; flex-direction: column; }
+  .java-pagination-actions { justify-content: space-between; }
 }
 
 html {
