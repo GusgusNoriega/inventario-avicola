@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Conductor;
+use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
 use App\Models\Pesada;
 use App\Models\Tercero;
@@ -64,6 +65,7 @@ class JavaControlService
             [
                 'empresa_id' => $companyId,
                 'sucursal_id' => $branchId,
+                'jornada_id' => $ticket->jornada_id,
                 'cliente_id' => $ticket->cliente_destino_id,
                 'tipo' => MovimientoJava::TYPE_DISPATCH,
                 'cantidad' => $quantity,
@@ -127,8 +129,16 @@ class JavaControlService
             $client,
             $vehicle,
             $driver,
-            $receivedAt
+            $receivedAt,
+            $timezone
         ): MovimientoJava {
+            $journey = $this->currentJourney(
+                $companyId,
+                $branchId,
+                $timezone,
+                $actor,
+                $receivedAt
+            );
             $movements = MovimientoJava::query()
                 ->where('empresa_id', $companyId)
                 ->where('cliente_id', $client->id)
@@ -150,6 +160,7 @@ class JavaControlService
             return MovimientoJava::query()->create([
                 'empresa_id' => $companyId,
                 'sucursal_id' => $branchId,
+                'jornada_id' => $journey->id,
                 'cliente_id' => $client->id,
                 'tipo' => MovimientoJava::TYPE_RECEIPT,
                 'cantidad' => $quantity,
@@ -162,5 +173,46 @@ class JavaControlService
                 'created_by' => $actor->id,
             ]);
         }, 3);
+    }
+
+    private function currentJourney(
+        int $companyId,
+        int $branchId,
+        string $timezone,
+        User $actor,
+        CarbonImmutable $occurredAt
+    ): JornadaOperativa {
+        $occurredAt = $occurredAt->setTimezone($timezone);
+        $cutoff = (string) DB::table('empresas')
+            ->where('id', $companyId)
+            ->value('hora_corte_operativo') ?: '21:00:00';
+        $cutoffAt = $occurredAt->startOfDay()->setTimeFromTimeString($cutoff);
+        $operatingDate = $occurredAt->greaterThanOrEqualTo($cutoffAt)
+            ? $occurredAt->addDay()->startOfDay()
+            : $occurredAt->startOfDay();
+        $journey = JornadaOperativa::query()
+            ->where('sucursal_id', $branchId)
+            ->whereDate('fecha_operativa', $operatingDate->format('Y-m-d'))
+            ->lockForUpdate()
+            ->first();
+
+        if (! $journey) {
+            $journey = JornadaOperativa::query()->create([
+                'sucursal_id' => $branchId,
+                'fecha_operativa' => $operatingDate->format('Y-m-d'),
+                'estado' => JornadaOperativa::STATUS_OPEN,
+                'abierta_por' => $actor->id,
+                'inicio_at' => $operatingDate->subDay()->setTimeFromTimeString($cutoff),
+                'cierre_programado_at' => $operatingDate->setTimeFromTimeString($cutoff),
+            ]);
+        }
+
+        if ($journey->estado !== JornadaOperativa::STATUS_OPEN) {
+            throw ValidationException::withMessages([
+                'journey' => 'La jornada operativa actual ya está cerrada.',
+            ]);
+        }
+
+        return $journey;
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\JavaControl\StoreJavaReceiptRequest;
+use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
 use App\Models\TerceroRole;
 use App\Services\JavaControlService;
@@ -23,12 +24,27 @@ class JavaControlController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters = $request->validate([
+            'journey_id' => ['nullable', 'integer'],
             'client_id' => ['nullable', 'integer'],
             'search' => ['nullable', 'string', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
         $branch = $this->context->branch($request);
         $companyId = $this->context->companyId($request);
+        $journeys = JornadaOperativa::query()
+            ->where('sucursal_id', $branch->id)
+            ->orderByDesc('fecha_operativa')
+            ->orderByDesc('id')
+            ->get();
+        $selectedJourneyId = isset($filters['journey_id'])
+            ? (int) $filters['journey_id']
+            : (int) ($journeys->first()?->id ?? 0);
+        $currentJourneyId = (int) ($journeys->first()?->id ?? 0);
+
+        if ($selectedJourneyId && ! $journeys->contains('id', $selectedJourneyId)) {
+            abort(404, 'La jornada seleccionada no pertenece a esta sucursal.');
+        }
+
         $clientId = isset($filters['client_id']) ? (int) $filters['client_id'] : null;
         $search = trim((string) ($filters['search'] ?? ''));
         $page = (int) ($filters['page'] ?? 1);
@@ -84,13 +100,102 @@ class JavaControlController extends Controller
 
         $movements = MovimientoJava::query()
             ->where('empresa_id', $companyId)
+            ->where('sucursal_id', $branch->id)
+            ->when($selectedJourneyId, fn ($query) => $query->where('jornada_id', $selectedJourneyId))
             ->when($clientId, fn ($query) => $query->where('cliente_id', $clientId))
-            ->with(['cliente:id,nombre_razon_social', 'ticketDespacho:id,codigo', 'vehiculo:id,placa', 'conductor:id,nombre_completo'])
+            ->with([
+                'jornada:id,fecha_operativa,estado',
+                'cliente:id,nombre_razon_social',
+                'ticketDespacho:id,codigo',
+                'vehiculo:id,placa',
+                'conductor:id,nombre_completo',
+            ])
             ->orderByDesc('fecha_movimiento')
             ->orderByDesc('id')
-            ->limit(100)
+            ->limit(250)
             ->get()
             ->map(fn (MovimientoJava $movement): array => $this->formatMovement($movement))
+            ->values();
+        $journeyTotals = MovimientoJava::query()
+            ->where('empresa_id', $companyId)
+            ->where('sucursal_id', $branch->id)
+            ->when($selectedJourneyId, fn ($query) => $query->where('jornada_id', $selectedJourneyId))
+            ->selectRaw(
+                "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE 0 END), 0) AS dispatched"
+            )
+            ->selectRaw(
+                "COALESCE(SUM(CASE WHEN tipo = 'RECEPCION' THEN cantidad ELSE 0 END), 0) AS received"
+            )
+            ->selectRaw('COUNT(DISTINCT vehiculo_id) AS trucks_count')
+            ->selectRaw('COUNT(*) AS movements_count')
+            ->first();
+        $dispatched = (int) ($journeyTotals->dispatched ?? 0);
+        $received = (int) ($journeyTotals->received ?? 0);
+        $currentJourneyTotals = ! $currentJourneyId
+            ? (object) ['dispatched' => 0, 'received' => 0, 'trucks_count' => 0]
+            : ($currentJourneyId === $selectedJourneyId
+                ? $journeyTotals
+                : MovimientoJava::query()
+                    ->where('empresa_id', $companyId)
+                    ->where('sucursal_id', $branch->id)
+                    ->where('jornada_id', $currentJourneyId)
+                    ->selectRaw(
+                        "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE 0 END), 0) AS dispatched"
+                    )
+                    ->selectRaw(
+                        "COALESCE(SUM(CASE WHEN tipo = 'RECEPCION' THEN cantidad ELSE 0 END), 0) AS received"
+                    )
+                    ->selectRaw('COUNT(DISTINCT vehiculo_id) AS trucks_count')
+                    ->first());
+        $currentDispatched = (int) ($currentJourneyTotals->dispatched ?? 0);
+        $currentReceived = (int) ($currentJourneyTotals->received ?? 0);
+        $truckActivity = DB::table('movimientos_javas')
+            ->join('terceros', 'terceros.id', '=', 'movimientos_javas.cliente_id')
+            ->leftJoin('vehiculos', 'vehiculos.id', '=', 'movimientos_javas.vehiculo_id')
+            ->leftJoin('conductores', 'conductores.id', '=', 'movimientos_javas.conductor_id')
+            ->where('movimientos_javas.empresa_id', $companyId)
+            ->where('movimientos_javas.sucursal_id', $branch->id)
+            ->when(
+                $selectedJourneyId,
+                fn ($query) => $query->where('movimientos_javas.jornada_id', $selectedJourneyId)
+            )
+            ->groupBy(
+                'movimientos_javas.vehiculo_id',
+                'vehiculos.placa',
+                'movimientos_javas.conductor_id',
+                'conductores.nombre_completo',
+                'movimientos_javas.cliente_id',
+                'terceros.nombre_razon_social'
+            )
+            ->orderBy('vehiculos.placa')
+            ->orderBy('terceros.nombre_razon_social')
+            ->get([
+                'movimientos_javas.vehiculo_id',
+                'vehiculos.placa',
+                'movimientos_javas.conductor_id',
+                'conductores.nombre_completo',
+                'movimientos_javas.cliente_id',
+                'terceros.nombre_razon_social',
+                DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad ELSE 0 END) AS dispatched"),
+                DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'RECEPCION' THEN movimientos_javas.cantidad ELSE 0 END) AS received"),
+            ])
+            ->map(fn (object $activity): array => [
+                'truck' => [
+                    'id' => $activity->vehiculo_id ? (int) $activity->vehiculo_id : null,
+                    'plate' => $activity->placa ?: 'Sin camión registrado',
+                ],
+                'driver' => [
+                    'id' => $activity->conductor_id ? (int) $activity->conductor_id : null,
+                    'name' => $activity->nombre_completo ?: 'Sin chofer registrado',
+                ],
+                'client' => [
+                    'id' => (int) $activity->cliente_id,
+                    'name' => $activity->nombre_razon_social,
+                ],
+                'dispatched' => (int) $activity->dispatched,
+                'received' => (int) $activity->received,
+                'net' => (int) $activity->dispatched - (int) $activity->received,
+            ])
             ->values();
         $today = CarbonImmutable::now($branch->zona_horaria);
         $receivedToday = MovimientoJava::query()
@@ -112,7 +217,27 @@ class JavaControlController extends Controller
                 'total_pending' => (int) ($summary->total_pending ?? 0),
                 'clients_with_balance' => (int) ($summary->clients_with_balance ?? 0),
                 'received_today' => (int) $receivedToday,
+                'dispatched' => $dispatched,
+                'received' => $received,
+                'net' => $dispatched - $received,
+                'trucks_count' => (int) ($journeyTotals->trucks_count ?? 0),
+                'movements_count' => (int) ($journeyTotals->movements_count ?? 0),
             ],
+            'current_summary' => [
+                'journey_id' => $currentJourneyId ?: null,
+                'dispatched' => $currentDispatched,
+                'received' => $currentReceived,
+                'net' => $currentDispatched - $currentReceived,
+                'trucks_count' => (int) ($currentJourneyTotals->trucks_count ?? 0),
+            ],
+            'journeys' => $journeys->map(fn (JornadaOperativa $journey): array => [
+                'id' => (int) $journey->id,
+                'operating_date' => $journey->fecha_operativa?->format('Y-m-d'),
+                'status' => $journey->estado,
+                'starts_at' => $journey->inicio_at?->toISOString(),
+                'ends_at' => ($journey->cerrada_at ?: $journey->cierre_programado_at)?->toISOString(),
+            ])->values(),
+            'selected_journey_id' => $selectedJourneyId ?: null,
             'clients' => $clients,
             'clients_pagination' => [
                 'current_page' => $clientPaginator->currentPage(),
@@ -137,6 +262,7 @@ class JavaControlController extends Controller
                 ->get(['id', 'nombre_completo'])
                 ->map(fn (object $driver): array => ['id' => (int) $driver->id, 'name' => $driver->nombre_completo])
                 ->values(),
+            'truck_activity' => $truckActivity,
             'movements' => $movements,
         ]]);
     }
@@ -151,10 +277,15 @@ class JavaControlController extends Controller
             $this->context->actor($request, (int) $branch->id),
             $request->validated()
         );
-        $movement->load(['cliente:id,nombre_razon_social', 'vehiculo:id,placa', 'conductor:id,nombre_completo']);
+        $movement->load([
+            'jornada:id,fecha_operativa,estado',
+            'cliente:id,nombre_razon_social',
+            'vehiculo:id,placa',
+            'conductor:id,nombre_completo',
+        ]);
 
         return response()->json([
-            'message' => 'La devolución de javas fue registrada correctamente.',
+            'message' => 'La entrada de javas fue registrada correctamente.',
             'data' => $this->formatMovement($movement),
         ], 201);
     }
@@ -167,6 +298,13 @@ class JavaControlController extends Controller
             'type' => $movement->tipo,
             'quantity' => (int) $movement->cantidad,
             'occurred_at' => $movement->fecha_movimiento?->toISOString(),
+            'journey' => $movement->jornada
+                ? [
+                    'id' => (int) $movement->jornada->id,
+                    'operating_date' => $movement->jornada->fecha_operativa?->format('Y-m-d'),
+                    'status' => $movement->jornada->estado,
+                ]
+                : null,
             'client' => [
                 'id' => (int) $movement->cliente_id,
                 'name' => $movement->cliente?->nombre_razon_social,

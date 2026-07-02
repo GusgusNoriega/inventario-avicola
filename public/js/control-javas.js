@@ -3,7 +3,13 @@ import { apiRequest } from "./api-client.js";
 const elements = {
   totalPending: document.getElementById("javaTotalPending"),
   clientsPending: document.getElementById("javaClientsPending"),
-  receivedToday: document.getElementById("javaReceivedToday"),
+  journey: document.getElementById("javaJourneyFilter"),
+  journeyTitle: document.getElementById("javaJourneyTitle"),
+  journeyWindow: document.getElementById("javaJourneyWindow"),
+  journeyDispatched: document.getElementById("javaJourneyDispatched"),
+  journeyReceived: document.getElementById("javaJourneyReceived"),
+  journeyNet: document.getElementById("javaJourneyNet"),
+  journeyTrucks: document.getElementById("javaJourneyTrucks"),
   search: document.getElementById("javaClientSearch"),
   clientRows: document.getElementById("javaClientRows"),
   clientPagination: document.getElementById("javaClientPagination"),
@@ -18,12 +24,15 @@ const elements = {
   submit: document.getElementById("javaReceiptSubmit"),
   receiptMessage: document.getElementById("javaReceiptMessage"),
   historyClient: document.getElementById("javaHistoryClient"),
+  truckActivityRows: document.getElementById("javaTruckActivityRows"),
   movementRows: document.getElementById("javaMovementRows"),
   historyMessage: document.getElementById("javaHistoryMessage")
 };
 
 const state = {
   clients: [],
+  journeys: [],
+  truckActivity: [],
   movements: [],
   pagination: {
     current_page: 1,
@@ -64,6 +73,37 @@ function formatDate(value) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function formatOperatingDate(value) {
+  if (!value) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "full",
+    timeZone: "UTC"
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function renderJourneys(selectedJourneyId) {
+  if (!state.journeys.length) {
+    elements.journey.innerHTML = '<option value="">Sin jornadas registradas</option>';
+    elements.journey.disabled = true;
+    elements.journeyTitle.textContent = "Sin jornada operativa";
+    elements.journeyWindow.textContent = "Al registrar el primer movimiento se creará la jornada actual.";
+    return;
+  }
+
+  elements.journey.disabled = false;
+  elements.journey.innerHTML = state.journeys.map((journey) => `
+    <option value="${journey.id}">${escapeHtml(formatOperatingDate(journey.operating_date))} · ${escapeHtml(journey.status)}</option>
+  `).join("");
+  elements.journey.value = String(selectedJourneyId || state.journeys[0].id);
+  const selected = state.journeys.find((journey) => Number(journey.id) === Number(elements.journey.value));
+  elements.journeyTitle.textContent = selected
+    ? `Jornada del ${formatOperatingDate(selected.operating_date)}`
+    : "Jornada seleccionada";
+  elements.journeyWindow.textContent = selected
+    ? `${formatDate(selected.starts_at)} a ${formatDate(selected.ends_at)} · Estado: ${selected.status} · Solo cambia las tablas inferiores.`
+    : "Este filtro solo cambia el consolidado y el detalle que aparecen debajo.";
 }
 
 function selectedClient() {
@@ -141,26 +181,44 @@ function renderClientPagination() {
 
 function renderMovements() {
   if (!state.movements.length) {
-    elements.movementRows.innerHTML = '<tr><td colspan="6" class="java-empty-cell">Todavía no hay movimientos para mostrar.</td></tr>';
+    elements.movementRows.innerHTML = '<tr><td colspan="7" class="java-empty-cell">No hay entradas ni salidas de javas en esta jornada.</td></tr>';
     return;
   }
 
   elements.movementRows.innerHTML = state.movements.map((movement) => {
     const isReceipt = movement.type === "RECEPCION";
-    const transport = [movement.truck?.plate, movement.driver?.name].filter(Boolean).join(" · ") || "—";
     const reference = movement.ticket?.code
       ? `Ticket ${escapeHtml(movement.ticket.code)}`
-      : escapeHtml(movement.observations || "Devolución manual");
+      : escapeHtml(movement.observations || "Entrada manual");
     return `
       <tr>
         <td data-label="Fecha">${formatDate(movement.occurred_at)}</td>
+        <td data-label="Camión"><strong>${escapeHtml(movement.truck?.plate || "—")}</strong></td>
         <td data-label="Cliente"><strong>${escapeHtml(movement.client?.name)}</strong></td>
-        <td data-label="Movimiento"><span class="java-movement-badge ${isReceipt ? "is-receipt" : "is-dispatch"}">${isReceipt ? "Devuelta por el cliente" : "Entregada al cliente"}</span></td>
+        <td data-label="Movimiento"><span class="java-movement-badge ${isReceipt ? "is-receipt" : "is-dispatch"}">${isReceipt ? "Entrada" : "Salida"}</span></td>
         <td data-label="Cantidad"><strong class="java-quantity ${isReceipt ? "is-negative" : "is-positive"}">${isReceipt ? "−" : "+"}${movement.quantity}</strong></td>
-        <td data-label="Camión / chofer">${escapeHtml(transport)}</td>
+        <td data-label="Chofer">${escapeHtml(movement.driver?.name || "—")}</td>
         <td data-label="Referencia">${reference}</td>
       </tr>`;
   }).join("");
+}
+
+function renderTruckActivity() {
+  if (!state.truckActivity.length) {
+    elements.truckActivityRows.innerHTML = '<tr><td colspan="6" class="java-empty-cell">No hay actividad de camiones en esta jornada.</td></tr>';
+    return;
+  }
+
+  elements.truckActivityRows.innerHTML = state.truckActivity.map((activity) => `
+    <tr>
+      <td data-label="Camión"><strong>${escapeHtml(activity.truck?.plate || "Sin camión")}</strong></td>
+      <td data-label="Chofer">${escapeHtml(activity.driver?.name || "Sin chofer")}</td>
+      <td data-label="Cliente">${escapeHtml(activity.client?.name || "—")}</td>
+      <td data-label="Javas que llevó"><strong class="java-quantity is-positive">${activity.dispatched}</strong></td>
+      <td data-label="Javas que trajo"><strong class="java-quantity is-negative">${activity.received}</strong></td>
+      <td data-label="Balance"><span class="java-balance ${activity.net > 0 ? "has-balance" : "is-clear"}">${activity.net}</span></td>
+    </tr>
+  `).join("");
 }
 
 function updateBalanceHint() {
@@ -185,11 +243,16 @@ function chooseClientForReceipt(clientId) {
   elements.form.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-async function loadControl({ keepMessages = false, page = state.pagination.current_page } = {}) {
+async function loadControl({
+  keepMessages = false,
+  page = state.pagination.current_page,
+  journeyId = elements.journey.value
+} = {}) {
   const requestId = ++state.requestId;
   const historyClientId = elements.historyClient.value;
   const query = new URLSearchParams({ page: String(page) });
   const search = elements.search.value.trim();
+  if (journeyId) query.set("journey_id", journeyId);
   if (historyClientId) query.set("client_id", historyClientId);
   if (search) query.set("search", search);
 
@@ -203,17 +266,25 @@ async function loadControl({ keepMessages = false, page = state.pagination.curre
     if (requestId !== state.requestId) return;
     const data = response.data;
     state.clients = data.clients || [];
+    state.journeys = data.journeys || [];
+    state.truckActivity = data.truck_activity || [];
     state.movements = data.movements || [];
     state.pagination = data.clients_pagination || state.pagination;
     elements.totalPending.textContent = data.summary?.total_pending ?? 0;
-    elements.totalPending.classList.toggle("has-balance", Number(data.summary?.total_pending ?? 0) > 0);
-    elements.totalPending.classList.toggle("is-clear", Number(data.summary?.total_pending ?? 0) === 0);
     elements.clientsPending.textContent = data.summary?.clients_with_balance ?? 0;
-    elements.receivedToday.textContent = data.summary?.received_today ?? 0;
+    const currentSummary = data.current_summary || {};
+    elements.journeyDispatched.textContent = currentSummary.dispatched ?? 0;
+    elements.journeyReceived.textContent = currentSummary.received ?? 0;
+    elements.journeyNet.textContent = currentSummary.net ?? 0;
+    elements.journeyNet.classList.toggle("has-balance", Number(currentSummary.net ?? 0) > 0);
+    elements.journeyNet.classList.toggle("is-clear", Number(currentSummary.net ?? 0) <= 0);
+    elements.journeyTrucks.textContent = currentSummary.trucks_count ?? 0;
+    renderJourneys(data.selected_journey_id);
     renderClientOptions();
     renderFleetOptions(data.trucks || [], data.drivers || []);
     renderClients();
     renderClientPagination();
+    renderTruckActivity();
     renderMovements();
     setMessage(elements.balanceMessage);
     setMessage(elements.historyMessage);
@@ -256,7 +327,10 @@ async function submitReceipt(event) {
     });
     elements.quantity.value = "";
     elements.observations.value = "";
-    await loadControl({ keepMessages: true });
+    await loadControl({
+      keepMessages: true,
+      journeyId: response.data?.journey?.id || elements.journey.value
+    });
     setMessage(elements.receiptMessage, response.message);
   } catch (error) {
     setMessage(elements.receiptMessage, errorMessage(error), true);
@@ -275,6 +349,7 @@ elements.clientPagination.addEventListener("click", (event) => {
   loadControl({ page: Number(button.dataset.javaPage) });
 });
 elements.client.addEventListener("change", updateBalanceHint);
+elements.journey.addEventListener("change", () => loadControl({ page: 1 }));
 elements.historyClient.addEventListener("change", () => loadControl());
 elements.clientRows.addEventListener("click", (event) => {
   const button = event.target.closest("[data-receive-client]");

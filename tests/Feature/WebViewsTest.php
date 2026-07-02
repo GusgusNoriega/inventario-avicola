@@ -196,10 +196,16 @@ class WebViewsTest extends TestCase
     {
         $this->get('/control-javas')
             ->assertOk()
-            ->assertSee('Control de javas por cliente')
-            ->assertSee('Javas de la empresa en clientes')
+            ->assertSee('Trazabilidad de javas por jornada')
+            ->assertSee('Javas que salieron')
+            ->assertSee('Javas que entraron')
+            ->assertSee('Resumen de la jornada actual', false)
             ->assertSee('Javas que debe devolver')
-            ->assertSee('Registrar devolución de javas')
+            ->assertSee('Registrar entrada de javas')
+            ->assertSee('id="javaJourneyFilter"', false)
+            ->assertSee('Este filtro solo cambia el consolidado y el detalle', false)
+            ->assertSee('id="javaTruckActivityRows"', false)
+            ->assertSee('<th>Chofer</th>', false)
             ->assertSee('id="javaReceiptClient"', false)
             ->assertSee('id="javaReceiptTruck"', false)
             ->assertSee('id="javaReceiptDriver"', false)
@@ -215,6 +221,7 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('received_at', $javascript);
         $this->assertStringContainsString('data.clients_pagination', $javascript);
         $this->assertStringContainsString('new URLSearchParams', $javascript);
+        $this->assertStringContainsString('journey_id', $javascript);
     }
 
     public function test_daily_tickets_view_is_available_without_database_queries(): void

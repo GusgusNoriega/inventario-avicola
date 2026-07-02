@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'empresa_id',
     'sucursal_id',
+    'jornada_id',
     'cliente_id',
     'tipo',
     'cantidad',
@@ -26,6 +27,11 @@ class MovimientoJava extends Model
     public const TYPE_RECEIPT = 'RECEPCION';
 
     protected $table = 'movimientos_javas';
+
+    public function jornada(): BelongsTo
+    {
+        return $this->belongsTo(JornadaOperativa::class, 'jornada_id');
+    }
 
     public function cliente(): BelongsTo
     {

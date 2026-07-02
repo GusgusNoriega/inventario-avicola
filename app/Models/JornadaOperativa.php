@@ -35,6 +35,14 @@ class JornadaOperativa extends Model
         return $this->hasMany(TicketDespacho::class, 'jornada_id');
     }
 
+    /**
+     * @return HasMany<MovimientoJava, $this>
+     */
+    public function movimientosJavas(): HasMany
+    {
+        return $this->hasMany(MovimientoJava::class, 'jornada_id');
+    }
+
     protected function casts(): array
     {
         return [

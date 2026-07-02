@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Conductor;
+use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
 use App\Models\Permission;
 use App\Models\Role;
@@ -120,7 +121,8 @@ class JavaControlApiTest extends TestCase
             ->assertJsonPath('data.type', MovimientoJava::TYPE_RECEIPT)
             ->assertJsonPath('data.quantity', 4)
             ->assertJsonPath('data.client.id', $this->client->id)
-            ->assertJsonPath('data.truck.plate', 'JAV-001');
+            ->assertJsonPath('data.truck.plate', 'JAV-001')
+            ->assertJsonPath('data.journey.status', JornadaOperativa::STATUS_OPEN);
 
         $this->assertDatabaseHas('movimientos_javas', [
             'cliente_id' => $this->client->id,
@@ -129,6 +131,11 @@ class JavaControlApiTest extends TestCase
             'vehiculo_id' => $this->truck->id,
             'conductor_id' => $this->driver->id,
         ]);
+        $this->assertNotNull(
+            MovimientoJava::query()
+                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
+                ->value('jornada_id')
+        );
         $this->getJson('/api/v1/control-javas')
             ->assertOk()
             ->assertJsonPath('data.summary.total_pending', 6)
@@ -210,5 +217,79 @@ class JavaControlApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data.clients')
             ->assertJsonPath('data.clients.0.name', 'CLIENTE PAGINADO ESPECIAL');
+    }
+
+    public function test_traceability_is_filtered_and_summarized_by_journey(): void
+    {
+        $firstJourney = JornadaOperativa::query()->create([
+            'sucursal_id' => $this->branchId,
+            'fecha_operativa' => '2026-06-29',
+            'estado' => JornadaOperativa::STATUS_CLOSED,
+            'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-06-28 21:00:00',
+            'cierre_programado_at' => '2026-06-29 21:00:00',
+            'cerrada_por' => $this->user->id,
+            'cerrada_at' => '2026-06-29 21:00:00',
+        ]);
+        $secondJourney = JornadaOperativa::query()->create([
+            'sucursal_id' => $this->branchId,
+            'fecha_operativa' => '2026-06-30',
+            'estado' => JornadaOperativa::STATUS_CLOSED,
+            'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-06-29 21:00:00',
+            'cierre_programado_at' => '2026-06-30 21:00:00',
+            'cerrada_por' => $this->user->id,
+            'cerrada_at' => '2026-06-30 21:00:00',
+        ]);
+        MovimientoJava::query()->firstOrFail()->update([
+            'jornada_id' => $firstJourney->id,
+            'fecha_movimiento' => '2026-06-29 10:00:00',
+        ]);
+        MovimientoJava::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $firstJourney->id,
+            'cliente_id' => $this->client->id,
+            'tipo' => MovimientoJava::TYPE_RECEIPT,
+            'cantidad' => 3,
+            'vehiculo_id' => $this->truck->id,
+            'conductor_id' => $this->driver->id,
+            'fecha_movimiento' => '2026-06-29 12:00:00',
+            'created_by' => $this->user->id,
+        ]);
+        MovimientoJava::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $secondJourney->id,
+            'cliente_id' => $this->client->id,
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 7,
+            'vehiculo_id' => $this->truck->id,
+            'conductor_id' => $this->driver->id,
+            'fecha_movimiento' => '2026-06-30 10:00:00',
+            'created_by' => $this->user->id,
+        ]);
+
+        $this->getJson("/api/v1/control-javas?journey_id={$firstJourney->id}")
+            ->assertOk()
+            ->assertJsonPath('data.selected_journey_id', $firstJourney->id)
+            ->assertJsonPath('data.summary.dispatched', 10)
+            ->assertJsonPath('data.summary.received', 3)
+            ->assertJsonPath('data.summary.net', 7)
+            ->assertJsonPath('data.summary.trucks_count', 1)
+            ->assertJsonPath('data.current_summary.journey_id', $secondJourney->id)
+            ->assertJsonPath('data.current_summary.dispatched', 7)
+            ->assertJsonPath('data.current_summary.received', 0)
+            ->assertJsonCount(2, 'data.movements')
+            ->assertJsonPath('data.truck_activity.0.truck.plate', 'JAV-001')
+            ->assertJsonPath('data.truck_activity.0.driver.name', 'CHOFER DE JAVAS')
+            ->assertJsonPath('data.truck_activity.0.dispatched', 10)
+            ->assertJsonPath('data.truck_activity.0.received', 3);
+
+        $this->getJson("/api/v1/control-javas?journey_id={$secondJourney->id}")
+            ->assertOk()
+            ->assertJsonPath('data.summary.dispatched', 7)
+            ->assertJsonPath('data.summary.received', 0)
+            ->assertJsonCount(1, 'data.movements');
     }
 }
