@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Conductor;
+use App\Models\ConteoDiarioJava;
+use App\Models\InventarioJava;
 use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
 use App\Models\Pesada;
@@ -17,6 +19,122 @@ use Illuminate\Validation\ValidationException;
 
 class JavaControlService
 {
+    /** @return array<string, mixed> */
+    public function currentInventory(int $companyId, ?int $journeyId = null): array
+    {
+        $outsideQuantity = $this->outsideQuantity($companyId);
+        $inventory = InventarioJava::query()
+            ->where('empresa_id', $companyId)
+            ->first();
+        $dailyCount = $journeyId
+            ? ConteoDiarioJava::query()
+                ->where('empresa_id', $companyId)
+                ->where('jornada_id', $journeyId)
+                ->first()
+            : null;
+
+        if (! $inventory) {
+            return [
+                'configured' => false,
+                'total' => null,
+                'inside' => null,
+                'outside' => $outsideQuantity,
+                'updated_at' => null,
+                'daily_count' => $this->formatDailyCount($dailyCount),
+            ];
+        }
+
+        return [
+            ...$this->formatInventory($inventory, $outsideQuantity),
+            'daily_count' => $this->formatDailyCount($dailyCount),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function saveInventoryTotal(int $companyId, User $actor, array $data): array
+    {
+        return DB::transaction(function () use ($companyId, $actor, $data): array {
+            $outsideQuantity = $this->outsideQuantity($companyId);
+            $totalQuantity = (int) $data['total_quantity'];
+
+            if ($totalQuantity < $outsideQuantity) {
+                throw ValidationException::withMessages([
+                    'total_quantity' => "El total general no puede ser menor que las {$outsideQuantity} javas que están fuera con clientes.",
+                ]);
+            }
+
+            $inventory = InventarioJava::query()->updateOrCreate(
+                ['empresa_id' => $companyId],
+                [
+                    'cantidad_total' => $totalQuantity,
+                    'updated_by' => $actor->id,
+                ]
+            );
+
+            return $this->formatInventory($inventory, $outsideQuantity);
+        }, 3);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function saveDailyCount(
+        int $companyId,
+        int $branchId,
+        string $timezone,
+        User $actor,
+        array $data
+    ): array {
+        return DB::transaction(function () use (
+            $companyId,
+            $branchId,
+            $timezone,
+            $actor,
+            $data
+        ): array {
+            $inventory = InventarioJava::query()
+                ->where('empresa_id', $companyId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $inventory) {
+                throw ValidationException::withMessages([
+                    'quantity' => 'Primero debes definir el total general de javas de la empresa.',
+                ]);
+            }
+
+            $occurredAt = CarbonImmutable::now($timezone);
+            $journey = $this->currentJourney(
+                $companyId,
+                $branchId,
+                $timezone,
+                $actor,
+                $occurredAt
+            );
+            $outsideQuantity = $this->outsideQuantity($companyId);
+            $expectedQuantity = (int) $inventory->cantidad_total - $outsideQuantity;
+            $countedQuantity = (int) $data['quantity'];
+
+            ConteoDiarioJava::query()->updateOrCreate(
+                ['jornada_id' => $journey->id],
+                [
+                    'empresa_id' => $companyId,
+                    'cantidad_en_empresa' => $countedQuantity,
+                    'cantidad_esperada' => $expectedQuantity,
+                    'diferencia' => $countedQuantity - $expectedQuantity,
+                    'contado_at' => $occurredAt->format('Y-m-d H:i:s'),
+                    'contado_por' => $actor->id,
+                ]
+            );
+
+            return $this->currentInventory($companyId, (int) $journey->id);
+        }, 3);
+    }
+
     public function syncDispatchMovement(
         TicketDespacho $ticket,
         int $companyId,
@@ -214,5 +332,55 @@ class JavaControlService
         }
 
         return $journey;
+    }
+
+    private function outsideQuantity(int $companyId): int
+    {
+        $balance = MovimientoJava::query()
+            ->where('empresa_id', $companyId)
+            ->selectRaw(
+                "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE -cantidad END), 0) AS balance"
+            )
+            ->value('balance');
+
+        return max(0, (int) $balance);
+    }
+
+    /** @return array<string, mixed> */
+    private function formatInventory(InventarioJava $inventory, int $outsideQuantity): array
+    {
+        return [
+            'configured' => true,
+            'total' => (int) $inventory->cantidad_total,
+            'inside' => (int) $inventory->cantidad_total - $outsideQuantity,
+            'outside' => $outsideQuantity,
+            'updated_at' => $inventory->updated_at?->toISOString(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function formatDailyCount(?ConteoDiarioJava $count): array
+    {
+        if (! $count) {
+            return [
+                'configured' => false,
+                'journey_id' => null,
+                'quantity' => null,
+                'expected' => null,
+                'difference' => null,
+                'missing' => null,
+                'counted_at' => null,
+            ];
+        }
+
+        return [
+            'configured' => true,
+            'journey_id' => (int) $count->jornada_id,
+            'quantity' => (int) $count->cantidad_en_empresa,
+            'expected' => (int) $count->cantidad_esperada,
+            'difference' => (int) $count->diferencia,
+            'missing' => max(0, -(int) $count->diferencia),
+            'counted_at' => $count->contado_at?->toISOString(),
+        ];
     }
 }

@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(57, $migrationFiles);
+        $this->assertCount(59, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -85,6 +85,8 @@ class DatabaseSchemaTest extends TestCase
             'pago_aplicaciones',
             'auditoria_eventos',
             'movimientos_javas',
+            'inventarios_javas',
+            'conteos_diarios_javas',
         ];
 
         foreach ($tables as $table) {
@@ -103,6 +105,8 @@ class DatabaseSchemaTest extends TestCase
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
             'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id'],
             'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'vehiculo_id', 'fecha_movimiento'],
+            'inventarios_javas' => ['empresa_id', 'cantidad_total', 'updated_by'],
+            'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_esperada', 'diferencia', 'contado_at', 'contado_por'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'tipo_java_id', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
             'comprobantes' => ['operacion', 'codigo', 'origen_codigo', 'total', 'saldo_pendiente'],

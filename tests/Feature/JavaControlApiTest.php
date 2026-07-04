@@ -103,12 +103,30 @@ class JavaControlApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.summary.total_pending', 10)
             ->assertJsonPath('data.summary.clients_with_balance', 1)
+            ->assertJsonPath('data.inventory.configured', false)
+            ->assertJsonPath('data.inventory.outside', 10)
             ->assertJsonPath('data.clients.0.id', $this->client->id)
             ->assertJsonPath('data.clients.0.balance', 10)
+            ->assertJsonPath('data.client_options.0.id', $this->client->id)
+            ->assertJsonPath('data.client_options.0.balance', 10)
             ->assertJsonPath('data.clients_pagination.per_page', 12)
             ->assertJsonPath('data.clients_pagination.total', 1)
             ->assertJsonPath('data.trucks.0.id', $this->truck->id)
             ->assertJsonPath('data.drivers.0.id', $this->driver->id);
+
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'total_quantity' => 50,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.configured', true)
+            ->assertJsonPath('data.total', 50)
+            ->assertJsonPath('data.inside', 40)
+            ->assertJsonPath('data.outside', 10);
+        $this->assertDatabaseHas('inventarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_total' => 50,
+            'updated_by' => $this->user->id,
+        ]);
 
         $this->postJson('/api/v1/control-javas/recepciones', [
             'client_id' => $this->client->id,
@@ -139,7 +157,10 @@ class JavaControlApiTest extends TestCase
         $this->getJson('/api/v1/control-javas')
             ->assertOk()
             ->assertJsonPath('data.summary.total_pending', 6)
-            ->assertJsonPath('data.clients.0.balance', 6);
+            ->assertJsonPath('data.clients.0.balance', 6)
+            ->assertJsonPath('data.inventory.total', 50)
+            ->assertJsonPath('data.inventory.inside', 44)
+            ->assertJsonPath('data.inventory.outside', 6);
     }
 
     public function test_receipt_cannot_exceed_the_client_balance(): void
@@ -154,6 +175,62 @@ class JavaControlApiTest extends TestCase
             ->assertJsonValidationErrors('quantity');
 
         $this->assertDatabaseCount('movimientos_javas', 1);
+    }
+
+    public function test_company_total_cannot_be_less_than_javas_outside(): void
+    {
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'total_quantity' => 9,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('total_quantity');
+
+        $this->assertDatabaseCount('inventarios_javas', 0);
+    }
+
+    public function test_daily_count_detects_missing_javas_without_changing_company_total(): void
+    {
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'total_quantity' => 50,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/control-javas/conteo-diario', [
+            'quantity' => 38,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.total', 50)
+            ->assertJsonPath('data.inside', 40)
+            ->assertJsonPath('data.outside', 10)
+            ->assertJsonPath('data.daily_count.configured', true)
+            ->assertJsonPath('data.daily_count.quantity', 38)
+            ->assertJsonPath('data.daily_count.expected', 40)
+            ->assertJsonPath('data.daily_count.difference', -2)
+            ->assertJsonPath('data.daily_count.missing', 2);
+
+        $this->assertDatabaseHas('conteos_diarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_en_empresa' => 38,
+            'cantidad_esperada' => 40,
+            'diferencia' => -2,
+            'contado_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_total' => 50,
+        ]);
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.inventory.daily_count.quantity', 38)
+            ->assertJsonPath('data.inventory.daily_count.missing', 2);
+
+        $this->postJson('/api/v1/control-javas/conteo-diario', [
+            'quantity' => 41,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.daily_count.difference', 1)
+            ->assertJsonPath('data.daily_count.missing', 0);
+
+        $this->assertDatabaseCount('conteos_diarios_javas', 1);
     }
 
     public function test_receipt_timestamp_is_assigned_by_the_server_and_manual_value_is_ignored(): void

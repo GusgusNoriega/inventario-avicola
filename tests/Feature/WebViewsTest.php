@@ -196,30 +196,68 @@ class WebViewsTest extends TestCase
     {
         $this->get('/control-javas')
             ->assertOk()
-            ->assertSee('Trazabilidad de javas por jornada')
-            ->assertSee('Javas que salieron')
-            ->assertSee('Javas que entraron')
-            ->assertSee('Resumen de la jornada actual', false)
-            ->assertSee('Javas que debe devolver')
-            ->assertSee('Registrar entrada de javas')
-            ->assertSee('id="javaJourneyFilter"', false)
-            ->assertSee('Este filtro solo cambia el consolidado y el detalle', false)
-            ->assertSee('id="javaTruckActivityRows"', false)
-            ->assertSee('<th>Chofer</th>', false)
+            ->assertSee('Control de javas')
+            ->assertSee('Inventario y conteo')
+            ->assertSee('Pendientes y devoluciones')
+            ->assertSee('Trazabilidad por jornada')
+            ->assertSee(route('control-javas.inventario'), false)
+            ->assertSee(route('control-javas.devoluciones'), false)
+            ->assertSee(route('control-javas.trazabilidad'), false)
+            ->assertDontSee('id="javaInventoryOpen"', false)
+            ->assertDontSee('id="javaReceiptForm"', false)
+            ->assertDontSee('id="javaJourneyFilter"', false)
+            ->assertSee(asset('js/control-javas.js'), false)
+            ->assertSee(route('menu'), false);
+
+        $this->get('/control-javas/inventario')
+            ->assertOk()
+            ->assertSee('Inventario y conteo físico')
+            ->assertSee('Total propiedad de la empresa')
+            ->assertSee('Disponibles dentro')
+            ->assertSee('id="javaInventoryOpen"', false)
+            ->assertSee('id="javaInventoryModal"', false)
+            ->assertSee('id="javaInventoryQuantity"', false)
+            ->assertSee('Registrar conteo físico')
+            ->assertSee('id="javaDailyModal"', false)
+            ->assertSee('id="javaDailyCountQuantity"', false)
+            ->assertDontSee('id="javaClientRows"', false)
+            ->assertDontSee('id="javaJourneyFilter"', false)
+            ->assertSee(route('control-javas'), false);
+
+        $this->get('/control-javas/devoluciones')
+            ->assertOk()
+            ->assertSee('Pendientes y devoluciones')
+            ->assertSee('Javas por devolver')
+            ->assertSee('Registrar devolución')
             ->assertSee('id="javaReceiptClient"', false)
             ->assertSee('id="javaReceiptTruck"', false)
             ->assertSee('id="javaReceiptDriver"', false)
-            ->assertDontSee('id="javaReceiptDate"', false)
             ->assertSee('id="javaClientPagination"', false)
+            ->assertDontSee('id="javaReceiptDate"', false)
+            ->assertDontSee('id="javaInventoryOpen"', false)
+            ->assertDontSee('id="javaJourneyFilter"', false)
+            ->assertSee(route('control-javas'), false);
+
+        $this->get('/control-javas/trazabilidad')
+            ->assertOk()
+            ->assertSee('Trazabilidad por jornada')
+            ->assertSee('Javas que salieron')
+            ->assertSee('Javas que entraron')
+            ->assertSee('id="javaJourneyFilter"', false)
+            ->assertSee('id="javaTruckActivityRows"', false)
+            ->assertSee('<th>Chofer</th>', false)
             ->assertSee('id="javaMovementRows"', false)
-            ->assertSee(asset('js/control-javas.js'), false)
-            ->assertSee(route('menu'), false);
+            ->assertSee('data-java-trace-tab="activity"', false)
+            ->assertSee('data-java-trace-tab="movements"', false)
+            ->assertDontSee('id="javaReceiptForm"', false)
+            ->assertSee(route('control-javas'), false);
 
         $javascript = file_get_contents(public_path('js/control-javas.js'));
 
         $this->assertIsString($javascript);
         $this->assertStringNotContainsString('received_at', $javascript);
         $this->assertStringContainsString('data.clients_pagination', $javascript);
+        $this->assertStringContainsString('data.client_options', $javascript);
         $this->assertStringContainsString('new URLSearchParams', $javascript);
         $this->assertStringContainsString('journey_id', $javascript);
     }

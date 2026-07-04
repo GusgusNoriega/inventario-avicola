@@ -6,170 +6,81 @@
   <title>Control de Javas | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
-<body class="java-control-page">
-  <main class="java-control-shell">
-    <header class="java-control-header card">
-      <div>
-        <p class="eyebrow">Control de activos</p>
-        <h1>Trazabilidad de javas por jornada</h1>
-        <p>Controla cuántas javas salieron y entraron, qué camión las transportó y a qué cliente corresponde cada movimiento.</p>
-      </div>
-      <a class="menu-return-btn" href="{{ route('menu') }}">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M4 6h7v7H4z"></path><path d="M13 6h7v7h-7z"></path>
-          <path d="M4 15h7v3H4z"></path><path d="M13 15h7v3h-7z"></path>
-        </svg>
-        <span>Menú</span>
-      </a>
-    </header>
+<body class="java-control-page" data-java-page="dashboard">
+  <main class="java-control-shell java-dashboard-shell">
+    @include('partials.java-control-header', [
+      'eyebrow' => 'Control de activos',
+      'title' => 'Control de javas',
+      'description' => 'Consulta el estado actual y entra únicamente a la tarea que necesitas realizar.',
+      'showMenu' => true,
+    ])
 
-    <div class="java-current-summary-head">
-      <strong>Totales de la jornada actual</strong>
-      <span>No cambian al consultar jornadas anteriores en el filtro inferior.</span>
-    </div>
-    <section class="java-summary java-summary-four" aria-label="Resumen de la jornada actual">
+    <section class="java-summary java-dashboard-summary" aria-label="Estado actual de las javas">
       <article class="java-summary-card card">
-        <span>Javas que salieron</span>
-        <strong id="javaJourneyDispatched">0</strong>
-        <small>Entregadas a clientes</small>
+        <span>Disponibles en la empresa</span>
+        <strong id="javaCompanyInside">—</strong>
+        <small id="javaInventoryStatus">Calculando inventario actual</small>
       </article>
       <article class="java-summary-card card">
-        <span>Javas que entraron</span>
-        <strong id="javaJourneyReceived">0</strong>
-        <small>Recuperadas de clientes</small>
+        <span>Fuera con clientes</span>
+        <strong id="javaCompanyOutside">0</strong>
+        <small>Javas pendientes de retorno</small>
       </article>
       <article class="java-summary-card card">
-        <span>Balance de la jornada</span>
-        <strong id="javaJourneyNet" class="java-summary-debt is-clear">0</strong>
-        <small>Salidas menos entradas</small>
+        <span>Clientes con pendientes</span>
+        <strong id="javaClientsPending">0</strong>
+        <small id="javaPendingSummary">Sin saldos pendientes</small>
       </article>
       <article class="java-summary-card card">
-        <span>Camiones involucrados</span>
-        <strong id="javaJourneyTrucks">0</strong>
-        <small>Con movimientos de javas</small>
+        <span>Recibidas hoy</span>
+        <strong id="javaReceivedToday">0</strong>
+        <small>Entradas registradas hoy</small>
       </article>
     </section>
 
-    <section class="java-control-grid">
-      <section class="java-balance-panel card" aria-labelledby="javaBalanceTitle">
-        <div class="java-section-head">
-          <div>
-            <p class="eyebrow">Pendientes de devolución</p>
-            <h2 id="javaBalanceTitle">Javas en poder de cada cliente</h2>
-            <p class="java-section-note"><strong id="javaTotalPending">0</strong> javas pendientes en <strong id="javaClientsPending">0</strong> clientes.</p>
-          </div>
-          <label class="java-search">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"></circle><path d="M16 16l5 5"></path></svg>
-            <input id="javaClientSearch" type="search" placeholder="Buscar cliente o documento">
-          </label>
-        </div>
-        <p id="javaBalanceMessage" class="java-message" role="status" aria-live="polite"></p>
-        <div class="java-table-wrap">
-          <table class="java-table">
-            <thead>
-              <tr><th>Cliente</th><th>Documento</th><th>Javas que debe devolver</th><th></th></tr>
-            </thead>
-            <tbody id="javaClientRows"></tbody>
-          </table>
-        </div>
-        <nav id="javaClientPagination" class="java-pagination" aria-label="Paginación de clientes"></nav>
-      </section>
-
-      <section class="java-receipt-panel card" aria-labelledby="javaReceiptTitle">
-        <div class="java-section-head">
-          <div>
-            <p class="eyebrow">Entrada a planta</p>
-            <h2 id="javaReceiptTitle">Registrar entrada de javas</h2>
-          </div>
-          <span class="java-entry-badge">Reduce las pendientes</span>
-        </div>
-
-        <form id="javaReceiptForm" class="java-receipt-form" novalidate>
-          <label class="field">
-            Cliente de origen <span class="java-required">*</span>
-            <select id="javaReceiptClient" required>
-              <option value="">Seleccionar cliente</option>
-            </select>
-          </label>
-          <p id="javaClientBalanceHint" class="java-balance-hint">Selecciona un cliente para consultar cuántas javas debe devolver.</p>
-          <div class="java-form-row">
-            <label class="field">
-              Camión que trajo las javas <span class="java-required">*</span>
-              <select id="javaReceiptTruck" required><option value="">Seleccionar camión</option></select>
-            </label>
-            <label class="field">
-              Chofer <span class="java-required">*</span>
-              <select id="javaReceiptDriver" required><option value="">Seleccionar chofer</option></select>
-            </label>
-          </div>
-          <p class="java-resource-hint">Solo aparecen recursos propios activos. Si falta alguno, agrégalo en <a href="{{ route('flota') }}">Mi flota y choferes</a>.</p>
-          <label class="field">
-            Cantidad que entró <span class="java-required">*</span>
-            <input id="javaReceiptQuantity" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required>
-          </label>
-          <p class="java-balance-hint">La fecha y hora de la devolución se registrarán automáticamente al confirmar.</p>
-          <label class="field">
-            Observaciones
-            <textarea id="javaReceiptObservations" rows="3" maxlength="500" placeholder="Información opcional de la recepción"></textarea>
-          </label>
-          <button id="javaReceiptSubmit" class="btn btn-success java-submit-btn" type="submit">
-            Registrar entrada de javas
-          </button>
-          <p id="javaReceiptMessage" class="java-message" role="status" aria-live="polite"></p>
-        </form>
-      </section>
-    </section>
-
-    <section class="java-journey-toolbar card" aria-label="Filtro de trazabilidad por jornada">
-      <div>
-        <p class="eyebrow">Consultar trazabilidad</p>
-        <strong id="javaJourneyTitle">Selecciona una jornada</strong>
-        <small id="javaJourneyWindow">Este filtro solo cambia el consolidado y el detalle que aparecen debajo.</small>
-      </div>
-      <label class="java-history-filter java-journey-filter">
-        Ver jornada
-        <select id="javaJourneyFilter"><option value="">Cargando jornadas...</option></select>
-      </label>
-    </section>
-
-    <section class="java-history-panel card" aria-labelledby="javaTruckActivityTitle">
-      <div class="java-section-head">
+    <section class="java-module-section" aria-labelledby="javaModulesTitle">
+      <div class="java-module-heading">
         <div>
-          <p class="eyebrow">Camiones y clientes</p>
-          <h2 id="javaTruckActivityTitle">Movimiento consolidado de la jornada</h2>
-          <p class="java-section-note">Identifica qué camiones llevaron o trajeron javas para cada cliente.</p>
+          <p class="eyebrow">Áreas del control</p>
+          <h2 id="javaModulesTitle">¿Qué necesitas hacer?</h2>
         </div>
+        <p>Cada vista contiene solo la información y las acciones relacionadas con esa tarea.</p>
       </div>
-      <div class="java-table-wrap">
-        <table class="java-table">
-          <thead>
-            <tr><th>Camión</th><th>Chofer</th><th>Cliente</th><th>Javas que llevó</th><th>Javas que trajo</th><th>Balance</th></tr>
-          </thead>
-          <tbody id="javaTruckActivityRows"></tbody>
-        </table>
-      </div>
-    </section>
 
-    <section class="java-history-panel card" aria-labelledby="javaHistoryTitle">
-      <div class="java-section-head">
-        <div>
-          <p class="eyebrow">Trazabilidad</p>
-          <h2 id="javaHistoryTitle">Detalle de entradas y salidas</h2>
-        </div>
-        <label class="java-history-filter">
-          Ver cliente
-          <select id="javaHistoryClient"><option value="">Todos los clientes</option></select>
-        </label>
-      </div>
-      <p id="javaHistoryMessage" class="java-message" role="status" aria-live="polite"></p>
-      <div class="java-table-wrap">
-        <table class="java-table java-history-table">
-          <thead>
-            <tr><th>Fecha</th><th>Camión</th><th>Cliente</th><th>Movimiento</th><th>Cantidad</th><th>Chofer</th><th>Referencia</th></tr>
-          </thead>
-          <tbody id="javaMovementRows"></tbody>
-        </table>
-      </div>
+      <nav class="java-module-nav" aria-label="Vistas del control de javas">
+        <a class="java-module-card card" href="{{ route('control-javas.inventario') }}">
+          <span class="java-module-icon is-inventory" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16v5H4zM4 14h16v5H4z"></path><path d="M8 10v4M16 10v4"></path></svg>
+          </span>
+          <span class="java-module-copy">
+            <strong>Inventario y conteo</strong>
+            <small>Existencias totales, disponibles y verificación física de la jornada.</small>
+          </span>
+          <span class="java-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
+        <a class="java-module-card card" href="{{ route('control-javas.devoluciones') }}">
+          <span class="java-module-icon is-returns" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 7h12v10H4zM16 10h3l2 3v4h-5z"></path><path d="M8 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path></svg>
+          </span>
+          <span class="java-module-copy">
+            <strong>Pendientes y devoluciones</strong>
+            <small>Consulta qué debe cada cliente y registra las javas que regresan.</small>
+          </span>
+          <span class="java-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
+        <a class="java-module-card card" href="{{ route('control-javas.trazabilidad') }}">
+          <span class="java-module-icon is-trace" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 5h14M5 12h14M5 19h14"></path><circle cx="8" cy="5" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="10" cy="19" r="2"></circle></svg>
+          </span>
+          <span class="java-module-copy">
+            <strong>Trazabilidad por jornada</strong>
+            <small>Revisa salidas, entradas, camiones y el detalle de los movimientos.</small>
+          </span>
+          <span class="java-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+      </nav>
     </section>
   </main>
 

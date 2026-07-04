@@ -87,6 +87,10 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($javaControlReadMiddleware);
     Route::post('/control-javas/recepciones', [JavaControlController::class, 'store'])
         ->middleware($javaControlWriteMiddleware);
+    Route::post('/control-javas/inventario', [JavaControlController::class, 'storeInventory'])
+        ->middleware($javaControlWriteMiddleware);
+    Route::post('/control-javas/conteo-diario', [JavaControlController::class, 'storeDailyCount'])
+        ->middleware($javaControlWriteMiddleware);
 
     Route::middleware($directoryMiddleware)->group(function () use ($priceMiddleware): void {
         Route::apiResource('camiones', TruckController::class)

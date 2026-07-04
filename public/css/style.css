@@ -146,6 +146,78 @@ body.java-control-page {
 
 .java-journey-filter { min-width: 330px; }
 .java-summary.java-summary-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.java-summary.java-company-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.java-summary.java-daily-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.java-inventory-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 14px;
+  padding: 17px 20px;
+  border-left: 5px solid #f0ae20;
+}
+
+.java-inventory-head h2 { margin: 0; color: #fff; }
+.java-inventory-head p:last-child { margin: 6px 0 0; color: #91a9c8; }
+.java-inventory-open { min-height: 42px; white-space: nowrap; }
+.java-summary-card strong.is-negative-stock { color: #ff7d7d; }
+.java-summary-card strong.is-positive-stock { color: #82dfaa; }
+.java-daily-head { border-left-color: #4f9ae8; }
+
+.java-inventory-modal {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .78);
+  backdrop-filter: blur(5px);
+}
+
+.java-inventory-modal[hidden] { display: none; }
+
+.java-inventory-modal-card {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 20px;
+  border-top: 4px solid #f0ae20;
+}
+
+.java-inventory-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.java-inventory-modal-head h2 { margin: 0; color: #fff; }
+
+.java-inventory-close {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #49698f;
+  border-radius: 9px;
+  background: #101a29;
+  color: #fff;
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.java-inventory-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.java-inventory-actions .btn,
+.java-inventory-actions .java-receive-btn { min-height: 42px; }
+body.java-inventory-modal-open { overflow: hidden; }
 
 .java-summary-card {
   position: relative;
@@ -468,10 +540,277 @@ body.java-control-page {
 .java-quantity.is-negative { color: #82dfaa; }
 .java-empty-cell { padding: 28px !important; text-align: center !important; color: #91a9c8; }
 
+.java-dashboard-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.java-dashboard-shell .java-summary,
+.java-subview-shell .java-summary {
+  margin: 0;
+}
+
+.java-dashboard-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.java-module-section {
+  display: grid;
+  gap: 14px;
+}
+
+.java-module-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 4px 2px 0;
+}
+
+.java-module-heading h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 22px;
+}
+
+.java-module-heading > p {
+  max-width: 560px;
+  margin: 0;
+  color: #91a9c8;
+  text-align: right;
+}
+
+.java-module-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.java-module-card {
+  min-width: 0;
+  min-height: 190px;
+  padding: 20px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 16px;
+  border: 1px solid #293e5d;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color .16s ease, transform .16s ease, background .16s ease;
+}
+
+.java-module-card:hover,
+.java-module-card:focus-visible {
+  border-color: #f0ae20;
+  background: #111a27;
+  transform: translateY(-2px);
+}
+
+.java-module-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #6b5420;
+  border-radius: 12px;
+  background: #211b0b;
+  color: #f8dd5a;
+}
+
+.java-module-icon.is-returns {
+  border-color: #276948;
+  background: #092016;
+  color: #82dfaa;
+}
+
+.java-module-icon.is-trace {
+  border-color: #315d8f;
+  background: #0a192b;
+  color: #79b9ff;
+}
+
+.java-module-icon svg {
+  width: 29px;
+  height: 29px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.java-module-copy {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.java-module-copy strong {
+  color: #fff;
+  font-size: 18px;
+}
+
+.java-module-copy small {
+  color: #9eb4d1;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.java-module-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #f8dd5a;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.java-back-btn {
+  border-color: #315d8f;
+  color: #a9d4ff;
+}
+
+.java-subview-shell {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.java-inventory-workspace {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.java-inventory-task {
+  min-height: 250px;
+  padding: 20px;
+  display: grid;
+  align-content: space-between;
+  gap: 14px;
+  border-top: 4px solid #f0ae20;
+}
+
+.java-inventory-task h2 {
+  margin: 0;
+  color: #fff;
+}
+
+.java-inventory-task p:not(.eyebrow) {
+  margin: 7px 0 0;
+  color: #91a9c8;
+}
+
+.java-daily-task { border-top-color: #4f9ae8; }
+
+.java-daily-result {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.java-daily-result > span {
+  padding: 11px 13px;
+  border: 1px solid #293e5d;
+  border-radius: 10px;
+  background: #090f1a;
+}
+
+.java-daily-result small,
+.java-daily-result strong { display: block; }
+.java-daily-result small { color: #91a9c8; }
+.java-daily-result strong { margin-top: 4px; color: #fff; font-size: 27px; }
+.java-daily-result strong.is-negative-stock { color: #ff7d7d; }
+.java-daily-result strong.is-positive-stock { color: #82dfaa; }
+.java-daily-expected { font-size: 12px; }
+
+.java-returns-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.java-returns-grid { min-height: 0; }
+.java-compact-form { gap: 10px; }
+.java-compact-form .java-message { margin-top: 0; }
+
+.java-table-viewport {
+  max-height: min(52vh, 440px);
+  overflow: auto;
+  scrollbar-color: #49698f #090f1a;
+}
+
+.java-table-viewport .java-table th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+}
+
+.java-trace-summary .java-summary-card {
+  min-height: 82px;
+  padding-block: 13px;
+}
+
+.java-trace-summary .java-summary-card strong { font-size: 30px; }
+.java-trace-panel { margin-top: 0; }
+
+.java-trace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.java-trace-head h2 { margin: 0; color: #fff; }
+
+.java-trace-filters {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+}
+
+.java-trace-tabs {
+  display: inline-flex;
+  padding: 4px;
+  border: 1px solid #354c6c;
+  border-radius: 10px;
+  background: #080e18;
+}
+
+.java-trace-tabs button {
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #91a9c8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.java-trace-tabs button[aria-selected="true"] {
+  background: #17304f;
+  color: #fff;
+}
+
+.java-trace-table-viewport { max-height: min(47vh, 390px); }
+
 @media (max-width: 1050px) {
   .java-control-grid { grid-template-columns: 1fr; }
   .java-receipt-panel { order: -1; }
   .java-summary.java-summary-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .java-dashboard-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .java-module-nav { grid-template-columns: 1fr; }
+  .java-module-card {
+    min-height: 0;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto;
+    align-items: center;
+  }
+  .java-module-action { gap: 12px; }
 }
 
 @media (max-width: 720px) {
@@ -482,6 +821,29 @@ body.java-control-page {
   .java-summary { grid-template-columns: 1fr; }
   .java-current-summary-head { align-items: flex-start; flex-direction: column; gap: 3px; }
   .java-summary.java-summary-four { grid-template-columns: 1fr; }
+  .java-summary.java-company-summary { grid-template-columns: 1fr; }
+  .java-summary.java-daily-summary { grid-template-columns: 1fr; }
+  .java-dashboard-summary,
+  .java-returns-summary { grid-template-columns: 1fr; }
+  .java-module-heading,
+  .java-trace-head,
+  .java-trace-filters { align-items: stretch; flex-direction: column; }
+  .java-module-heading > p { text-align: left; }
+  .java-module-card {
+    grid-template-columns: auto 1fr;
+    padding: 16px;
+  }
+  .java-module-action { grid-column: 1 / -1; }
+  .java-inventory-workspace { grid-template-columns: 1fr; }
+  .java-inventory-task { min-height: 0; }
+  .java-trace-tabs { display: grid; grid-template-columns: 1fr 1fr; }
+  .java-inventory-head { align-items: stretch; flex-direction: column; }
+  .java-inventory-open { width: 100%; justify-content: center; }
+  .java-inventory-modal { padding: 10px; }
+  .java-inventory-modal-card { max-height: calc(100vh - 20px); padding: 16px; }
+  .java-inventory-actions { flex-direction: column-reverse; }
+  .java-inventory-actions .btn,
+  .java-inventory-actions .java-receive-btn { width: 100%; justify-content: center; }
   .java-summary-card { padding: 16px 20px; }
   .java-summary-card strong { font-size: 28px; }
   .java-balance-panel,
@@ -492,6 +854,7 @@ body.java-control-page {
   .java-journey-filter { width: 100%; min-width: 0; }
   .java-form-row { grid-template-columns: 1fr; }
   .java-table-wrap { border: 0; overflow: visible; }
+  .java-table-viewport { max-height: none; }
   .java-table thead { display: none; }
   .java-table,
   .java-table tbody,

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\JavaControl\StoreDailyJavaCountRequest;
+use App\Http\Requests\JavaControl\StoreJavaInventoryRequest;
 use App\Http\Requests\JavaControl\StoreJavaReceiptRequest;
 use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
@@ -36,6 +38,17 @@ class JavaControlController extends Controller
             ->orderByDesc('fecha_operativa')
             ->orderByDesc('id')
             ->get();
+        $now = CarbonImmutable::now($branch->zona_horaria);
+        $cutoff = (string) DB::table('empresas')
+            ->where('id', $companyId)
+            ->value('hora_corte_operativo') ?: '21:00:00';
+        $cutoffAt = $now->startOfDay()->setTimeFromTimeString($cutoff);
+        $currentOperatingDate = $now->greaterThanOrEqualTo($cutoffAt)
+            ? $now->addDay()->format('Y-m-d')
+            : $now->format('Y-m-d');
+        $activeJourneyId = (int) ($journeys
+            ->first(fn (JornadaOperativa $journey): bool => $journey->fecha_operativa?->format('Y-m-d') === $currentOperatingDate)
+            ?->id ?? 0);
         $selectedJourneyId = isset($filters['journey_id'])
             ? (int) $filters['journey_id']
             : (int) ($journeys->first()?->id ?? 0);
@@ -90,6 +103,21 @@ class JavaControlController extends Controller
                 DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
             ], 'page', $page);
         $clients = $clientPaginator->getCollection()
+            ->map(fn (object $client): array => [
+                'id' => (int) $client->id,
+                'name' => $client->nombre_razon_social,
+                'document_number' => $client->numero_documento,
+                'balance' => max(0, (int) $client->saldo),
+            ])
+            ->values();
+        $clientOptions = (clone $clientBaseQuery)
+            ->orderBy('terceros.nombre_razon_social')
+            ->get([
+                'terceros.id',
+                'terceros.nombre_razon_social',
+                'terceros.numero_documento',
+                DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
+            ])
             ->map(fn (object $client): array => [
                 'id' => (int) $client->id,
                 'name' => $client->nombre_razon_social,
@@ -230,6 +258,10 @@ class JavaControlController extends Controller
                 'net' => $currentDispatched - $currentReceived,
                 'trucks_count' => (int) ($currentJourneyTotals->trucks_count ?? 0),
             ],
+            'inventory' => $this->javaControl->currentInventory(
+                $companyId,
+                $activeJourneyId ?: null
+            ),
             'journeys' => $journeys->map(fn (JornadaOperativa $journey): array => [
                 'id' => (int) $journey->id,
                 'operating_date' => $journey->fecha_operativa?->format('Y-m-d'),
@@ -239,6 +271,7 @@ class JavaControlController extends Controller
             ])->values(),
             'selected_journey_id' => $selectedJourneyId ?: null,
             'clients' => $clients,
+            'client_options' => $clientOptions,
             'clients_pagination' => [
                 'current_page' => $clientPaginator->currentPage(),
                 'last_page' => $clientPaginator->lastPage(),
@@ -287,6 +320,38 @@ class JavaControlController extends Controller
         return response()->json([
             'message' => 'La entrada de javas fue registrada correctamente.',
             'data' => $this->formatMovement($movement),
+        ], 201);
+    }
+
+    public function storeInventory(StoreJavaInventoryRequest $request): JsonResponse
+    {
+        $branch = $this->context->branch($request);
+        $inventory = $this->javaControl->saveInventoryTotal(
+            $this->context->companyId($request),
+            $this->context->actor($request, (int) $branch->id),
+            $request->validated()
+        );
+
+        return response()->json([
+            'message' => 'El total general de javas fue actualizado correctamente.',
+            'data' => $inventory,
+        ], 201);
+    }
+
+    public function storeDailyCount(StoreDailyJavaCountRequest $request): JsonResponse
+    {
+        $branch = $this->context->branch($request);
+        $inventory = $this->javaControl->saveDailyCount(
+            $this->context->companyId($request),
+            (int) $branch->id,
+            $branch->zona_horaria,
+            $this->context->actor($request, (int) $branch->id),
+            $request->validated()
+        );
+
+        return response()->json([
+            'message' => 'El conteo diario de javas fue registrado correctamente.',
+            'data' => $inventory,
         ], 201);
     }
 

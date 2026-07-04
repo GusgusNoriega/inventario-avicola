@@ -10,6 +10,9 @@ Route::view('/jornada', 'jornada')->name('jornada');
 Route::view('/directorio', 'directorio')->name('directorio');
 Route::view('/flota', 'flota')->name('flota');
 Route::view('/control-javas', 'control-javas')->name('control-javas');
+Route::view('/control-javas/inventario', 'control-javas-inventario')->name('control-javas.inventario');
+Route::view('/control-javas/devoluciones', 'control-javas-devoluciones')->name('control-javas.devoluciones');
+Route::view('/control-javas/trazabilidad', 'control-javas-trazabilidad')->name('control-javas.trazabilidad');
 Route::view('/directorio/clientes/{tercero}', 'cliente-detalle')
     ->whereNumber('tercero')
     ->name('clientes.detalle');
