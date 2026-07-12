@@ -64,6 +64,7 @@ class CustomerHistoryController extends Controller
             ->where('p.estado', Pesada::STATUS_ACTIVE)
             ->selectRaw('COUNT(p.id) as registros')
             ->selectRaw('COALESCE(SUM(p.cantidad_javas), 0) as javas')
+            ->selectRaw('COALESCE(SUM(p.cantidad_bandejas), 0) as bandejas')
             ->selectRaw('COALESCE(SUM(p.cantidad_aves), 0) as aves')
             ->selectRaw(
                 'COALESCE(SUM(CASE WHEN td.tipo_operacion = ? THEN -p.peso_neto_kg ELSE p.peso_neto_kg END), 0) as peso_neto_kg',
@@ -82,6 +83,8 @@ class CustomerHistoryController extends Controller
                 'pesadas' => fn ($query) => $query->orderBy('numero'),
                 'pesadas.tipoPollo',
                 'pesadas.tipoJava',
+                'pesadas.tipoBandeja',
+                'pesadas.ajustePesoMinorista',
             ])
             ->orderByDesc(
                 DB::table('jornadas_operativas')
@@ -106,6 +109,7 @@ class CustomerHistoryController extends Controller
                     'tickets' => $ticketCount,
                     'records' => (int) ($totals->registros ?? 0),
                     'cages' => (int) ($totals->javas ?? 0),
+                    'trays' => (int) ($totals->bandejas ?? 0),
                     'birds' => (int) ($totals->aves ?? 0),
                     'net_weight_kg' => round((float) ($totals->peso_neto_kg ?? 0), 3),
                     'amount' => round((float) ($totals->importe ?? 0), 2),
@@ -151,10 +155,23 @@ class CustomerHistoryController extends Controller
                     'name' => $record->tipoPollo->nombre,
                 ],
                 'chicken_condition' => $record->condicion_pollo,
+                'chicken_sex' => $record->sexo,
+                'presentation' => $record->presentacion_pollo,
+                'adjustment' => $record->ajustePesoMinorista
+                    ? [
+                        'code' => $record->ajustePesoMinorista->codigo,
+                        'name' => $record->ajustePesoMinorista->nombre,
+                        'additional_grams' => (int) $record->ajuste_peso_gramos,
+                    ]
+                    : null,
                 'cage_type' => $record->tipoJava?->nombre,
                 'birds_per_cage' => $record->aves_por_java,
                 'cages' => $record->cantidad_javas,
+                'tray_type' => $record->tipoBandeja?->nombre,
+                'birds_per_tray' => $record->aves_por_bandeja,
+                'trays' => $record->cantidad_bandejas,
                 'birds' => $record->cantidad_aves,
+                'read_weight_kg' => (float) $record->peso_leido_kg,
                 'gross_weight_kg' => (float) $record->peso_bruto_kg,
                 'tare_weight_kg' => (float) $record->tara_total_kg,
                 'net_weight_kg' => (float) $record->peso_neto_kg,
@@ -179,6 +196,7 @@ class CustomerHistoryController extends Controller
             'summary' => [
                 'records' => $activeRecords->count(),
                 'cages' => $activeRecords->sum('cages'),
+                'trays' => $activeRecords->sum('trays'),
                 'birds' => $activeRecords->sum('birds'),
                 'net_weight_kg' => round((float) $activeRecords->sum('movement_net_weight_kg'), 3),
                 'amount' => round((float) $activeRecords->sum('amount'), 2),

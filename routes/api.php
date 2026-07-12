@@ -6,11 +6,12 @@ use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
 use App\Http\Controllers\Api\V1\DriverController;
-use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JavaControlController;
+use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
+use App\Http\Controllers\Api\V1\RetailDispatchController;
 use App\Http\Controllers\Api\V1\TicketWeighingManagementController;
 use App\Http\Controllers\Api\V1\TruckController;
 use App\Models\TerceroRole;
@@ -69,6 +70,12 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/operacion/tickets-dia', [DailyDispatchTicketController::class, 'index'])
         ->middleware($dailyTicketsMiddleware);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
+        ->middleware($operationWriteMiddleware);
+    Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
+        ->middleware($operationCatalogMiddleware);
+    Route::put('/despacho-minorista/configuracion', [RetailDispatchController::class, 'updateConfiguration'])
+        ->middleware($operationWriteMiddleware);
+    Route::post('/despacho-minorista/tickets', [RetailDispatchController::class, 'store'])
         ->middleware($operationWriteMiddleware);
     Route::middleware($weighingManagementMiddleware)->group(function (): void {
         Route::get('/operacion/gestion-pesadas', [TicketWeighingManagementController::class, 'index']);

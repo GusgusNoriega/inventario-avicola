@@ -36,6 +36,23 @@
           <span class="menu-status">Disponible</span>
         </a>
 
+        <a class="menu-tile menu-tile-primary" href="{{ route('despacho-minorista') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 5h16v5H4z"></path>
+              <path d="M6 12h5v4H6z"></path>
+              <path d="M13 12h5v4h-5z"></path>
+              <path d="M5 19h14"></path>
+              <path d="M8 16v3"></path><path d="M16 16v3"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Despacho minorista</strong>
+            <small>Despacho rápido de pollos en bandejas</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
         <a class="menu-tile menu-tile-primary" href="{{ Route::has('tickets-dia') ? route('tickets-dia') : '#' }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

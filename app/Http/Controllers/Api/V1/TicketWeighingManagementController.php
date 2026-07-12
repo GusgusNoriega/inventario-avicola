@@ -7,8 +7,8 @@ use App\Models\Pesada;
 use App\Models\TicketDespacho;
 use App\Models\TipoJava;
 use App\Models\TipoPollo;
-use App\Services\OperationContextService;
 use App\Services\JavaControlService;
+use App\Services\OperationContextService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -37,6 +37,7 @@ class TicketWeighingManagementController extends Controller
         $search = trim((string) ($filters['search'] ?? ''));
 
         $tickets = TicketDespacho::query()
+            ->where('canal', TicketDespacho::CHANNEL_WHOLESALE)
             ->whereHas('jornada', fn (Builder $query) => $query->where('sucursal_id', $branch->id))
             ->whereHas('pesadas', fn (Builder $query) => $query->where('estado', Pesada::STATUS_ACTIVE))
             ->when($search !== '', function (Builder $query) use ($search): void {
@@ -390,6 +391,7 @@ class TicketWeighingManagementController extends Controller
 
         return TicketDespacho::query()
             ->whereKey($ticketId)
+            ->where('canal', TicketDespacho::CHANNEL_WHOLESALE)
             ->whereHas('jornada', fn (Builder $query) => $query->where('sucursal_id', $branch->id))
             ->firstOrFail();
     }

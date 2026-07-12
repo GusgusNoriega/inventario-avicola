@@ -26,6 +26,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 ])]
 class TicketDespacho extends Model
 {
+    public const CHANNEL_WHOLESALE = 'MAYORISTA';
+
+    public const CHANNEL_RETAIL = 'MINORISTA';
+
     public const OPERATION_DISPATCH = 'DESPACHO';
 
     public const OPERATION_RETURN = 'DEVOLUCION';

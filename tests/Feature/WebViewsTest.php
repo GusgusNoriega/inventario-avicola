@@ -13,6 +13,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Menú principal')
             ->assertSee(route('operacion').'#despacho', false)
             ->assertSee('Despacho mayorista')
+            ->assertSee(route('despacho-minorista'), false)
+            ->assertSee('Despacho minorista')
             ->assertDontSee('Registro de pesadas y balanzas')
             ->assertSee(route('tickets-dia'), false)
             ->assertSee('Resumen de la jornada')
@@ -24,6 +26,41 @@ class WebViewsTest extends TestCase
             ->assertSee(route('control-javas'), false)
             ->assertSee('Control de javas')
             ->assertSee('Mi flota y choferes');
+    }
+
+    public function test_retail_dispatch_view_is_available_without_database_queries(): void
+    {
+        $this->get('/despacho-minorista')
+            ->assertOk()
+            ->assertSee('Despacho minorista')
+            ->assertSee('id="retailRawWeightInput"', false)
+            ->assertSee('id="retailTrayCount"', false)
+            ->assertSee('data-retail-add-list="3"', false)
+            ->assertSee('id="retailSettingsModal"', false)
+            ->assertSee('Balanza y ajustes minoristas')
+            ->assertSee('Grabar')
+            ->assertSee(asset('js/despacho-minorista.js'), false)
+            ->assertSee(asset('css/despacho-minorista.css'), false)
+            ->assertSee(route('menu'), false);
+
+        $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('/despacho-minorista/catalogo', $javascript);
+        $this->assertStringContainsString('/despacho-minorista/configuracion', $javascript);
+        $this->assertStringContainsString('/despacho-minorista/tickets', $javascript);
+        $this->assertStringContainsString('adjustment_code', $javascript);
+        $this->assertStringContainsString('read_weight_kg', $javascript);
+        $this->assertStringContainsString('tray_type_code', $javascript);
+        $this->assertStringNotContainsString('cage_type_code', $javascript);
+        $this->assertStringNotContainsString('cantidad_javas', $javascript);
+
+        $scaleJavascript = file_get_contents(public_path('js/despacho-minorista-balanza.js'));
+
+        $this->assertIsString($scaleJavascript);
+        $this->assertStringContainsString('sistema-pollos-retail-scale-v1', $scaleJavascript);
+        $this->assertStringContainsString('connectBle', $scaleJavascript);
+        $this->assertStringContainsString('connectSerial', $scaleJavascript);
     }
 
     public function test_operation_view_is_available_without_database_queries(): void

@@ -28,4 +28,12 @@ class Empresa extends Model
     {
         return $this->hasMany(Tercero::class);
     }
+
+    /**
+     * @return HasMany<AjustePesoMinorista, $this>
+     */
+    public function ajustesPesoMinorista(): HasMany
+    {
+        return $this->hasMany(AjustePesoMinorista::class);
+    }
 }

@@ -14,7 +14,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(59, $migrationFiles);
+        $this->assertCount(63, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -61,6 +61,8 @@ class DatabaseSchemaTest extends TestCase
             'almacenes',
             'tipos_pollo',
             'tipos_java',
+            'tipos_bandeja',
+            'ajustes_peso_minorista',
             'balanzas',
             'conductores',
             'vehiculos',
@@ -107,7 +109,10 @@ class DatabaseSchemaTest extends TestCase
             'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'vehiculo_id', 'fecha_movimiento'],
             'inventarios_javas' => ['empresa_id', 'cantidad_total', 'updated_by'],
             'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_esperada', 'diferencia', 'contado_at', 'contado_por'],
-            'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'tipo_java_id', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
+            'tipos_bandeja' => ['codigo', 'nombre', 'peso_kg', 'capacidad_aves', 'estado'],
+            'ajustes_peso_minorista' => ['empresa_id', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
+            'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
+            'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
             'comprobantes' => ['operacion', 'codigo', 'origen_codigo', 'total', 'saldo_pendiente'],
             'auditoria_eventos' => ['usuario_id', 'entidad', 'entidad_id', 'accion', 'datos_antes', 'datos_despues'],
@@ -121,5 +126,40 @@ class DatabaseSchemaTest extends TestCase
         }
 
         $this->assertFalse(Schema::hasColumn('vehiculos', 'conductor_habitual_id'));
+
+        $weighingColumns = collect(Schema::getColumns('pesadas'))->keyBy('name');
+        $this->assertTrue($weighingColumns->get('sexo')['nullable']);
+        $this->assertTrue($weighingColumns->get('ajuste_peso_minorista_id')['nullable']);
+        $this->assertTrue($weighingColumns->get('presentacion_pollo')['nullable']);
+        $this->assertTrue($weighingColumns->get('ajuste_peso_gramos')['nullable']);
+    }
+
+    public function test_retail_schema_rolls_back_and_can_be_applied_again_on_sqlite(): void
+    {
+        $paths = [
+            database_path('migrations/2026_07_04_000001_add_bandejas_to_dispatch_weighings.php'),
+            database_path('migrations/2026_07_04_000002_add_bandeja_columns_to_pesadas_table.php'),
+            database_path('migrations/2026_07_04_000003_create_ajustes_peso_minorista_table.php'),
+            database_path('migrations/2026_07_04_000004_add_ajuste_minorista_columns_to_pesadas_table.php'),
+        ];
+        $migrations = collect($paths)->map(fn (string $path) => require $path);
+
+        $migrations->reverse()->each(fn ($migration) => $migration->down());
+
+        $this->assertFalse(Schema::hasTable('tipos_bandeja'));
+        $this->assertFalse(Schema::hasTable('ajustes_peso_minorista'));
+        $this->assertFalse(Schema::hasColumn('pesadas', 'tipo_bandeja_id'));
+        $this->assertFalse(Schema::hasColumn('pesadas', 'ajuste_peso_minorista_id'));
+
+        $migrations->each(fn ($migration) => $migration->up());
+
+        $this->assertTrue(Schema::hasTable('tipos_bandeja'));
+        $this->assertTrue(Schema::hasTable('ajustes_peso_minorista'));
+        $this->assertTrue(Schema::hasColumns('pesadas', [
+            'tipo_bandeja_id',
+            'ajuste_peso_minorista_id',
+            'presentacion_pollo',
+            'ajuste_peso_gramos',
+        ]));
     }
 }

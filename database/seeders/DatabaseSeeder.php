@@ -73,6 +73,34 @@ class DatabaseSeeder extends Seeder
             [...$tipo, 'estado' => 'ACTIVO', 'created_at' => now(), 'updated_at' => now()]
         ));
 
+        DB::table('tipos_bandeja')->updateOrInsert(
+            ['codigo' => 'BANDEJA_ESTANDAR'],
+            [
+                'nombre' => 'Bandeja estandar',
+                'peso_kg' => 0,
+                'capacidad_aves' => 5,
+                'estado' => 'ACTIVO',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        collect([
+            ['codigo' => 'MACHO_CERRADO', 'nombre' => 'Macho cerrado', 'sexo' => 'MACHO', 'presentacion' => 'CERRADO', 'predeterminado' => true],
+            ['codigo' => 'MACHO_ABIERTO', 'nombre' => 'Macho abierto', 'sexo' => 'MACHO', 'presentacion' => 'ABIERTO', 'predeterminado' => false],
+            ['codigo' => 'HEMBRA_CERRADA', 'nombre' => 'Hembra cerrada', 'sexo' => 'HEMBRA', 'presentacion' => 'CERRADA', 'predeterminado' => false],
+            ['codigo' => 'HEMBRA_ABIERTA', 'nombre' => 'Hembra abierta', 'sexo' => 'HEMBRA', 'presentacion' => 'ABIERTA', 'predeterminado' => false],
+        ])->each(fn (array $adjustment) => DB::table('ajustes_peso_minorista')->updateOrInsert(
+            ['empresa_id' => $empresaId, 'codigo' => $adjustment['codigo']],
+            [
+                ...$adjustment,
+                'gramos_adicionales' => 0,
+                'estado' => 'ACTIVO',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        ));
+
         collect([
             ['codigo' => 'ALMACEN_1', 'nombre' => 'Almacén 1'],
             ['codigo' => 'ALMACEN_2', 'nombre' => 'Almacén 2'],
@@ -90,10 +118,24 @@ class DatabaseSeeder extends Seeder
         collect([
             ['codigo' => 'BALANZA_1', 'nombre' => 'Balanza 1'],
             ['codigo' => 'BALANZA_2', 'nombre' => 'Balanza 2'],
+            [
+                'codigo' => 'BALANZA_MINORISTA',
+                'nombre' => 'Balanza despacho minorista',
+                'modo_conexion' => 'SERIAL',
+                'configuracion' => json_encode([
+                    'baudRate' => 9600,
+                    'dataBits' => 8,
+                    'stopBits' => 1,
+                    'parity' => 'none',
+                    'flowControl' => 'none',
+                ], JSON_THROW_ON_ERROR),
+            ],
         ])->each(fn (array $balanza) => DB::table('balanzas')->updateOrInsert(
             ['sucursal_id' => $sucursalId, 'codigo' => $balanza['codigo']],
             [
                 'nombre' => $balanza['nombre'],
+                'modo_conexion' => $balanza['modo_conexion'] ?? null,
+                'configuracion' => $balanza['configuracion'] ?? null,
                 'estado' => 'ACTIVO',
                 'created_at' => now(),
                 'updated_at' => now(),

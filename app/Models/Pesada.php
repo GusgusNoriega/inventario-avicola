@@ -12,7 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'tipo_pollo_id',
     'condicion_pollo',
     'sexo',
+    'presentacion_pollo',
     'tipo_java_id',
+    'tipo_bandeja_id',
+    'ajuste_peso_minorista_id',
     'lectura_balanza_id',
     'proveedor_origen_id',
     'almacen_origen_id',
@@ -21,10 +24,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'placa_snapshot',
     'origen_peso',
     'aves_por_java',
+    'aves_por_bandeja',
     'cantidad_javas',
+    'cantidad_bandejas',
     'cantidad_aves',
     'peso_java_kg_snapshot',
+    'peso_bandeja_kg_snapshot',
     'peso_leido_kg',
+    'ajuste_peso_gramos',
     'peso_bruto_kg',
     'tara_total_kg',
     'peso_neto_kg',
@@ -76,6 +83,22 @@ class Pesada extends Model
     }
 
     /**
+     * @return BelongsTo<TipoBandeja, $this>
+     */
+    public function tipoBandeja(): BelongsTo
+    {
+        return $this->belongsTo(TipoBandeja::class);
+    }
+
+    /**
+     * @return BelongsTo<AjustePesoMinorista, $this>
+     */
+    public function ajustePesoMinorista(): BelongsTo
+    {
+        return $this->belongsTo(AjustePesoMinorista::class, 'ajuste_peso_minorista_id');
+    }
+
+    /**
      * @return BelongsTo<Tercero, $this>
      */
     public function proveedorOrigen(): BelongsTo
@@ -103,7 +126,9 @@ class Pesada extends Model
     {
         return [
             'peso_java_kg_snapshot' => 'decimal:3',
+            'peso_bandeja_kg_snapshot' => 'decimal:3',
             'peso_leido_kg' => 'decimal:3',
+            'ajuste_peso_gramos' => 'integer',
             'peso_bruto_kg' => 'decimal:3',
             'tara_total_kg' => 'decimal:3',
             'peso_neto_kg' => 'decimal:3',

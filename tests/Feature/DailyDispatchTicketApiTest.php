@@ -36,6 +36,10 @@ class DailyDispatchTicketApiTest extends TestCase
 
     private int $cageTypeId;
 
+    private int $trayTypeId;
+
+    private int $retailAdjustmentId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -84,6 +88,21 @@ class DailyDispatchTicketApiTest extends TestCase
             'codigo' => 'JAVA_700',
             'nombre' => 'Java 7.00 kg',
             'peso_kg' => 7,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->trayTypeId = (int) DB::table('tipos_bandeja')
+            ->where('codigo', 'BANDEJA_ESTANDAR')
+            ->value('id');
+        $this->retailAdjustmentId = DB::table('ajustes_peso_minorista')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'MACHO_CERRADO',
+            'nombre' => 'Macho cerrado',
+            'sexo' => Pesada::SEX_MALE,
+            'presentacion' => 'CERRADO',
+            'gramos_adicionales' => 250,
+            'predeterminado' => true,
             'estado' => 'ACTIVO',
             'created_at' => now(),
             'updated_at' => now(),
@@ -184,6 +203,7 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.summary.tickets', 3)
             ->assertJsonPath('data.summary.records', 4)
             ->assertJsonPath('data.summary.cages', 5)
+            ->assertJsonPath('data.summary.trays', 0)
             ->assertJsonPath('data.summary.birds', 102)
             ->assertJsonPath('data.summary.gross_weight_kg', 275)
             ->assertJsonPath('data.summary.tare_weight_kg', 35)
@@ -204,7 +224,13 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.summary.by_client.0.return_net_weight_kg', 30)
             ->assertJsonPath('data.summary.by_client.0.net_weight_kg', 70)
             ->assertJsonPath('data.tickets.0.destination.type', 'ALMACEN')
-            ->assertJsonPath('data.tickets.0.records.0.origin.type', 'ALMACEN');
+            ->assertJsonPath('data.tickets.0.channel', TicketDespacho::CHANNEL_WHOLESALE)
+            ->assertJsonPath('data.tickets.0.summary.trays', 0)
+            ->assertJsonPath('data.tickets.0.records.0.origin.type', 'ALMACEN')
+            ->assertJsonPath('data.tickets.0.records.0.chicken_sex', Pesada::SEX_MALE)
+            ->assertJsonPath('data.tickets.0.records.0.presentation', null)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment', null)
+            ->assertJsonPath('data.tickets.0.records.0.read_weight_kg', 57);
 
         $ticket = $response->json('data.tickets.0');
         $record = $ticket['records'][0];
@@ -299,6 +325,50 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonCount(1, 'data.tickets.0.records');
     }
 
+    public function test_daily_summary_serializes_retail_trays_and_weight_adjustment(): void
+    {
+        $this->createTicket('M-20260626-001', '2026-06-26', [
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_tray' => 5,
+                'trays' => 2,
+                'read_weight' => 12,
+                'gross_weight' => 12.25,
+                'tare_weight' => 0,
+                'net_weight' => 12.25,
+                'weighed_at' => '2026-06-26 09:15:00',
+                'presentation' => 'CERRADO',
+                'adjustment_grams' => 250,
+            ],
+        ], false, TicketDespacho::OPERATION_DISPATCH, TicketDespacho::CHANNEL_RETAIL);
+
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-06-26')
+            ->assertOk()
+            ->assertJsonPath('data.summary.tickets', 1)
+            ->assertJsonPath('data.summary.records', 1)
+            ->assertJsonPath('data.summary.cages', 0)
+            ->assertJsonPath('data.summary.trays', 2)
+            ->assertJsonPath('data.summary.birds', 10)
+            ->assertJsonPath('data.summary.by_type.0.trays', 2)
+            ->assertJsonPath('data.summary.by_client.0.trays', 2)
+            ->assertJsonPath('data.tickets.0.channel', TicketDespacho::CHANNEL_RETAIL)
+            ->assertJsonPath('data.tickets.0.summary.cages', 0)
+            ->assertJsonPath('data.tickets.0.summary.trays', 2)
+            ->assertJsonPath('data.tickets.0.records.0.chicken_sex', Pesada::SEX_MALE)
+            ->assertJsonPath('data.tickets.0.records.0.presentation', 'CERRADO')
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.code', 'MACHO_CERRADO')
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.name', 'Macho cerrado')
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.additional_grams', 250)
+            ->assertJsonPath('data.tickets.0.records.0.cage_type.code', null)
+            ->assertJsonPath('data.tickets.0.records.0.tray_type.code', 'BANDEJA_ESTANDAR')
+            ->assertJsonPath('data.tickets.0.records.0.tray_type.name', 'Bandeja estandar')
+            ->assertJsonPath('data.tickets.0.records.0.birds_per_tray', 5)
+            ->assertJsonPath('data.tickets.0.records.0.trays', 2)
+            ->assertJsonPath('data.tickets.0.records.0.read_weight_kg', 12)
+            ->assertJsonPath('data.tickets.0.records.0.gross_weight_kg', 12.25)
+            ->assertJsonPath('data.tickets.0.records.0.net_weight_kg', 12.25);
+    }
+
     private function createParty(string $name, string $document): int
     {
         return DB::table('terceros')->insertGetId([
@@ -321,7 +391,8 @@ class DailyDispatchTicketApiTest extends TestCase
         string $operatingDate,
         array $records,
         bool $toWarehouse = false,
-        string $operationType = TicketDespacho::OPERATION_DISPATCH
+        string $operationType = TicketDespacho::OPERATION_DISPATCH,
+        string $channel = TicketDespacho::CHANNEL_WHOLESALE
     ): void {
         $journeyId = DB::table('jornadas_operativas')
             ->where('sucursal_id', $this->branchId)
@@ -345,7 +416,7 @@ class DailyDispatchTicketApiTest extends TestCase
         $ticketId = DB::table('tickets_despacho')->insertGetId([
             'jornada_id' => $journeyId,
             'codigo' => $code,
-            'canal' => 'MAYORISTA',
+            'canal' => $channel,
             'tipo_operacion' => $operationType,
             'cliente_destino_id' => $toWarehouse ? null : $this->clientId,
             'almacen_destino_id' => $toWarehouse ? $this->warehouseId : null,
@@ -359,25 +430,36 @@ class DailyDispatchTicketApiTest extends TestCase
 
         foreach ($records as $index => $record) {
             $warehouseOrigin = (bool) ($record['warehouse_origin'] ?? false);
-            $cages = (int) $record['cages'];
-            $birdsPerCage = (int) $record['birds_per_cage'];
+            $isRetail = $channel === TicketDespacho::CHANNEL_RETAIL;
+            $cages = (int) ($record['cages'] ?? 0);
+            $birdsPerCage = (int) ($record['birds_per_cage'] ?? 0);
+            $trays = (int) ($record['trays'] ?? 0);
+            $birdsPerTray = (int) ($record['birds_per_tray'] ?? 0);
 
             DB::table('pesadas')->insert([
                 'ticket_id' => $ticketId,
                 'numero' => $index + 1,
                 'tipo_pollo_id' => $record['type_id'],
                 'condicion_pollo' => Pesada::CHICKEN_CONDITION_LIVE,
-                'tipo_java_id' => $this->cageTypeId,
-                'proveedor_origen_id' => $warehouseOrigin ? null : $this->providerId,
+                'sexo' => Pesada::SEX_MALE,
+                'presentacion_pollo' => $record['presentation'] ?? null,
+                'ajuste_peso_minorista_id' => $isRetail ? $this->retailAdjustmentId : null,
+                'ajuste_peso_gramos' => $record['adjustment_grams'] ?? null,
+                'tipo_java_id' => $isRetail ? null : $this->cageTypeId,
+                'tipo_bandeja_id' => $isRetail ? $this->trayTypeId : null,
+                'proveedor_origen_id' => $warehouseOrigin || $isRetail ? null : $this->providerId,
                 'almacen_origen_id' => $warehouseOrigin ? $this->warehouseId : null,
-                'vehiculo_id' => $warehouseOrigin ? null : $this->vehicleId,
-                'placa_snapshot' => $warehouseOrigin ? null : 'ABC-123',
+                'vehiculo_id' => $warehouseOrigin || $isRetail ? null : $this->vehicleId,
+                'placa_snapshot' => $warehouseOrigin || $isRetail ? null : 'ABC-123',
                 'origen_peso' => 'BALANZA',
-                'aves_por_java' => $birdsPerCage,
-                'cantidad_javas' => $cages,
-                'cantidad_aves' => $birdsPerCage * $cages,
-                'peso_java_kg_snapshot' => 7,
-                'peso_leido_kg' => $record['gross_weight'],
+                'aves_por_java' => $isRetail ? null : $birdsPerCage,
+                'aves_por_bandeja' => $isRetail ? $birdsPerTray : null,
+                'cantidad_javas' => $isRetail ? null : $cages,
+                'cantidad_bandejas' => $isRetail ? $trays : null,
+                'cantidad_aves' => $isRetail ? $birdsPerTray * $trays : $birdsPerCage * $cages,
+                'peso_java_kg_snapshot' => $isRetail ? null : 7,
+                'peso_bandeja_kg_snapshot' => $isRetail ? 0 : null,
+                'peso_leido_kg' => $record['read_weight'] ?? $record['gross_weight'],
                 'peso_bruto_kg' => $record['gross_weight'],
                 'tara_total_kg' => $record['tare_weight'],
                 'peso_neto_kg' => $record['net_weight'],

@@ -365,6 +365,41 @@ class TicketWeighingManagementApiTest extends TestCase
         )->assertStatus(409);
     }
 
+    public function test_retail_tickets_are_hidden_and_cannot_be_opened_modified_or_annulled(): void
+    {
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['canal' => TicketDespacho::CHANNEL_RETAIL]);
+
+        $this->getJson('/api/v1/operacion/gestion-pesadas?search=T-20260627-001')
+            ->assertOk()
+            ->assertJsonCount(0, 'data.tickets');
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertNotFound();
+
+        $this->putJson("/api/v1/operacion/tickets/{$this->ticketId}/transporte", [
+            'vehicle_id' => $this->alternateDeliveryVehicleId,
+            'driver_id' => $this->alternateDeliveryDriverId,
+        ])->assertNotFound();
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $this->updatePayload()
+        )->assertNotFound();
+
+        $this->deleteJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}", [
+            'reason' => 'No debe anularse desde gestion mayorista',
+        ])->assertNotFound();
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'estado' => Pesada::STATUS_ACTIVE,
+            'peso_neto_kg' => 26,
+        ]);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
     private function createChickenType(string $code, string $name): int
     {
         return DB::table('tipos_pollo')->insertGetId([
