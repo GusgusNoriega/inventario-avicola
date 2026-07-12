@@ -1,6 +1,7 @@
 import { apiRequest } from "./api-client.js";
 import {
   RetailScaleController,
+  RETAIL_SCALE_STORAGE_KEY,
   RETAIL_SCALE_SERIAL_DEFAULTS
 } from "./despacho-minorista-balanza.js";
 
@@ -8,7 +9,6 @@ const STORAGE_PREFIX = "sistema-pollos-retail-dispatch-v2-branch";
 const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
-const SEX_FEMALE = "HEMBRA";
 const LIST_COUNT = 4;
 const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
 
@@ -21,11 +21,13 @@ const elements = {
   openSettings: document.querySelector("#retailOpenSettings"),
   trayType: document.querySelector("#retailTrayType"),
   trayCount: document.querySelector("#retailTrayCount"),
+  trayCountTrigger: document.querySelector("#retailTrayCountTrigger"),
+  trayCountValue: document.querySelector("#retailTrayCountValue"),
   trayCountLabel: document.querySelector("#retailTrayCountLabel"),
   birdsPerTray: document.querySelector("#retailBirdsPerTray"),
   rawWeightInput: document.querySelector("#retailRawWeightInput"),
+  manualWeightTrigger: document.querySelector("#retailManualWeightTrigger"),
   adjustedWeight: document.querySelector("#retailAdjustedWeight"),
-  adjustmentPreview: document.querySelector("#retailAdjustmentPreview"),
   weightSourceLabel: document.querySelector("#retailWeightSourceLabel"),
   captureState: document.querySelector("#retailCaptureState"),
   captureWeight: document.querySelector("#retailCaptureWeight"),
@@ -36,7 +38,6 @@ const elements = {
   netPreview: document.querySelector("#retailNetPreview"),
   birdTotalPreview: document.querySelector("#retailBirdTotalPreview"),
   chickenTypes: document.querySelector("#retailChickenTypes"),
-  sex: document.querySelector("#retailSex"),
   adjustments: document.querySelector("#retailAdjustments"),
   listsGrid: document.querySelector("#retailListsGrid"),
   assignClient: document.querySelector("#retailAssignClient"),
@@ -51,6 +52,10 @@ const elements = {
   totalNet: document.querySelector("#retailTotalNet"),
   totalAmount: document.querySelector("#retailTotalAmount"),
   lastTicket: document.querySelector("#retailLastTicket"),
+  trayCountModal: document.querySelector("#retailTrayCountModal"),
+  manualWeightModal: document.querySelector("#retailManualWeightModal"),
+  manualWeightForm: document.querySelector("#retailManualWeightForm"),
+  manualWeightEntry: document.querySelector("#retailManualWeightEntry"),
   clientModal: document.querySelector("#retailClientModal"),
   clientSearch: document.querySelector("#retailClientSearch"),
   clientOptions: document.querySelector("#retailClientOptions"),
@@ -102,6 +107,7 @@ const state = {
   scaleState: null,
   loading: true
 };
+const modalFocusOrigins = new Map();
 
 function createDraftId() {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -229,12 +235,6 @@ function formatMoney(value, signed = false) {
   return `${prefix}S/ ${amount.toFixed(2)}`;
 }
 
-function formatGrams(value) {
-  const grams = Number(value || 0);
-  if (!grams) return "Sin ajuste adicional";
-  return `${grams > 0 ? "+" : ""}${grams} g adicionales`;
-}
-
 function setMessage(message, isError = false) {
   elements.message.textContent = message || "";
   elements.message.classList.toggle("is-error", Boolean(isError));
@@ -340,7 +340,9 @@ function previewValues() {
   const trayCount = Math.max(0, Number(elements.trayCount.value || 0));
   const birdsPerTray = Math.max(0, Number(elements.birdsPerTray.value || 0));
   const adjustmentGrams = Number(adjustment?.additional_grams || 0);
-  const grossWeight = roundWeight(readWeight + adjustmentGrams / 1000);
+  const grossWeight = readWeight > 0
+    ? roundWeight(readWeight + adjustmentGrams / 1000)
+    : 0;
   const tareWeight = roundWeight(trayCount * Number(tray?.weight_kg || 0));
   const netWeight = roundWeight(grossWeight - tareWeight);
 
@@ -369,7 +371,6 @@ function renderWeightPreview() {
   };
 
   elements.adjustedWeight.textContent = values.grossWeight.toFixed(3);
-  elements.adjustmentPreview.textContent = formatGrams(values.adjustmentGrams);
   elements.grossPreview.textContent = formatWeight(values.grossWeight);
   elements.tarePreview.textContent = formatWeight(values.tareWeight);
   elements.netPreview.textContent = formatWeight(Math.max(values.netWeight, 0));
@@ -380,14 +381,17 @@ function renderWeightPreview() {
   elements.captureState.classList.toggle("is-captured", Boolean(state.captured));
   elements.captureWeight.classList.toggle("is-captured", Boolean(state.captured));
   elements.captureWeight.lastChild.textContent = state.captured ? " Volver a capturar" : " Capturar peso";
-  elements.pricePreview.textContent = price ? `S/ ${price.value.toFixed(2)}` : "S/ --";
+  const liveAmount = price && values.netWeight > 0 ? values.netWeight * price.value : null;
+  elements.pricePreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
   elements.priceSource.textContent = price
-    ? (price.source === "MANUAL" ? "Precio puntual de la lista" : `Precio ${price.source.toLowerCase()}`)
+    ? `S/ ${price.value.toFixed(4)} por kg · ${price.source === "MANUAL" ? "puntual" : price.source.toLowerCase()}`
     : (clientFor() ? "Precio no configurado" : "Asigna un cliente");
-  elements.trayCountLabel.textContent = `${values.trayCount} bandeja${values.trayCount === 1 ? "" : "s"}`;
-
-  document.querySelectorAll("[data-retail-tray-count]").forEach((button) => {
-    button.classList.toggle("is-active", Number(button.dataset.retailTrayCount) === values.trayCount);
+  elements.trayCountValue.textContent = values.trayCount;
+  elements.trayCountLabel.textContent = `bandeja${values.trayCount === 1 ? "" : "s"}`;
+  document.querySelectorAll("[data-retail-tray-option]").forEach((button) => {
+    const selected = Number(button.dataset.retailTrayOption) === values.trayCount;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
 }
 
@@ -404,43 +408,28 @@ function renderChickenTypes() {
   elements.chickenTypes.innerHTML = state.catalog.chicken_types.map((type) => `
     <button type="button" data-retail-chicken="${escapeHtml(type.code)}" class="${type.code === state.chickenType ? "is-active" : ""}" aria-pressed="${type.code === state.chickenType}">
       ${escapeHtml(type.name)}
-      <small>${escapeHtml(type.code.replaceAll("_", " "))}</small>
     </button>
   `).join("");
 }
 
-function adjustmentsForSex(sex) {
-  return state.catalog.adjustments.filter((adjustment) => adjustment.sex === sex);
-}
-
-function presentationKind(value) {
-  const normalized = String(value || "").toUpperCase();
-  if (normalized.startsWith("ABIERT")) return "ABIERTO";
-  if (normalized.startsWith("CERRAD")) return "CERRADO";
-  return normalized;
-}
-
-function ensureAdjustmentSelection(preferredPresentation = null) {
-  const available = adjustmentsForSex(state.sex);
+function ensureAdjustmentSelection() {
+  const available = state.catalog.adjustments;
   const current = available.find((adjustment) => adjustment.code === state.adjustmentCode);
   if (current) return;
 
-  const preferred = available.find((adjustment) => (
-    presentationKind(adjustment.presentation) === presentationKind(preferredPresentation)
-  ))
-    || available.find((adjustment) => adjustment.is_default)
+  const preferred = available.find((adjustment) => adjustment.is_default)
     || available[0];
   state.adjustmentCode = preferred?.code || null;
+  state.sex = preferred?.sex || SEX_MALE;
 }
 
 function renderAdjustments() {
   ensureAdjustmentSelection();
-  const available = adjustmentsForSex(state.sex);
+  const available = state.catalog.adjustments;
 
   elements.adjustments.innerHTML = available.map((adjustment) => `
     <button type="button" data-retail-adjustment="${escapeHtml(adjustment.code)}" class="${adjustment.code === state.adjustmentCode ? "is-active" : ""}" aria-pressed="${adjustment.code === state.adjustmentCode}">
       ${escapeHtml(adjustment.name)}
-      <small>${formatGrams(adjustment.additional_grams)}</small>
     </button>
   `).join("");
 }
@@ -468,7 +457,7 @@ function renderLists() {
       : '<tr><td colspan="4"><div class="rd-empty-list">Captura un peso y agrégalo a esta lista.</div></td></tr>';
 
     return `
-      <article class="rd-list-card ${LIST_CLASSES[listIndex]} ${listIndex === state.activeList ? "is-active" : ""} ${list.saving ? "is-saving" : ""}" data-retail-list="${listIndex}">
+      <article class="rd-list-card ${LIST_CLASSES[listIndex]} ${listIndex === state.activeList ? "is-active" : ""} ${list.saving ? "is-saving" : ""}" data-retail-list="${listIndex}" role="button" tabindex="0" aria-pressed="${listIndex === state.activeList}">
         <header class="rd-list-head">
           <span class="rd-list-number">${listIndex + 1}</span>
           <span class="rd-list-client"><strong>${escapeHtml(client?.name || "Cliente sin asignar")}</strong><small>${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${totals.trays} bandejas</small></span>
@@ -630,12 +619,31 @@ function removeSelectedWeighing() {
 
 function openModal(modal) {
   if (!modal) return;
+  modalFocusOrigins.set(modal.id, document.activeElement);
   modal.hidden = false;
+  elements.station.inert = true;
+  elements.station.setAttribute("aria-hidden", "true");
+  const focusTarget = modal.querySelector("input:not([disabled]), select:not([disabled]), button:not([disabled])");
+  focusTarget?.focus();
 }
 
 function closeModal(modal) {
   if (!modal) return;
   modal.hidden = true;
+  const hasOpenModal = [
+    elements.trayCountModal,
+    elements.manualWeightModal,
+    elements.clientModal,
+    elements.priceModal,
+    elements.settingsModal
+  ].some((entry) => entry && !entry.hidden);
+  if (!hasOpenModal) {
+    elements.station.inert = false;
+    elements.station.removeAttribute("aria-hidden");
+  }
+  const origin = modalFocusOrigins.get(modal.id);
+  modalFocusOrigins.delete(modal.id);
+  origin?.focus?.();
 }
 
 function renderClientOptions(search = "") {
@@ -892,7 +900,6 @@ function applySettingsResponse(data) {
   if (defaultAdjustment) {
     state.sex = defaultAdjustment.sex;
     state.adjustmentCode = defaultAdjustment.code;
-    elements.sex.value = state.sex;
   }
   recalculateDraftItems();
 }
@@ -1005,6 +1012,29 @@ function applyManualScaleReading() {
   }
 }
 
+function openManualWeightModal() {
+  elements.manualWeightEntry.value = state.liveWeight > 0 ? state.liveWeight.toFixed(3) : "";
+  openModal(elements.manualWeightModal);
+  elements.manualWeightEntry.focus();
+}
+
+function applyMainManualWeight(event) {
+  event.preventDefault();
+  try {
+    const scaleState = state.scale.setManualReading(elements.manualWeightEntry.value);
+    state.liveWeight = scaleState.currentWeightKg;
+    state.liveSource = "manual";
+    state.captured = null;
+    elements.rawWeightInput.value = state.liveWeight.toFixed(3);
+    closeModal(elements.manualWeightModal);
+    renderWeightPreview();
+    setMessage(`Peso manual recibido. La pantalla muestra ${formatWeight(previewValues().grossWeight)} con el ajuste.`);
+  } catch (error) {
+    setMessage(error.message, true);
+    elements.manualWeightEntry.focus();
+  }
+}
+
 function normalizeCatalog(data) {
   const adjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
   return {
@@ -1037,7 +1067,8 @@ async function loadCatalog() {
   try {
     const response = await apiRequest("/despacho-minorista/catalogo");
     state.catalog = normalizeCatalog(response.data || {});
-    restoreLists(state.catalog.branch?.id || "default");
+    const branchId = state.catalog.branch?.id || "default";
+    restoreLists(branchId);
     recalculateDraftItems();
     elements.branchName.textContent = state.catalog.branch?.name || "Sucursal sin nombre";
     renderTrayOptions();
@@ -1047,9 +1078,10 @@ async function loadCatalog() {
     if (defaultAdjustment) {
       state.sex = defaultAdjustment.sex;
       state.adjustmentCode = defaultAdjustment.code;
-      elements.sex.value = state.sex;
     }
     state.chickenType = state.catalog.chicken_types[0]?.code || null;
+
+    state.scale.setStorageKey(`${RETAIL_SCALE_STORAGE_KEY}-branch-${branchId}`, { reload: true });
 
     const configuration = state.catalog.scale?.configuration || {};
     try {
@@ -1100,13 +1132,6 @@ state.scale = new RetailScaleController({
   }
 });
 
-elements.rawWeightInput.addEventListener("input", () => {
-  const value = Number(String(elements.rawWeightInput.value || "0").replace(",", "."));
-  state.liveWeight = Number.isFinite(value) ? Math.max(roundWeight(value), 0) : 0;
-  state.liveSource = "manual";
-  state.captured = null;
-  renderWeightPreview();
-});
 elements.trayCount.addEventListener("input", renderWeightPreview);
 elements.birdsPerTray.addEventListener("input", renderWeightPreview);
 elements.trayType.addEventListener("change", () => {
@@ -1114,14 +1139,9 @@ elements.trayType.addEventListener("change", () => {
   if (tray?.bird_capacity) elements.birdsPerTray.value = tray.bird_capacity;
   renderWeightPreview();
 });
-elements.sex.addEventListener("change", () => {
-  const previousPresentation = selectedAdjustment()?.presentation;
-  state.sex = elements.sex.value === SEX_FEMALE ? SEX_FEMALE : SEX_MALE;
-  state.adjustmentCode = null;
-  ensureAdjustmentSelection(previousPresentation);
-  renderAdjustments();
-  renderWeightPreview();
-});
+elements.trayCountTrigger.addEventListener("click", () => openModal(elements.trayCountModal));
+elements.manualWeightTrigger.addEventListener("click", openManualWeightModal);
+elements.manualWeightForm.addEventListener("submit", applyMainManualWeight);
 elements.captureWeight.addEventListener("click", captureWeight);
 elements.assignClient.addEventListener("click", openClientModal);
 elements.removeWeighing.addEventListener("click", removeSelectedWeighing);
@@ -1141,9 +1161,10 @@ elements.disconnectScale.addEventListener("click", disconnectScale);
 elements.applyManualScale.addEventListener("click", applyManualScaleReading);
 
 document.addEventListener("click", (event) => {
-  const quickTray = event.target.closest("[data-retail-tray-count]");
-  if (quickTray) {
-    elements.trayCount.value = quickTray.dataset.retailTrayCount;
+  const trayOption = event.target.closest("[data-retail-tray-option]");
+  if (trayOption) {
+    elements.trayCount.value = trayOption.dataset.retailTrayOption;
+    closeModal(elements.trayCountModal);
     renderWeightPreview();
     return;
   }
@@ -1159,6 +1180,7 @@ document.addEventListener("click", (event) => {
   const adjustmentButton = event.target.closest("[data-retail-adjustment]");
   if (adjustmentButton) {
     state.adjustmentCode = adjustmentButton.dataset.retailAdjustment;
+    state.sex = selectedAdjustment()?.sex || SEX_MALE;
     renderAdjustments();
     renderWeightPreview();
     return;
@@ -1216,14 +1238,51 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    [elements.clientModal, elements.priceModal, elements.settingsModal]
+    [
+      elements.trayCountModal,
+      elements.manualWeightModal,
+      elements.clientModal,
+      elements.priceModal,
+      elements.settingsModal
+    ]
       .filter((modal) => !modal.hidden)
       .forEach(closeModal);
+  }
+
+  if (event.key === "Tab") {
+    const openModalElement = [
+      elements.trayCountModal,
+      elements.manualWeightModal,
+      elements.clientModal,
+      elements.priceModal,
+      elements.settingsModal
+    ].find((modal) => modal && !modal.hidden);
+    if (openModalElement) {
+      const focusable = [...openModalElement.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )].filter((element) => !element.hidden);
+      if (focusable.length) {
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    }
   }
 
   if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-retail-item]")) {
     event.preventDefault();
     event.target.click();
+  }
+
+  if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-retail-list]")) {
+    event.preventDefault();
+    selectList(event.target.dataset.retailList);
   }
 });
 

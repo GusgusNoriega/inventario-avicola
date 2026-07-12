@@ -18,9 +18,9 @@
         </div>
       </div>
 
-      <div class="rd-branch-meta" aria-live="polite">
+      <div class="rd-branch-meta">
         <span id="retailBranchName">Cargando sucursal...</span>
-        <strong id="retailClock">--:--</strong>
+        <strong id="retailClock" aria-hidden="true">--:--</strong>
       </div>
 
       <div class="rd-topbar-actions">
@@ -41,24 +41,16 @@
     <form id="retailWeighingForm" class="rd-capture-form" novalidate>
       <section class="rd-capture-deck" aria-label="Captura de la pesada">
         <article class="rd-tray-panel rd-panel">
-          <div class="rd-panel-heading">
+          <div class="rd-panel-heading rd-tray-quantity-heading">
             <div>
-              <span>Grupo de bandejas</span>
-              <strong id="retailTrayCountLabel">1 bandeja</strong>
+              <span>Cantidad de bandejas</span>
+              <strong>Toca el número para cambiar</strong>
             </div>
-            <label class="rd-compact-number">
-              <span class="sr-only">Cantidad de bandejas</span>
-              <input id="retailTrayCount" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required>
-            </label>
-          </div>
-
-          <div class="rd-quick-grid" aria-label="Cantidad rápida de bandejas">
-            <button type="button" data-retail-tray-count="1" class="is-active">1</button>
-            <button type="button" data-retail-tray-count="2">2</button>
-            <button type="button" data-retail-tray-count="3">3</button>
-            <button type="button" data-retail-tray-count="4">4</button>
-            <button type="button" data-retail-tray-count="5">5</button>
-            <button type="button" data-retail-tray-count="10">10</button>
+            <input id="retailTrayCount" type="hidden" value="1">
+            <button id="retailTrayCountTrigger" class="rd-tray-count-trigger" type="button" aria-haspopup="dialog" aria-controls="retailTrayCountModal">
+              <strong id="retailTrayCountValue">1</strong>
+              <small id="retailTrayCountLabel">bandeja</small>
+            </button>
           </div>
 
           <div class="rd-tray-fields">
@@ -79,16 +71,14 @@
             <span id="retailCaptureState" class="rd-capture-state">Peso en vivo</span>
           </div>
 
-          <div class="rd-scale-reading">
-            <label class="sr-only" for="retailRawWeightInput">Peso leído en kilogramos</label>
-            <input id="retailRawWeightInput" type="number" min="0" step="0.001" value="0" inputmode="decimal" autocomplete="off">
+          <input id="retailRawWeightInput" type="hidden" value="0">
+          <button id="retailManualWeightTrigger" class="rd-scale-reading" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" aria-label="Peso final ajustado. Toca para ingresar peso manual">
+            <output id="retailAdjustedWeight">0.000</output>
             <span aria-hidden="true">kg</span>
-          </div>
+          </button>
 
           <div class="rd-adjusted-reading">
-            <span>Peso final con ajuste</span>
-            <strong><output id="retailAdjustedWeight">0.000</output> kg</strong>
-            <small id="retailAdjustmentPreview">Sin ajuste adicional</small>
+            <span>Peso mostrado con ajuste aplicado</span>
           </div>
 
           <button id="retailCaptureWeight" class="rd-capture-button" type="button">
@@ -99,7 +89,7 @@
 
         <article class="rd-values-panel rd-panel">
           <div class="rd-value-card is-price">
-            <span>Precio a valorizar</span>
+            <span>Valor en tiempo real</span>
             <strong id="retailPricePreview">S/ --</strong>
             <small id="retailPriceSource">Asigna un cliente</small>
           </div>
@@ -122,27 +112,20 @@
       <section class="rd-selection-bar" aria-label="Características y destino de la pesada">
         <div class="rd-chicken-types" id="retailChickenTypes" role="group" aria-label="Tipo de pollo"></div>
 
-        <label class="rd-sex-field">
-          <span>Sexo predeterminado</span>
-          <select id="retailSex" aria-label="Sexo predeterminado">
-            <option value="MACHO">Macho</option>
-            <option value="HEMBRA">Hembra</option>
-          </select>
-        </label>
-
         <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo"></div>
+      </section>
+    </form>
 
+    <section class="rd-workspace" aria-label="Listas de venta minorista">
+      <div class="rd-lists-stage">
         <div class="rd-add-buttons" aria-label="Agregar pesada a una lista">
           <button type="button" data-retail-add-list="0">Agregar a lista 1</button>
           <button type="button" data-retail-add-list="1">Agregar a lista 2</button>
           <button type="button" data-retail-add-list="2">Agregar a lista 3</button>
           <button type="button" data-retail-add-list="3">Agregar a lista 4</button>
         </div>
-      </section>
-    </form>
-
-    <section class="rd-workspace" aria-label="Listas de venta minorista">
-      <div id="retailListsGrid" class="rd-lists-grid"></div>
+        <div id="retailListsGrid" class="rd-lists-grid"></div>
+      </div>
 
       <aside class="rd-action-rail" aria-label="Acciones de la lista activa">
         <div class="rd-operation-buttons" role="group" aria-label="Tipo de operación">
@@ -182,6 +165,44 @@
 
     <section id="retailLastTicket" class="rd-ticket-toast" hidden aria-live="polite"></section>
   </main>
+
+  <div id="retailTrayCountModal" class="rd-modal" hidden>
+    <section class="rd-modal-card is-compact" role="dialog" aria-modal="true" aria-labelledby="retailTrayCountModalTitle">
+      <header class="rd-modal-head">
+        <div>
+          <p>Selección táctil</p>
+          <h2 id="retailTrayCountModalTitle">Cantidad de bandejas</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailTrayCountModal" aria-label="Cerrar">×</button>
+      </header>
+      <div class="rd-tray-count-options" role="group" aria-label="Seleccionar cantidad de bandejas">
+        @for ($quantity = 1; $quantity <= 10; $quantity++)
+          <button type="button" data-retail-tray-option="{{ $quantity }}">{{ $quantity }}</button>
+        @endfor
+      </div>
+    </section>
+  </div>
+
+  <div id="retailManualWeightModal" class="rd-modal" hidden>
+    <form id="retailManualWeightForm" class="rd-modal-card is-compact" role="dialog" aria-modal="true" aria-labelledby="retailManualWeightModalTitle">
+      <header class="rd-modal-head">
+        <div>
+          <p>Respaldo manual</p>
+          <h2 id="retailManualWeightModalTitle">Ingresar peso leído</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailManualWeightModal" aria-label="Cerrar">×</button>
+      </header>
+      <p class="rd-modal-copy">Este valor se guarda internamente; la pantalla principal mostrará únicamente el peso final con el ajuste seleccionado.</p>
+      <label class="rd-manual-weight-field">
+        <span>Peso leído (kg)</span>
+        <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="decimal" required autocomplete="off" placeholder="Ej. 12.500">
+      </label>
+      <div class="rd-modal-actions">
+        <button type="button" class="rd-secondary-button" data-retail-close-modal="retailManualWeightModal">Cancelar</button>
+        <button class="rd-primary-button" type="submit">Aplicar peso</button>
+      </div>
+    </form>
+  </div>
 
   <div id="retailClientModal" class="rd-modal" hidden>
     <section class="rd-modal-card is-client" role="dialog" aria-modal="true" aria-labelledby="retailClientModalTitle">

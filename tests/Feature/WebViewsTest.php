@@ -35,13 +35,19 @@ class WebViewsTest extends TestCase
             ->assertSee('Despacho minorista')
             ->assertSee('id="retailRawWeightInput"', false)
             ->assertSee('id="retailTrayCount"', false)
+            ->assertSee('id="retailTrayCountTrigger"', false)
+            ->assertSee('data-retail-tray-option="10"', false)
+            ->assertSee('id="retailAdjustedWeight"', false)
+            ->assertSee('class="rd-lists-stage"', false)
             ->assertSee('data-retail-add-list="3"', false)
             ->assertSee('id="retailSettingsModal"', false)
             ->assertSee('Balanza y ajustes minoristas')
             ->assertSee('Grabar')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false)
-            ->assertSee(route('menu'), false);
+            ->assertSee(route('menu'), false)
+            ->assertDontSee('id="retailAdjustmentPreview"', false)
+            ->assertDontSee('id="retailSex"', false);
 
         $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
 
@@ -52,6 +58,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('adjustment_code', $javascript);
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
+        $this->assertStringContainsString('additional_grams', $javascript);
+        $this->assertStringNotContainsString('g adicionales', $javascript);
+        $this->assertStringNotContainsString('type.code.replaceAll', $javascript);
         $this->assertStringNotContainsString('cage_type_code', $javascript);
         $this->assertStringNotContainsString('cantidad_javas', $javascript);
 

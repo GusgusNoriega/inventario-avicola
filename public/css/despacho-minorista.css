@@ -75,7 +75,7 @@ body.retail-dispatch-page {
   min-width: 1024px;
   padding: 5px;
   display: grid;
-  grid-template-rows: 52px 202px 92px minmax(0, 1fr) 30px;
+  grid-template-rows: 52px 202px 72px minmax(0, 1fr) 30px;
   gap: 5px;
   overflow: hidden;
 }
@@ -291,8 +291,8 @@ body.retail-dispatch-page {
 .rd-tray-panel {
   padding: 9px;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 7px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 9px;
   border-top: 3px solid #c43b43;
 }
 
@@ -336,43 +336,38 @@ body.retail-dispatch-page {
   white-space: nowrap;
 }
 
-.rd-compact-number input {
-  width: 62px;
-  height: 34px;
-  padding: 0 6px;
+.rd-tray-count-trigger {
+  min-width: 82px;
+  min-height: 96px;
+  padding: 8px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
   color: var(--rd-yellow);
   border: 1px solid #655727;
-  border-radius: 5px;
-  background: #090b0f;
-  font-size: 1.15rem;
-  font-weight: 950;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #19170d, #090b0f);
   text-align: center;
-}
-
-.rd-quick-grid {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.rd-quick-grid button {
-  min-height: 0;
-  color: #fff;
-  border: 1px solid #4a5362;
-  border-radius: 5px;
-  background: linear-gradient(180deg, #252c36, #171d25);
-  font-size: 1.08rem;
-  font-weight: 950;
   cursor: pointer;
 }
 
-.rd-quick-grid button:hover,
-.rd-quick-grid button.is-active {
-  color: #1d1300;
+.rd-tray-count-trigger > strong {
+  color: var(--rd-yellow);
+  font-size: 2.55rem;
+  line-height: 0.95;
+}
+
+.rd-tray-count-trigger > small {
+  color: #c7ad59;
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.rd-tray-count-trigger:hover {
   border-color: #ffd954;
-  background: linear-gradient(180deg, #ffe373, #efb61a);
+  background: #29230c;
 }
 
 .rd-tray-fields {
@@ -452,21 +447,23 @@ body.retail-dispatch-page {
 
 .rd-scale-reading {
   z-index: 1;
+  width: 100%;
   min-width: 0;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
-.rd-scale-reading input {
+.rd-scale-reading output {
   width: min(100%, 430px);
   min-width: 0;
-  padding: 0;
   color: #f9df2e;
-  border: 0;
-  outline: 0;
-  background: transparent;
   font-size: clamp(3.3rem, 7.7vh, 5.5rem);
   font-weight: 950;
   line-height: 0.9;
@@ -495,12 +492,6 @@ body.retail-dispatch-page {
 .rd-adjusted-reading strong {
   color: #73e9ff;
   font-size: 1.08rem;
-}
-
-.rd-adjusted-reading small {
-  color: #dda9ad;
-  font-size: 0.6rem;
-  font-weight: 750;
 }
 
 .rd-capture-button {
@@ -592,7 +583,7 @@ body.retail-dispatch-page {
   min-height: 0;
   padding: 6px;
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 142px minmax(220px, 0.85fr) minmax(440px, 1.65fr);
+  grid-template-columns: minmax(330px, 0.9fr) minmax(600px, 1.45fr);
   gap: 6px;
   border-top: 3px solid #8e2930;
 }
@@ -625,23 +616,18 @@ body.retail-dispatch-page {
   cursor: pointer;
 }
 
-.rd-chicken-types button small,
-.rd-adjustment-buttons button small {
-  display: block;
-  margin-top: 2px;
-  color: #8998aa;
-  font-size: 0.55rem;
-  font-weight: 800;
+.rd-chicken-types button,
+.rd-adjustment-buttons button {
+  padding: 7px 8px;
+  font-size: 0.85rem;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 .rd-chicken-types button.is-active {
   color: #07141b;
   border-color: #58d4ff;
   background: linear-gradient(180deg, #5cd8ff, #28afe3);
-}
-
-.rd-chicken-types button.is-active small {
-  color: #17475b;
 }
 
 .rd-sex-field {
@@ -662,7 +648,7 @@ body.retail-dispatch-page {
 }
 
 .rd-adjustment-buttons {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .rd-adjustment-buttons button.is-active {
@@ -671,12 +657,9 @@ body.retail-dispatch-page {
   background: linear-gradient(180deg, #c84049, #86262d);
 }
 
-.rd-adjustment-buttons button.is-active small {
-  color: #ffd4d7;
-}
-
 .rd-add-buttons {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 0;
 }
 
 .rd-add-buttons button {
@@ -709,6 +692,14 @@ body.retail-dispatch-page {
   grid-template-columns: minmax(0, 1fr) 142px;
   gap: 5px;
   overflow: hidden;
+}
+
+.rd-lists-stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  gap: 5px;
 }
 
 .rd-lists-grid {
@@ -839,7 +830,7 @@ body.retail-dispatch-page {
   color: #8290a5;
   border-bottom: 1px solid #2f3949;
   background: #111722;
-  font-size: 0.5rem;
+  font-size: 0.58rem;
   letter-spacing: 0.035em;
   text-align: center;
   text-transform: uppercase;
@@ -866,7 +857,7 @@ body.retail-dispatch-page {
   padding: 6px 3px;
   color: #dce5f1;
   border-bottom: 1px solid #1c2430;
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 780;
   text-align: center;
 }
@@ -901,7 +892,7 @@ body.retail-dispatch-page {
   display: block;
   margin-top: 2px;
   color: #75849a;
-  font-size: 0.48rem;
+  font-size: 0.56rem;
   font-weight: 720;
 }
 
@@ -936,7 +927,7 @@ body.retail-dispatch-page {
 
 .rd-list-foot span {
   color: #8e9cb0;
-  font-size: 0.52rem;
+  font-size: 0.58rem;
   text-transform: uppercase;
 }
 
@@ -948,7 +939,7 @@ body.retail-dispatch-page {
 
 .rd-list-foot strong {
   color: #91a0b3;
-  font-size: 0.52rem;
+  font-size: 0.58rem;
   font-weight: 800;
   text-align: right;
   text-transform: uppercase;
@@ -1153,6 +1144,56 @@ body.retail-dispatch-page {
 .rd-modal-card.is-settings {
   width: min(980px, calc(100vw - 36px));
   border-top-color: #f1c64b;
+}
+
+.rd-modal-card.is-compact {
+  width: min(520px, calc(100vw - 36px));
+  border-top-color: #f1c64b;
+}
+
+.rd-tray-count-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rd-tray-count-options button {
+  min-height: 68px;
+  color: #fff;
+  border: 1px solid #4a586c;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #26303e, #151b24);
+  font-size: 1.45rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.rd-tray-count-options button:hover,
+.rd-tray-count-options button.is-active {
+  color: #1d1300;
+  border-color: #ffd954;
+  background: linear-gradient(180deg, #ffe373, #efb61a);
+}
+
+.rd-manual-weight-field {
+  display: grid;
+  gap: 6px;
+  color: #aebdd0;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.rd-manual-weight-field input {
+  width: 100%;
+  min-height: 74px;
+  padding: 8px 14px;
+  color: #ffe04e;
+  border: 1px solid #655727;
+  border-radius: 8px;
+  background: #080b10;
+  font-size: 2.4rem;
+  font-weight: 950;
+  text-align: center;
 }
 
 .rd-modal-head {
@@ -1457,7 +1498,7 @@ body.retail-dispatch-page {
 
 @media (max-height: 820px) {
   .rd-station {
-    grid-template-rows: 52px 202px 92px minmax(0, 1fr) 30px;
+    grid-template-rows: 52px 202px 72px minmax(0, 1fr) 30px;
   }
 
   .rd-list-card {
@@ -1467,7 +1508,7 @@ body.retail-dispatch-page {
 
 @media (min-height: 900px) {
   .rd-station {
-    grid-template-rows: 58px 232px 104px minmax(0, 1fr) 34px;
+    grid-template-rows: 58px 232px 80px minmax(0, 1fr) 34px;
     gap: 7px;
     padding: 7px;
   }
@@ -1515,12 +1556,11 @@ body.retail-dispatch-page {
   }
 
   .rd-selection-bar {
-    grid-template-columns: 1fr 150px 1fr;
+    grid-template-columns: minmax(330px, 0.9fr) minmax(600px, 1.45fr);
   }
 
   .rd-add-buttons {
-    grid-column: 1 / -1;
-    min-height: 58px;
+    min-height: 0;
   }
 
   .rd-workspace {
@@ -1582,7 +1622,6 @@ body.retail-dispatch-page {
   }
 
   .rd-add-buttons {
-    grid-column: auto;
     grid-template-columns: 1fr 1fr;
   }
 
