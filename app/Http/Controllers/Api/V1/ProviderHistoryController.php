@@ -82,8 +82,7 @@ class ProviderHistoryController extends Controller
             ->withQueryString();
         $vehicles = ProveedorVehiculo::query()
             ->where('proveedor_id', $provider->id)
-            ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
-            ->whereNull('vigente_hasta')
+            ->vigente()
             ->with('vehiculo')
             ->orderByDesc('id')
             ->get()

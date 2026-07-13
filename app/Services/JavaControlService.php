@@ -213,7 +213,6 @@ class JavaControlService
             ->find($data['client_id']);
         $vehicle = Vehiculo::query()
             ->where('empresa_id', $companyId)
-            ->where('es_propio', true)
             ->where('estado', Vehiculo::STATUS_ACTIVE)
             ->find($data['vehicle_id']);
         $driver = Conductor::query()

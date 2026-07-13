@@ -618,6 +618,10 @@ class DispatchTicketService
 
         $associationQuery = ProveedorVehiculo::query()
             ->where('proveedor_id', $provider->id)
+            ->vigente()
+            ->whereHas('vehiculo', fn ($query) => $query
+                ->where('empresa_id', $companyId)
+                ->where('estado', 'ACTIVO'))
             ->with('vehiculo');
 
         if ($origin['provider_vehicle_id'] ?? null) {

@@ -14,6 +14,9 @@ function normalizeTicketRecord(record) {
   const grossWeight = Number(record?.grossWeight) || 0;
   const tareWeight = Number(record?.tareWeight) || 0;
   const suppliedNetWeight = Number(record?.netWeight);
+  const priceKg = Number(record?.priceKg) || 0;
+  const suppliedAmount = Number(record?.amount);
+  const netWeight = Number.isFinite(suppliedNetWeight) ? suppliedNetWeight : grossWeight - tareWeight;
 
   return {
     typeCode: String(record?.typeCode || "PV").trim() || "PV",
@@ -21,7 +24,9 @@ function normalizeTicketRecord(record) {
     cages: Math.max(0, Number(record?.cages) || 0),
     grossWeight,
     tareWeight,
-    netWeight: Number.isFinite(suppliedNetWeight) ? suppliedNetWeight : grossWeight - tareWeight
+    netWeight,
+    priceKg,
+    amount: Number.isFinite(suppliedAmount) ? suppliedAmount : netWeight * priceKg
   };
 }
 
@@ -33,16 +38,24 @@ function summarizeTicketRecords(records) {
       typeCode: record.typeCode,
       grossWeight: 0,
       tareWeight: 0,
-      netWeight: 0
+      netWeight: 0,
+      priceKg: record.priceKg,
+      amount: 0
     };
 
     current.grossWeight += record.grossWeight;
     current.tareWeight += record.tareWeight;
     current.netWeight += record.netWeight;
+    current.priceKg = record.priceKg;
+    current.amount += record.amount;
     totalsByType.set(record.typeCode, current);
   });
 
   return Array.from(totalsByType.values());
+}
+
+function formatTicketMoney(value) {
+  return `S/ ${Number(value || 0).toFixed(2)}`;
 }
 
 export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
@@ -52,26 +65,54 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   const records = (ticket?.records || []).map(normalizeTicketRecord);
   const typeTotals = summarizeTicketRecords(records);
   const isReturn = ticket?.operationType === "DEVOLUCION";
-  const documentTitle = isReturn ? "DEVOLUCION" : "CONTROL DE PESO";
+  const isRetail = ticket?.channel === "MINORISTA";
+  const customerKind = ticket?.customerKind === "VENTA_EXTERNA" ? "VENTA EXTERNA" : "CLIENTE REGISTRADO";
+  const documentTitle = isRetail
+    ? (isReturn ? "DEVOLUCION MINORISTA" : "DESPACHO MINORISTA")
+    : (isReturn ? "DEVOLUCION" : "CONTROL DE PESO");
   const rows = records.map((record) => `
     <tr>
       <td>${escapeTicketHtml(record.typeCode)}</td>
       <td class="number">${record.birdsPerCage}</td>
       <td class="number">${record.cages}</td>
-      <td class="number">${record.grossWeight.toFixed(2)}</td>
-      <td class="number">${record.tareWeight.toFixed(2)}</td>
+      ${isRetail ? `
+        <td class="number">${record.netWeight.toFixed(2)}</td>
+        <td class="number">${escapeTicketHtml(formatTicketMoney(record.priceKg))}</td>
+        <td class="number">${escapeTicketHtml(formatTicketMoney(record.amount))}</td>
+      ` : `
+        <td class="number">${record.grossWeight.toFixed(2)}</td>
+        <td class="number">${record.tareWeight.toFixed(2)}</td>
+      `}
     </tr>
   `).join("");
   const totalRows = typeTotals.map((total) => `
     <tr>
       <td>${escapeTicketHtml(total.typeCode)}</td>
-      <td>${total.grossWeight.toFixed(2)}</td>
-      <td>${total.tareWeight.toFixed(2)}</td>
-      <td>${total.netWeight.toFixed(2)}</td>
+      ${isRetail ? `
+        <td>${total.netWeight.toFixed(2)}</td>
+        <td>${escapeTicketHtml(formatTicketMoney(total.priceKg))}</td>
+        <td>${escapeTicketHtml(formatTicketMoney(total.amount))}</td>
+      ` : `
+        <td>${total.grossWeight.toFixed(2)}</td>
+        <td>${total.tareWeight.toFixed(2)}</td>
+        <td>${total.netWeight.toFixed(2)}</td>
+      `}
     </tr>
   `).join("");
+  const suppliedTotalAmount = Number(ticket?.totalAmount);
+  const totalAmount = Number.isFinite(suppliedTotalAmount)
+    ? suppliedTotalAmount
+    : records.reduce((total, record) => total + record.amount, 0);
   const ticketCode = String(ticket?.code || "--");
   const destinationName = String(ticket?.destinationName || "Sin destino asignado");
+  const deliveryVehicle = ticket?.delivery?.vehicle || null;
+  const deliveryDriver = ticket?.delivery?.driver || null;
+  const deliveryHtml = deliveryVehicle || deliveryDriver
+    ? `<section class="delivery">
+        ${deliveryVehicle ? `<p>CAMIÓN: ${escapeTicketHtml(deliveryVehicle.plate || "--")}</p>` : ""}
+        ${deliveryDriver ? `<p>CHOFER: ${escapeTicketHtml(deliveryDriver.name || "--")}</p>` : ""}
+      </section>`
+    : "";
   const printedDate = safePrintDate.toLocaleDateString(TICKET_LOCALE, { timeZone: TICKET_TIME_ZONE });
   const printedTime = safePrintDate.toLocaleTimeString(TICKET_LOCALE, { timeZone: TICKET_TIME_ZONE });
 
@@ -151,6 +192,26 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       font-weight: 900;
     }
 
+    .delivery {
+      margin: 2mm 0;
+      padding: 1.5mm 0;
+      border-top: 1px dashed #000;
+      border-bottom: 1px dashed #000;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .delivery p + p {
+      margin-top: 0.7mm;
+    }
+
+    .channel {
+      margin-top: 1mm;
+      text-align: center;
+      font-size: 9.5px;
+      font-weight: 900;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -195,6 +256,20 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     .detail-table th:nth-child(4) { width: 31%; }
     .detail-table th:nth-child(5) { width: 30%; }
 
+    .retail-detail-table th,
+    .retail-detail-table td {
+      padding-left: 0.2mm;
+      padding-right: 0.2mm;
+      font-size: 8.5px;
+    }
+
+    .retail-detail-table th:nth-child(1) { width: 11%; }
+    .retail-detail-table th:nth-child(2) { width: 11%; }
+    .retail-detail-table th:nth-child(3) { width: 10%; }
+    .retail-detail-table th:nth-child(4) { width: 18%; }
+    .retail-detail-table th:nth-child(5) { width: 24%; }
+    .retail-detail-table th:nth-child(6) { width: 26%; }
+
     .summary-title {
       margin: 4mm 0 1mm;
       font-size: 12px;
@@ -219,6 +294,18 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       font-size: 12px;
       font-weight: 900;
     }
+
+    .sale-total {
+      margin-top: 3mm;
+      padding: 2mm 0;
+      border-top: 2px solid #000;
+      border-bottom: 2px solid #000;
+      display: flex;
+      justify-content: space-between;
+      gap: 2mm;
+      font-size: 14px;
+      font-weight: 900;
+    }
   </style>
 </head>
 <body>
@@ -237,15 +324,15 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   </section>
 
   <p class="destination">${escapeTicketHtml(destinationName)}</p>
+  ${isRetail ? `<p class="channel">DESPACHO MINORISTA · ${escapeTicketHtml(customerKind)}</p>` : ""}
+  ${deliveryHtml}
 
-  <table class="detail-table">
+  <table class="detail-table${isRetail ? " retail-detail-table" : ""}">
     <thead>
       <tr>
-        <th>TIPO</th>
-        <th>C/A</th>
-        <th>CJ</th>
-        <th>PESO<br>BRUTO</th>
-        <th>PESO<br>TARA</th>
+        ${isRetail
+          ? "<th>TIPO</th><th>AV/B</th><th>BAN</th><th>NETO<br>KG</th><th>PRECIO<br>/KG</th><th>SUBTOTAL</th>"
+          : "<th>TIPO</th><th>C/A</th><th>CJ</th><th>PESO<br>BRUTO</th><th>PESO<br>TARA</th>"}
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -256,13 +343,20 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     <thead>
       <tr>
         <th>TIPO</th>
-        <th>PB</th>
-        <th>TARA</th>
-        <th>PN</th>
+        ${isRetail
+          ? "<th>NETO KG</th><th>PRECIO/KG</th><th>SUBTOTAL</th>"
+          : "<th>PB</th><th>TARA</th><th>PN</th>"}
       </tr>
     </thead>
     <tbody>${totalRows}</tbody>
   </table>
+
+  ${isRetail ? `
+    <p class="sale-total">
+      <span>TOTAL TICKET</span>
+      <span>${escapeTicketHtml(formatTicketMoney(totalAmount))}</span>
+    </p>
+  ` : ""}
 
   <section class="form-fields">
     <p>OBSERV:</p>

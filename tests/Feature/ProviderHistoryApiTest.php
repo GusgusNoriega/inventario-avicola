@@ -179,6 +179,8 @@ class ProviderHistoryApiTest extends TestCase
 
         $this->assertDatabaseCount('vehiculos', 2);
         $this->assertDatabaseCount('proveedor_vehiculos', 2);
+        $this->assertDatabaseMissing('vehiculos', ['es_propio' => false]);
+        $this->assertDatabaseMissing('vehiculos', ['tercero_propietario_id' => $this->providerId]);
 
         $this->getJson("/api/v1/proveedores/{$this->providerId}/historial")
             ->assertOk()
@@ -197,6 +199,38 @@ class ProviderHistoryApiTest extends TestCase
             'estado' => 'INACTIVO',
         ]);
         $this->assertDatabaseCount('vehiculos', 2);
+        $this->assertDatabaseHas('vehiculos', [
+            'placa' => 'ABC-123',
+            'es_propio' => true,
+            'tercero_propietario_id' => null,
+            'estado' => 'ACTIVO',
+        ]);
+    }
+
+    public function test_existing_company_truck_can_be_assigned_without_duplication(): void
+    {
+        $truckId = $this->postJson('/api/v1/camiones', ['placa' => 'EMP-001'])
+            ->assertCreated()
+            ->assertJsonPath('data.is_own', true)
+            ->json('data.id');
+
+        $this->postJson(
+            "/api/v1/proveedores/{$this->providerId}/vehiculos",
+            ['placa' => 'EMP-001']
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.vehicle_id', $truckId);
+
+        $this->assertDatabaseCount('vehiculos', 1);
+        $this->assertDatabaseHas('vehiculos', [
+            'id' => $truckId,
+            'es_propio' => true,
+            'tercero_propietario_id' => null,
+        ]);
+        $this->getJson('/api/v1/camiones?buscar=PROVEEDOR NORTE')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $truckId)
+            ->assertJsonPath('data.0.assigned_provider.id', $this->providerId);
     }
 
     public function test_plate_cannot_be_assigned_twice_or_to_two_active_providers(): void

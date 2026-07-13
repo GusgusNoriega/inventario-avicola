@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
 
 const root = document.querySelector("[data-weighing-management]");
+const RETAIL_CHANNEL = "MINORISTA";
 
 const elements = {
   message: document.getElementById("weighingManagementMessage"),
@@ -73,6 +74,10 @@ function formatWeight(value) {
   return `${Number(value || 0).toFixed(3)} kg`;
 }
 
+function formatMoney(value) {
+  return `S/ ${Number(value || 0).toFixed(2)}`;
+}
+
 function formatDate(value, includeTime = false) {
   if (!value) {
     return "--";
@@ -100,6 +105,47 @@ function formatDate(value, includeTime = false) {
 
 function operationLabel(value) {
   return value === "DEVOLUCION" ? "Devolución" : "Despacho";
+}
+
+function isRetailTicket(ticket) {
+  return ticket?.channel === RETAIL_CHANNEL;
+}
+
+function ticketCustomerName(ticket) {
+  if (ticket?.client?.name) {
+    return ticket.client.name;
+  }
+
+  if (isRetailTicket(ticket)) {
+    return "Venta externa (sin cliente asignado)";
+  }
+
+  return ticket?.destination?.name || "Sin destino registrado";
+}
+
+function retailCustomerBadge(ticket) {
+  if (!isRetailTicket(ticket)) {
+    return "";
+  }
+
+  return ticket?.client?.id
+    ? '<span class="weighing-customer-badge">Cliente registrado</span>'
+    : '<span class="weighing-customer-badge is-external">Venta externa</span>';
+}
+
+function priceOriginLabel(value) {
+  const labels = {
+    CLIENTE: "Precio del cliente",
+    LISTA_CLIENTE: "Precio del cliente",
+    MANUAL: "Precio personalizado",
+    PERSONALIZADO: "Precio personalizado",
+    LISTA_PERSONALIZADA: "Precio personalizado",
+    GENERAL: "Precio vigente",
+    VIGENTE: "Precio vigente",
+    LISTA_VIGENTE: "Precio vigente"
+  };
+
+  return labels[String(value || "").toUpperCase()] || "Precio aplicado al despacho";
 }
 
 function normalizeChickenSex(value) {
@@ -141,22 +187,38 @@ function getPrintedTypeCode(weighing, operationType) {
     return weighing?.chicken_condition === "MUERTO" ? "PM" : "PV";
   }
 
-  return weighing?.chicken_type?.code === "POLLO_PELADO" ? "PP" : "PV";
+  const typeCode = weighing?.chicken_type?.code || weighing?.chicken_type_code;
+  const printedCodes = {
+    POLLO_VIVO: "PV",
+    POLLO_PELADO: "PP",
+    POLLO_BENEFICIADO: "PB",
+    POLLO_MUERTO: "PM"
+  };
+
+  return printedCodes[typeCode] || typeCode || "PV";
 }
 
 function buildSelectedTicketPrintData(ticket) {
+  const retail = isRetailTicket(ticket);
+
   return {
     code: ticket.code,
+    channel: ticket.channel,
     operationType: ticket.operation_type,
-    destinationName: ticket.destination?.name || "Sin destino registrado",
+    destinationName: ticketCustomerName(ticket),
+    customerKind: retail ? (ticket.client?.id ? "CLIENTE_REGISTRADO" : "VENTA_EXTERNA") : null,
     emittedAt: ticket.closed_at,
+    totalAmount: ticket.summary?.amount,
+    delivery: ticket.delivery,
     records: (ticket.weighings || []).map((weighing) => ({
       typeCode: getPrintedTypeCode(weighing, ticket.operation_type),
-      birdsPerCage: Number(weighing.birds_per_cage) || 0,
-      cages: Number(weighing.cages) || 0,
+      birdsPerCage: Number(retail ? weighing.birds_per_tray : weighing.birds_per_cage) || 0,
+      cages: Number(retail ? weighing.trays : weighing.cages) || 0,
       grossWeight: Number(weighing.gross_weight_kg) || 0,
       tareWeight: Number(weighing.tare_weight_kg) || 0,
-      netWeight: Number(weighing.net_weight_kg) || 0
+      netWeight: Number(weighing.net_weight_kg) || 0,
+      priceKg: Number(weighing.price_kg) || 0,
+      amount: Number(weighing.amount) || 0
     }))
   };
 }
@@ -216,20 +278,53 @@ function renderTicketResults() {
   elements.resultList.innerHTML = state.tickets.map((ticket) => {
     const active = Number(ticket.id) === Number(state.selectedTicket?.id);
     const readOnly = ticket.editable === false;
+    const retail = isRetailTicket(ticket);
     return `
-      <button class="weighing-ticket-option${active ? " is-active" : ""}${readOnly ? " is-readonly" : ""}" type="button" data-ticket-id="${ticket.id}">
+      <button class="weighing-ticket-option${active ? " is-active" : ""}${readOnly ? " is-readonly" : ""}${retail ? " is-retail" : ""}" type="button" data-ticket-id="${ticket.id}">
         <span class="weighing-ticket-option-head">
           <strong>${escapeHtml(ticket.code)}</strong>
           <span class="weighing-ticket-option-tags">
             <small>${escapeHtml(operationLabel(ticket.operation_type))}</small>
+            ${retail ? '<span class="weighing-channel-badge">Despacho minorista</span>' : ""}
+            ${retailCustomerBadge(ticket)}
             ${readOnly ? '<span class="weighing-readonly-badge">Solo lectura</span>' : ""}
           </span>
         </span>
-        <span>${escapeHtml(ticket.destination?.name || "Sin destino")}</span>
+        <span>${escapeHtml(ticketCustomerName(ticket))}</span>
         <small>${escapeHtml(formatDate(ticket.operating_date))} · ${formatNumber(ticket.weighings_count)} pesada${Number(ticket.weighings_count) === 1 ? "" : "s"}</small>
       </button>
     `;
   }).join("");
+}
+
+function renderAppliedPrices(ticket) {
+  if (!isRetailTicket(ticket)) {
+    return "";
+  }
+
+  const prices = Object.entries(ticket.prices || {});
+  if (!prices.length) {
+    return `
+      <div class="weighing-ticket-prices">
+        <div>
+          <small>Precios aplicados al despacho</small>
+          <strong>Sin precios guardados</strong>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="weighing-ticket-prices" aria-label="Precios aplicados al despacho">
+      ${prices.map(([typeCode, price]) => `
+        <div>
+          <small>${escapeHtml(price?.chicken_type?.name || typeCode.replaceAll("_", " "))}</small>
+          <strong>${escapeHtml(formatMoney(price?.price_kg))}/kg</strong>
+          <span>${escapeHtml(priceOriginLabel(price?.source))}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderSelectedTicket() {
@@ -248,8 +343,10 @@ function renderSelectedTicket() {
 
   const summary = ticket.summary || {};
   const isDispatch = ticket.operation_type === "DESPACHO";
+  const retail = isRetailTicket(ticket);
+  const canEdit = ticket.editable && !retail;
   const rows = (ticket.weighings || []).map((weighing) => {
-    const actions = ticket.editable
+    const actions = canEdit
       ? `
           <button class="btn btn-secondary" type="button" data-edit-weighing="${weighing.id}">Editar</button>
           <button class="btn btn-danger" type="button" data-delete-weighing="${weighing.id}">Eliminar</button>
@@ -266,14 +363,21 @@ function renderSelectedTicket() {
         </div>
       </td>
       <td>${chickenSexBadge(weighing.chicken_sex)}</td>
-      <td>${escapeHtml(weighing.origin || "--")}<small>${weighing.plate ? `<br>${escapeHtml(weighing.plate)}` : ""}</small></td>
-      <td>${escapeHtml(weighing.cage_type?.name || "--")}</td>
-      <td>${formatNumber(weighing.cages)}</td>
-      <td>${formatNumber(weighing.birds_per_cage)}</td>
+      <td>${retail
+        ? `${escapeHtml(weighing.adjustment?.name || "Sin ajuste")}${weighing.adjustment?.additional_grams ? `<small><br>+${formatNumber(weighing.adjustment.additional_grams)} g</small>` : ""}`
+        : `${escapeHtml(weighing.origin || "--")}<small>${weighing.plate ? `<br>${escapeHtml(weighing.plate)}` : ""}</small>`}
+      </td>
+      <td>${escapeHtml((retail ? weighing.tray_type?.name : weighing.cage_type?.name) || "--")}</td>
+      <td>${formatNumber(retail ? weighing.trays : weighing.cages)}</td>
+      <td>${formatNumber(retail ? weighing.birds_per_tray : weighing.birds_per_cage)}</td>
       <td>${formatNumber(weighing.birds)}</td>
       <td>${formatWeight(weighing.gross_weight_kg)}</td>
       <td>${formatWeight(weighing.tare_weight_kg)}</td>
       <td><strong>${formatWeight(weighing.net_weight_kg)}</strong></td>
+      ${retail ? `
+        <td><strong>${escapeHtml(formatMoney(weighing.price_kg))}/kg</strong><small><br>${escapeHtml(priceOriginLabel(weighing.price_origin))}</small></td>
+        <td><strong>${escapeHtml(formatMoney(weighing.amount))}</strong></td>
+      ` : ""}
       <td>${escapeHtml(formatDate(weighing.weighed_at, true))}</td>
       <td>
         <div class="weighing-row-actions">
@@ -290,11 +394,13 @@ function renderSelectedTicket() {
         <div>
           <div class="customer-ticket-badges">
             <span class="customer-operation-tag ${ticket.operation_type === "DEVOLUCION" ? "customer-operation-return" : "customer-operation-dispatch"}">${escapeHtml(operationLabel(ticket.operation_type))}</span>
+            ${retail ? '<span class="weighing-channel-badge">Despacho minorista</span>' : ""}
+            ${retailCustomerBadge(ticket)}
             <span class="directory-record-tag">${escapeHtml(formatDate(ticket.operating_date))}</span>
             ${ticket.editable ? "" : '<span class="weighing-readonly-badge">Solo lectura</span>'}
           </div>
           <h2>${escapeHtml(ticket.code)}</h2>
-          <p>${escapeHtml(ticket.destination?.name || "Sin destino registrado")}</p>
+          <p>${escapeHtml(ticketCustomerName(ticket))}</p>
         </div>
         <div class="weighing-ticket-detail-actions">
           <button class="btn btn-primary" type="button" data-print-selected-ticket ${(ticket.weighings || []).length ? "" : "disabled"}>Imprimir ticket</button>
@@ -303,10 +409,12 @@ function renderSelectedTicket() {
       </header>
       ${ticket.editable ? "" : `
         <div class="weighing-readonly-notice" role="note">
-          ${escapeHtml(ticket.edit_restriction || "Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.")}
+          ${escapeHtml(ticket.edit_restriction || (retail
+            ? "Los tickets de despacho minorista se conservan en modo de consulta para respetar los precios aplicados al vender."
+            : "Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista."))}
         </div>
       `}
-      ${isDispatch ? `
+      ${isDispatch && !retail ? `
         <div class="weighing-ticket-delivery">
           <span>
             <small>Camión de entrega</small>
@@ -316,27 +424,29 @@ function renderSelectedTicket() {
             <small>Chofer de entrega</small>
             <strong>${escapeHtml(ticket.delivery?.driver?.name || "Sin chofer asignado")}</strong>
           </span>
-          ${ticket.editable
+          ${canEdit
             ? '<button class="btn btn-secondary" type="button" data-edit-ticket-delivery>Editar transporte</button>'
             : ""}
         </div>
       ` : ""}
-      <div class="weighing-ticket-stats">
+      <div class="weighing-ticket-stats${retail ? " is-retail" : ""}">
         <span><small>Pesadas</small><strong>${formatNumber(summary.weighings)}</strong></span>
-        <span><small>Javas</small><strong>${formatNumber(summary.cages)}</strong></span>
+        <span><small>${retail ? "Bandejas" : "Javas"}</small><strong>${formatNumber(retail ? summary.trays : summary.cages)}</strong></span>
         <span><small>Aves</small><strong>${formatNumber(summary.birds)}</strong></span>
         <span><small>Peso bruto</small><strong>${formatWeight(summary.gross_weight_kg)}</strong></span>
         <span><small>Tara</small><strong>${formatWeight(summary.tare_weight_kg)}</strong></span>
         <span class="is-accent"><small>Peso neto</small><strong>${formatWeight(summary.net_weight_kg)}</strong></span>
+        ${retail ? `<span class="is-sale-total"><small>Total del ticket</small><strong>${escapeHtml(formatMoney(summary.amount))}</strong></span>` : ""}
       </div>
+      ${renderAppliedPrices(ticket)}
       <div class="customer-history-table-wrap weighing-table-wrap">
-        <table class="customer-history-table weighing-records-table">
+        <table class="customer-history-table weighing-records-table${retail ? " is-retail" : ""}">
           <thead>
             <tr>
-              <th>N.º</th><th>Tipo</th><th>Sexo</th><th>Origen</th><th>Java</th><th>Javas</th><th>Aves/java</th><th>Aves</th><th>Bruto</th><th>Tara</th><th>Neto</th><th>Fecha</th><th>Acciones</th>
+              <th>N.º</th><th>Tipo</th><th>Sexo</th><th>${retail ? "Ajuste" : "Origen"}</th><th>${retail ? "Bandeja" : "Java"}</th><th>${retail ? "Bandejas" : "Javas"}</th><th>${retail ? "Aves/bandeja" : "Aves/java"}</th><th>Aves</th><th>Bruto</th><th>Tara</th><th>Neto</th>${retail ? "<th>Precio aplicado</th><th>Subtotal</th>" : ""}<th>Fecha</th><th>Acciones</th>
             </tr>
           </thead>
-          <tbody>${rows || `<tr><td colspan="13" class="customer-history-empty-cell">Este ticket ya no tiene pesadas activas.</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="${retail ? 15 : 13}" class="customer-history-empty-cell">Este ticket ya no tiene pesadas activas.</td></tr>`}</tbody>
         </table>
       </div>
     </article>

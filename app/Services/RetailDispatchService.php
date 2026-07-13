@@ -64,13 +64,16 @@ class RetailDispatchService
                 ];
             }
 
-            $client = Tercero::query()
-                ->where('empresa_id', $companyId)
-                ->where('estado', Tercero::STATUS_ACTIVE)
-                ->conRol(TerceroRole::CLIENT)
-                ->find($data['client_id']);
+            $clientId = $data['client_id'] ?? null;
+            $client = $clientId
+                ? Tercero::query()
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', Tercero::STATUS_ACTIVE)
+                    ->conRol(TerceroRole::CLIENT)
+                    ->find($clientId)
+                : null;
 
-            if (! $client) {
+            if ($clientId && ! $client) {
                 throw ValidationException::withMessages([
                     'client_id' => 'El cliente seleccionado no esta disponible.',
                 ]);
@@ -142,16 +145,20 @@ class RetailDispatchService
                 }
             }
 
+            $delivery = $data['operation_type'] === TicketDespacho::OPERATION_DISPATCH
+                ? ($data['delivery'] ?? [])
+                : [];
+
             $ticket = TicketDespacho::query()->create([
                 'jornada_id' => $journey->id,
                 'codigo' => $this->nextTicketCode($journey, $operatingDate),
                 'referencia_externa' => $data['draft_id'],
                 'canal' => TicketDespacho::CHANNEL_RETAIL,
                 'tipo_operacion' => $data['operation_type'],
-                'cliente_destino_id' => $client->id,
+                'cliente_destino_id' => $client?->id,
                 'almacen_destino_id' => null,
-                'vehiculo_entrega_id' => null,
-                'conductor_entrega_id' => null,
+                'vehiculo_entrega_id' => $delivery['vehicle_id'] ?? null,
+                'conductor_entrega_id' => $delivery['driver_id'] ?? null,
                 'estado' => TicketDespacho::STATUS_CLOSED,
                 'cerrado_por' => $actor->id,
                 'cerrado_at' => now(),
@@ -160,7 +167,7 @@ class RetailDispatchService
 
             $prices = $this->freezePrices(
                 $companyId,
-                $client->id,
+                $client?->id,
                 $types,
                 collect($data['price_overrides'] ?? [])
             );
@@ -326,17 +333,19 @@ class RetailDispatchService
      */
     private function freezePrices(
         int $companyId,
-        int $clientId,
+        ?int $clientId,
         Collection $types,
         Collection $overrides
     ): array {
         $sourceIds = $types->map(fn (TipoPollo $type): int => $type->priceSourceTypeId())->unique()->values();
-        $specificListId = ListaPrecio::query()
-            ->where('empresa_id', $companyId)
-            ->where('tercero_id', $clientId)
-            ->where('operacion', ListaPrecio::OPERATION_SALE)
-            ->where('estado', ListaPrecio::STATUS_ACTIVE)
-            ->value('id');
+        $specificListId = $clientId
+            ? ListaPrecio::query()
+                ->where('empresa_id', $companyId)
+                ->where('tercero_id', $clientId)
+                ->where('operacion', ListaPrecio::OPERATION_SALE)
+                ->where('estado', ListaPrecio::STATUS_ACTIVE)
+                ->value('id')
+            : null;
         $specific = $specificListId
             ? PrecioHistorial::query()->where('lista_precio_id', $specificListId)
                 ->whereIn('tipo_pollo_id', $sourceIds)->whereNull('vigente_hasta')
@@ -363,11 +372,15 @@ class RetailDispatchService
 
             if (! $history) {
                 throw ValidationException::withMessages([
-                    'client_id' => "Falta configurar el precio de {$type->nombre} para este cliente.",
+                    ($clientId ? 'client_id' : 'price_overrides') => $clientId
+                        ? "Falta configurar el precio de {$type->nombre} para este cliente."
+                        : "Falta configurar el precio general de {$type->nombre}.",
                 ]);
             }
 
-            $isManual = $overrides->has($type->codigo);
+            // El precio del cliente siempre prevalece. Los precios puntuales solo
+            // pertenecen al borrador/lista de una venta minorista sin cliente.
+            $isManual = ! $clientId && $overrides->has($type->codigo);
             $result[$type->id] = [
                 'history' => $history,
                 'source' => $isManual ? 'MANUAL' : ($specificPrice ? 'CLIENTE' : 'GENERAL'),
@@ -385,6 +398,8 @@ class RetailDispatchService
         return $ticket->load([
             'jornada',
             'clienteDestino',
+            'vehiculoEntrega',
+            'conductorEntrega',
             'precios.tipoPollo',
             'pesadas.tipoPollo',
             'pesadas.tipoBandeja',

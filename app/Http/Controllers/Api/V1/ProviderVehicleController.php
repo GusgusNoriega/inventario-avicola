@@ -31,15 +31,15 @@ class ProviderVehicleController extends Controller
                     'placa' => $request->validated('placa'),
                 ],
                 [
-                    'tercero_propietario_id' => $provider->id,
+                    'tercero_propietario_id' => null,
+                    'es_propio' => true,
                     'estado' => Vehiculo::STATUS_ACTIVE,
                 ]
             );
 
             $activeAssociation = ProveedorVehiculo::query()
                 ->where('vehiculo_id', $vehicle->id)
-                ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
-                ->whereNull('vigente_hasta')
+                ->vigente()
                 ->lockForUpdate()
                 ->first();
 
@@ -55,7 +55,11 @@ class ProviderVehicleController extends Controller
                 ]);
             }
 
-            $vehicle->update(['estado' => Vehiculo::STATUS_ACTIVE]);
+            $vehicle->update([
+                'tercero_propietario_id' => null,
+                'es_propio' => true,
+                'estado' => Vehiculo::STATUS_ACTIVE,
+            ]);
             $sameDayAssociation = ProveedorVehiculo::query()
                 ->where('proveedor_id', $provider->id)
                 ->where('vehiculo_id', $vehicle->id)
@@ -83,7 +87,7 @@ class ProviderVehicleController extends Controller
         });
 
         return response()->json([
-            'message' => 'Camión asignado correctamente.',
+            'message' => 'Camión de la empresa asignado correctamente al proveedor.',
             'data' => $this->formatAssociation($association),
         ], 201);
     }
@@ -96,8 +100,7 @@ class ProviderVehicleController extends Controller
         $provider = $this->provider($request, $tercero);
         $providerVehicle = ProveedorVehiculo::query()
             ->where('proveedor_id', $provider->id)
-            ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
-            ->whereNull('vigente_hasta')
+            ->vigente()
             ->findOrFail($association);
 
         $providerVehicle->update([
@@ -106,7 +109,7 @@ class ProviderVehicleController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Camión retirado del proveedor.',
+            'message' => 'Asignación retirada. El camión permanece disponible en Mi flota.',
         ]);
     }
 

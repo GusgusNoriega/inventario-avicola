@@ -15,6 +15,7 @@ use App\Services\RetailConfigurationService;
 use App\Services\RetailDispatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class RetailDispatchController extends Controller
 {
@@ -45,6 +46,7 @@ class RetailDispatchController extends Controller
             ->orderBy('id')
             ->get(['id', 'codigo', 'nombre', 'precio_fuente_tipo_pollo_id']);
         $prices = $this->configuration->pricesForClients($companyId, $clients, $chickenTypes);
+        $generalPrices = $this->configuration->generalPrices($companyId, $chickenTypes);
         $retailConfiguration = $this->configuration->configuration(
             $companyId,
             (int) $branch->id
@@ -63,6 +65,34 @@ class RetailDispatchController extends Controller
                         'name' => $client->nombre_razon_social,
                         'document' => $client->numero_documento,
                         'prices' => $prices[$client->id] ?? [],
+                    ])
+                    ->values(),
+                'general_prices' => $generalPrices,
+                'delivery_trucks' => DB::table('vehiculos')
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', 'ACTIVO')
+                    ->orderBy('placa')
+                    ->get(['id', 'placa', 'marca', 'modelo', 'color', 'descripcion'])
+                    ->map(fn (object $truck): array => [
+                        'id' => $truck->id,
+                        'plate' => $truck->placa,
+                        'brand' => $truck->marca,
+                        'model' => $truck->modelo,
+                        'color' => $truck->color,
+                        'description' => $truck->descripcion,
+                    ])
+                    ->values(),
+                'delivery_drivers' => DB::table('conductores')
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', 'ACTIVO')
+                    ->orderBy('nombre_completo')
+                    ->get(['id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'telefono'])
+                    ->map(fn (object $driver): array => [
+                        'id' => $driver->id,
+                        'name' => $driver->nombre_completo,
+                        'document_type' => $driver->tipo_documento,
+                        'document_number' => $driver->numero_documento,
+                        'phone' => $driver->telefono,
                     ])
                     ->values(),
                 'chicken_types' => $chickenTypes
@@ -145,10 +175,30 @@ class RetailDispatchController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
-            'client' => [
-                'id' => $ticket->clienteDestino->id,
-                'name' => $ticket->clienteDestino->nombre_razon_social,
-            ],
+            'client' => $ticket->clienteDestino
+                ? [
+                    'id' => $ticket->clienteDestino->id,
+                    'name' => $ticket->clienteDestino->nombre_razon_social,
+                ]
+                : null,
+            'delivery' => $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
+                ? [
+                    'vehicle' => $ticket->vehiculoEntrega
+                        ? [
+                            'id' => $ticket->vehiculoEntrega->id,
+                            'plate' => $ticket->vehiculoEntrega->placa,
+                            'description' => $ticket->vehiculoEntrega->descripcion,
+                        ]
+                        : null,
+                    'driver' => $ticket->conductorEntrega
+                        ? [
+                            'id' => $ticket->conductorEntrega->id,
+                            'name' => $ticket->conductorEntrega->nombre_completo,
+                            'document_number' => $ticket->conductorEntrega->numero_documento,
+                        ]
+                        : null,
+                ]
+                : null,
             'prices' => $ticket->precios->mapWithKeys(fn ($price): array => [
                 $price->tipoPollo?->codigo ?? (string) $price->tipo_pollo_id => [
                     'price_kg' => (float) $price->precio_kg,

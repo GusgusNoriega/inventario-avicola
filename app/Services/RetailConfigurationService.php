@@ -247,4 +247,37 @@ class RetailConfigurationService
 
         return $result;
     }
+
+    /**
+     * @param  Collection<int, TipoPollo>  $types
+     * @return array<string, array{price_kg: ?float, source: ?string, history_id: ?int}>
+     */
+    public function generalPrices(int $companyId, Collection $types): array
+    {
+        $sourceIds = $types
+            ->map(fn (TipoPollo $type): int => $type->priceSourceTypeId())
+            ->unique()
+            ->values();
+        $general = ListaPrecio::query()
+            ->where('empresa_id', $companyId)
+            ->whereNull('tercero_id')
+            ->where('operacion', ListaPrecio::OPERATION_SALE)
+            ->where('estado', ListaPrecio::STATUS_ACTIVE)
+            ->with(['preciosVigentes' => fn ($query) => $query
+                ->whereIn('tipo_pollo_id', $sourceIds)
+                ->orderByDesc('vigente_desde')])
+            ->orderBy('id')
+            ->first();
+
+        return $types->mapWithKeys(function (TipoPollo $type) use ($general): array {
+            $history = $general?->preciosVigentes
+                ->firstWhere('tipo_pollo_id', $type->priceSourceTypeId());
+
+            return [$type->codigo => [
+                'price_kg' => $history ? (float) $history->precio_kg : null,
+                'source' => $history ? 'GENERAL' : null,
+                'history_id' => $history?->id,
+            ]];
+        })->all();
+    }
 }

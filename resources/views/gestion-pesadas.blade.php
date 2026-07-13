@@ -12,8 +12,8 @@
       <form id="ticketSearchForm" class="weighing-search-form">
         <h1 id="ticketSearchTitle">Buscar ticket</h1>
         <label class="field">
-          Número de ticket o nombre del cliente
-          <input id="ticketSearchInput" type="search" maxlength="100" autocomplete="off" placeholder="Ej: T-20260627-001 o Distribuidora Central">
+          Número de ticket o cliente registrado
+          <input id="ticketSearchInput" type="search" maxlength="100" autocomplete="off" placeholder="Busca tickets mayoristas, minoristas o ventas externas por número">
         </label>
         <button class="btn btn-primary directory-btn" type="submit">Buscar</button>
         <button id="ticketSearchClear" class="btn btn-ghost directory-btn" type="button">Limpiar</button>
@@ -35,7 +35,7 @@
         <div class="weighing-panel-head">
           <div>
             <p class="eyebrow">Resultados</p>
-            <h2 id="ticketResultsTitle">Tickets</h2>
+            <h2 id="ticketResultsTitle">Tickets de despacho</h2>
           </div>
           <span id="ticketResultsCount" class="directory-record-tag">0</span>
         </div>

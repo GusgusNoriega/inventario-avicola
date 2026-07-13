@@ -287,6 +287,24 @@ class DispatchTicketApiTest extends TestCase
         $this->assertDatabaseCount('pesadas', 0);
     }
 
+    public function test_published_journey_rejects_a_withdrawn_provider_vehicle_assignment(): void
+    {
+        DB::table('proveedor_vehiculos')
+            ->where('id', $this->providerVehicleId)
+            ->update([
+                'estado' => 'INACTIVO',
+                'vigente_hasta' => today(),
+                'updated_at' => now(),
+            ]);
+
+        $this->postJson('/api/v1/operacion/tickets', $this->ticketPayload())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.origin.plate');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pesadas', 0);
+    }
+
     public function test_unconfigured_journey_rejects_weighings_without_creating_operational_records(): void
     {
         DB::table('programaciones_recepcion')->delete();
@@ -555,18 +573,21 @@ class DispatchTicketApiTest extends TestCase
 
     public function test_operation_catalog_returns_database_warehouses_and_cage_types(): void
     {
-        $this->getJson('/api/v1/operacion/catalogo')
+        $response = $this->getJson('/api/v1/operacion/catalogo')
             ->assertOk()
             ->assertJsonPath('data.branch.id', $this->branchId)
             ->assertJsonPath('data.warehouses.0.id', $this->warehouseId)
             ->assertJsonPath('data.warehouses.0.code', 'ALMACEN_1')
             ->assertJsonPath('data.cage_types.0.code', 'JAVA_700')
             ->assertJsonPath('data.cage_types.0.weight_kg', 7)
-            ->assertJsonPath('data.delivery_trucks.0.id', $this->deliveryVehicleId)
-            ->assertJsonPath('data.delivery_trucks.0.plate', 'ENT-001')
             ->assertJsonPath('data.delivery_drivers.0.id', $this->deliveryDriverId)
             ->assertJsonPath('data.delivery_drivers.0.name', 'CHOFER DE REPARTO')
             ->assertJsonMissingPath('data.general_prices');
+
+        $response->assertJsonFragment([
+            'id' => $this->deliveryVehicleId,
+            'plate' => 'ENT-001',
+        ]);
     }
 
     public function test_dispatch_requires_an_active_company_truck_and_driver(): void

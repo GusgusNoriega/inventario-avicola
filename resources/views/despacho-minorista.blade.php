@@ -47,7 +47,7 @@
               <strong>Toca el número para cambiar</strong>
             </div>
             <input id="retailTrayCount" type="hidden" value="1">
-            <button id="retailTrayCountTrigger" class="rd-tray-count-trigger" type="button" aria-haspopup="dialog" aria-controls="retailTrayCountModal">
+            <button id="retailTrayCountTrigger" class="rd-number-trigger rd-tray-count-trigger" type="button" aria-haspopup="dialog" aria-controls="retailTrayCountModal">
               <strong id="retailTrayCountValue">1</strong>
               <small id="retailTrayCountLabel">bandeja</small>
             </button>
@@ -58,10 +58,14 @@
               <span>Tipo de bandeja</span>
               <select id="retailTrayType" required></select>
             </label>
-            <label>
-              <span>Aves por bandeja</span>
-              <input id="retailBirdsPerTray" type="number" min="1" max="100" step="1" value="5" inputmode="numeric" required>
-            </label>
+            <div class="rd-birds-per-tray-field">
+              <span id="retailBirdsPerTrayAccessibleLabel" class="sr-only">Aves por bandeja</span>
+              <input id="retailBirdsPerTray" type="hidden" value="5">
+              <button id="retailBirdsPerTrayTrigger" class="rd-number-trigger rd-birds-per-tray-trigger" type="button" aria-haspopup="dialog" aria-controls="retailBirdsPerTrayModal" aria-labelledby="retailBirdsPerTrayAccessibleLabel retailBirdsPerTrayValue retailBirdsPerTrayLabel">
+                <strong id="retailBirdsPerTrayValue">5</strong>
+                <small id="retailBirdsPerTrayLabel">aves</small>
+              </button>
+            </div>
           </div>
         </article>
 
@@ -91,7 +95,7 @@
           <div class="rd-value-card is-price">
             <span>Valor en tiempo real</span>
             <strong id="retailPricePreview">S/ --</strong>
-            <small id="retailPriceSource">Asigna un cliente</small>
+            <small id="retailPriceSource">Asigna un precio a la lista</small>
           </div>
           <div class="rd-value-card">
             <span>Peso bruto ajustado</span>
@@ -118,11 +122,12 @@
 
     <section class="rd-workspace" aria-label="Listas de venta minorista">
       <div class="rd-lists-stage">
-        <div class="rd-add-buttons" aria-label="Agregar pesada a una lista">
-          <button type="button" data-retail-add-list="0">Agregar a lista 1</button>
-          <button type="button" data-retail-add-list="1">Agregar a lista 2</button>
-          <button type="button" data-retail-add-list="2">Agregar a lista 3</button>
-          <button type="button" data-retail-add-list="3">Agregar a lista 4</button>
+        <div class="rd-add-buttons" aria-label="Seleccionar lista de destino">
+          <p class="rd-list-selection-hint">Selecciona una columna y captura; la pesada se agregará directamente.</p>
+          <button type="button" class="is-active" data-retail-add-list="0" aria-pressed="true">Seleccionar lista 1</button>
+          <button type="button" data-retail-add-list="1" aria-pressed="false">Seleccionar lista 2</button>
+          <button type="button" data-retail-add-list="2" aria-pressed="false">Seleccionar lista 3</button>
+          <button type="button" data-retail-add-list="3" aria-pressed="false">Seleccionar lista 4</button>
         </div>
         <div id="retailListsGrid" class="rd-lists-grid"></div>
       </div>
@@ -175,9 +180,30 @@
         </div>
         <button type="button" data-retail-close-modal="retailTrayCountModal" aria-label="Cerrar">×</button>
       </header>
-      <div class="rd-tray-count-options" role="group" aria-label="Seleccionar cantidad de bandejas">
+      <div class="rd-number-options rd-tray-count-options" role="group" aria-label="Seleccionar cantidad de bandejas">
+        <button class="is-zero" type="button" data-retail-tray-option="0">
+          <strong>0</strong>
+          <small>Sin bandejas</small>
+        </button>
         @for ($quantity = 1; $quantity <= 10; $quantity++)
           <button type="button" data-retail-tray-option="{{ $quantity }}">{{ $quantity }}</button>
+        @endfor
+      </div>
+    </section>
+  </div>
+
+  <div id="retailBirdsPerTrayModal" class="rd-modal" hidden>
+    <section class="rd-modal-card is-compact" role="dialog" aria-modal="true" aria-labelledby="retailBirdsPerTrayModalTitle">
+      <header class="rd-modal-head">
+        <div>
+          <p>Selección táctil</p>
+          <h2 id="retailBirdsPerTrayModalTitle">Aves por bandeja</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailBirdsPerTrayModal" aria-label="Cerrar">×</button>
+      </header>
+      <div class="rd-number-options rd-birds-per-tray-options" role="group" aria-label="Seleccionar aves por bandeja">
+        @for ($quantity = 1; $quantity <= 10; $quantity++)
+          <button type="button" data-retail-birds-per-tray-option="{{ $quantity }}">{{ $quantity }}</button>
         @endfor
       </div>
     </section>
@@ -230,11 +256,39 @@
         </div>
         <button type="button" data-retail-close-modal="retailPriceModal" aria-label="Cerrar">×</button>
       </header>
-      <p class="rd-modal-copy">Deja un campo vacío para usar el precio vigente del cliente o la lista general.</p>
+      <p class="rd-modal-copy">Sin cliente, usa el precio general vigente o define uno propio para este ticket. Con cliente, siempre se respetará su precio vigente.</p>
       <div id="retailPriceFields" class="rd-price-fields"></div>
       <div class="rd-modal-actions">
         <button id="retailClearPrices" class="rd-secondary-button" type="button">Usar precios vigentes</button>
         <button class="rd-primary-button" type="submit">Aplicar a la lista</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="retailDeliveryModal" class="rd-modal" hidden>
+    <form id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle">
+      <header class="rd-modal-head">
+        <div>
+          <p>Trazabilidad de bandejas</p>
+          <h2 id="retailDeliveryModalTitle">Asignar transporte</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailDeliveryModal" aria-label="Cerrar">×</button>
+      </header>
+      <p id="retailDeliverySummary" class="rd-delivery-summary"></p>
+      <div class="rd-delivery-fields">
+        <label>
+          <span>Camión que llevará la mercancía</span>
+          <select id="retailDeliveryTruck" required></select>
+        </label>
+        <label>
+          <span>Chofer responsable</span>
+          <select id="retailDeliveryDriver" required></select>
+        </label>
+      </div>
+      <p id="retailDeliveryMessage" class="rd-settings-message" role="status" aria-live="polite"></p>
+      <div class="rd-modal-actions">
+        <button type="button" class="rd-secondary-button" data-retail-close-modal="retailDeliveryModal">Cancelar</button>
+        <button id="retailConfirmDelivery" class="rd-primary-button" type="submit">Guardar e imprimir / PDF</button>
       </div>
     </form>
   </div>
@@ -304,6 +358,18 @@
         <div id="retailSettingsAdjustments" class="rd-adjustment-settings-grid"></div>
       </section>
 
+      <section class="rd-typography-settings">
+        <div class="rd-settings-title">
+          <div>
+            <span>Visualización de esta estación</span>
+            <strong>Tamaños de texto personalizados</strong>
+          </div>
+          <button id="retailOpenTypography" class="rd-secondary-button" type="button" aria-controls="retailTypographyDrawer" aria-expanded="false">
+            Tamaños de tipografía
+          </button>
+        </div>
+      </section>
+
       <p id="retailSettingsMessage" class="rd-settings-message" role="status" aria-live="polite"></p>
       <div class="rd-modal-actions">
         <button type="button" class="rd-secondary-button" data-retail-close-modal="retailSettingsModal">Cancelar</button>
@@ -311,6 +377,21 @@
       </div>
     </form>
   </div>
+
+  <aside id="retailTypographyDrawer" class="rd-typography-drawer" hidden aria-hidden="true" aria-labelledby="retailTypographyTitle">
+    <header class="rd-typography-head">
+      <div>
+        <p>Vista previa en tiempo real</p>
+        <h2 id="retailTypographyTitle">Tamaños de tipografía</h2>
+      </div>
+      <button id="retailTypographyClose" type="button" aria-label="Cerrar ajustes de tipografía">×</button>
+    </header>
+    <p class="rd-typography-copy">Ajusta cada grupo por separado y observa el resultado al instante. Los cambios se guardan automáticamente en este navegador.</p>
+    <div id="retailTypographyControls" class="rd-typography-controls"></div>
+    <footer class="rd-typography-footer">
+      <button id="retailTypographyReset" class="rd-secondary-button" type="button">Restaurar predeterminados</button>
+    </footer>
+  </aside>
 
   <script type="module" src="{{ asset('js/despacho-minorista.js') }}?v={{ filemtime(public_path('js/despacho-minorista.js')) }}"></script>
 </body>

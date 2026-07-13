@@ -26,6 +26,8 @@ class TicketWeighingManagementApiTest extends TestCase
 
     private int $weighingId;
 
+    private int $liveTypeId;
+
     private int $dressedTypeId;
 
     private int $smallCageTypeId;
@@ -65,7 +67,7 @@ class TicketWeighingManagementApiTest extends TestCase
         ]);
         $this->user->update(['sucursal_id' => $this->branchId]);
 
-        $liveTypeId = $this->createChickenType(TipoPollo::CHICKEN_LIVE, 'Pollo vivo');
+        $this->liveTypeId = $this->createChickenType(TipoPollo::CHICKEN_LIVE, 'Pollo vivo');
         $this->dressedTypeId = $this->createChickenType(TipoPollo::CHICKEN_DRESSED, 'Pollo pelado');
         $largeCageTypeId = $this->createCageType('JAVA_700', 'Java 7 kg', 7);
         $this->smallCageTypeId = $this->createCageType('JAVA_500', 'Java 5 kg', 5);
@@ -109,7 +111,7 @@ class TicketWeighingManagementApiTest extends TestCase
         $this->weighingId = DB::table('pesadas')->insertGetId([
             'ticket_id' => $this->ticketId,
             'numero' => 1,
-            'tipo_pollo_id' => $liveTypeId,
+            'tipo_pollo_id' => $this->liveTypeId,
             'condicion_pollo' => Pesada::CHICKEN_CONDITION_LIVE,
             'sexo' => Pesada::SEX_MALE,
             'tipo_java_id' => $largeCageTypeId,
@@ -365,32 +367,84 @@ class TicketWeighingManagementApiTest extends TestCase
         )->assertStatus(409);
     }
 
-    public function test_retail_tickets_are_hidden_and_cannot_be_opened_modified_or_annulled(): void
+    public function test_retail_tickets_can_be_searched_viewed_and_reprinted_but_not_modified(): void
     {
         DB::table('tickets_despacho')
             ->where('id', $this->ticketId)
-            ->update(['canal' => TicketDespacho::CHANNEL_RETAIL]);
+            ->update([
+                'canal' => TicketDespacho::CHANNEL_RETAIL,
+                'cliente_destino_id' => null,
+                'vehiculo_entrega_id' => null,
+                'conductor_entrega_id' => null,
+            ]);
+        $priceListId = DB::table('listas_precios')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => null,
+            'codigo' => 'GENERAL-MINORISTA',
+            'nombre' => 'Precios minoristas',
+            'operacion' => 'VENTA',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $priceHistoryId = DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $priceListId,
+            'tipo_pollo_id' => $this->liveTypeId,
+            'precio_kg' => 9.75,
+            'vigente_desde' => now()->subHour(),
+            'vigente_hasta' => null,
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $this->liveTypeId,
+            'precio_historial_id' => $priceHistoryId,
+            'precio_kg' => 9.75,
+            'origen_precio' => 'MANUAL',
+            'congelado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
 
         $this->getJson('/api/v1/operacion/gestion-pesadas?search=T-20260627-001')
             ->assertOk()
-            ->assertJsonCount(0, 'data.tickets');
+            ->assertJsonCount(1, 'data.tickets')
+            ->assertJsonPath('data.tickets.0.channel', TicketDespacho::CHANNEL_RETAIL)
+            ->assertJsonPath('data.tickets.0.editable', false)
+            ->assertJsonPath('data.tickets.0.customer_type', 'EXTERNO_SIN_REGISTRO')
+            ->assertJsonPath('data.tickets.0.client', null)
+            ->assertJsonPath('data.tickets.0.destination.type', 'VENTA_EXTERNA')
+            ->assertJsonPath('data.tickets.0.destination.name', 'Venta externa (sin cliente)');
 
         $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
-            ->assertNotFound();
+            ->assertOk()
+            ->assertJsonPath('data.ticket.channel', TicketDespacho::CHANNEL_RETAIL)
+            ->assertJsonPath('data.ticket.editable', false)
+            ->assertJsonPath(
+                'data.ticket.edit_restriction',
+                'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.'
+            )
+            ->assertJsonPath('data.ticket.prices.POLLO_VIVO.price_kg', 9.75)
+            ->assertJsonPath('data.ticket.prices.POLLO_VIVO.source', 'MANUAL')
+            ->assertJsonPath('data.ticket.weighings.0.price_kg', 9.75)
+            ->assertJsonPath('data.ticket.weighings.0.price_origin', 'MANUAL')
+            ->assertJsonPath('data.ticket.weighings.0.amount', 253.5)
+            ->assertJsonPath('data.ticket.summary.amount', 253.5);
 
         $this->putJson("/api/v1/operacion/tickets/{$this->ticketId}/transporte", [
             'vehicle_id' => $this->alternateDeliveryVehicleId,
             'driver_id' => $this->alternateDeliveryDriverId,
-        ])->assertNotFound();
+        ])->assertStatus(409);
 
         $this->putJson(
             "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
             $this->updatePayload()
-        )->assertNotFound();
+        )->assertStatus(409);
 
         $this->deleteJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}", [
             'reason' => 'No debe anularse desde gestion mayorista',
-        ])->assertNotFound();
+        ])->assertStatus(409);
 
         $this->assertDatabaseHas('pesadas', [
             'id' => $this->weighingId,

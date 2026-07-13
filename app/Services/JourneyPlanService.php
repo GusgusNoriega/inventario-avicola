@@ -265,12 +265,14 @@ class JourneyPlanService
     private function availableVehicles(int $companyId): Collection
     {
         return ProveedorVehiculo::query()
-            ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
-            ->whereNull('vigente_hasta')
+            ->vigente()
             ->whereHas('proveedor', fn ($query) => $query
                 ->where('empresa_id', $companyId)
                 ->where('estado', Tercero::STATUS_ACTIVE)
                 ->conRol(TerceroRole::PROVIDER))
+            ->whereHas('vehiculo', fn ($query) => $query
+                ->where('empresa_id', $companyId)
+                ->where('estado', 'ACTIVO'))
             ->with(['proveedor', 'vehiculo'])
             ->get()
             ->sortBy([
@@ -291,5 +293,4 @@ class JourneyPlanService
             ->orderBy('id')
             ->get(['id', 'codigo', 'nombre', 'direccion']);
     }
-
 }

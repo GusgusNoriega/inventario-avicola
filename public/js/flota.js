@@ -6,9 +6,9 @@ const TYPES = {
     plural: "camiones",
     formTitle: "Agregar camión",
     editTitle: "Editar camión",
-    listTitle: "Camiones propios",
+    listTitle: "Camiones de la empresa",
     saveLabel: "Guardar camión",
-    searchPlaceholder: "Buscar por placa, marca o modelo"
+    searchPlaceholder: "Buscar por placa, marca, modelo o proveedor"
   },
   choferes: {
     singular: "chofer",
@@ -344,6 +344,11 @@ function truckCard(record) {
     .filter(Boolean)
     .map(escapeHtml)
     .join(" · ");
+  const providerName = String(record.assigned_provider?.name || "").trim();
+  const providerDocument = String(record.assigned_provider?.document || "").trim();
+  const providerLabel = providerName
+    ? `Asignado a ${providerName}`
+    : "Sin proveedor asignado";
 
   return `
     <article class="fleet-record${state.editingId === Number(record.id) ? " is-editing" : ""}">
@@ -353,6 +358,10 @@ function truckCard(record) {
           <strong class="fleet-plate">${escapeHtml(record.placa)}</strong>
           <span>${details || "Sin datos adicionales"}</span>
         </div>
+      </div>
+      <div class="fleet-provider ${providerName ? "is-assigned" : "is-unassigned"}">
+        <span>${escapeHtml(providerLabel)}</span>
+        ${providerDocument ? `<small>${escapeHtml(providerDocument)}</small>` : ""}
       </div>
       ${record.descripcion ? `<p>${escapeHtml(record.descripcion)}</p>` : ""}
       ${recordActions(record.id, `camión ${record.placa}`)}

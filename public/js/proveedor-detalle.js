@@ -122,7 +122,7 @@ function renderVehicles(vehicles) {
     elements.vehicleList.innerHTML = `
       <div class="directory-empty">
         <strong>Sin camiones asignados.</strong>
-        <span>Agrega la primera placa de este proveedor.</span>
+        <span>Crea en Mi flota la primera placa asignada a este proveedor.</span>
       </div>
     `;
     return;
@@ -143,14 +143,14 @@ function renderVehicles(vehicles) {
         </span>
         <div>
           <strong>${escapeHtml(vehicle.plate)}</strong>
-          <span>Asignado desde ${escapeHtml(vehicle.valid_from)}</span>
+          <span>Camión de mi empresa · Asignado desde ${escapeHtml(vehicle.valid_from)}</span>
         </div>
         <button
           class="directory-record-action directory-record-action-danger ${isConfirming ? "is-confirming" : ""}"
           type="button"
           data-remove-vehicle="${escapeHtml(vehicle.id)}"
-          aria-label="${isConfirming ? "Confirmar retiro de" : "Retirar"} ${escapeHtml(vehicle.plate)}"
-          title="${isConfirming ? "Confirmar retiro" : "Retirar camión"}"
+          aria-label="${isConfirming ? "Confirmar retiro de la asignación de" : "Retirar asignación de"} ${escapeHtml(vehicle.plate)}"
+          title="${isConfirming ? "Confirmar retiro de la asignación" : "Retirar asignación del proveedor"}"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 7h16"></path>
@@ -250,7 +250,7 @@ async function saveVehicle(event) {
   }
 
   elements.saveVehicle.disabled = true;
-  setMessage(elements.vehicleMessage, "Guardando camión...");
+  setMessage(elements.vehicleMessage, "Creando el camión en Mi flota y asignándolo al proveedor...");
 
   try {
     const response = await apiRequest(`/proveedores/${providerId}/vehiculos`, {
@@ -273,10 +273,10 @@ async function removeVehicle(associationId) {
 
   if (pendingVehicleRemoval !== id) {
     pendingVehicleRemoval = id;
-    setMessage(elements.vehicleMessage, "Pulsa retirar otra vez para confirmar.", true);
+    setMessage(elements.vehicleMessage, "Pulsa retirar otra vez para confirmar. El camión seguirá en Mi flota.", true);
     elements.vehicleList.querySelectorAll("[data-remove-vehicle]").forEach((button) => {
       button.classList.toggle("is-confirming", button.dataset.removeVehicle === id);
-      button.title = button.dataset.removeVehicle === id ? "Confirmar retiro" : "Retirar camión";
+      button.title = button.dataset.removeVehicle === id ? "Confirmar retiro de la asignación" : "Retirar asignación del proveedor";
     });
     return;
   }

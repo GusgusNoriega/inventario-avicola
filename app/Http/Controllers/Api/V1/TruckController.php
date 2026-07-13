@@ -29,7 +29,12 @@ class TruckController extends Controller
                 $searchQuery
                     ->where('placa', 'like', "%{$search}%")
                     ->orWhere('marca', 'like', "%{$search}%")
-                    ->orWhere('modelo', 'like', "%{$search}%");
+                    ->orWhere('modelo', 'like', "%{$search}%")
+                    ->orWhereHas('asignacionProveedorActiva.proveedor', function ($providerQuery) use ($search): void {
+                        $providerQuery
+                            ->where('nombre_razon_social', 'like', "%{$search}%")
+                            ->orWhere('numero_documento', 'like', "%{$search}%");
+                    });
             }))
             ->orderBy('placa')
             ->paginate((int) ($validated['per_page'] ?? 15))
@@ -53,12 +58,14 @@ class TruckController extends Controller
             ->first();
 
         if ($existingTruck) {
-            if (! $existingTruck->es_propio || $existingTruck->estado === Vehiculo::STATUS_ACTIVE) {
+            if ($existingTruck->estado === Vehiculo::STATUS_ACTIVE) {
                 $this->duplicatePlate();
             }
 
             $existingTruck->update([
                 ...$data,
+                'tercero_propietario_id' => null,
+                'es_propio' => true,
                 'estado' => Vehiculo::STATUS_ACTIVE,
             ]);
             $truck = $existingTruck->refresh();
@@ -72,7 +79,7 @@ class TruckController extends Controller
             ]);
         }
 
-        return (new TruckResource($truck))
+        return (new TruckResource($truck->load('asignacionProveedorActiva.proveedor')))
             ->additional(['message' => 'Camion creado correctamente.'])
             ->response()
             ->setStatusCode(201);
@@ -91,7 +98,7 @@ class TruckController extends Controller
 
         $truck->update($data);
 
-        return (new TruckResource($truck->refresh()))
+        return (new TruckResource($truck->refresh()->load('asignacionProveedorActiva.proveedor')))
             ->additional(['message' => 'Camion actualizado correctamente.']);
     }
 
@@ -100,9 +107,9 @@ class TruckController extends Controller
         $truck = $this->findTruck($request, $camion);
 
         abort_if(
-            $truck->proveedores()->exists(),
+            $truck->asignacionProveedorActiva()->exists(),
             409,
-            'No se puede eliminar el camion porque tiene asignaciones registradas.'
+            'No se puede eliminar el camión porque está asignado actualmente a un proveedor.'
         );
 
         $truck->update(['estado' => Vehiculo::STATUS_INACTIVE]);
@@ -119,8 +126,8 @@ class TruckController extends Controller
     {
         return Vehiculo::query()
             ->where('empresa_id', $this->companyId($request))
-            ->where('es_propio', true)
-            ->where('estado', Vehiculo::STATUS_ACTIVE);
+            ->where('estado', Vehiculo::STATUS_ACTIVE)
+            ->with('asignacionProveedorActiva.proveedor');
     }
 
     private function findTruck(Request $request, int $truckId): Vehiculo

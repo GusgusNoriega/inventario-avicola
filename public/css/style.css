@@ -3138,6 +3138,52 @@ body[data-fleet-view="choferes"] .fleet-tab.is-active {
   overflow-wrap: anywhere;
 }
 
+.fleet-provider {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #3b4d67;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(47, 65, 89, 0.22);
+}
+
+.fleet-provider span {
+  min-width: 0;
+  color: #b8c7da;
+  font-size: 0.76rem;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.fleet-provider small {
+  flex: 0 0 auto;
+  color: #8fa3be;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.fleet-provider.is-assigned {
+  border-color: #2f7754;
+  background: rgba(39, 132, 83, 0.14);
+}
+
+.fleet-provider.is-assigned span {
+  color: #79e3aa;
+}
+
+.fleet-provider.is-unassigned {
+  border-color: #705e2f;
+  background: rgba(158, 121, 35, 0.1);
+}
+
+.fleet-provider.is-unassigned span {
+  color: #efd77b;
+}
+
 .fleet-record p {
   min-height: 34px;
   margin: 0;
@@ -7152,6 +7198,14 @@ body.customer-history-page {
   background: rgba(255, 208, 42, 0.08);
 }
 
+.weighing-ticket-option.is-retail {
+  border-left-color: var(--success);
+}
+
+.weighing-ticket-option.is-retail.is-active {
+  box-shadow: inset 4px 0 0 var(--success);
+}
+
 .weighing-ticket-option.is-readonly:not(.is-active) {
   opacity: 0.78;
 }
@@ -7232,6 +7286,35 @@ body.customer-history-page {
   text-transform: uppercase;
 }
 
+.weighing-channel-badge,
+.weighing-customer-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 7px;
+  border: 1px solid rgba(65, 219, 141, 0.5);
+  border-radius: 999px;
+  background: rgba(65, 219, 141, 0.1);
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.weighing-customer-badge {
+  border-color: rgba(43, 199, 255, 0.5);
+  background: rgba(43, 199, 255, 0.1);
+  color: var(--primary);
+}
+
+.weighing-customer-badge.is-external {
+  border-color: rgba(255, 162, 43, 0.55);
+  background: rgba(255, 162, 43, 0.1);
+  color: #ffbd69;
+}
+
 .weighing-readonly-notice {
   padding: 10px 22px;
   border-bottom: 1px solid rgba(255, 208, 42, 0.3);
@@ -7274,6 +7357,10 @@ body.customer-history-page {
   overflow-x: auto;
 }
 
+.weighing-ticket-stats.is-retail {
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+}
+
 .weighing-ticket-stats > span {
   min-width: 120px;
   padding: 14px 16px;
@@ -7300,6 +7387,50 @@ body.customer-history-page {
   color: var(--success);
 }
 
+.weighing-ticket-stats .is-sale-total {
+  background: rgba(65, 219, 141, 0.08);
+}
+
+.weighing-ticket-stats .is-sale-total strong {
+  color: var(--success);
+}
+
+.weighing-ticket-prices {
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: rgba(65, 219, 141, 0.04);
+}
+
+.weighing-ticket-prices > div {
+  min-width: 180px;
+  padding: 10px 12px;
+  border: 1px solid rgba(65, 219, 141, 0.24);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  background: var(--bg-input);
+}
+
+.weighing-ticket-prices small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.weighing-ticket-prices strong {
+  color: var(--success);
+  font-size: 17px;
+}
+
+.weighing-ticket-prices span {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
 .weighing-table-wrap {
   border-radius: 0;
   scrollbar-color: var(--secondary) #080808;
@@ -7314,6 +7445,10 @@ body.customer-history-page {
 
 .weighing-records-table {
   min-width: 1450px;
+}
+
+.weighing-records-table.is-retail {
+  min-width: 1680px;
 }
 
 .weighing-row-actions {

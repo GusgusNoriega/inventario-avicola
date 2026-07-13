@@ -9,7 +9,6 @@ use App\Http\Requests\Directory\UpdateTerceroRequest;
 use App\Http\Resources\TerceroResource;
 use App\Models\Empresa;
 use App\Models\ListaPrecio;
-use App\Models\ProveedorVehiculo;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\User;
@@ -47,8 +46,7 @@ class DirectoryController extends Controller
 
         if ($role === TerceroRole::PROVIDER) {
             $relations['vehiculosProveedor'] = fn ($query) => $query
-                ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
-                ->whereNull('vigente_hasta')
+                ->vigente()
                 ->with('vehiculo')
                 ->orderBy('id');
         }

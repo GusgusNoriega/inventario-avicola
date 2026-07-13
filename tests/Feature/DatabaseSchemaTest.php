@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -14,7 +16,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(63, $migrationFiles);
+        $this->assertCount(64, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -161,5 +163,54 @@ class DatabaseSchemaTest extends TestCase
             'presentacion_pollo',
             'ajuste_peso_gramos',
         ]));
+    }
+
+    public function test_vehicle_ownership_migration_normalizes_legacy_data_and_default(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_07_12_000001_normalize_company_vehicle_ownership.php'
+        );
+        $migration->down();
+        $user = User::factory()->create();
+        $providerId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'tipo_documento' => 'NIT',
+            'numero_documento' => '900111222',
+            'nombre_razon_social' => 'Proveedor legacy',
+            'direccion' => 'Direccion legacy',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $legacyVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'placa' => 'LEG-001',
+            'tercero_propietario_id' => $providerId,
+            'es_propio' => false,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $migration->up();
+
+        $this->assertDatabaseHas('vehiculos', [
+            'id' => $legacyVehicleId,
+            'tercero_propietario_id' => null,
+            'es_propio' => true,
+        ]);
+
+        $defaultVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'placa' => 'DEF-001',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->assertDatabaseHas('vehiculos', [
+            'id' => $defaultVehicleId,
+            'tercero_propietario_id' => null,
+            'es_propio' => true,
+        ]);
     }
 }

@@ -28,6 +28,10 @@ class RetailDispatchApiTest extends TestCase
 
     private int $priceHistoryId;
 
+    private int $deliveryVehicleId;
+
+    private int $deliveryDriverId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -101,6 +105,27 @@ class RetailDispatchApiTest extends TestCase
             'registrado_por' => $this->user->id,
             'created_at' => now(),
         ]);
+        $this->deliveryVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'MIN-001',
+            'marca' => 'Toyota',
+            'modelo' => 'Dyna',
+            'descripcion' => 'Camion minorista',
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->deliveryDriverId = DB::table('conductores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre_completo' => 'CHOFER MINORISTA',
+            'tipo_documento' => 'CC',
+            'numero_documento' => '123456',
+            'telefono' => '3001234567',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     public function test_catalog_returns_prices_adjustments_and_the_exclusive_retail_scale(): void
@@ -110,6 +135,10 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.clients.0.id', $this->clientId)
             ->assertJsonPath('data.clients.0.prices.POLLO_VIVO.price_kg', 8.5)
             ->assertJsonPath('data.clients.0.prices.POLLO_VIVO.source', 'CLIENTE')
+            ->assertJsonPath('data.delivery_trucks.0.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.delivery_trucks.0.plate', 'MIN-001')
+            ->assertJsonPath('data.delivery_drivers.0.id', $this->deliveryDriverId)
+            ->assertJsonPath('data.delivery_drivers.0.name', 'CHOFER MINORISTA')
             ->assertJsonPath('data.chicken_types.0.code', TipoPollo::CHICKEN_LIVE)
             ->assertJsonPath('data.tray_types.0.code', 'BANDEJA_ESTANDAR')
             ->assertJsonPath('data.tray_types.0.bird_capacity', 5)
@@ -204,6 +233,10 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.channel', TicketDespacho::CHANNEL_RETAIL)
             ->assertJsonPath('data.operation_type', TicketDespacho::OPERATION_DISPATCH)
             ->assertJsonPath('data.client.id', $this->clientId)
+            ->assertJsonPath('data.delivery.vehicle.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.delivery.vehicle.plate', 'MIN-001')
+            ->assertJsonPath('data.delivery.driver.id', $this->deliveryDriverId)
+            ->assertJsonPath('data.delivery.driver.name', 'CHOFER MINORISTA')
             ->assertJsonPath('data.totals.trays', 2)
             ->assertJsonPath('data.totals.birds', 10)
             ->assertJsonPath('data.totals.read_weight_kg', 12)
@@ -220,8 +253,8 @@ class RetailDispatchApiTest extends TestCase
             'canal' => TicketDespacho::CHANNEL_RETAIL,
             'tipo_operacion' => TicketDespacho::OPERATION_DISPATCH,
             'cliente_destino_id' => $this->clientId,
-            'vehiculo_entrega_id' => null,
-            'conductor_entrega_id' => null,
+            'vehiculo_entrega_id' => $this->deliveryVehicleId,
+            'conductor_entrega_id' => $this->deliveryDriverId,
         ]);
         $this->assertDatabaseHas('pesadas', [
             'tipo_java_id' => null,
@@ -256,31 +289,187 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.weighings.0.presentation', 'CERRADO');
     }
 
-    public function test_manual_price_keeps_base_history_foreign_key_and_marks_its_origin(): void
+    public function test_registered_client_dispatch_with_trays_requires_delivery(): void
+    {
+        $payload = $this->payload();
+        unset($payload['delivery']);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'delivery',
+                'delivery.vehicle_id',
+                'delivery.driver_id',
+            ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_retail_dispatch_rejects_inactive_or_non_company_fleet(): void
+    {
+        $otherUser = User::factory()->create();
+        $otherVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $otherUser->empresa_id,
+            'placa' => 'OTR-001',
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $inactiveDriverId = DB::table('conductores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre_completo' => 'CHOFER INACTIVO',
+            'estado' => 'INACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $payload = $this->payload();
+        $payload['delivery'] = [
+            'vehicle_id' => $otherVehicleId,
+            'driver_id' => $inactiveDriverId,
+        ];
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'delivery.vehicle_id',
+                'delivery.driver_id',
+            ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_retail_dispatch_accepts_a_company_vehicle_assigned_to_a_provider(): void
+    {
+        $providerId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo_documento' => 'NIT',
+            'numero_documento' => '900999888',
+            'nombre_razon_social' => 'Proveedor con camion asignado',
+            'direccion' => 'Direccion de proveedor',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $providerId,
+            'rol' => 'PROVEEDOR',
+            'created_at' => now(),
+        ]);
+        $providerVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'EXT-001',
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('proveedor_vehiculos')->insert([
+            'proveedor_id' => $providerId,
+            'vehiculo_id' => $providerVehicleId,
+            'vigente_desde' => today(),
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $payload = $this->payload();
+        $payload['delivery']['vehicle_id'] = $providerVehicleId;
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.delivery.vehicle.id', $providerVehicleId)
+            ->assertJsonPath('data.delivery.vehicle.plate', 'EXT-001');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'vehiculo_entrega_id' => $providerVehicleId,
+        ]);
+    }
+
+    public function test_client_price_always_prevails_over_a_submitted_list_override(): void
     {
         $payload = $this->payload();
         $payload['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 10.25];
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
-            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 10.25)
-            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'MANUAL')
+            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 8.5)
+            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'CLIENTE')
             ->assertJsonPath('data.prices.POLLO_VIVO.history_id', $this->priceHistoryId)
-            ->assertJsonPath('data.weighings.0.price_origin', 'MANUAL')
-            ->assertJsonPath('data.totals.amount', 123);
+            ->assertJsonPath('data.weighings.0.price_origin', 'CLIENTE')
+            ->assertJsonPath('data.totals.amount', 102);
 
         $this->assertDatabaseHas('ticket_precios', [
             'tipo_pollo_id' => $this->typeId,
             'precio_historial_id' => $this->priceHistoryId,
+            'precio_kg' => 8.5,
+            'origen_precio' => 'CLIENTE',
+        ]);
+    }
+
+    public function test_lists_without_client_keep_their_own_manual_prices(): void
+    {
+        $generalHistoryId = $this->createGeneralPrice(7.25);
+        $first = $this->payload();
+        $first['client_id'] = null;
+        unset($first['delivery']);
+        $first['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 10.25];
+        $second = $this->payload();
+        $second['client_id'] = null;
+        unset($second['delivery']);
+        $second['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 11.75];
+
+        $firstResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $first)
+            ->assertCreated()
+            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 10.25)
+            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'MANUAL')
+            ->assertJsonPath('data.prices.POLLO_VIVO.history_id', $generalHistoryId);
+        $secondResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $second)
+            ->assertCreated()
+            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 11.75)
+            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'MANUAL');
+
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $firstResponse->json('data.id'),
             'precio_kg' => 10.25,
             'origen_precio' => 'MANUAL',
         ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $secondResponse->json('data.id'),
+            'precio_kg' => 11.75,
+            'origen_precio' => 'MANUAL',
+        ]);
+    }
+
+    public function test_list_without_client_uses_the_current_general_price_when_it_has_no_override(): void
+    {
+        $generalHistoryId = $this->createGeneralPrice(7.25);
+        $payload = $this->payload();
+        $payload['client_id'] = null;
+        unset($payload['delivery']);
+
+        $this->getJson('/api/v1/despacho-minorista/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.general_prices.POLLO_VIVO.price_kg', 7.25)
+            ->assertJsonPath('data.general_prices.POLLO_VIVO.source', 'GENERAL')
+            ->assertJsonPath('data.general_prices.POLLO_VIVO.history_id', $generalHistoryId);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 7.25)
+            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'GENERAL')
+            ->assertJsonPath('data.weighings.0.price_kg', 7.25)
+            ->assertJsonPath('data.totals.amount', 87);
     }
 
     public function test_return_amounts_are_serialized_with_negative_sign(): void
     {
         $payload = $this->payload();
         $payload['operation_type'] = TicketDespacho::OPERATION_RETURN;
+        unset($payload['delivery']);
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
@@ -291,6 +480,8 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseHas('tickets_despacho', [
             'canal' => TicketDespacho::CHANNEL_RETAIL,
             'tipo_operacion' => TicketDespacho::OPERATION_RETURN,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
         ]);
     }
 
@@ -310,18 +501,65 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
-    public function test_retail_dispatch_requires_at_least_one_tray_and_its_exclusive_scale_source(): void
+    public function test_retail_dispatch_allows_weighing_without_trays(): void
     {
+        $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
+        DB::table('ajustes_peso_minorista')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', AjustePesoMinorista::MALE_CLOSED)
+            ->update(['gramos_adicionales' => 250]);
         $payload = $this->payload();
         $payload['weighings'][0]['tray_count'] = 0;
+        unset($payload['delivery']);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.totals.trays', 0)
+            ->assertJsonPath('data.totals.birds', 0)
+            ->assertJsonPath('data.totals.gross_weight_kg', 12.25)
+            ->assertJsonPath('data.totals.net_weight_kg', 12.25)
+            ->assertJsonPath('data.weighings.0.tray_count', 0)
+            ->assertJsonPath('data.weighings.0.birds', 0)
+            ->assertJsonPath('data.weighings.0.tare_weight_kg', 0)
+            ->assertJsonPath('data.weighings.0.gross_weight_kg', 12.25)
+            ->assertJsonPath('data.weighings.0.net_weight_kg', 12.25);
+
+        $this->assertDatabaseHas('pesadas', [
+            'cantidad_bandejas' => 0,
+            'cantidad_aves' => 0,
+            'peso_leido_kg' => 12,
+            'ajuste_peso_gramos' => 250,
+            'peso_bruto_kg' => 12.25,
+            'tara_total_kg' => 0,
+            'peso_neto_kg' => 12.25,
+        ]);
+        $this->assertDatabaseHas('tickets_despacho', [
+            'cliente_destino_id' => $this->clientId,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+        ]);
+    }
+
+    public function test_retail_dispatch_rejects_a_non_retail_weight_source(): void
+    {
+        $payload = $this->payload();
         $payload['weighings'][0]['weight_source'] = 'BALANZA_1';
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertUnprocessable()
-            ->assertJsonValidationErrors([
-                'weighings.0.tray_count',
-                'weighings.0.weight_source',
-            ]);
+            ->assertJsonValidationErrors('weighings.0.weight_source');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_retail_dispatch_rejects_more_than_ten_birds_per_tray(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['birds_per_tray'] = 11;
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.birds_per_tray');
 
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
@@ -379,6 +617,10 @@ class RetailDispatchApiTest extends TestCase
             'draft_id' => (string) Str::uuid(),
             'client_id' => $this->clientId,
             'operation_type' => TicketDespacho::OPERATION_DISPATCH,
+            'delivery' => [
+                'vehicle_id' => $this->deliveryVehicleId,
+                'driver_id' => $this->deliveryDriverId,
+            ],
             'weighings' => [[
                 'local_id' => 1,
                 'chicken_type_code' => TipoPollo::CHICKEN_LIVE,
@@ -391,5 +633,30 @@ class RetailDispatchApiTest extends TestCase
                 'weighed_at' => now('America/Lima')->subMinute()->toIso8601String(),
             ]],
         ];
+    }
+
+    private function createGeneralPrice(float $price): int
+    {
+        $listId = DB::table('listas_precios')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => null,
+            'codigo' => 'GENERAL-MINORISTA',
+            'nombre' => 'Precios generales minoristas',
+            'operacion' => 'VENTA',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $listId,
+            'tipo_pollo_id' => $this->typeId,
+            'precio_kg' => $price,
+            'vigente_desde' => now()->subMinute(),
+            'vigente_hasta' => null,
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
     }
 }

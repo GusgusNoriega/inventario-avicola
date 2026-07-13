@@ -41,16 +41,17 @@
       <div class="customer-history-section-head">
         <div>
           <p class="eyebrow">Transporte</p>
-          <h2 id="providerVehiclesTitle">Camiones asignados</h2>
+          <h2 id="providerVehiclesTitle">Camiones de mi empresa asignados</h2>
         </div>
         <span id="providerVehicleCount" class="directory-record-tag">0 camiones</span>
       </div>
+      <p class="customer-history-meta">Cada placa que agregues pertenecerá a Mi flota y quedará asignada operativamente a este proveedor. Si ya existe en la flota, solo se creará la asignación.</p>
       <form id="providerVehicleForm" class="provider-vehicle-form">
         <label class="field">
           Placa del camión
           <input id="providerVehiclePlate" type="text" maxlength="20" autocomplete="off" placeholder="Ej: ABC-123" required>
         </label>
-        <button id="saveProviderVehicle" class="btn btn-success directory-btn" type="submit">Agregar camión</button>
+        <button id="saveProviderVehicle" class="btn btn-success directory-btn" type="submit">Crear y asignar camión</button>
       </form>
       <p id="providerVehicleMessage" class="form-message" role="status" aria-live="polite"></p>
       <div id="providerVehicleList" class="provider-vehicle-list" aria-live="polite"></div>

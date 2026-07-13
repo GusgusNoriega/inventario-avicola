@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('vehiculos', function (Blueprint $table): void {
             $table->dropConstrainedForeignId('conductor_habitual_id');
-            $table->boolean('es_propio')->default(false)->index();
+            $table->boolean('es_propio')->default(true)->index();
         });
     }
 

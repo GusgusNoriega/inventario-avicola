@@ -44,7 +44,6 @@ class StoreDispatchTicketRequest extends FormRequest
                 'integer',
                 Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
                     ->where('empresa_id', $this->companyId())
-                    ->where('es_propio', true)
                     ->where('estado', 'ACTIVO')),
             ],
             'delivery.driver_id' => [

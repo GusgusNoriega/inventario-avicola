@@ -6,16 +6,15 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'empresa_id',
     'placa',
-    'tercero_propietario_id',
     'marca',
     'modelo',
     'color',
     'descripcion',
-    'es_propio',
     'estado',
 ])]
 class Vehiculo extends Model
@@ -25,6 +24,10 @@ class Vehiculo extends Model
     public const STATUS_INACTIVE = 'INACTIVO';
 
     protected $table = 'vehiculos';
+
+    protected $attributes = [
+        'es_propio' => true,
+    ];
 
     /**
      * @return BelongsTo<Empresa, $this>
@@ -43,6 +46,17 @@ class Vehiculo extends Model
     }
 
     /**
+     * @return HasOne<ProveedorVehiculo, $this>
+     */
+    public function asignacionProveedorActiva(): HasOne
+    {
+        return $this->hasOne(ProveedorVehiculo::class, 'vehiculo_id')
+            ->where('estado', ProveedorVehiculo::STATUS_ACTIVE)
+            ->whereNull('vigente_hasta')
+            ->latestOfMany();
+    }
+
+    /**
      * @return HasMany<TicketDespacho, $this>
      */
     public function ticketsEntregados(): HasMany
@@ -55,5 +69,13 @@ class Vehiculo extends Model
         return [
             'es_propio' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Vehiculo $vehicle): void {
+            $vehicle->es_propio = true;
+            $vehicle->tercero_propietario_id = null;
+        });
     }
 }

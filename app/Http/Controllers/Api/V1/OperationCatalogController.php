@@ -42,7 +42,6 @@ class OperationCatalogController extends Controller
                     ->values(),
                 'delivery_trucks' => DB::table('vehiculos')
                     ->where('empresa_id', $companyId)
-                    ->where('es_propio', true)
                     ->where('estado', 'ACTIVO')
                     ->orderBy('placa')
                     ->get(['id', 'placa', 'marca', 'modelo', 'color', 'descripcion'])

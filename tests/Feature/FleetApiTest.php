@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\Vehiculo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -39,13 +40,6 @@ class FleetApiTest extends TestCase
 
     public function test_truck_crud_is_complete_and_scoped_to_company_fleet(): void
     {
-        Vehiculo::query()->create([
-            'empresa_id' => $this->user->empresa_id,
-            'placa' => 'EXT-999',
-            'es_propio' => false,
-            'estado' => Vehiculo::STATUS_ACTIVE,
-        ]);
-
         $response = $this->postJson('/api/v1/camiones', [
             'placa' => ' abc 123 ',
             'marca' => 'Hino',
@@ -55,7 +49,9 @@ class FleetApiTest extends TestCase
         ])
             ->assertCreated()
             ->assertJsonPath('data.placa', 'ABC123')
-            ->assertJsonPath('data.marca', 'Hino');
+            ->assertJsonPath('data.marca', 'Hino')
+            ->assertJsonPath('data.is_own', true)
+            ->assertJsonPath('data.assigned_provider', null);
 
         $truckId = $response->json('data.id');
 
@@ -88,6 +84,73 @@ class FleetApiTest extends TestCase
         $this->postJson('/api/v1/camiones', ['placa' => 'ABC123'])
             ->assertCreated()
             ->assertJsonPath('data.id', $truckId);
+    }
+
+    public function test_provider_assignment_is_shown_and_searchable_in_company_fleet(): void
+    {
+        $providerId = $this->createProvider('PROVEEDOR DE PRUEBA', '900123456');
+        $truck = Vehiculo::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'ASG-001',
+            'estado' => Vehiculo::STATUS_ACTIVE,
+        ]);
+        $associationId = DB::table('proveedor_vehiculos')->insertGetId([
+            'proveedor_id' => $providerId,
+            'vehiculo_id' => $truck->id,
+            'vigente_desde' => today(),
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/camiones?buscar=PROVEEDOR')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $truck->id)
+            ->assertJsonPath('data.0.is_own', true)
+            ->assertJsonPath('data.0.assigned_provider.id', $providerId)
+            ->assertJsonPath('data.0.assigned_provider.name', 'PROVEEDOR DE PRUEBA')
+            ->assertJsonPath('data.0.assigned_provider.document', '900123456');
+
+        $this->getJson('/api/v1/camiones?buscar=900123456')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $truck->id);
+
+        $this->deleteJson("/api/v1/camiones/{$truck->id}")
+            ->assertStatus(409);
+
+        DB::table('proveedor_vehiculos')->where('id', $associationId)->update([
+            'vigente_hasta' => today(),
+            'estado' => 'INACTIVO',
+            'updated_at' => now(),
+        ]);
+
+        $this->deleteJson("/api/v1/camiones/{$truck->id}")
+            ->assertOk();
+        $this->assertDatabaseHas('vehiculos', [
+            'id' => $truck->id,
+            'estado' => Vehiculo::STATUS_INACTIVE,
+        ]);
+        $this->assertDatabaseHas('proveedor_vehiculos', [
+            'id' => $associationId,
+            'estado' => 'INACTIVO',
+        ]);
+    }
+
+    public function test_vehicle_model_always_enforces_company_ownership(): void
+    {
+        $providerId = $this->createProvider('PROVEEDOR LEGACY', '900654321');
+        $truck = Vehiculo::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'OWN-001',
+            'tercero_propietario_id' => $providerId,
+            'es_propio' => false,
+            'estado' => Vehiculo::STATUS_ACTIVE,
+        ]);
+
+        $this->assertTrue($truck->es_propio);
+        $this->assertNull($truck->tercero_propietario_id);
     }
 
     public function test_truck_plate_must_be_unique_within_company(): void
@@ -185,5 +248,26 @@ class FleetApiTest extends TestCase
 
         $this->getJson("/api/v1/camiones/{$otherTruck->id}")->assertNotFound();
         $this->getJson("/api/v1/choferes/{$otherDriver->id}")->assertNotFound();
+    }
+
+    private function createProvider(string $name, string $document): int
+    {
+        $providerId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo_documento' => 'NIT',
+            'numero_documento' => $document,
+            'nombre_razon_social' => $name,
+            'direccion' => 'Direccion de prueba',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $providerId,
+            'rol' => 'PROVEEDOR',
+            'created_at' => now(),
+        ]);
+
+        return $providerId;
     }
 }

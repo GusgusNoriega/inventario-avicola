@@ -36,12 +36,38 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailRawWeightInput"', false)
             ->assertSee('id="retailTrayCount"', false)
             ->assertSee('id="retailTrayCountTrigger"', false)
+            ->assertSee('data-retail-tray-option="0"', false)
             ->assertSee('data-retail-tray-option="10"', false)
+            ->assertSee('Sin bandejas')
+            ->assertSee('id="retailBirdsPerTray"', false)
+            ->assertSee('id="retailBirdsPerTrayAccessibleLabel" class="sr-only"', false)
+            ->assertSee('id="retailBirdsPerTrayTrigger"', false)
+            ->assertSee('aria-labelledby="retailBirdsPerTrayAccessibleLabel retailBirdsPerTrayValue retailBirdsPerTrayLabel"', false)
+            ->assertSee('id="retailBirdsPerTrayValue"', false)
+            ->assertSee('id="retailBirdsPerTrayLabel"', false)
+            ->assertSee('id="retailBirdsPerTrayModal"', false)
+            ->assertSee('data-retail-birds-per-tray-option="1"', false)
+            ->assertSee('data-retail-birds-per-tray-option="10"', false)
             ->assertSee('id="retailAdjustedWeight"', false)
             ->assertSee('class="rd-lists-stage"', false)
+            ->assertSee('aria-label="Seleccionar lista de destino"', false)
+            ->assertSee('Selecciona una columna y captura; la pesada se agregará directamente.')
+            ->assertSee('class="is-active" data-retail-add-list="0" aria-pressed="true"', false)
+            ->assertSee('Seleccionar lista 1')
+            ->assertDontSee('Agregar a lista 1')
             ->assertSee('data-retail-add-list="3"', false)
             ->assertSee('id="retailSettingsModal"', false)
             ->assertSee('Balanza y ajustes minoristas')
+            ->assertSee('id="retailOpenTypography"', false)
+            ->assertSee('id="retailTypographyDrawer"', false)
+            ->assertSee('id="retailTypographyControls"', false)
+            ->assertSee('id="retailTypographyReset"', false)
+            ->assertSee('id="retailTypographyClose"', false)
+            ->assertSee('Tamaños de tipografía')
+            ->assertSee('id="retailDeliveryModal"', false)
+            ->assertSee('id="retailDeliveryTruck"', false)
+            ->assertSee('id="retailDeliveryDriver"', false)
+            ->assertSee('Guardar e imprimir / PDF')
             ->assertSee('Grabar')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false)
@@ -59,6 +85,29 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
         $this->assertStringContainsString('additional_grams', $javascript);
+        $this->assertStringContainsString('priceEditingListIndex', $javascript);
+        $this->assertStringContainsString('general_prices', $javascript);
+        $this->assertStringContainsString('data-retail-clear-client', $javascript);
+        $this->assertStringContainsString('list.clientId ? Number(list.clientId) : null', $javascript);
+        $this->assertStringContainsString('if (client) return currentClientPrice(list, chickenTypeCode);', $javascript);
+        $this->assertStringContainsString('sistema-pollos-retail-typography-v1', $javascript);
+        $this->assertStringContainsString('data-typography-step', $javascript);
+        $this->assertStringContainsString('document.documentElement.style.setProperty', $javascript);
+        $this->assertStringContainsString('localStorage.setItem(TYPOGRAPHY_STORAGE_KEY', $javascript);
+        $this->assertStringContainsString('addWeighingToList(state.activeList, capturedReading)', $javascript);
+        $this->assertStringContainsString('selectList(addButton.dataset.retailAddList)', $javascript);
+        $this->assertStringContainsString('values.trayCount < 0', $javascript);
+        $this->assertStringContainsString('elements.birdsPerTray.value = birdsOption.dataset.retailBirdsPerTrayOption', $javascript);
+        $this->assertStringContainsString('openModal(elements.birdsPerTrayModal)', $javascript);
+        $this->assertStringContainsString('elements.birdsPerTrayModal,', $javascript);
+        $this->assertStringContainsString('from "./ticket-printer.js"', $javascript);
+        $this->assertStringContainsString('function requiresDelivery(list)', $javascript);
+        $this->assertStringContainsString('delivery_trucks', $javascript);
+        $this->assertStringContainsString('delivery_drivers', $javascript);
+        $this->assertStringContainsString('delivery,', $javascript);
+        $this->assertStringContainsString('await printRegisteredTicket(ticket, listIndex, list.draftId)', $javascript);
+        $this->assertStringContainsString('clearRegisteredList(listIndex, draftId, ticket)', $javascript);
+        $this->assertStringNotContainsString('state.captured', $javascript);
         $this->assertStringNotContainsString('g adicionales', $javascript);
         $this->assertStringNotContainsString('type.code.replaceAll', $javascript);
         $this->assertStringNotContainsString('cage_type_code', $javascript);
@@ -70,6 +119,16 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('sistema-pollos-retail-scale-v1', $scaleJavascript);
         $this->assertStringContainsString('connectBle', $scaleJavascript);
         $this->assertStringContainsString('connectSerial', $scaleJavascript);
+
+        $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
+
+        $this->assertIsString($stylesheet);
+        $this->assertStringContainsString('--rd-font-base:', $stylesheet);
+        $this->assertStringContainsString('--rd-font-chicken-type:', $stylesheet);
+        $this->assertStringContainsString('--rd-font-presentation:', $stylesheet);
+        $this->assertStringContainsString('--rd-font-table-cell:', $stylesheet);
+        $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);
+        $this->assertDoesNotMatchRegularExpression('/font-size:\s*(?:\d|\.)/', $stylesheet);
     }
 
     public function test_operation_view_is_available_without_database_queries(): void
@@ -215,14 +274,16 @@ class WebViewsTest extends TestCase
             ->assertSee(asset('js/clientes.js'), false);
     }
 
-    public function test_company_fleet_view_manages_only_own_trucks_and_drivers(): void
+    public function test_company_fleet_view_shows_all_trucks_with_their_provider_assignment(): void
     {
         $this->get('/flota')
             ->assertOk()
             ->assertSee('Flota de la empresa')
-            ->assertSee('Camiones propios')
+            ->assertSee('Camiones registrados')
+            ->assertSee('Camiones de la empresa')
             ->assertSee('Choferes de la empresa')
-            ->assertSee('Solo recursos de mi empresa')
+            ->assertSee('Todos son propios; con o sin proveedor')
+            ->assertSee('incluidos los asignados a proveedores')
             ->assertSee('id="truckPlate"', false)
             ->assertSee('id="driverName"', false)
             ->assertSee(asset('js/flota.js'), false)
@@ -234,6 +295,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('apiRequest(`/${state.activeType}', $javascript);
         $this->assertStringContainsString('camiones', $javascript);
         $this->assertStringContainsString('choferes', $javascript);
+        $this->assertStringContainsString('record.assigned_provider?.name', $javascript);
+        $this->assertStringContainsString('record.assigned_provider?.document', $javascript);
+        $this->assertStringContainsString('Asignado a ${providerName}', $javascript);
+        $this->assertStringContainsString('Sin proveedor asignado', $javascript);
         $this->assertStringNotContainsString('/proveedores/', $javascript);
         $this->assertStringNotContainsString('/clientes/', $javascript);
     }
@@ -346,6 +411,7 @@ class WebViewsTest extends TestCase
         $this->get('/gestion-pesadas')
             ->assertOk()
             ->assertSee('Gestión de pesadas')
+            ->assertSee('tickets mayoristas, minoristas o ventas externas')
             ->assertSee('ticketSearchInput', false)
             ->assertSee('selectedTicketPanel', false)
             ->assertSee('editTicketDeliveryModal', false)
@@ -364,6 +430,27 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data-edit-ticket-delivery', $managementJavascript);
         $this->assertStringContainsString('/transporte', $managementJavascript);
         $this->assertStringContainsString('printWeightControlTicket(buildSelectedTicketPrintData(ticket)', $managementJavascript);
+        $this->assertStringContainsString('Despacho minorista', $managementJavascript);
+        $this->assertStringContainsString('Venta externa', $managementJavascript);
+        $this->assertStringContainsString('weighing.price_kg', $managementJavascript);
+        $this->assertStringContainsString('ticket.prices', $managementJavascript);
+        $this->assertStringContainsString('summary.amount', $managementJavascript);
+        $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);
+    }
+
+    public function test_retail_ticket_reprint_keeps_the_applied_price_and_customer_kind(): void
+    {
+        $javascript = file_get_contents(public_path('js/ticket-printer.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('DESPACHO MINORISTA', $javascript);
+        $this->assertStringContainsString('VENTA EXTERNA', $javascript);
+        $this->assertStringContainsString('PRECIO<br>/KG', $javascript);
+        $this->assertStringContainsString('TOTAL TICKET', $javascript);
+        $this->assertStringContainsString('record?.priceKg', $javascript);
+        $this->assertStringContainsString('record?.amount', $javascript);
+        $this->assertStringContainsString('deliveryVehicle.plate', $javascript);
+        $this->assertStringContainsString('deliveryDriver.name', $javascript);
     }
 
     public function test_customer_history_view_is_available_without_database_queries(): void
@@ -379,10 +466,18 @@ class WebViewsTest extends TestCase
     {
         $this->get('/directorio/proveedores/20')
             ->assertOk()
-            ->assertSee('Camiones asignados')
+            ->assertSee('Camiones de mi empresa asignados')
+            ->assertSee('Cada placa que agregues pertenecerá a Mi flota')
+            ->assertSee('Crear y asignar camión')
             ->assertSee('Pesadas del proveedor')
             ->assertSee('data-provider-id="20"', false)
             ->assertSee(asset('js/proveedor-detalle.js'), false);
+
+        $javascript = file_get_contents(public_path('js/proveedor-detalle.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('Camión de mi empresa · Asignado desde', $javascript);
+        $this->assertStringContainsString('El camión seguirá en Mi flota.', $javascript);
     }
 
     public function test_legacy_html_urls_redirect_to_laravel_routes(): void

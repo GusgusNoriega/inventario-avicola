@@ -6,6 +6,7 @@ use App\Models\AjustePesoMinorista;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class StoreRetailDispatchRequest extends FormRequest
@@ -22,11 +23,34 @@ class StoreRetailDispatchRequest extends FormRequest
     {
         return [
             'draft_id' => ['required', 'uuid'],
-            'client_id' => ['required', 'integer', 'min:1'],
+            'client_id' => ['nullable', 'integer', 'min:1'],
             'operation_type' => ['required', Rule::in([
                 TicketDespacho::OPERATION_DISPATCH,
                 TicketDespacho::OPERATION_RETURN,
             ])],
+            'delivery' => [
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                'nullable',
+                'array:vehicle_id,driver_id',
+            ],
+            'delivery.vehicle_id' => [
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                'required_with:delivery.driver_id',
+                'nullable',
+                'integer',
+                Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
+                    ->where('empresa_id', $this->companyId())
+                    ->where('estado', 'ACTIVO')),
+            ],
+            'delivery.driver_id' => [
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                'required_with:delivery.vehicle_id',
+                'nullable',
+                'integer',
+                Rule::exists('conductores', 'id')->where(fn ($query) => $query
+                    ->where('empresa_id', $this->companyId())
+                    ->where('estado', 'ACTIVO')),
+            ],
             'price_overrides' => [
                 'sometimes',
                 'array:'.implode(',', [
@@ -56,8 +80,8 @@ class StoreRetailDispatchRequest extends FormRequest
                 'required',
                 Rule::in(['MANUAL', 'BALANZA_MINORISTA']),
             ],
-            'weighings.*.birds_per_tray' => ['required', 'integer', 'min:1', 'max:100'],
-            'weighings.*.tray_count' => ['required', 'integer', 'min:1', 'max:1000'],
+            'weighings.*.birds_per_tray' => ['required', 'integer', 'min:1', 'max:10'],
+            'weighings.*.tray_count' => ['required', 'integer', 'min:0', 'max:1000'],
             'weighings.*.read_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
             'weighings.*.weighed_at' => ['required', 'date'],
         ];
@@ -125,11 +149,39 @@ class StoreRetailDispatchRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'client_id.required' => 'Asigna un cliente antes de grabar el despacho.',
+            'delivery.required' => 'Selecciona el camion y el chofer que realizaran la entrega.',
+            'delivery.vehicle_id.required' => 'Selecciona un camion de la flota para la entrega.',
+            'delivery.vehicle_id.required_with' => 'Selecciona un camion de la flota para la entrega.',
+            'delivery.vehicle_id.exists' => 'El camion seleccionado no pertenece a la flota activa de la empresa.',
+            'delivery.driver_id.required' => 'Selecciona un chofer de la flota para la entrega.',
+            'delivery.driver_id.required_with' => 'Selecciona un chofer de la flota para la entrega.',
+            'delivery.driver_id.exists' => 'El chofer seleccionado no pertenece a la empresa o esta inactivo.',
             'weighings.min' => 'Agrega al menos una pesada a la lista.',
             'weighings.*.local_id.distinct' => 'Cada pesada debe tener un identificador diferente.',
-            'weighings.*.tray_count.min' => 'La cantidad de bandejas debe ser al menos 1.',
+            'weighings.*.birds_per_tray.max' => 'La cantidad de aves por bandeja no puede superar 10.',
+            'weighings.*.tray_count.min' => 'La cantidad de bandejas no puede ser negativa.',
             'weighings.*.read_weight_kg.required' => 'Captura o ingresa el peso leido por la balanza.',
         ];
+    }
+
+    private function requiresDelivery(): bool
+    {
+        if (
+            $this->input('operation_type') !== TicketDespacho::OPERATION_DISPATCH
+            || ! filled($this->input('client_id'))
+        ) {
+            return false;
+        }
+
+        return collect($this->input('weighings', []))->contains(
+            fn (mixed $weighing): bool => is_array($weighing)
+                && (int) ($weighing['tray_count'] ?? 0) > 0
+        );
+    }
+
+    private function companyId(): int
+    {
+        return (int) ($this->user()?->empresa_id
+            ?? DB::table('empresas')->where('estado', 'ACTIVO')->orderBy('id')->value('id'));
     }
 }

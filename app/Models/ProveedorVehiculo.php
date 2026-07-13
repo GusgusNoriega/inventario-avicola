@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -22,6 +23,17 @@ class ProveedorVehiculo extends Model
     public const STATUS_INACTIVE = 'INACTIVO';
 
     protected $table = 'proveedor_vehiculos';
+
+    /**
+     * @param  Builder<ProveedorVehiculo>  $query
+     * @return Builder<ProveedorVehiculo>
+     */
+    public function scopeVigente(Builder $query): Builder
+    {
+        return $query
+            ->where('estado', self::STATUS_ACTIVE)
+            ->whereNull('vigente_hasta');
+    }
 
     /**
      * @return BelongsTo<Tercero, $this>

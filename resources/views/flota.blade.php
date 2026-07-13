@@ -10,9 +10,9 @@
   <main class="fleet-shell">
     <header class="fleet-header card">
       <div>
-        <p class="eyebrow">Recursos propios</p>
+        <p class="eyebrow">Recursos de la empresa</p>
         <h1>Flota de la empresa</h1>
-        <p>Administra exclusivamente los camiones y choferes que pertenecen a tu empresa.</p>
+        <p>Consulta todos los camiones registrados, incluidos los asignados a proveedores, y administra los choferes de tu empresa.</p>
       </div>
       <a class="menu-return-btn" href="{{ route('menu') }}">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -25,9 +25,9 @@
       </a>
     </header>
 
-    <section class="fleet-summary" aria-label="Resumen de recursos propios">
+    <section class="fleet-summary" aria-label="Resumen de recursos de la empresa">
       <article class="fleet-summary-card card">
-        <span>Camiones propios</span>
+        <span>Camiones registrados</span>
         <strong id="truckCount">0</strong>
       </article>
       <article class="fleet-summary-card card">
@@ -35,8 +35,8 @@
         <strong id="driverCount">0</strong>
       </article>
       <article class="fleet-summary-card fleet-summary-note card">
-        <span>Alcance</span>
-        <strong>Solo recursos de mi empresa</strong>
+        <span>Flota completa</span>
+        <strong>Todos son propios; con o sin proveedor</strong>
       </article>
     </section>
 
@@ -48,7 +48,7 @@
           <circle cx="7" cy="18" r="2"></circle>
           <circle cx="17" cy="18" r="2"></circle>
         </svg>
-        <span>Mis camiones</span>
+        <span>Camiones</span>
       </button>
       <button class="fleet-tab" type="button" data-fleet-type="choferes" role="tab" aria-selected="false">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -63,7 +63,7 @@
       <section class="fleet-form-panel card" aria-labelledby="fleetFormTitle">
         <div class="fleet-section-head">
           <div>
-            <p class="eyebrow">Registro propio</p>
+            <p class="eyebrow">Registro de camión</p>
             <h2 id="fleetFormTitle">Agregar camión</h2>
           </div>
           <span id="fleetEditBadge" class="fleet-edit-badge" hidden>Editando</span>
@@ -137,15 +137,15 @@
       <section class="fleet-list-panel card" aria-labelledby="fleetListTitle">
         <div class="fleet-list-head">
           <div>
-            <p class="eyebrow">Registros de la empresa</p>
-            <h2 id="fleetListTitle">Camiones propios</h2>
+            <p class="eyebrow">Todos los registros</p>
+            <h2 id="fleetListTitle">Camiones de la empresa</h2>
           </div>
           <label class="fleet-search">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <circle cx="10.5" cy="10.5" r="7.5"></circle>
               <path d="M16 16l5 5"></path>
             </svg>
-            <input id="fleetSearch" type="search" placeholder="Buscar por placa, marca o modelo">
+            <input id="fleetSearch" type="search" placeholder="Buscar por placa, marca, modelo o proveedor">
           </label>
         </div>
         <p id="fleetListMessage" class="fleet-message" role="status" aria-live="polite"></p>

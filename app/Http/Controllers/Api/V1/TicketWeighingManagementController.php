@@ -37,7 +37,6 @@ class TicketWeighingManagementController extends Controller
         $search = trim((string) ($filters['search'] ?? ''));
 
         $tickets = TicketDespacho::query()
-            ->where('canal', TicketDespacho::CHANNEL_WHOLESALE)
             ->whereHas('jornada', fn (Builder $query) => $query->where('sucursal_id', $branch->id))
             ->whereHas('pesadas', fn (Builder $query) => $query->where('estado', Pesada::STATUS_ACTIVE))
             ->when($search !== '', function (Builder $query) use ($search): void {
@@ -60,9 +59,12 @@ class TicketWeighingManagementController extends Controller
             ->map(fn (TicketDespacho $ticket) => [
                 'id' => $ticket->id,
                 'code' => $ticket->codigo,
+                'channel' => $ticket->canal,
                 'operation_type' => $ticket->tipo_operacion,
                 'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
-                'editable' => $this->isFromOperatingDate($ticket, $currentOperatingDate),
+                'editable' => $this->isEditable($ticket, $currentOperatingDate),
+                'customer_type' => $this->customerType($ticket),
+                'client' => $this->formatClient($ticket),
                 'destination' => $this->formatDestination($ticket),
                 'weighings_count' => (int) $ticket->active_weighings_count,
                 'closed_at' => $ticket->cerrado_at?->toISOString(),
@@ -130,7 +132,6 @@ class TicketWeighingManagementController extends Controller
                 'integer',
                 Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
                     ->where('empresa_id', $companyId)
-                    ->where('es_propio', true)
                     ->where('estado', 'ACTIVO')),
             ],
             'driver_id' => [
@@ -391,7 +392,6 @@ class TicketWeighingManagementController extends Controller
 
         return TicketDespacho::query()
             ->whereKey($ticketId)
-            ->where('canal', TicketDespacho::CHANNEL_WHOLESALE)
             ->whereHas('jornada', fn (Builder $query) => $query->where('sucursal_id', $branch->id))
             ->firstOrFail();
     }
@@ -404,11 +404,14 @@ class TicketWeighingManagementController extends Controller
             'almacenDestino',
             'vehiculoEntrega',
             'conductorEntrega',
+            'precios.tipoPollo',
             'pesadas' => fn ($query) => $query
                 ->where('estado', Pesada::STATUS_ACTIVE)
                 ->orderBy('numero'),
             'pesadas.tipoPollo',
             'pesadas.tipoJava',
+            'pesadas.tipoBandeja',
+            'pesadas.ajustePesoMinorista',
             'pesadas.proveedorOrigen',
             'pesadas.almacenOrigen',
             'pesadas.vehiculo',
@@ -422,61 +425,123 @@ class TicketWeighingManagementController extends Controller
         string $currentOperatingDate
     ): array {
         $records = $ticket->pesadas->where('estado', Pesada::STATUS_ACTIVE)->values();
-        $editable = $this->isFromOperatingDate($ticket, $currentOperatingDate);
+        $editable = $this->isEditable($ticket, $currentOperatingDate);
+        $isRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL;
+        $pricesByType = $ticket->precios->keyBy('tipo_pollo_id');
+        $amount = $records->sum(function (Pesada $record) use ($ticket, $pricesByType): float {
+            $price = $pricesByType->get($record->tipo_pollo_id);
+
+            return $price
+                ? $this->signedAmount($ticket, (float) $record->peso_neto_kg, (float) $price->precio_kg)
+                : 0;
+        });
 
         return [
             'id' => $ticket->id,
             'code' => $ticket->codigo,
+            'channel' => $ticket->canal,
             'operation_type' => $ticket->tipo_operacion,
             'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
             'editable' => $editable,
             'edit_restriction' => $editable
                 ? null
-                : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.',
+                : ($isRetail
+                    ? 'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.'
+                    : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.'),
+            'customer_type' => $this->customerType($ticket),
+            'client' => $this->formatClient($ticket),
             'destination' => $this->formatDestination($ticket),
             'delivery' => $this->formatDelivery($ticket),
             'closed_at' => $ticket->cerrado_at?->toISOString(),
+            'prices' => $isRetail
+                ? $ticket->precios
+                    ->mapWithKeys(fn ($price) => [
+                        (string) ($price->tipoPollo?->codigo ?? $price->tipo_pollo_id) => [
+                            'chicken_type' => [
+                                'code' => $price->tipoPollo?->codigo,
+                                'name' => $price->tipoPollo?->nombre,
+                            ],
+                            'price_kg' => (float) $price->precio_kg,
+                            'source' => $price->origen_precio,
+                            'history_id' => $price->precio_historial_id,
+                        ],
+                    ])
+                    ->all()
+                : [],
             'summary' => [
                 'weighings' => $records->count(),
                 'cages' => (int) $records->sum('cantidad_javas'),
+                'trays' => (int) $records->sum('cantidad_bandejas'),
                 'birds' => (int) $records->sum('cantidad_aves'),
                 'gross_weight_kg' => round((float) $records->sum('peso_bruto_kg'), 3),
                 'tare_weight_kg' => round((float) $records->sum('tara_total_kg'), 3),
                 'net_weight_kg' => round((float) $records->sum('peso_neto_kg'), 3),
+                'amount' => $isRetail ? round((float) $amount, 2) : null,
             ],
-            'weighings' => $records->map(fn (Pesada $record) => [
-                'id' => $record->id,
-                'number' => (int) $record->numero,
-                'chicken_type' => [
-                    'code' => $record->tipoPollo?->codigo,
-                    'name' => $record->tipoPollo?->nombre,
-                ],
-                'chicken_condition' => $record->condicion_pollo,
-                'chicken_sex' => $record->sexo,
-                'cage_type' => [
-                    'code' => $record->tipoJava?->codigo,
-                    'name' => $record->tipoJava?->nombre,
-                    'weight_kg' => (float) $record->peso_java_kg_snapshot,
-                ],
-                'origin' => $record->proveedorOrigen?->nombre_razon_social
-                    ?? $record->almacenOrigen?->nombre
-                    ?? ($ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? 'Devolución de cliente' : 'Sin origen'),
-                'plate' => $record->placa_snapshot ?: $record->vehiculo?->placa,
-                'weight_source' => $record->origen_peso,
-                'birds_per_cage' => (int) $record->aves_por_java,
-                'cages' => (int) $record->cantidad_javas,
-                'birds' => (int) $record->cantidad_aves,
-                'gross_weight_kg' => (float) $record->peso_bruto_kg,
-                'tare_weight_kg' => (float) $record->tara_total_kg,
-                'net_weight_kg' => (float) $record->peso_neto_kg,
-                'weighed_at' => $record->pesada_at
-                    ? CarbonImmutable::createFromFormat(
-                        'Y-m-d H:i:s',
-                        $record->pesada_at->format('Y-m-d H:i:s'),
-                        $timezone
-                    )->toIso8601String()
-                    : null,
-            ])->values(),
+            'weighings' => $records->map(function (Pesada $record) use ($ticket, $isRetail, $pricesByType, $timezone): array {
+                $frozenPrice = $pricesByType->get($record->tipo_pollo_id);
+
+                return [
+                    'id' => $record->id,
+                    'number' => (int) $record->numero,
+                    'chicken_type' => [
+                        'code' => $record->tipoPollo?->codigo,
+                        'name' => $record->tipoPollo?->nombre,
+                    ],
+                    'chicken_condition' => $record->condicion_pollo,
+                    'chicken_sex' => $record->sexo,
+                    'presentation' => $record->presentacion_pollo,
+                    'adjustment' => $record->ajustePesoMinorista
+                        ? [
+                            'code' => $record->ajustePesoMinorista->codigo,
+                            'name' => $record->ajustePesoMinorista->nombre,
+                            'additional_grams' => (int) $record->ajuste_peso_gramos,
+                        ]
+                        : null,
+                    'cage_type' => [
+                        'code' => $record->tipoJava?->codigo,
+                        'name' => $record->tipoJava?->nombre,
+                        'weight_kg' => (float) $record->peso_java_kg_snapshot,
+                    ],
+                    'tray_type' => [
+                        'code' => $record->tipoBandeja?->codigo,
+                        'name' => $record->tipoBandeja?->nombre,
+                        'weight_kg' => $record->peso_bandeja_kg_snapshot !== null
+                            ? (float) $record->peso_bandeja_kg_snapshot
+                            : null,
+                    ],
+                    'origin' => $record->proveedorOrigen?->nombre_razon_social
+                        ?? $record->almacenOrigen?->nombre
+                        ?? ($ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? 'Devolución de cliente' : 'Sin origen'),
+                    'plate' => $record->placa_snapshot ?: $record->vehiculo?->placa,
+                    'weight_source' => $record->origen_peso,
+                    'birds_per_cage' => (int) $record->aves_por_java,
+                    'cages' => (int) $record->cantidad_javas,
+                    'birds_per_tray' => (int) $record->aves_por_bandeja,
+                    'trays' => (int) $record->cantidad_bandejas,
+                    'birds' => (int) $record->cantidad_aves,
+                    'read_weight_kg' => (float) $record->peso_leido_kg,
+                    'gross_weight_kg' => (float) $record->peso_bruto_kg,
+                    'tare_weight_kg' => (float) $record->tara_total_kg,
+                    'net_weight_kg' => (float) $record->peso_neto_kg,
+                    'price_kg' => $isRetail && $frozenPrice ? (float) $frozenPrice->precio_kg : null,
+                    'price_origin' => $isRetail && $frozenPrice ? $frozenPrice->origen_precio : null,
+                    'amount' => $isRetail && $frozenPrice
+                        ? $this->signedAmount(
+                            $ticket,
+                            (float) $record->peso_neto_kg,
+                            (float) $frozenPrice->precio_kg
+                        )
+                        : null,
+                    'weighed_at' => $record->pesada_at
+                        ? CarbonImmutable::createFromFormat(
+                            'Y-m-d H:i:s',
+                            $record->pesada_at->format('Y-m-d H:i:s'),
+                            $timezone
+                        )->toIso8601String()
+                        : null,
+                ];
+            })->values(),
         ];
     }
 
@@ -498,12 +563,24 @@ class TicketWeighingManagementController extends Controller
         return $ticket->jornada?->fecha_operativa?->format('Y-m-d') === $operatingDate;
     }
 
+    private function isEditable(TicketDespacho $ticket, string $operatingDate): bool
+    {
+        return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $this->isFromOperatingDate($ticket, $operatingDate);
+    }
+
     private function assertEditable(
         TicketDespacho $ticket,
         string $operatingDate,
         string $message = 'Solo se pueden modificar pesadas de la jornada operativa actual.'
     ): void {
         $ticket->loadMissing('jornada');
+
+        abort_unless(
+            $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE,
+            409,
+            'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.'
+        );
 
         abort_unless(
             $this->isFromOperatingDate($ticket, $operatingDate),
@@ -548,11 +625,50 @@ class TicketWeighingManagementController extends Controller
             ];
         }
 
+        if ($ticket->canal === TicketDespacho::CHANNEL_RETAIL) {
+            return [
+                'type' => 'VENTA_EXTERNA',
+                'id' => null,
+                'name' => 'Venta externa (sin cliente)',
+            ];
+        }
+
         return [
             'type' => 'ALMACEN',
             'id' => $ticket->almacenDestino?->id,
             'name' => $ticket->almacenDestino?->nombre ?? 'Sin destino registrado',
         ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function formatClient(TicketDespacho $ticket): ?array
+    {
+        return $ticket->clienteDestino
+            ? [
+                'id' => $ticket->clienteDestino->id,
+                'name' => $ticket->clienteDestino->nombre_razon_social,
+            ]
+            : null;
+    }
+
+    private function customerType(TicketDespacho $ticket): string
+    {
+        if ($ticket->cliente_destino_id !== null) {
+            return 'CLIENTE_REGISTRADO';
+        }
+
+        return $ticket->canal === TicketDespacho::CHANNEL_RETAIL
+            ? 'EXTERNO_SIN_REGISTRO'
+            : 'DESTINO_ALMACEN';
+    }
+
+    private function signedAmount(TicketDespacho $ticket, float $weight, float $price): float
+    {
+        $amount = round($weight * $price, 2);
+
+        return $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN
+            ? -$amount
+            : $amount;
     }
 
     /** @return array<string, mixed> */
@@ -565,7 +681,6 @@ class TicketWeighingManagementController extends Controller
         return [
             'delivery_trucks' => DB::table('vehiculos')
                 ->where('empresa_id', $companyId)
-                ->where('es_propio', true)
                 ->where('estado', 'ACTIVO')
                 ->orderBy('placa')
                 ->get(['id', 'placa', 'marca', 'modelo', 'descripcion'])

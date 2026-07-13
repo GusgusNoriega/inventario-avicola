@@ -191,6 +191,22 @@ class JourneyPlanApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 6);
     }
 
+    public function test_inactive_company_vehicle_is_not_available_for_journey_selection(): void
+    {
+        $vehicleId = DB::table('proveedor_vehiculos')
+            ->where('id', $this->providerVehicleIds[0])
+            ->value('vehiculo_id');
+        DB::table('vehiculos')->where('id', $vehicleId)->update([
+            'estado' => 'INACTIVO',
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/operacion/jornada')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.trucks')
+            ->assertJsonPath('data.trucks.0.plate', 'XYZ-999');
+    }
+
     public function test_after_nine_pm_the_plan_targets_the_next_operating_date(): void
     {
         Carbon::setTestNow('2026-06-22 21:05:00');
