@@ -220,5 +220,7 @@ class DatabaseSeeder extends Seeder
 
             $user->roles()->syncWithoutDetaching([$administrator->id]);
         }
+
+        $this->call(InstallationAdminSeeder::class);
     }
 }
