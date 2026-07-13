@@ -17,10 +17,21 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         $credentials = $request->validated();
-        $email = Str::lower($credentials['email']);
-        $user = User::query()->where('email', $email)->first();
+        $login = Str::lower(trim($credentials['login'] ?? $credentials['email']));
+        $column = Str::contains($login, '@') ? 'email' : 'nombre';
+        $users = User::query()
+            ->whereRaw("LOWER({$column}) = ?", [$login])
+            ->get();
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password_hash)) {
+        $matchingUsers = $users->filter(
+            fn (User $candidate): bool => Hash::check($credentials['password'], $candidate->password_hash)
+        );
+
+        $user = $matchingUsers->count() === 1
+            ? $matchingUsers->first()
+            : null;
+
+        if (! $user) {
             return response()->json([
                 'message' => 'Las credenciales son incorrectas.',
             ], 401);

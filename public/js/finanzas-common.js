@@ -169,7 +169,7 @@ function updateAccessState(state, label) {
 
 export function openFinanceAccess() {
   const dialog = document.getElementById("financeAuthDialog");
-  const email = document.getElementById("financeAuthEmail");
+  const loginField = document.getElementById("financeAuthLogin");
 
   updateAccessState("required", "Acceso requerido");
   if (!dialog) return;
@@ -179,7 +179,7 @@ export function openFinanceAccess() {
     else dialog.setAttribute("open", "");
   }
 
-  window.setTimeout(() => email?.focus(), 40);
+  window.setTimeout(() => loginField?.focus(), 40);
 }
 
 export function markFinanceAccessReady() {
@@ -192,7 +192,7 @@ export function initFinanceAccess(retry) {
   const form = document.getElementById("financeAuthForm");
   const button = document.getElementById("financeAccessButton");
   const submit = document.getElementById("financeAuthSubmit");
-  const email = document.getElementById("financeAuthEmail");
+  const loginField = document.getElementById("financeAuthLogin");
   const password = document.getElementById("financeAuthPassword");
   const message = document.getElementById("financeAuthMessage");
 
@@ -207,12 +207,12 @@ export function initFinanceAccess(retry) {
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const emailValue = email?.value.trim() || "";
+    const loginValue = loginField?.value.trim() || "";
     const passwordValue = password?.value || "";
 
-    if (!emailValue || !passwordValue) {
-      setMessage(message, "Ingresa tu correo y contraseña.", "error");
-      (!emailValue ? email : password)?.focus();
+    if (!loginValue || !passwordValue) {
+      setMessage(message, "Ingresa tu usuario o correo y contraseña.", "error");
+      (!loginValue ? loginField : password)?.focus();
       return;
     }
 
@@ -220,7 +220,7 @@ export function initFinanceAccess(retry) {
     setMessage(message, "Verificando acceso...");
 
     try {
-      await login(emailValue, passwordValue, "finanzas-web");
+      await login(loginValue, passwordValue, "finanzas-web");
       markFinanceAccessReady();
       setMessage(message, "Acceso confirmado.", "success");
       password.value = "";

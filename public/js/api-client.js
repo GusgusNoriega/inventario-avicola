@@ -63,11 +63,11 @@ export async function apiRequest(path, options = {}) {
   return data;
 }
 
-export async function login(email, password, deviceName = "frontend-web") {
+export async function login(identifier, password, deviceName = "frontend-web") {
   const data = await apiRequest("/auth/login", {
     method: "POST",
     body: JSON.stringify({
-      email,
+      login: identifier,
       password,
       device_name: deviceName
     })

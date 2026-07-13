@@ -45,8 +45,8 @@
     <p class="fin-auth-copy">Los saldos y movimientos financieros solo están disponibles para usuarios autorizados.</p>
 
     <label class="fin-field">
-      <span>Correo electrónico</span>
-      <input id="financeAuthEmail" type="email" autocomplete="username" required placeholder="usuario@empresa.com">
+      <span>Usuario o correo electrónico</span>
+      <input id="financeAuthLogin" type="text" autocomplete="username" required placeholder="gustavo o usuario@empresa.com">
     </label>
     <label class="fin-field">
       <span>Contraseña</span>

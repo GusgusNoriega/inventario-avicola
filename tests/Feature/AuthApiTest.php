@@ -50,6 +50,35 @@ class AuthApiTest extends TestCase
         ])->assertUnauthorized();
     }
 
+    public function test_active_user_can_login_with_name_ignoring_case(): void
+    {
+        User::factory()->create([
+            'nombre' => 'Gustavo',
+            'email' => 'gustavo@example.com',
+            'password_hash' => 'clave-segura',
+        ]);
+
+        $this->postJson('/api/v1/auth/login', [
+            'login' => 'gUsTaVo',
+            'password' => 'clave-segura',
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.email', 'gustavo@example.com');
+    }
+
+    public function test_ambiguous_name_and_password_are_rejected(): void
+    {
+        User::factory()->count(2)->create([
+            'nombre' => 'Duplicado',
+            'password_hash' => 'misma-clave',
+        ]);
+
+        $this->postJson('/api/v1/auth/login', [
+            'login' => 'Duplicado',
+            'password' => 'misma-clave',
+        ])->assertUnauthorized();
+    }
+
     public function test_inactive_user_cannot_login(): void
     {
         User::factory()->create([
