@@ -37,6 +37,51 @@
       <article class="directory-stat card directory-stat-accent"><span>Peso neto</span><strong id="providerNetWeight">0.000 kg</strong></article>
     </section>
 
+    <section id="providerFinanceSection" class="customer-history-section" aria-labelledby="providerFinanceTitle" hidden>
+      <div class="customer-history-section-head">
+        <div>
+          <p class="eyebrow">Cuenta por pagar</p>
+          <h2 id="providerFinanceTitle">Estado financiero</h2>
+        </div>
+        <a
+          class="btn btn-success directory-btn"
+          href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR&amp;proveedor_id={{ request()->route('tercero') }}"
+        >Registrar pago</a>
+      </div>
+      <div class="customer-history-stats" aria-label="Resumen financiero del proveedor">
+        <article class="directory-stat card"><span>Compras valorizadas</span><strong id="providerFinanceDocumented">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Depositado por clientes</span><strong id="providerFinanceDirect">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Pagado por nosotros</span><strong id="providerFinanceOwn">S/ 0.00</strong></article>
+        <article class="directory-stat card directory-stat-accent"><span>Saldo neto pendiente</span><strong id="providerFinancePending">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Costos sin precio</span><strong id="providerFinancePendingCosts">0</strong></article>
+      </div>
+      <p id="providerFinanceHelp" class="customer-history-meta"></p>
+    </section>
+
+    <section id="providerDirectDepositsSection" class="customer-history-section" aria-labelledby="providerDirectDepositsTitle" hidden>
+      <div class="customer-history-section-head">
+        <div>
+          <p class="eyebrow">Trazabilidad</p>
+          <h2 id="providerDirectDepositsTitle">Depositos directos de clientes</h2>
+        </div>
+      </div>
+      <div class="customer-history-table-wrap card">
+        <table class="customer-history-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Movimiento</th>
+              <th>Cliente</th>
+              <th>Destino</th>
+              <th>Metodo / referencia</th>
+              <th>Importe</th>
+            </tr>
+          </thead>
+          <tbody id="providerDirectDepositList"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="provider-vehicle-panel card" aria-labelledby="providerVehiclesTitle">
       <div class="customer-history-section-head">
         <div>

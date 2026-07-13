@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'cliente_id',
     'tipo',
     'cantidad',
+    'cantidad_bandejas',
     'ticket_despacho_id',
     'vehiculo_id',
     'conductor_id',
@@ -57,6 +58,7 @@ class MovimientoJava extends Model
     {
         return [
             'cantidad' => 'integer',
+            'cantidad_bandejas' => 'integer',
             'fecha_movimiento' => 'datetime',
         ];
     }

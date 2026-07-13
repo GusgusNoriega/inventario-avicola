@@ -183,6 +183,7 @@ class DispatchTicketApiTest extends TestCase
             'cliente_id' => $this->clientId,
             'tipo' => 'DESPACHO',
             'cantidad' => 3,
+            'cantidad_bandejas' => 0,
             'vehiculo_id' => $this->deliveryVehicleId,
             'conductor_id' => $this->deliveryDriverId,
         ]);

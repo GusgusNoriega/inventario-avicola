@@ -40,6 +40,9 @@ http://sistema-pollos.test
 - `/directorio`: clientes y proveedores.
 - `/directorio/clientes/{id}`: tickets, registros e histórico de precios del cliente.
 - `/directorio/proveedores/{id}`: pesadas, destinos y camiones del proveedor.
+- `/finanzas`: saldos, cartera y trazabilidad de depositos.
+- `/finanzas/entidades`: empresas receptoras y cuentas propias/externas.
+- `/finanzas/movimientos/nuevo`: registro de cobros, pagos y reembolsos.
 
 La vista de operación todavía utiliza el almacenamiento local existente. El
 directorio de clientes y proveedores ya consulta y modifica la base de datos
@@ -60,3 +63,4 @@ Documentación adicional:
 - [Esquema de base de datos](docs/esquema-base-datos.md)
 - [Migraciones y base local](docs/migraciones-base-datos.md)
 - [Despliegue en cPanel sin Node ni npm](docs/despliegue-cpanel.md)
+- [Modulo de finanzas y trazabilidad](docs/finanzas.md)

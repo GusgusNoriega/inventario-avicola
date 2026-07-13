@@ -15,7 +15,6 @@
           <h1 id="menuTitle">Menú principal</h1>
           <p class="menu-copy">Acceso rápido a las áreas de recepción, despacho y registros del sistema.</p>
         </div>
-        <p id="menuNotice" class="menu-notice" role="status" aria-live="polite"></p>
       </header>
 
       <nav class="menu-grid" aria-label="Vistas del sistema">
@@ -87,22 +86,6 @@
           <span class="menu-status">Disponible</span>
         </a>
 
-        <a class="menu-tile" href="#facturacion" data-future-view="Registro de facturación">
-          <span class="menu-tile-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M7 3h10v18l-2-1-2 1-2-1-2 1-2-1z"></path>
-              <path d="M9 8h6"></path>
-              <path d="M9 12h6"></path>
-              <path d="M9 16h4"></path>
-            </svg>
-          </span>
-          <span class="menu-tile-text">
-            <strong>Facturación</strong>
-            <small>Registro de comprobantes</small>
-          </span>
-          <span class="menu-status menu-status-soon">Por crear</span>
-        </a>
-
         <a class="menu-tile menu-tile-primary" href="{{ route('directorio') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -135,6 +118,24 @@
           <span class="menu-status">Disponible</span>
         </a>
 
+        <a class="menu-tile menu-tile-primary" href="{{ route('finanzas') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 19h16"></path>
+              <path d="M6 16V9"></path>
+              <path d="M10 16V6"></path>
+              <path d="M14 16v-4"></path>
+              <path d="M18 16V4"></path>
+              <path d="M5 5l4 2 4-3 5-2"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Finanzas y tesorería</strong>
+            <small>Cobros, pagos, saldos y trazabilidad</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+
         <a class="menu-tile menu-tile-primary" href="{{ route('control-javas') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -145,8 +146,8 @@
             </svg>
           </span>
           <span class="menu-tile-text">
-            <strong>Control de javas</strong>
-            <small>Saldos y devoluciones por cliente</small>
+            <strong>Control de javas y bandejas</strong>
+            <small>Inventario, saldos y devoluciones por cliente</small>
           </span>
           <span class="menu-status">Disponible</span>
         </a>
@@ -170,27 +171,9 @@
           <span class="menu-status">Disponible</span>
         </a>
 
-        <a class="menu-tile" href="#ingresos-despachos" data-future-view="Ingresos y despachos de pollos">
-          <span class="menu-tile-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M5 4h14v16H5z"></path>
-              <path d="M8 8h8"></path>
-              <path d="M8 12h8"></path>
-              <path d="M8 16h5"></path>
-              <path d="M3 8h2"></path>
-              <path d="M3 16h2"></path>
-            </svg>
-          </span>
-          <span class="menu-tile-text">
-            <strong>Ingresos y despachos</strong>
-            <small>Movimientos de pollos</small>
-          </span>
-          <span class="menu-status menu-status-soon">Por crear</span>
-        </a>
       </nav>
     </div>
   </section>
 
-  <script src="{{ asset('js/menu.js') }}"></script>
 </body>
 </html>

@@ -699,6 +699,34 @@ body.java-inventory-modal-open { overflow: hidden; }
   text-shadow: 0 0 18px rgba(42, 182, 110, 0.16);
 }
 
+.java-summary-card .java-asset-values {
+  margin: 8px 0 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.java-summary-card .java-asset-values > span {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #293e5d;
+  border-radius: 8px;
+  background: rgba(7, 13, 23, 0.72);
+}
+
+.java-summary-card .java-asset-values small {
+  color: #91a9c8;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.java-summary-card .java-asset-values strong {
+  margin: 3px 0 0;
+  font-size: 25px;
+}
+
 .java-control-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(360px, .8fr);
@@ -1146,6 +1174,34 @@ body.java-inventory-modal-open { overflow: hidden; }
 
 .java-daily-task { border-top-color: #4f9ae8; }
 
+.java-daily-assets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.java-daily-asset {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #3b5f89;
+  border-radius: 11px;
+  background: rgba(12, 29, 49, 0.5);
+}
+
+.java-daily-asset.is-tray {
+  border-color: #6e5731;
+  background: rgba(89, 61, 19, 0.16);
+}
+
+.java-daily-asset > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #e2ebf6;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .java-daily-result {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1166,6 +1222,53 @@ body.java-inventory-modal-open { overflow: hidden; }
 .java-daily-result strong.is-negative-stock { color: #ff7d7d; }
 .java-daily-result strong.is-positive-stock { color: #82dfaa; }
 .java-daily-expected { font-size: 12px; }
+
+.java-inventory-outside-hints {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.java-inventory-outside-hints .java-balance-hint {
+  margin: 0;
+}
+
+.java-asset-stack {
+  min-width: 118px;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(54px, 1fr));
+  gap: 5px;
+}
+
+.java-asset-stack > span {
+  padding: 4px 6px;
+  border: 1px solid #334a69;
+  border-radius: 7px;
+  background: #0a1422;
+  text-align: center;
+}
+
+.java-asset-stack small,
+.java-asset-stack strong {
+  display: block;
+}
+
+.java-asset-stack small {
+  color: #8298b5;
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.java-asset-stack strong {
+  margin-top: 2px;
+  color: #f8dd5a;
+}
+
+.java-asset-stack.is-receipt strong,
+.java-asset-stack.is-clear strong { color: #82dfaa; }
+
+.java-asset-stack.has-balance strong { color: #ff8f8f; }
 
 .java-returns-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .java-returns-grid { min-height: 0; }
@@ -1273,6 +1376,8 @@ body.java-inventory-modal-open { overflow: hidden; }
   .java-module-action { grid-column: 1 / -1; }
   .java-inventory-workspace { grid-template-columns: 1fr; }
   .java-inventory-task { min-height: 0; }
+  .java-daily-assets,
+  .java-inventory-outside-hints { grid-template-columns: 1fr; }
   .java-trace-tabs { display: grid; grid-template-columns: 1fr 1fr; }
   .java-inventory-head { align-items: stretch; flex-direction: column; }
   .java-inventory-open { width: 100%; justify-content: center; }

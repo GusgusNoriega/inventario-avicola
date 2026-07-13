@@ -67,6 +67,9 @@ class JavaControlController extends Controller
             ->groupBy('cliente_id')
             ->selectRaw(
                 "cliente_id, SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE -cantidad END) AS saldo"
+            )
+            ->selectRaw(
+                "SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad_bandejas ELSE -cantidad_bandejas END) AS saldo_bandejas"
             );
 
         $clientBaseQuery = DB::table('terceros')
@@ -84,7 +87,16 @@ class JavaControlController extends Controller
                 'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN saldos_javas.saldo ELSE 0 END), 0) AS total_pending'
             )
             ->selectRaw(
-                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN 1 ELSE 0 END), 0) AS clients_with_balance'
+                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 OR COALESCE(saldos_javas.saldo_bandejas, 0) > 0 THEN 1 ELSE 0 END), 0) AS clients_with_balance'
+            )
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN 1 ELSE 0 END), 0) AS java_clients_with_balance'
+            )
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo_bandejas, 0) > 0 THEN saldos_javas.saldo_bandejas ELSE 0 END), 0) AS tray_total_pending'
+            )
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo_bandejas, 0) > 0 THEN 1 ELSE 0 END), 0) AS tray_clients_with_balance'
             )
             ->first();
         $clientPaginator = (clone $clientBaseQuery)
@@ -94,13 +106,14 @@ class JavaControlController extends Controller
                         ->orWhere('terceros.numero_documento', 'like', "%{$search}%");
                 });
             })
-            ->orderByDesc(DB::raw('COALESCE(saldos_javas.saldo, 0)'))
+            ->orderByDesc(DB::raw('COALESCE(saldos_javas.saldo, 0) + COALESCE(saldos_javas.saldo_bandejas, 0)'))
             ->orderBy('terceros.nombre_razon_social')
             ->paginate($perPage, [
                 'terceros.id',
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
                 DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
+                DB::raw('COALESCE(saldos_javas.saldo_bandejas, 0) AS saldo_bandejas'),
             ], 'page', $page);
         $clients = $clientPaginator->getCollection()
             ->map(fn (object $client): array => [
@@ -108,6 +121,8 @@ class JavaControlController extends Controller
                 'name' => $client->nombre_razon_social,
                 'document_number' => $client->numero_documento,
                 'balance' => max(0, (int) $client->saldo),
+                'java_balance' => max(0, (int) $client->saldo),
+                'tray_balance' => max(0, (int) $client->saldo_bandejas),
             ])
             ->values();
         $clientOptions = (clone $clientBaseQuery)
@@ -117,12 +132,15 @@ class JavaControlController extends Controller
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
                 DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
+                DB::raw('COALESCE(saldos_javas.saldo_bandejas, 0) AS saldo_bandejas'),
             ])
             ->map(fn (object $client): array => [
                 'id' => (int) $client->id,
                 'name' => $client->nombre_razon_social,
                 'document_number' => $client->numero_documento,
                 'balance' => max(0, (int) $client->saldo),
+                'java_balance' => max(0, (int) $client->saldo),
+                'tray_balance' => max(0, (int) $client->saldo_bandejas),
             ])
             ->values();
 
@@ -154,13 +172,27 @@ class JavaControlController extends Controller
             ->selectRaw(
                 "COALESCE(SUM(CASE WHEN tipo = 'RECEPCION' THEN cantidad ELSE 0 END), 0) AS received"
             )
+            ->selectRaw(
+                "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad_bandejas ELSE 0 END), 0) AS trays_dispatched"
+            )
+            ->selectRaw(
+                "COALESCE(SUM(CASE WHEN tipo = 'RECEPCION' THEN cantidad_bandejas ELSE 0 END), 0) AS trays_received"
+            )
             ->selectRaw('COUNT(DISTINCT vehiculo_id) AS trucks_count')
             ->selectRaw('COUNT(*) AS movements_count')
             ->first();
         $dispatched = (int) ($journeyTotals->dispatched ?? 0);
         $received = (int) ($journeyTotals->received ?? 0);
+        $traysDispatched = (int) ($journeyTotals->trays_dispatched ?? 0);
+        $traysReceived = (int) ($journeyTotals->trays_received ?? 0);
         $currentJourneyTotals = ! $currentJourneyId
-            ? (object) ['dispatched' => 0, 'received' => 0, 'trucks_count' => 0]
+            ? (object) [
+                'dispatched' => 0,
+                'received' => 0,
+                'trays_dispatched' => 0,
+                'trays_received' => 0,
+                'trucks_count' => 0,
+            ]
             : ($currentJourneyId === $selectedJourneyId
                 ? $journeyTotals
                 : MovimientoJava::query()
@@ -173,10 +205,18 @@ class JavaControlController extends Controller
                     ->selectRaw(
                         "COALESCE(SUM(CASE WHEN tipo = 'RECEPCION' THEN cantidad ELSE 0 END), 0) AS received"
                     )
+                    ->selectRaw(
+                        "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad_bandejas ELSE 0 END), 0) AS trays_dispatched"
+                    )
+                    ->selectRaw(
+                        "COALESCE(SUM(CASE WHEN tipo = 'RECEPCION' THEN cantidad_bandejas ELSE 0 END), 0) AS trays_received"
+                    )
                     ->selectRaw('COUNT(DISTINCT vehiculo_id) AS trucks_count')
                     ->first());
         $currentDispatched = (int) ($currentJourneyTotals->dispatched ?? 0);
         $currentReceived = (int) ($currentJourneyTotals->received ?? 0);
+        $currentTraysDispatched = (int) ($currentJourneyTotals->trays_dispatched ?? 0);
+        $currentTraysReceived = (int) ($currentJourneyTotals->trays_received ?? 0);
         $truckActivity = DB::table('movimientos_javas')
             ->join('terceros', 'terceros.id', '=', 'movimientos_javas.cliente_id')
             ->leftJoin('vehiculos', 'vehiculos.id', '=', 'movimientos_javas.vehiculo_id')
@@ -206,6 +246,8 @@ class JavaControlController extends Controller
                 'terceros.nombre_razon_social',
                 DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad ELSE 0 END) AS dispatched"),
                 DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'RECEPCION' THEN movimientos_javas.cantidad ELSE 0 END) AS received"),
+                DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad_bandejas ELSE 0 END) AS trays_dispatched"),
+                DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'RECEPCION' THEN movimientos_javas.cantidad_bandejas ELSE 0 END) AS trays_received"),
             ])
             ->map(fn (object $activity): array => [
                 'truck' => [
@@ -223,6 +265,12 @@ class JavaControlController extends Controller
                 'dispatched' => (int) $activity->dispatched,
                 'received' => (int) $activity->received,
                 'net' => (int) $activity->dispatched - (int) $activity->received,
+                'java_dispatched' => (int) $activity->dispatched,
+                'java_received' => (int) $activity->received,
+                'java_net' => (int) $activity->dispatched - (int) $activity->received,
+                'tray_dispatched' => (int) $activity->trays_dispatched,
+                'tray_received' => (int) $activity->trays_received,
+                'tray_net' => (int) $activity->trays_dispatched - (int) $activity->trays_received,
             ])
             ->values();
         $today = CarbonImmutable::now($branch->zona_horaria);
@@ -233,7 +281,11 @@ class JavaControlController extends Controller
                 $today->startOfDay()->format('Y-m-d H:i:s'),
                 $today->endOfDay()->format('Y-m-d H:i:s'),
             ])
-            ->sum('cantidad');
+            ->selectRaw('COALESCE(SUM(cantidad), 0) AS javas')
+            ->selectRaw('COALESCE(SUM(cantidad_bandejas), 0) AS trays')
+            ->first();
+        $javasReceivedToday = (int) ($receivedToday?->javas ?? 0);
+        $traysReceivedToday = (int) ($receivedToday?->trays ?? 0);
 
         return response()->json(['data' => [
             'branch' => [
@@ -244,10 +296,22 @@ class JavaControlController extends Controller
             'summary' => [
                 'total_pending' => (int) ($summary->total_pending ?? 0),
                 'clients_with_balance' => (int) ($summary->clients_with_balance ?? 0),
-                'received_today' => (int) $receivedToday,
+                'received_today' => $javasReceivedToday,
                 'dispatched' => $dispatched,
                 'received' => $received,
                 'net' => $dispatched - $received,
+                'java_total_pending' => (int) ($summary->total_pending ?? 0),
+                'java_clients_with_balance' => (int) ($summary->java_clients_with_balance ?? 0),
+                'java_received_today' => $javasReceivedToday,
+                'java_dispatched' => $dispatched,
+                'java_received' => $received,
+                'java_net' => $dispatched - $received,
+                'tray_total_pending' => (int) ($summary->tray_total_pending ?? 0),
+                'tray_clients_with_balance' => (int) ($summary->tray_clients_with_balance ?? 0),
+                'tray_received_today' => $traysReceivedToday,
+                'tray_dispatched' => $traysDispatched,
+                'tray_received' => $traysReceived,
+                'tray_net' => $traysDispatched - $traysReceived,
                 'trucks_count' => (int) ($journeyTotals->trucks_count ?? 0),
                 'movements_count' => (int) ($journeyTotals->movements_count ?? 0),
             ],
@@ -256,6 +320,12 @@ class JavaControlController extends Controller
                 'dispatched' => $currentDispatched,
                 'received' => $currentReceived,
                 'net' => $currentDispatched - $currentReceived,
+                'java_dispatched' => $currentDispatched,
+                'java_received' => $currentReceived,
+                'java_net' => $currentDispatched - $currentReceived,
+                'tray_dispatched' => $currentTraysDispatched,
+                'tray_received' => $currentTraysReceived,
+                'tray_net' => $currentTraysDispatched - $currentTraysReceived,
                 'trucks_count' => (int) ($currentJourneyTotals->trucks_count ?? 0),
             ],
             'inventory' => $this->javaControl->currentInventory(
@@ -317,7 +387,7 @@ class JavaControlController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'La entrada de javas fue registrada correctamente.',
+            'message' => 'La entrada de envases fue registrada correctamente.',
             'data' => $this->formatMovement($movement),
         ], 201);
     }
@@ -332,7 +402,7 @@ class JavaControlController extends Controller
         );
 
         return response()->json([
-            'message' => 'El total general de javas fue actualizado correctamente.',
+            'message' => 'El inventario general de envases fue actualizado correctamente.',
             'data' => $inventory,
         ], 201);
     }
@@ -349,7 +419,7 @@ class JavaControlController extends Controller
         );
 
         return response()->json([
-            'message' => 'El conteo diario de javas fue registrado correctamente.',
+            'message' => 'El conteo diario de envases fue registrado correctamente.',
             'data' => $inventory,
         ], 201);
     }
@@ -361,6 +431,8 @@ class JavaControlController extends Controller
             'id' => (int) $movement->id,
             'type' => $movement->tipo,
             'quantity' => (int) $movement->cantidad,
+            'java_quantity' => (int) $movement->cantidad,
+            'tray_quantity' => (int) $movement->cantidad_bandejas,
             'occurred_at' => $movement->fecha_movimiento?->toISOString(),
             'journey' => $movement->jornada
                 ? [

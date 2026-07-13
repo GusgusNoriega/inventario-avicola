@@ -16,6 +16,7 @@ const elements = {
   name: document.getElementById("customerName"),
   meta: document.getElementById("customerMeta"),
   message: document.getElementById("customerHistoryMessage"),
+  financeSection: document.getElementById("customerFinanceSection"),
   filters: document.getElementById("customerHistoryFilters"),
   ticketSearch: document.getElementById("historyTicketSearch"),
   dateFrom: document.getElementById("historyDateFrom"),
@@ -27,6 +28,11 @@ const elements = {
   birdCount: document.getElementById("historyBirdCount"),
   netWeight: document.getElementById("historyNetWeight"),
   amount: document.getElementById("historyAmount"),
+  financeDocumented: document.getElementById("customerFinanceDocumented"),
+  financePayments: document.getElementById("customerFinancePayments"),
+  financeDirect: document.getElementById("customerFinanceDirect"),
+  financePending: document.getElementById("customerFinancePending"),
+  financeHelp: document.getElementById("customerFinanceHelp"),
   resultCount: document.getElementById("historyResultCount"),
   ticketList: document.getElementById("customerTicketList"),
   pagination: document.getElementById("customerTicketPagination"),
@@ -45,10 +51,10 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function formatCurrency(value) {
+function formatCurrency(value, currency = "PEN") {
   return new Intl.NumberFormat("es-PE", {
     style: "currency",
-    currency: "PEN"
+    currency
   }).format(Number(value || 0));
 }
 
@@ -132,6 +138,24 @@ function renderSummary(summary) {
   elements.birdCount.textContent = formatNumber(summary.birds);
   elements.netWeight.textContent = formatWeight(summary.net_weight_kg);
   elements.amount.textContent = formatCurrency(summary.amount);
+}
+
+function renderFinance(finance) {
+  elements.financeSection.hidden = !finance;
+  if (!finance) {
+    return;
+  }
+
+  const currency = finance.currency || "PEN";
+  elements.financeDocumented.textContent = formatCurrency(finance.documented, currency);
+  elements.financePayments.textContent = formatCurrency(finance.payments, currency);
+  elements.financeDirect.textContent = formatCurrency(finance.direct_to_providers, currency);
+  elements.financePending.textContent = formatCurrency(finance.pending, currency);
+
+  const unapplied = Number(finance.unapplied || 0);
+  elements.financeHelp.textContent = unapplied > 0
+    ? `${formatCurrency(unapplied, currency)} de los pagos estan disponibles como saldo a favor sin aplicar a un comprobante.`
+    : "El saldo neto descuenta devoluciones, pagos recibidos y depositos directos aplicados.";
 }
 
 function renderTicket(ticket) {
@@ -296,6 +320,7 @@ async function loadHistory(page = 1) {
     const response = await apiRequest(`/clientes/${clientId}/historial?${buildQuery(page)}`);
     renderClient(response.data.client);
     renderSummary(response.data.summary);
+    void loadFinance();
     renderTickets(response.data.tickets, response.meta);
     renderPriceHistory(response.data.price_history);
     renderPagination(response.meta);
@@ -310,6 +335,18 @@ async function loadHistory(page = 1) {
   } finally {
     loading = false;
     elements.ticketList.classList.remove("is-loading");
+  }
+}
+
+async function loadFinance() {
+  try {
+    const response = await apiRequest(`/finanzas/clientes/${clientId}/resumen`);
+    renderFinance(response.data);
+  } catch (error) {
+    renderFinance(null);
+    if (![401, 403].includes(error?.status)) {
+      setMessage("No fue posible cargar el resumen financiero del cliente.", true);
+    }
   }
 }
 

@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trazabilidad de Javas | Sistema Pollos</title>
+  <title>Trazabilidad de Javas y Bandejas | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body class="java-control-page" data-java-page="traceability">
   <main class="java-control-shell java-subview-shell">
     @include('partials.java-control-header', [
-      'eyebrow' => 'Control de javas',
+      'eyebrow' => 'Control de activos',
       'title' => 'Trazabilidad por jornada',
       'description' => 'Analiza una jornada a la vez y alterna entre el consolidado y el detalle.',
     ])
@@ -22,9 +22,30 @@
     </section>
 
     <section class="java-summary java-summary-four java-trace-summary" aria-label="Resumen de la jornada seleccionada">
-      <article class="java-summary-card card"><span>Javas que salieron</span><strong id="javaJourneyDispatched">0</strong><small>Entregadas a clientes</small></article>
-      <article class="java-summary-card card"><span>Javas que entraron</span><strong id="javaJourneyReceived">0</strong><small>Recuperadas de clientes</small></article>
-      <article class="java-summary-card card"><span>Balance</span><strong id="javaJourneyNet" class="java-summary-debt is-clear">0</strong><small>Salidas menos entradas</small></article>
+      <article class="java-summary-card card">
+        <span>Activos que salieron</span>
+        <div class="java-asset-values">
+          <span><small>Javas</small><strong id="javaJourneyDispatched">0</strong></span>
+          <span><small>Bandejas</small><strong id="trayJourneyDispatched">0</strong></span>
+        </div>
+        <small>Entregados a clientes</small>
+      </article>
+      <article class="java-summary-card card">
+        <span>Activos que entraron</span>
+        <div class="java-asset-values">
+          <span><small>Javas</small><strong id="javaJourneyReceived">0</strong></span>
+          <span><small>Bandejas</small><strong id="trayJourneyReceived">0</strong></span>
+        </div>
+        <small>Recuperados de clientes</small>
+      </article>
+      <article class="java-summary-card card">
+        <span>Balance</span>
+        <div class="java-asset-values">
+          <span><small>Javas</small><strong id="javaJourneyNet" class="java-summary-debt is-clear">0</strong></span>
+          <span><small>Bandejas</small><strong id="trayJourneyNet" class="java-summary-debt is-clear">0</strong></span>
+        </div>
+        <small>Salidas menos entradas</small>
+      </article>
       <article class="java-summary-card card"><span>Camiones</span><strong id="javaJourneyTrucks">0</strong><small>Con movimientos</small></article>
     </section>
 
@@ -54,7 +75,7 @@
       <div data-java-trace-panel="movements" hidden>
         <div class="java-table-wrap java-table-viewport java-trace-table-viewport">
           <table class="java-table java-history-table">
-            <thead><tr><th>Fecha</th><th>Camión</th><th>Cliente</th><th>Movimiento</th><th>Cantidad</th><th>Chofer</th><th>Referencia</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Camión</th><th>Cliente</th><th>Movimiento</th><th>Javas / Bandejas</th><th>Chofer</th><th>Referencia</th></tr></thead>
             <tbody id="javaMovementRows"></tbody>
           </table>
         </div>

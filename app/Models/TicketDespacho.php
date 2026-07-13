@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -102,6 +103,15 @@ class TicketDespacho extends Model
     public function movimientoJavas(): HasOne
     {
         return $this->hasOne(MovimientoJava::class, 'ticket_despacho_id');
+    }
+
+    /**
+     * @return BelongsToMany<Comprobante, $this>
+     */
+    public function comprobantes(): BelongsToMany
+    {
+        return $this->belongsToMany(Comprobante::class, 'comprobante_tickets', 'ticket_id', 'comprobante_id')
+            ->withPivot('importe_aplicado');
     }
 
     protected function casts(): array

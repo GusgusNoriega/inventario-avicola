@@ -36,4 +36,28 @@ class Empresa extends Model
     {
         return $this->hasMany(AjustePesoMinorista::class);
     }
+
+    /**
+     * @return HasMany<EntidadFinanciera, $this>
+     */
+    public function entidadesFinancieras(): HasMany
+    {
+        return $this->hasMany(EntidadFinanciera::class);
+    }
+
+    /**
+     * @return HasMany<Comprobante, $this>
+     */
+    public function comprobantes(): HasMany
+    {
+        return $this->hasMany(Comprobante::class);
+    }
+
+    /**
+     * @return HasMany<Pago, $this>
+     */
+    public function pagos(): HasMany
+    {
+        return $this->hasMany(Pago::class);
+    }
 }

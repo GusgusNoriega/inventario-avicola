@@ -22,7 +22,8 @@ class JavaControlService
     /** @return array<string, mixed> */
     public function currentInventory(int $companyId, ?int $journeyId = null): array
     {
-        $outsideQuantity = $this->outsideQuantity($companyId);
+        $outsideJavaQuantity = $this->outsideQuantity($companyId, 'cantidad');
+        $outsideTrayQuantity = $this->outsideQuantity($companyId, 'cantidad_bandejas');
         $inventory = InventarioJava::query()
             ->where('empresa_id', $companyId)
             ->first();
@@ -33,20 +34,23 @@ class JavaControlService
                 ->first()
             : null;
 
-        if (! $inventory) {
-            return [
-                'configured' => false,
-                'total' => null,
-                'inside' => null,
-                'outside' => $outsideQuantity,
-                'updated_at' => null,
-                'daily_count' => $this->formatDailyCount($dailyCount),
-            ];
-        }
+        $javas = $this->formatInventoryAsset(
+            $inventory,
+            'cantidad_total',
+            $outsideJavaQuantity,
+            $this->formatDailyCount($dailyCount, 'javas')
+        );
+        $trays = $this->formatInventoryAsset(
+            $inventory,
+            'cantidad_total_bandejas',
+            $outsideTrayQuantity,
+            $this->formatDailyCount($dailyCount, 'trays')
+        );
 
         return [
-            ...$this->formatInventory($inventory, $outsideQuantity),
-            'daily_count' => $this->formatDailyCount($dailyCount),
+            ...$javas,
+            'javas' => $javas,
+            'trays' => $trays,
         ];
     }
 
@@ -57,24 +61,42 @@ class JavaControlService
     public function saveInventoryTotal(int $companyId, User $actor, array $data): array
     {
         return DB::transaction(function () use ($companyId, $actor, $data): array {
-            $outsideQuantity = $this->outsideQuantity($companyId);
-            $totalQuantity = (int) $data['total_quantity'];
+            $outsideJavaQuantity = $this->outsideQuantity($companyId, 'cantidad');
+            $outsideTrayQuantity = $this->outsideQuantity($companyId, 'cantidad_bandejas');
+            $javaQuantity = (int) $data['java_quantity'];
+            $trayQuantity = array_key_exists('tray_quantity', $data)
+                ? (int) $data['tray_quantity']
+                : null;
+            $javaField = array_key_exists('total_quantity', $data)
+                ? 'total_quantity'
+                : 'java_quantity';
 
-            if ($totalQuantity < $outsideQuantity) {
+            if ($javaQuantity < $outsideJavaQuantity) {
                 throw ValidationException::withMessages([
-                    'total_quantity' => "El total general no puede ser menor que las {$outsideQuantity} javas que están fuera con clientes.",
+                    $javaField => "El total general no puede ser menor que las {$outsideJavaQuantity} javas que estan fuera con clientes.",
                 ]);
+            }
+
+            if ($trayQuantity !== null && $trayQuantity < $outsideTrayQuantity) {
+                throw ValidationException::withMessages([
+                    'tray_quantity' => "El total general no puede ser menor que las {$outsideTrayQuantity} bandejas que estan fuera con clientes.",
+                ]);
+            }
+
+            $values = [
+                'cantidad_total' => $javaQuantity,
+                'updated_by' => $actor->id,
+            ];
+            if ($trayQuantity !== null) {
+                $values['cantidad_total_bandejas'] = $trayQuantity;
             }
 
             $inventory = InventarioJava::query()->updateOrCreate(
                 ['empresa_id' => $companyId],
-                [
-                    'cantidad_total' => $totalQuantity,
-                    'updated_by' => $actor->id,
-                ]
+                $values
             );
 
-            return $this->formatInventory($inventory, $outsideQuantity);
+            return $this->currentInventory($companyId);
         }, 3);
     }
 
@@ -96,6 +118,7 @@ class JavaControlService
             $actor,
             $data
         ): array {
+            $javaField = array_key_exists('quantity', $data) ? 'quantity' : 'java_quantity';
             $inventory = InventarioJava::query()
                 ->where('empresa_id', $companyId)
                 ->lockForUpdate()
@@ -103,7 +126,7 @@ class JavaControlService
 
             if (! $inventory) {
                 throw ValidationException::withMessages([
-                    'quantity' => 'Primero debes definir el total general de javas de la empresa.',
+                    $javaField => 'Primero debes definir el total general de javas de la empresa.',
                 ]);
             }
 
@@ -115,20 +138,39 @@ class JavaControlService
                 $actor,
                 $occurredAt
             );
-            $outsideQuantity = $this->outsideQuantity($companyId);
-            $expectedQuantity = (int) $inventory->cantidad_total - $outsideQuantity;
-            $countedQuantity = (int) $data['quantity'];
+            $outsideJavaQuantity = $this->outsideQuantity($companyId, 'cantidad');
+            $outsideTrayQuantity = $this->outsideQuantity($companyId, 'cantidad_bandejas');
+            $expectedJavaQuantity = (int) $inventory->cantidad_total - $outsideJavaQuantity;
+            $countedJavaQuantity = (int) $data['java_quantity'];
+            $hasTrayCount = array_key_exists('tray_quantity', $data);
+
+            if ($hasTrayCount && $inventory->cantidad_total_bandejas === null) {
+                throw ValidationException::withMessages([
+                    'tray_quantity' => 'Primero debes definir el total general de bandejas de la empresa.',
+                ]);
+            }
+
+            $values = [
+                'empresa_id' => $companyId,
+                'cantidad_en_empresa' => $countedJavaQuantity,
+                'cantidad_esperada' => $expectedJavaQuantity,
+                'diferencia' => $countedJavaQuantity - $expectedJavaQuantity,
+                'contado_at' => $occurredAt->format('Y-m-d H:i:s'),
+                'contado_por' => $actor->id,
+            ];
+            if ($hasTrayCount) {
+                $expectedTrayQuantity = (int) $inventory->cantidad_total_bandejas - $outsideTrayQuantity;
+                $countedTrayQuantity = (int) $data['tray_quantity'];
+                $values += [
+                    'cantidad_en_empresa_bandejas' => $countedTrayQuantity,
+                    'cantidad_esperada_bandejas' => $expectedTrayQuantity,
+                    'diferencia_bandejas' => $countedTrayQuantity - $expectedTrayQuantity,
+                ];
+            }
 
             ConteoDiarioJava::query()->updateOrCreate(
                 ['jornada_id' => $journey->id],
-                [
-                    'empresa_id' => $companyId,
-                    'cantidad_en_empresa' => $countedQuantity,
-                    'cantidad_esperada' => $expectedQuantity,
-                    'diferencia' => $countedQuantity - $expectedQuantity,
-                    'contado_at' => $occurredAt->format('Y-m-d H:i:s'),
-                    'contado_por' => $actor->id,
-                ]
+                $values
             );
 
             return $this->currentInventory($companyId, (int) $journey->id);
@@ -147,30 +189,47 @@ class JavaControlService
             return;
         }
 
-        $quantity = (int) Pesada::query()
+        $quantities = Pesada::query()
             ->where('ticket_id', $ticket->id)
             ->where('estado', Pesada::STATUS_ACTIVE)
-            ->sum('cantidad_javas');
+            ->selectRaw('COALESCE(SUM(cantidad_javas), 0) AS javas')
+            ->selectRaw('COALESCE(SUM(cantidad_bandejas), 0) AS trays')
+            ->first();
+        $javaQuantity = (int) ($quantities?->javas ?? 0);
+        $trayQuantity = (int) ($quantities?->trays ?? 0);
         $clientMovements = MovimientoJava::query()
             ->where('empresa_id', $companyId)
             ->where('cliente_id', $ticket->cliente_destino_id)
             ->lockForUpdate()
-            ->get(['tipo', 'cantidad', 'ticket_despacho_id']);
-        $otherDispatches = (int) $clientMovements
+            ->get(['tipo', 'cantidad', 'cantidad_bandejas', 'ticket_despacho_id']);
+        $otherJavaDispatches = (int) $clientMovements
             ->where('tipo', MovimientoJava::TYPE_DISPATCH)
             ->where('ticket_despacho_id', '!=', $ticket->id)
             ->sum('cantidad');
-        $receipts = (int) $clientMovements
+        $javaReceipts = (int) $clientMovements
             ->where('tipo', MovimientoJava::TYPE_RECEIPT)
             ->sum('cantidad');
+        $otherTrayDispatches = (int) $clientMovements
+            ->where('tipo', MovimientoJava::TYPE_DISPATCH)
+            ->where('ticket_despacho_id', '!=', $ticket->id)
+            ->sum('cantidad_bandejas');
+        $trayReceipts = (int) $clientMovements
+            ->where('tipo', MovimientoJava::TYPE_RECEIPT)
+            ->sum('cantidad_bandejas');
 
-        if ($quantity + $otherDispatches < $receipts) {
+        if ($javaQuantity + $otherJavaDispatches < $javaReceipts) {
             throw ValidationException::withMessages([
                 'cages' => 'No se puede reducir esta cantidad porque el cliente ya devolvió javas asociadas a su saldo.',
             ]);
         }
 
-        if ($quantity === 0) {
+        if ($trayQuantity + $otherTrayDispatches < $trayReceipts) {
+            throw ValidationException::withMessages([
+                'trays' => 'No se puede reducir esta cantidad porque el cliente ya devolvio bandejas asociadas a su saldo.',
+            ]);
+        }
+
+        if ($javaQuantity === 0 && $trayQuantity === 0) {
             MovimientoJava::query()
                 ->where('ticket_despacho_id', $ticket->id)
                 ->delete();
@@ -186,7 +245,8 @@ class JavaControlService
                 'jornada_id' => $ticket->jornada_id,
                 'cliente_id' => $ticket->cliente_destino_id,
                 'tipo' => MovimientoJava::TYPE_DISPATCH,
-                'cantidad' => $quantity,
+                'cantidad' => $javaQuantity,
+                'cantidad_bandejas' => $trayQuantity,
                 'vehiculo_id' => $ticket->vehiculo_entrega_id,
                 'conductor_id' => $ticket->conductor_entrega_id,
                 'fecha_movimiento' => $ticket->cerrado_at ?: $ticket->created_at ?: now(),
@@ -260,17 +320,29 @@ class JavaControlService
                 ->where('empresa_id', $companyId)
                 ->where('cliente_id', $client->id)
                 ->lockForUpdate()
-                ->get(['tipo', 'cantidad']);
-            $balance = (int) $movements->sum(
+                ->get(['tipo', 'cantidad', 'cantidad_bandejas']);
+            $javaBalance = (int) $movements->sum(
                 fn (MovimientoJava $movement): int => $movement->tipo === MovimientoJava::TYPE_DISPATCH
                     ? $movement->cantidad
                     : -$movement->cantidad
             );
-            $quantity = (int) $data['quantity'];
+            $trayBalance = (int) $movements->sum(
+                fn (MovimientoJava $movement): int => $movement->tipo === MovimientoJava::TYPE_DISPATCH
+                    ? $movement->cantidad_bandejas
+                    : -$movement->cantidad_bandejas
+            );
+            $javaQuantity = (int) ($data['java_quantity'] ?? $data['quantity'] ?? 0);
+            $trayQuantity = (int) ($data['tray_quantity'] ?? 0);
+            $javaField = array_key_exists('quantity', $data) ? 'quantity' : 'java_quantity';
 
-            if ($quantity > $balance) {
+            if ($javaQuantity > $javaBalance) {
                 throw ValidationException::withMessages([
-                    'quantity' => "El cliente solo tiene {$balance} javas pendientes. No se pueden recibir {$quantity}.",
+                    $javaField => "El cliente solo tiene {$javaBalance} javas pendientes. No se pueden recibir {$javaQuantity}.",
+                ]);
+            }
+            if ($trayQuantity > $trayBalance) {
+                throw ValidationException::withMessages([
+                    'tray_quantity' => "El cliente solo tiene {$trayBalance} bandejas pendientes. No se pueden recibir {$trayQuantity}.",
                 ]);
             }
 
@@ -280,7 +352,8 @@ class JavaControlService
                 'jornada_id' => $journey->id,
                 'cliente_id' => $client->id,
                 'tipo' => MovimientoJava::TYPE_RECEIPT,
-                'cantidad' => $quantity,
+                'cantidad' => $javaQuantity,
+                'cantidad_bandejas' => $trayQuantity,
                 'vehiculo_id' => $vehicle->id,
                 'conductor_id' => $driver->id,
                 'fecha_movimiento' => $receivedAt->format('Y-m-d H:i:s'),
@@ -333,12 +406,16 @@ class JavaControlService
         return $journey;
     }
 
-    private function outsideQuantity(int $companyId): int
+    private function outsideQuantity(int $companyId, string $column): int
     {
+        if (! in_array($column, ['cantidad', 'cantidad_bandejas'], true)) {
+            throw new \InvalidArgumentException('Columna de inventario no soportada.');
+        }
+
         $balance = MovimientoJava::query()
             ->where('empresa_id', $companyId)
             ->selectRaw(
-                "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE -cantidad END), 0) AS balance"
+                "COALESCE(SUM(CASE WHEN tipo = 'DESPACHO' THEN {$column} ELSE -{$column} END), 0) AS balance"
             )
             ->value('balance');
 
@@ -346,21 +423,34 @@ class JavaControlService
     }
 
     /** @return array<string, mixed> */
-    private function formatInventory(InventarioJava $inventory, int $outsideQuantity): array
-    {
+    private function formatInventoryAsset(
+        ?InventarioJava $inventory,
+        string $column,
+        int $outsideQuantity,
+        array $dailyCount
+    ): array {
+        $total = $inventory?->{$column};
+        $configured = $total !== null;
+
         return [
-            'configured' => true,
-            'total' => (int) $inventory->cantidad_total,
-            'inside' => (int) $inventory->cantidad_total - $outsideQuantity,
+            'configured' => $configured,
+            'total' => $configured ? (int) $total : null,
+            'inside' => $configured ? (int) $total - $outsideQuantity : null,
             'outside' => $outsideQuantity,
-            'updated_at' => $inventory->updated_at?->toISOString(),
+            'updated_at' => $configured ? $inventory?->updated_at?->toISOString() : null,
+            'daily_count' => $dailyCount,
         ];
     }
 
     /** @return array<string, mixed> */
-    private function formatDailyCount(?ConteoDiarioJava $count): array
+    private function formatDailyCount(?ConteoDiarioJava $count, string $asset): array
     {
-        if (! $count) {
+        $isTray = $asset === 'trays';
+        $quantityColumn = $isTray ? 'cantidad_en_empresa_bandejas' : 'cantidad_en_empresa';
+        $expectedColumn = $isTray ? 'cantidad_esperada_bandejas' : 'cantidad_esperada';
+        $differenceColumn = $isTray ? 'diferencia_bandejas' : 'diferencia';
+
+        if (! $count || $count->{$quantityColumn} === null) {
             return [
                 'configured' => false,
                 'journey_id' => null,
@@ -375,10 +465,10 @@ class JavaControlService
         return [
             'configured' => true,
             'journey_id' => (int) $count->jornada_id,
-            'quantity' => (int) $count->cantidad_en_empresa,
-            'expected' => (int) $count->cantidad_esperada,
-            'difference' => (int) $count->diferencia,
-            'missing' => max(0, -(int) $count->diferencia),
+            'quantity' => (int) $count->{$quantityColumn},
+            'expected' => (int) $count->{$expectedColumn},
+            'difference' => (int) $count->{$differenceColumn},
+            'missing' => max(0, -(int) $count->{$differenceColumn}),
             'counted_at' => $count->contado_at?->toISOString(),
         ];
     }

@@ -23,9 +23,87 @@ class WebViewsTest extends TestCase
             ->assertSee(route('jornada'), false)
             ->assertSee(route('directorio'), false)
             ->assertSee(route('flota'), false)
+            ->assertSee(route('finanzas'), false)
+            ->assertSee('Finanzas y tesorería')
             ->assertSee(route('control-javas'), false)
-            ->assertSee('Control de javas')
-            ->assertSee('Mi flota y choferes');
+            ->assertSee('Control de javas y bandejas')
+            ->assertSee('Mi flota y choferes')
+            ->assertDontSee('Facturación')
+            ->assertDontSee('Ingresos y despachos')
+            ->assertDontSee('data-future-view', false);
+    }
+
+    public function test_financial_views_are_available_without_database_queries(): void
+    {
+        $this->get('/finanzas')
+            ->assertOk()
+            ->assertSee('Saldos y trazabilidad')
+            ->assertSee('id="financeAvailableBalance"', false)
+            ->assertSee('id="financeTraceRows"', false)
+            ->assertSee('id="financeAuthDialog"', false)
+            ->assertSee(route('finanzas.entidades'), false)
+            ->assertSee(route('finanzas.movimientos.nuevo'), false)
+            ->assertSee(asset('css/finanzas.css'), false)
+            ->assertSee('css/finanzas.css?v=', false)
+            ->assertSee(asset('js/finanzas-dashboard.js'), false);
+
+        $this->get('/finanzas/entidades')
+            ->assertOk()
+            ->assertSee('Empresas y cuentas')
+            ->assertSee('id="financeEntityForm"', false)
+            ->assertSee('value="PROPIA"', false)
+            ->assertSee('value="EXTERNA"', false)
+            ->assertSee('id="financeEntityProvider"', false)
+            ->assertSee('id="financeAccountForm"', false)
+            ->assertSee('value="BANCO"', false)
+            ->assertSee('value="CAJA"', false)
+            ->assertSee('value="BILLETERA"', false)
+            ->assertSee('css/finanzas.css?v=', false)
+            ->assertSee(asset('js/finanzas-entidades.js'), false);
+
+        $this->get('/finanzas/movimientos/nuevo')
+            ->assertOk()
+            ->assertSee('Registrar movimiento')
+            ->assertSee('value="COBRO_CLIENTE"', false)
+            ->assertSee('value="PAGO_DIRECTO"', false)
+            ->assertSee('value="PAGO_PROVEEDOR"', false)
+            ->assertSee('value="COBRO_MINORISTA"', false)
+            ->assertSee('value="REEMBOLSO_CLIENTE"', false)
+            ->assertSee('id="financeCxcList"', false)
+            ->assertSee('id="financeCxpList"', false)
+            ->assertSee('css/finanzas.css?v=', false)
+            ->assertSee(asset('js/finanzas-movimiento.js'), false);
+
+        $financeStylesheet = file_get_contents(public_path('css/finanzas.css'));
+        $dashboardJavascript = file_get_contents(public_path('js/finanzas-dashboard.js'));
+        $entitiesJavascript = file_get_contents(public_path('js/finanzas-entidades.js'));
+        $movementJavascript = file_get_contents(public_path('js/finanzas-movimiento.js'));
+
+        $this->assertIsString($financeStylesheet);
+        $this->assertIsString($dashboardJavascript);
+        $this->assertIsString($entitiesJavascript);
+        $this->assertIsString($movementJavascript);
+        $this->assertMatchesRegularExpression(
+            '/html\.fin-root,\s*body\.fin-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
+            $financeStylesheet,
+        );
+        $this->assertStringContainsString('/finanzas/saldos', $dashboardJavascript);
+        $this->assertStringContainsString('/finanzas/trazabilidad', $dashboardJavascript);
+        $this->assertStringContainsString('/finanzas/movimientos?per_page=6', $dashboardJavascript);
+        $this->assertStringContainsString('/finanzas/entidades', $entitiesJavascript);
+        $this->assertStringContainsString('include=cuentas&per_page=100', $entitiesJavascript);
+        $this->assertStringNotContainsString('include=cuentas&per_page=200', $entitiesJavascript);
+        $this->assertStringContainsString('/finanzas/cuentas/', $entitiesJavascript);
+        $this->assertStringContainsString('/finanzas/catalogo', $movementJavascript);
+        $this->assertStringContainsString('include=cuentas&estado=ACTIVO&per_page=100', $movementJavascript);
+        $this->assertStringNotContainsString('include=cuentas&estado=ACTIVO&per_page=200', $movementJavascript);
+        $this->assertStringContainsString('/finanzas/cartera?', $movementJavascript);
+        $this->assertStringContainsString('importe_aplicado:', $movementJavascript);
+        $this->assertStringContainsString('idempotency_key:', $movementJavascript);
+        $this->assertStringContainsString('queryParameters.get("tipo")', $movementJavascript);
+        $this->assertStringContainsString('queryParameters.get("cliente_id")', $movementJavascript);
+        $this->assertStringContainsString('queryParameters.get("proveedor_id")', $movementJavascript);
+        $this->assertStringContainsString('method: "POST"', $movementJavascript);
     }
 
     public function test_retail_dispatch_view_is_available_without_database_queries(): void
@@ -307,7 +385,10 @@ class WebViewsTest extends TestCase
     {
         $this->get('/control-javas')
             ->assertOk()
-            ->assertSee('Control de javas')
+            ->assertSee('Control de javas y bandejas')
+            ->assertSee('id="trayCompanyInside"', false)
+            ->assertSee('id="trayCompanyOutside"', false)
+            ->assertSee('id="trayReceivedToday"', false)
             ->assertSee('Inventario y conteo')
             ->assertSee('Pendientes y devoluciones')
             ->assertSee('Trazabilidad por jornada')
@@ -328,9 +409,13 @@ class WebViewsTest extends TestCase
             ->assertSee('id="javaInventoryOpen"', false)
             ->assertSee('id="javaInventoryModal"', false)
             ->assertSee('id="javaInventoryQuantity"', false)
+            ->assertSee('id="trayInventoryQuantity"', false)
+            ->assertSee('id="trayCompanyTotal"', false)
             ->assertSee('Registrar conteo físico')
             ->assertSee('id="javaDailyModal"', false)
             ->assertSee('id="javaDailyCountQuantity"', false)
+            ->assertSee('id="trayDailyCountQuantity"', false)
+            ->assertSee('id="trayDailyDifference"', false)
             ->assertDontSee('id="javaClientRows"', false)
             ->assertDontSee('id="javaJourneyFilter"', false)
             ->assertSee(route('control-javas'), false);
@@ -338,11 +423,14 @@ class WebViewsTest extends TestCase
         $this->get('/control-javas/devoluciones')
             ->assertOk()
             ->assertSee('Pendientes y devoluciones')
-            ->assertSee('Javas por devolver')
+            ->assertSee('Javas y bandejas por devolver')
             ->assertSee('Registrar devolución')
             ->assertSee('id="javaReceiptClient"', false)
             ->assertSee('id="javaReceiptTruck"', false)
             ->assertSee('id="javaReceiptDriver"', false)
+            ->assertSee('id="javaReceiptQuantity"', false)
+            ->assertSee('id="trayReceiptQuantity"', false)
+            ->assertSee('id="trayTotalPending"', false)
             ->assertSee('id="javaClientPagination"', false)
             ->assertDontSee('id="javaReceiptDate"', false)
             ->assertDontSee('id="javaInventoryOpen"', false)
@@ -352,8 +440,11 @@ class WebViewsTest extends TestCase
         $this->get('/control-javas/trazabilidad')
             ->assertOk()
             ->assertSee('Trazabilidad por jornada')
-            ->assertSee('Javas que salieron')
-            ->assertSee('Javas que entraron')
+            ->assertSee('Activos que salieron')
+            ->assertSee('Activos que entraron')
+            ->assertSee('id="trayJourneyDispatched"', false)
+            ->assertSee('id="trayJourneyReceived"', false)
+            ->assertSee('id="trayJourneyNet"', false)
             ->assertSee('id="javaJourneyFilter"', false)
             ->assertSee('id="javaTruckActivityRows"', false)
             ->assertSee('<th>Chofer</th>', false)
@@ -371,6 +462,12 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data.client_options', $javascript);
         $this->assertStringContainsString('new URLSearchParams', $javascript);
         $this->assertStringContainsString('journey_id', $javascript);
+        $this->assertStringContainsString('java_quantity: javaQuantity', $javascript);
+        $this->assertStringContainsString('tray_quantity: trayQuantity', $javascript);
+        $this->assertStringContainsString('java_balance: numericValue', $javascript);
+        $this->assertStringContainsString('tray_balance: numericValue', $javascript);
+        $this->assertStringContainsString('javaQuantity === 0 && trayQuantity === 0', $javascript);
+        $this->assertStringContainsString('movement?.java_quantity, movement?.quantity', $javascript);
     }
 
     public function test_daily_tickets_view_is_available_without_database_queries(): void
@@ -459,6 +556,8 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Histórico de precios')
             ->assertSee('data-client-id="15"', false)
+            ->assertSee('id="customerFinanceSection"', false)
+            ->assertSee('tipo=COBRO_CLIENTE&amp;cliente_id=15', false)
             ->assertSee(asset('js/cliente-detalle.js'), false);
     }
 
@@ -471,6 +570,9 @@ class WebViewsTest extends TestCase
             ->assertSee('Crear y asignar camión')
             ->assertSee('Pesadas del proveedor')
             ->assertSee('data-provider-id="20"', false)
+            ->assertSee('id="providerFinanceSection"', false)
+            ->assertSee('id="providerDirectDepositsSection"', false)
+            ->assertSee('tipo=PAGO_PROVEEDOR&amp;proveedor_id=20', false)
             ->assertSee(asset('js/proveedor-detalle.js'), false);
 
         $javascript = file_get_contents(public_path('js/proveedor-detalle.js'));

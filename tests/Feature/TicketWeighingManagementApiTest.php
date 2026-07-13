@@ -8,9 +8,12 @@ use App\Models\Role;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\FinancialMovementService;
+use App\Services\FinancialObligationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -25,6 +28,8 @@ class TicketWeighingManagementApiTest extends TestCase
     private int $ticketId;
 
     private int $weighingId;
+
+    private int $clientId;
 
     private int $liveTypeId;
 
@@ -71,7 +76,7 @@ class TicketWeighingManagementApiTest extends TestCase
         $this->dressedTypeId = $this->createChickenType(TipoPollo::CHICKEN_DRESSED, 'Pollo pelado');
         $largeCageTypeId = $this->createCageType('JAVA_700', 'Java 7 kg', 7);
         $this->smallCageTypeId = $this->createCageType('JAVA_500', 'Java 5 kg', 5);
-        $clientId = DB::table('terceros')->insertGetId([
+        $this->clientId = DB::table('terceros')->insertGetId([
             'empresa_id' => $this->user->empresa_id,
             'tipo_documento' => 'NIT',
             'numero_documento' => '900123456',
@@ -80,6 +85,11 @@ class TicketWeighingManagementApiTest extends TestCase
             'estado' => 'ACTIVO',
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $this->clientId,
+            'rol' => 'CLIENTE',
+            'created_at' => now(),
         ]);
         $journeyId = DB::table('jornadas_operativas')->insertGetId([
             'sucursal_id' => $this->branchId,
@@ -98,7 +108,7 @@ class TicketWeighingManagementApiTest extends TestCase
             'codigo' => 'T-20260627-001',
             'canal' => 'MAYORISTA',
             'tipo_operacion' => TicketDespacho::OPERATION_DISPATCH,
-            'cliente_destino_id' => $clientId,
+            'cliente_destino_id' => $this->clientId,
             'vehiculo_entrega_id' => $this->deliveryVehicleId,
             'conductor_entrega_id' => $this->deliveryDriverId,
             'estado' => TicketDespacho::STATUS_CLOSED,
@@ -260,6 +270,111 @@ class TicketWeighingManagementApiTest extends TestCase
             'entidad_id' => (string) $this->weighingId,
             'accion' => 'ACTUALIZAR',
             'usuario_id' => $this->user->id,
+        ]);
+    }
+
+    public function test_update_resynchronizes_unpaid_sale_purchase_and_cost_documents(): void
+    {
+        $documents = $this->prepareFinancialObligations();
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documents['sale'],
+            'total' => 260,
+            'saldo_pendiente' => 260,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documents['purchase'],
+            'total' => 156,
+            'saldo_pendiente' => 156,
+        ]);
+
+        $payload = $this->updatePayload();
+        $payload['chicken_type_code'] = TipoPollo::CHICKEN_LIVE;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 20);
+
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documents['sale'],
+            'total' => 200,
+            'saldo_pendiente' => 200,
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documents['purchase'],
+            'total' => 120,
+            'saldo_pendiente' => 120,
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseHas('costos_compra_pesadas', [
+            'pesada_id' => $this->weighingId,
+            'peso_kg' => 20,
+            'precio_kg' => 6,
+            'importe' => 120,
+            'estado' => 'ACTIVO',
+        ]);
+        $this->assertDatabaseHas('comprobante_pesadas', [
+            'comprobante_id' => $documents['purchase'],
+            'pesada_id' => $this->weighingId,
+            'importe_aplicado' => 120,
+        ]);
+    }
+
+    public function test_update_is_blocked_after_a_financial_movement_is_applied(): void
+    {
+        $documents = $this->prepareFinancialObligations();
+        $account = $this->createOwnFinancialAccount();
+        $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        app(FinancialMovementService::class)->register(
+            (int) $this->user->empresa_id,
+            $this->user,
+            [
+                'idempotency_key' => (string) Str::uuid(),
+                'tipo' => 'COBRO_CLIENTE',
+                'cliente_id' => $this->clientId,
+                'cuenta_destino_id' => $account,
+                'metodo_pago_id' => $method,
+                'moneda' => 'PEN',
+                'importe' => '20.00',
+                'aplicaciones' => [[
+                    'lado' => 'CXC',
+                    'comprobante_id' => $documents['sale'],
+                    'importe_aplicado' => '20.00',
+                ]],
+            ],
+        );
+
+        $payload = $this->updatePayload();
+        $payload['chicken_type_code'] = TipoPollo::CHICKEN_LIVE;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload,
+        )
+            ->assertStatus(409)
+            ->assertJsonPath(
+                'message',
+                'No se puede modificar la pesada porque el ticket ya tiene cobros o pagos aplicados. Anula primero los movimientos financieros relacionados.'
+            );
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'peso_neto_kg' => 26,
+            'estado' => Pesada::STATUS_ACTIVE,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documents['sale'],
+            'total' => 260,
+            'saldo_pendiente' => 240,
+            'estado' => 'PARCIAL',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'pesadas',
+            'entidad_id' => (string) $this->weighingId,
+            'accion' => 'ACTUALIZAR',
         ]);
     }
 
@@ -452,6 +567,107 @@ class TicketWeighingManagementApiTest extends TestCase
             'peso_neto_kg' => 26,
         ]);
         $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    /** @return array{sale: int, purchase: int} */
+    private function prepareFinancialObligations(): array
+    {
+        $provider = DB::table('terceros')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo_documento' => 'RUC',
+            'numero_documento' => '20999999991',
+            'nombre_razon_social' => 'Proveedor financiero de prueba',
+            'direccion' => 'Calle financiera 1',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $provider,
+            'rol' => 'PROVEEDOR',
+            'created_at' => now(),
+        ]);
+        DB::table('pesadas')->where('id', $this->weighingId)->update([
+            'proveedor_origen_id' => $provider,
+        ]);
+
+        $saleList = $this->createFinancialPriceList($this->clientId, 'VENTA');
+        $saleHistory = $this->createFinancialPriceHistory($saleList, '10.0000');
+        $purchaseList = $this->createFinancialPriceList($provider, 'COMPRA');
+        $this->createFinancialPriceHistory($purchaseList, '6.0000');
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $this->liveTypeId,
+            'precio_historial_id' => $saleHistory,
+            'precio_kg' => 10,
+            'origen_precio' => 'CLIENTE',
+            'congelado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        $result = app(FinancialObligationService::class)->syncTicket(
+            (int) $this->user->empresa_id,
+            TicketDespacho::query()->findOrFail($this->ticketId),
+            $this->user,
+        );
+
+        return [
+            'sale' => (int) $result['sale_document_id'],
+            'purchase' => (int) collect($result['purchase_document_ids'])->first(),
+        ];
+    }
+
+    private function createFinancialPriceList(int $thirdParty, string $operation): int
+    {
+        return DB::table('listas_precios')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $thirdParty,
+            'codigo' => "FIN-{$operation}-{$thirdParty}",
+            'nombre' => "Lista financiera {$operation}",
+            'operacion' => $operation,
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createFinancialPriceHistory(int $list, string $price): int
+    {
+        return DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $list,
+            'tipo_pollo_id' => $this->liveTypeId,
+            'precio_kg' => $price,
+            'vigente_desde' => now()->subDay(),
+            'vigente_hasta' => null,
+            'motivo_cambio' => 'Precio para regresion financiera',
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+    }
+
+    private function createOwnFinancialAccount(): int
+    {
+        $entity = DB::table('entidades_financieras')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo' => 'PROPIA',
+            'razon_social' => 'Caja de prueba de pesadas',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $entity,
+            'tipo' => 'CAJA',
+            'alias' => 'Caja gestion pesadas',
+            'moneda' => 'PEN',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function createChickenType(string $code, string $name): int

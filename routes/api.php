@@ -6,6 +6,11 @@ use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
 use App\Http\Controllers\Api\V1\DriverController;
+use App\Http\Controllers\Api\V1\FinancialAccountController;
+use App\Http\Controllers\Api\V1\FinancialCounterpartyController;
+use App\Http\Controllers\Api\V1\FinancialEntityController;
+use App\Http\Controllers\Api\V1\FinancialMovementController;
+use App\Http\Controllers\Api\V1\FinancialQueryController;
 use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
@@ -26,6 +31,43 @@ Route::prefix('v1')->group(function (): void {
 
     Route::post('/auth/login', [AuthController::class, 'login'])
         ->middleware('throttle:login');
+
+    Route::prefix('finanzas')->middleware(['auth:sanctum', 'active'])->group(function (): void {
+        Route::middleware('permission:FINANZAS_VER')->group(function (): void {
+            Route::get('/entidades', [FinancialEntityController::class, 'index']);
+            Route::get('/catalogo', [FinancialQueryController::class, 'catalog']);
+            Route::get('/cartera', [FinancialQueryController::class, 'portfolio']);
+            Route::get('/saldos', [FinancialQueryController::class, 'balances']);
+            Route::get('/trazabilidad', [FinancialQueryController::class, 'trace']);
+            Route::get('/movimientos', [FinancialMovementController::class, 'index']);
+            Route::get('/movimientos/{movimiento}', [FinancialMovementController::class, 'show'])
+                ->whereNumber('movimiento');
+            Route::get('/clientes/{tercero}/resumen', [FinancialCounterpartyController::class, 'customer'])
+                ->whereNumber('tercero');
+            Route::get('/proveedores/{tercero}/resumen', [FinancialCounterpartyController::class, 'provider'])
+                ->whereNumber('tercero');
+        });
+
+        Route::middleware('permission:CUENTAS_FINANCIERAS_GESTIONAR')->group(function (): void {
+            Route::post('/entidades', [FinancialEntityController::class, 'store']);
+            Route::put('/entidades/{entidad}', [FinancialEntityController::class, 'update'])
+                ->whereNumber('entidad');
+            Route::delete('/entidades/{entidad}', [FinancialEntityController::class, 'destroy'])
+                ->whereNumber('entidad');
+            Route::post('/entidades/{entidad}/cuentas', [FinancialAccountController::class, 'store'])
+                ->whereNumber('entidad');
+            Route::put('/cuentas/{cuenta}', [FinancialAccountController::class, 'update'])
+                ->whereNumber('cuenta');
+            Route::delete('/cuentas/{cuenta}', [FinancialAccountController::class, 'destroy'])
+                ->whereNumber('cuenta');
+        });
+
+        Route::post('/movimientos', [FinancialMovementController::class, 'store'])
+            ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/movimientos/{movimiento}/anular', [FinancialMovementController::class, 'void'])
+            ->whereNumber('movimiento')
+            ->middleware('permission:PAGOS_ANULAR');
+    });
 
     $directoryMiddleware = config('directory.public_access')
         ? ['throttle:api']

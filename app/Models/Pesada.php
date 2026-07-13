@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'ticket_id',
@@ -120,6 +122,23 @@ class Pesada extends Model
     public function vehiculo(): BelongsTo
     {
         return $this->belongsTo(Vehiculo::class);
+    }
+
+    /**
+     * @return HasOne<CostoCompraPesada, $this>
+     */
+    public function costoCompra(): HasOne
+    {
+        return $this->hasOne(CostoCompraPesada::class);
+    }
+
+    /**
+     * @return BelongsToMany<Comprobante, $this>
+     */
+    public function comprobantes(): BelongsToMany
+    {
+        return $this->belongsToMany(Comprobante::class, 'comprobante_pesadas', 'pesada_id', 'comprobante_id')
+            ->withPivot('importe_aplicado');
     }
 
     protected function casts(): array

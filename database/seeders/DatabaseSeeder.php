@@ -142,6 +142,19 @@ class DatabaseSeeder extends Seeder
             ]
         ));
 
+        collect([
+            ['codigo' => 'DEPOSITO', 'nombre' => 'Deposito', 'requiere_referencia' => true],
+            ['codigo' => 'TRANSFERENCIA', 'nombre' => 'Transferencia', 'requiere_referencia' => true],
+            ['codigo' => 'EFECTIVO', 'nombre' => 'Efectivo', 'requiere_referencia' => false],
+            ['codigo' => 'YAPE', 'nombre' => 'Yape', 'requiere_referencia' => true],
+            ['codigo' => 'PLIN', 'nombre' => 'Plin', 'requiere_referencia' => true],
+            ['codigo' => 'CHEQUE', 'nombre' => 'Cheque', 'requiere_referencia' => true],
+            ['codigo' => 'OTRO', 'nombre' => 'Otro', 'requiere_referencia' => false],
+        ])->each(fn (array $method) => DB::table('metodos_pago')->updateOrInsert(
+            ['codigo' => $method['codigo']],
+            [...$method, 'estado' => 'ACTIVO', 'created_at' => now(), 'updated_at' => now()]
+        ));
+
         $permissions = collect([
             'DASHBOARD_VER',
             'RECEPCIONES_VER',
@@ -155,6 +168,11 @@ class DatabaseSeeder extends Seeder
             'TERCEROS_GESTIONAR',
             'PRECIOS_GESTIONAR',
             'USUARIOS_GESTIONAR',
+            'FINANZAS_VER',
+            'CUENTAS_FINANCIERAS_GESTIONAR',
+            'PAGOS_REGISTRAR',
+            'PAGOS_ANULAR',
+            'SALDOS_AJUSTAR',
         ])->mapWithKeys(function (string $code): array {
             $permission = Permission::query()->updateOrCreate(
                 ['codigo' => $code],

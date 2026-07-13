@@ -38,6 +38,26 @@
       <article class="directory-stat card directory-stat-accent"><span>Importe</span><strong id="historyAmount">S/ 0.00</strong></article>
     </section>
 
+    <section id="customerFinanceSection" class="customer-history-section" aria-labelledby="customerFinanceTitle" hidden>
+      <div class="customer-history-section-head">
+        <div>
+          <p class="eyebrow">Cuenta por cobrar</p>
+          <h2 id="customerFinanceTitle">Estado financiero</h2>
+        </div>
+        <a
+          class="btn btn-success directory-btn"
+          href="{{ route('finanzas.movimientos.nuevo') }}?tipo=COBRO_CLIENTE&amp;cliente_id={{ request()->route('tercero') }}"
+        >Registrar abono</a>
+      </div>
+      <div class="customer-history-stats" aria-label="Resumen financiero del cliente">
+        <article class="directory-stat card"><span>Ventas netas</span><strong id="customerFinanceDocumented">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Pagos registrados</span><strong id="customerFinancePayments">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Directo a proveedores</span><strong id="customerFinanceDirect">S/ 0.00</strong></article>
+        <article class="directory-stat card directory-stat-accent"><span>Saldo neto pendiente</span><strong id="customerFinancePending">S/ 0.00</strong></article>
+      </div>
+      <p id="customerFinanceHelp" class="customer-history-meta"></p>
+    </section>
+
     <section class="customer-history-filters card" aria-labelledby="historyFiltersTitle">
       <div class="section-head">
         <div>

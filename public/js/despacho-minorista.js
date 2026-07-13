@@ -117,6 +117,17 @@ const elements = {
   priceForm: document.querySelector("#retailPriceForm"),
   priceFields: document.querySelector("#retailPriceFields"),
   clearPrices: document.querySelector("#retailClearPrices"),
+  paymentModal: document.querySelector("#retailPaymentModal"),
+  paymentForm: document.querySelector("#retailPaymentForm"),
+  paymentSummary: document.querySelector("#retailPaymentSummary"),
+  paymentRows: document.querySelector("#retailPaymentRows"),
+  addPayment: document.querySelector("#retailAddPayment"),
+  paymentSaleTotal: document.querySelector("#retailPaymentSaleTotal"),
+  paymentReceivedTotal: document.querySelector("#retailPaymentReceivedTotal"),
+  paymentPendingTotal: document.querySelector("#retailPaymentPendingTotal"),
+  paymentMessage: document.querySelector("#retailPaymentMessage"),
+  skipPayment: document.querySelector("#retailSkipPayment"),
+  confirmPayment: document.querySelector("#retailConfirmPayment"),
   deliveryModal: document.querySelector("#retailDeliveryModal"),
   deliveryForm: document.querySelector("#retailDeliveryForm"),
   deliverySummary: document.querySelector("#retailDeliverySummary"),
@@ -160,7 +171,11 @@ const state = {
     delivery_trucks: [],
     delivery_drivers: [],
     adjustments: [],
-    scale: null
+    scale: null,
+    financial: {
+      methods: [],
+      own_accounts: []
+    }
   },
   activeList: 0,
   chickenType: null,
@@ -175,7 +190,9 @@ const state = {
   scale: null,
   scaleState: null,
   loading: true,
-  typography: {}
+  typography: {},
+  pendingPayments: [],
+  paymentRows: []
 };
 const modalFocusOrigins = new Map();
 
@@ -1082,6 +1099,193 @@ function requiresDelivery(list) {
     && list.items.some((item) => Number(item.trayCount || 0) > 0);
 }
 
+function paymentMethodOptions(selectedId = "") {
+  return (state.catalog.financial.methods || []).map((method) => `
+    <option value="${Number(method.id)}" ${String(method.id) === String(selectedId) ? "selected" : ""}>
+      ${escapeHtml(method.name)}
+    </option>
+  `).join("");
+}
+
+function paymentAccountOptions(selectedId = "") {
+  return (state.catalog.financial.own_accounts || []).map((account) => {
+    const detail = [account.entity?.name, account.alias, account.bank, account.masked_number]
+      .filter(Boolean)
+      .join(" · ");
+    return `
+      <option value="${Number(account.id)}" ${String(account.id) === String(selectedId) ? "selected" : ""}>
+        ${escapeHtml(detail)}
+      </option>
+    `;
+  }).join("");
+}
+
+function newPaymentRow(amount = 0) {
+  const methods = state.catalog.financial.methods || [];
+  const accounts = state.catalog.financial.own_accounts || [];
+
+  return {
+    key: createDraftId(),
+    methodId: methods[0]?.id || "",
+    accountId: accounts[0]?.id || "",
+    amount: Math.max(0, Number(amount || 0)).toFixed(2),
+    reference: ""
+  };
+}
+
+function renderPaymentRows() {
+  elements.paymentRows.innerHTML = state.paymentRows.map((row, index) => `
+    <article class="rd-payment-row" data-payment-row="${escapeHtml(row.key)}">
+      <div class="rd-payment-row-head">
+        <strong>Forma de pago ${index + 1}</strong>
+        <button type="button" data-remove-payment-row="${escapeHtml(row.key)}" ${state.paymentRows.length === 1 ? "hidden" : ""}>Quitar</button>
+      </div>
+      <div class="rd-payment-fields">
+        <label>
+          <span>Método</span>
+          <select data-payment-method required>${paymentMethodOptions(row.methodId)}</select>
+        </label>
+        <label>
+          <span>Cuenta o caja receptora</span>
+          <select data-payment-account required>${paymentAccountOptions(row.accountId)}</select>
+        </label>
+        <label>
+          <span>Importe</span>
+          <input data-payment-amount type="number" min="0.01" step="0.01" inputmode="decimal" value="${escapeHtml(row.amount)}" required>
+        </label>
+        <label>
+          <span>Referencia</span>
+          <input data-payment-reference type="text" maxlength="100" value="${escapeHtml(row.reference)}" placeholder="Número de operación">
+        </label>
+      </div>
+    </article>
+  `).join("");
+  renderPaymentTotals();
+}
+
+function syncPaymentRowsFromForm() {
+  elements.paymentRows.querySelectorAll("[data-payment-row]").forEach((rowElement) => {
+    const row = state.paymentRows.find((entry) => entry.key === rowElement.dataset.paymentRow);
+    if (!row) return;
+    row.methodId = rowElement.querySelector("[data-payment-method]")?.value || "";
+    row.accountId = rowElement.querySelector("[data-payment-account]")?.value || "";
+    row.amount = rowElement.querySelector("[data-payment-amount]")?.value || "";
+    row.reference = rowElement.querySelector("[data-payment-reference]")?.value || "";
+  });
+}
+
+function paymentReceivedTotal() {
+  return state.paymentRows.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+}
+
+function renderPaymentTotals() {
+  syncPaymentRowsFromForm();
+  const total = Number(listTotals(activeList()).amount || 0);
+  const received = paymentReceivedTotal();
+  const pending = Math.max(0, total - received);
+  elements.paymentSaleTotal.textContent = formatMoney(total);
+  elements.paymentReceivedTotal.textContent = formatMoney(received);
+  elements.paymentPendingTotal.textContent = formatMoney(pending);
+  elements.paymentPendingTotal.classList.toggle("is-settled", pending < 0.005);
+}
+
+function openPaymentModal() {
+  const list = activeList();
+  const totals = listTotals(list);
+  const client = clientFor(list);
+  const methods = state.catalog.financial.methods || [];
+  const accounts = state.catalog.financial.own_accounts || [];
+
+  state.paymentRows = [newPaymentRow(totals.amount)];
+  elements.paymentSummary.textContent = client
+    ? `${client.name} puede pagar ahora total o parcialmente; el resto quedará en su cuenta por cobrar.`
+    : "La venta no tiene un cliente identificado y debe quedar pagada completamente.";
+  elements.skipPayment.hidden = !client;
+  elements.addPayment.disabled = methods.length === 0 || accounts.length === 0;
+  elements.confirmPayment.disabled = methods.length === 0 || accounts.length === 0;
+  elements.paymentMessage.textContent = methods.length && accounts.length
+    ? "Puedes dividir el cobro entre efectivo, transferencia u otros métodos."
+    : "Primero registra una entidad propia y al menos una cuenta o caja desde Finanzas.";
+  elements.paymentMessage.classList.toggle("is-error", methods.length === 0 || accounts.length === 0);
+  renderPaymentRows();
+  openModal(elements.paymentModal);
+}
+
+function continueDispatchAfterPayment(payments) {
+  const list = activeList();
+  state.pendingPayments = payments;
+
+  if (!requiresDelivery(list)) {
+    void saveDispatch(null, payments);
+    return;
+  }
+
+  renderDeliveryOptions(list);
+  openModal(elements.deliveryModal);
+}
+
+function submitPayment(event) {
+  event.preventDefault();
+  syncPaymentRowsFromForm();
+  const list = activeList();
+  const saleTotal = Number(listTotals(list).amount || 0);
+  const received = paymentReceivedTotal();
+  const client = clientFor(list);
+
+  if (state.paymentRows.some((row) => !Number(row.methodId) || !Number(row.accountId) || Number(row.amount) <= 0)) {
+    elements.paymentMessage.textContent = "Completa método, cuenta e importe en cada forma de pago.";
+    elements.paymentMessage.classList.add("is-error");
+    return;
+  }
+  if (received > saleTotal + 0.005) {
+    elements.paymentMessage.textContent = "El total recibido no puede superar el importe de la venta.";
+    elements.paymentMessage.classList.add("is-error");
+    return;
+  }
+  if (!client && Math.abs(received - saleTotal) >= 0.005) {
+    elements.paymentMessage.textContent = "La venta sin cliente debe quedar pagada completamente.";
+    elements.paymentMessage.classList.add("is-error");
+    return;
+  }
+
+  const methods = new Map((state.catalog.financial.methods || []).map((method) => [String(method.id), method]));
+  const missingReference = state.paymentRows.some((row) => {
+    const method = methods.get(String(row.methodId));
+    return method?.requires_reference && !String(row.reference || "").trim();
+  });
+  if (missingReference) {
+    elements.paymentMessage.textContent = "Ingresa la referencia de cada depósito o transferencia.";
+    elements.paymentMessage.classList.add("is-error");
+    return;
+  }
+
+  const payments = state.paymentRows.map((row) => ({
+    idempotency_key: row.key,
+    metodo_pago_id: Number(row.methodId),
+    cuenta_destino_id: Number(row.accountId),
+    moneda: "PEN",
+    importe: Number(Number(row.amount).toFixed(2)),
+    referencia: String(row.reference || "").trim() || null
+  }));
+  closeModal(elements.paymentModal);
+  continueDispatchAfterPayment(payments);
+}
+
+function skipPayment() {
+  if (!clientFor(activeList())) return;
+  state.paymentRows = [];
+  closeModal(elements.paymentModal);
+  continueDispatchAfterPayment([]);
+}
+
+function addPaymentRow() {
+  if (state.paymentRows.length >= 5) return;
+  syncPaymentRowsFromForm();
+  const remaining = Math.max(0, Number(listTotals(activeList()).amount || 0) - paymentReceivedTotal());
+  state.paymentRows.push(newPaymentRow(remaining));
+  renderPaymentRows();
+}
+
 function setDeliveryMessage(message = "", isError = false) {
   elements.deliveryMessage.textContent = message;
   elements.deliveryMessage.classList.toggle("is-error", Boolean(isError));
@@ -1126,13 +1330,12 @@ function prepareDispatchRegistration() {
     return;
   }
 
-  if (!requiresDelivery(list)) {
-    void saveDispatch(null);
+  if (list.operationType === OPERATION_RETURN) {
+    continueDispatchAfterPayment([]);
     return;
   }
 
-  renderDeliveryOptions(list);
-  openModal(elements.deliveryModal);
+  openPaymentModal();
 }
 
 function submitDelivery(event) {
@@ -1146,7 +1349,7 @@ function submitDelivery(event) {
   }
 
   closeModal(elements.deliveryModal);
-  void saveDispatch({ vehicle_id: vehicleId, driver_id: driverId });
+  void saveDispatch({ vehicle_id: vehicleId, driver_id: driverId }, state.pendingPayments);
 }
 
 function printedChickenTypeCode(code) {
@@ -1218,7 +1421,7 @@ function printRegisteredTicket(ticket, listIndex, draftId) {
   });
 }
 
-async function saveDispatch(delivery = null) {
+async function saveDispatch(delivery = null, payments = []) {
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
   if (!list || list.saving || !list.items.length) return;
@@ -1248,6 +1451,7 @@ async function saveDispatch(delivery = null) {
         operation_type: list.operationType,
         client_id: list.clientId ? Number(list.clientId) : null,
         delivery,
+        payments,
         price_overrides: priceOverrides,
         weighings: list.items.map((item, index) => ({
           local_id: index + 1,
@@ -1264,6 +1468,8 @@ async function saveDispatch(delivery = null) {
     });
 
     const ticket = response.data;
+    state.pendingPayments = [];
+    state.paymentRows = [];
     setMessage(`${response.message || "Despacho minorista registrado correctamente."} Abriendo impresión; también puedes elegir Guardar como PDF.`);
     await printRegisteredTicket(ticket, listIndex, list.draftId);
   } catch (error) {
@@ -1498,6 +1704,9 @@ function applyMainManualWeight(event) {
 
 function normalizeCatalog(data) {
   const adjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
+  const financial = data.financial && typeof data.financial === "object"
+    ? data.financial
+    : {};
   return {
     branch: data.branch || null,
     clients: Array.isArray(data.clients) ? data.clients : [],
@@ -1515,7 +1724,11 @@ function normalizeCatalog(data) {
       additional_grams: Number(adjustment.additional_grams || 0),
       is_default: Boolean(adjustment.is_default)
     })),
-    scale: data.scale || null
+    scale: data.scale || null,
+    financial: {
+      methods: Array.isArray(financial.methods) ? financial.methods : [],
+      own_accounts: Array.isArray(financial.own_accounts) ? financial.own_accounts : []
+    }
   };
 }
 
@@ -1621,6 +1834,11 @@ elements.saveDispatch.addEventListener("click", prepareDispatchRegistration);
 elements.clientSearch.addEventListener("input", () => renderClientOptions(elements.clientSearch.value));
 elements.priceForm.addEventListener("submit", applyPrices);
 elements.clearPrices.addEventListener("click", clearPriceOverrides);
+elements.paymentForm.addEventListener("submit", submitPayment);
+elements.addPayment.addEventListener("click", addPaymentRow);
+elements.skipPayment.addEventListener("click", skipPayment);
+elements.paymentRows.addEventListener("input", renderPaymentTotals);
+elements.paymentRows.addEventListener("change", renderPaymentTotals);
 elements.deliveryForm.addEventListener("submit", submitDelivery);
 elements.openSettings.addEventListener("click", () => {
   fillSettingsForm();
@@ -1653,6 +1871,14 @@ document.addEventListener("click", (event) => {
   const closeTypographyButton = event.target.closest("[data-retail-close-typography]");
   if (closeTypographyButton) {
     closeTypographyDrawer();
+    return;
+  }
+
+  const removePaymentButton = event.target.closest("[data-remove-payment-row]");
+  if (removePaymentButton) {
+    syncPaymentRowsFromForm();
+    state.paymentRows = state.paymentRows.filter((row) => row.key !== removePaymentButton.dataset.removePaymentRow);
+    renderPaymentRows();
     return;
   }
 
@@ -1754,6 +1980,7 @@ document.addEventListener("keydown", (event) => {
       elements.manualWeightModal,
       elements.clientModal,
       elements.priceModal,
+      elements.paymentModal,
       elements.deliveryModal,
       elements.settingsModal
     ]
@@ -1768,6 +1995,7 @@ document.addEventListener("keydown", (event) => {
       elements.manualWeightModal,
       elements.clientModal,
       elements.priceModal,
+      elements.paymentModal,
       elements.deliveryModal,
       elements.settingsModal
     ].find((modal) => modal && !modal.hidden);

@@ -8,11 +8,20 @@ const elements = {
   name: document.getElementById("providerName"),
   meta: document.getElementById("providerMeta"),
   message: document.getElementById("providerHistoryMessage"),
+  financeSection: document.getElementById("providerFinanceSection"),
+  directDepositsSection: document.getElementById("providerDirectDepositsSection"),
   recordCount: document.getElementById("providerRecordCount"),
   ticketCount: document.getElementById("providerTicketCount"),
   cageCount: document.getElementById("providerCageCount"),
   birdCount: document.getElementById("providerBirdCount"),
   netWeight: document.getElementById("providerNetWeight"),
+  financeDocumented: document.getElementById("providerFinanceDocumented"),
+  financeDirect: document.getElementById("providerFinanceDirect"),
+  financeOwn: document.getElementById("providerFinanceOwn"),
+  financePending: document.getElementById("providerFinancePending"),
+  financePendingCosts: document.getElementById("providerFinancePendingCosts"),
+  financeHelp: document.getElementById("providerFinanceHelp"),
+  directDepositList: document.getElementById("providerDirectDepositList"),
   vehicleCount: document.getElementById("providerVehicleCount"),
   vehicleForm: document.getElementById("providerVehicleForm"),
   vehiclePlate: document.getElementById("providerVehiclePlate"),
@@ -49,6 +58,13 @@ function formatNumber(value) {
 
 function formatWeight(value) {
   return `${Number(value || 0).toFixed(3)} kg`;
+}
+
+function formatCurrency(value, currency = "PEN") {
+  return new Intl.NumberFormat("es-PE", {
+    style: "currency",
+    currency
+  }).format(Number(value || 0));
 }
 
 function formatDateTime(value) {
@@ -113,6 +129,61 @@ function renderSummary(summary) {
   elements.cageCount.textContent = formatNumber(summary.cages);
   elements.birdCount.textContent = formatNumber(summary.birds);
   elements.netWeight.textContent = formatWeight(summary.net_weight_kg);
+}
+
+function renderFinance(finance) {
+  elements.financeSection.hidden = !finance;
+  elements.directDepositsSection.hidden = !finance;
+  if (!finance) {
+    return;
+  }
+
+  const currency = finance.currency || "PEN";
+  elements.financeDocumented.textContent = formatCurrency(finance.documented, currency);
+  elements.financeDirect.textContent = formatCurrency(finance.paid_directly_by_clients, currency);
+  elements.financeOwn.textContent = formatCurrency(finance.paid_by_company, currency);
+  elements.financePending.textContent = formatCurrency(finance.pending, currency);
+  elements.financePendingCosts.textContent = formatNumber(finance.pending_costs.count);
+
+  const pendingWeight = Number(finance.pending_costs.weight_kg || 0);
+  const unapplied = Number(finance.unapplied || 0);
+  const notes = [];
+  if (pendingWeight > 0) {
+    notes.push(`${formatWeight(pendingWeight)} aun no tienen precio de compra y no forman parte del total valorizado`);
+  }
+  if (unapplied > 0) {
+    notes.push(`${formatCurrency(unapplied, currency)} esta registrado como adelanto sin aplicar`);
+  }
+  elements.financeHelp.textContent = notes.length
+    ? `${notes.join(". ")}.`
+    : "El saldo descuenta los pagos directos de clientes y los pagos realizados desde nuestras cuentas.";
+
+  renderDirectDeposits(finance.recent_direct_deposits || []);
+}
+
+function renderDirectDeposits(deposits) {
+  if (!deposits.length) {
+    elements.directDepositList.innerHTML = `
+      <tr>
+        <td colspan="6" class="customer-history-empty-cell">Este proveedor aun no tiene depositos directos registrados.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.directDepositList.innerHTML = deposits.map((deposit) => `
+    <tr>
+      <td>${escapeHtml(formatDateTime(deposit.paid_at))}</td>
+      <td><strong>${escapeHtml(deposit.code || `#${deposit.id}`)}</strong></td>
+      <td>${escapeHtml(deposit.client.name)}</td>
+      <td>${escapeHtml(deposit.destination || "Cuenta del proveedor")}</td>
+      <td>
+        <strong>${escapeHtml(deposit.method)}</strong>
+        <small>${escapeHtml(deposit.reference || "Sin referencia")}</small>
+      </td>
+      <td><strong>${formatCurrency(deposit.amount, deposit.currency || "PEN")}</strong></td>
+    </tr>
+  `).join("");
 }
 
 function renderVehicles(vehicles) {
@@ -226,6 +297,7 @@ async function loadProviderHistory(page = 1) {
     const response = await apiRequest(`/proveedores/${providerId}/historial?${buildQuery(page)}`);
     renderProvider(response.data.provider);
     renderSummary(response.data.summary);
+    void loadFinance();
     renderVehicles(response.data.vehicles);
     renderRecords(response.data.records, response.meta);
     renderPagination(response.meta);
@@ -237,6 +309,18 @@ async function loadProviderHistory(page = 1) {
     `;
   } finally {
     loading = false;
+  }
+}
+
+async function loadFinance() {
+  try {
+    const response = await apiRequest(`/finanzas/proveedores/${providerId}/resumen`);
+    renderFinance(response.data);
+  } catch (error) {
+    renderFinance(null);
+    if (![401, 403].includes(error?.status)) {
+      setMessage(elements.message, "No fue posible cargar el resumen financiero del proveedor.", true);
+    }
   }
 }
 

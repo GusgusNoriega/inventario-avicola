@@ -60,6 +60,40 @@ class StoreRetailDispatchRequest extends FormRequest
                 ]),
             ],
             'price_overrides.*' => ['numeric', 'gt:0', 'max:99999999.9999'],
+            'payments' => [
+                Rule::requiredIf(fn (): bool => $this->requiresImmediatePayment()),
+                Rule::prohibitedIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_RETURN),
+                'array',
+                'min:1',
+                'max:5',
+            ],
+            'payments.*' => [
+                'required',
+                'array:idempotency_key,metodo_pago_id,cuenta_destino_id,moneda,importe,referencia,observaciones,fecha_hora',
+            ],
+            'payments.*.idempotency_key' => ['required', 'uuid', 'distinct'],
+            'payments.*.metodo_pago_id' => [
+                'required',
+                'integer',
+                Rule::exists('metodos_pago', 'id')->where(fn ($query) => $query
+                    ->where('estado', 'ACTIVO')),
+            ],
+            'payments.*.cuenta_destino_id' => [
+                'required',
+                'integer',
+                Rule::exists('cuentas_financieras', 'id')->where(fn ($query) => $query
+                    ->where('estado', 'ACTIVO')
+                    ->whereIn('entidad_financiera_id', DB::table('entidades_financieras')
+                        ->where('empresa_id', $this->companyId())
+                        ->where('tipo', 'PROPIA')
+                        ->where('estado', 'ACTIVO')
+                        ->select('id'))),
+            ],
+            'payments.*.moneda' => ['sometimes', Rule::in(['PEN'])],
+            'payments.*.importe' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:999999999999.99'],
+            'payments.*.referencia' => ['nullable', 'string', 'max:100'],
+            'payments.*.observaciones' => ['nullable', 'string', 'max:1000'],
+            'payments.*.fecha_hora' => ['nullable', 'date'],
             'weighings' => ['required', 'array', 'min:1', 'max:100'],
             'weighings.*' => [
                 'required',
@@ -140,6 +174,27 @@ class StoreRetailDispatchRequest extends FormRequest
             $normalized['price_overrides'] = $priceOverrides;
         }
 
+        if ($this->exists('payments') && is_array($this->input('payments'))) {
+            $normalized['payments'] = collect($this->input('payments'))
+                ->map(function (mixed $payment): mixed {
+                    if (! is_array($payment)) {
+                        return $payment;
+                    }
+
+                    return [
+                        ...$payment,
+                        'moneda' => mb_strtoupper(trim((string) ($payment['moneda'] ?? 'PEN')), 'UTF-8'),
+                        'referencia' => filled($payment['referencia'] ?? null)
+                            ? trim((string) $payment['referencia'])
+                            : null,
+                        'observaciones' => filled($payment['observaciones'] ?? null)
+                            ? trim((string) $payment['observaciones'])
+                            : null,
+                    ];
+                })
+                ->all();
+        }
+
         $this->merge($normalized);
     }
 
@@ -161,6 +216,10 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings.*.birds_per_tray.max' => 'La cantidad de aves por bandeja no puede superar 10.',
             'weighings.*.tray_count.min' => 'La cantidad de bandejas no puede ser negativa.',
             'weighings.*.read_weight_kg.required' => 'Captura o ingresa el peso leido por la balanza.',
+            'payments.required' => 'Una venta sin cliente debe registrar el pago completo.',
+            'payments.prohibited' => 'Los reembolsos de devoluciones se registran desde Finanzas.',
+            'payments.*.cuenta_destino_id.exists' => 'Selecciona una cuenta o caja activa de la empresa.',
+            'payments.*.metodo_pago_id.exists' => 'Selecciona un metodo de pago activo.',
         ];
     }
 
@@ -177,6 +236,12 @@ class StoreRetailDispatchRequest extends FormRequest
             fn (mixed $weighing): bool => is_array($weighing)
                 && (int) ($weighing['tray_count'] ?? 0) > 0
         );
+    }
+
+    private function requiresImmediatePayment(): bool
+    {
+        return $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH
+            && ! filled($this->input('client_id'));
     }
 
     private function companyId(): int

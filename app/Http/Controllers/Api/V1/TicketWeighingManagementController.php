@@ -7,6 +7,7 @@ use App\Models\Pesada;
 use App\Models\TicketDespacho;
 use App\Models\TipoJava;
 use App\Models\TipoPollo;
+use App\Services\FinancialObligationService;
 use App\Services\JavaControlService;
 use App\Services\OperationContextService;
 use Carbon\CarbonImmutable;
@@ -21,7 +22,8 @@ class TicketWeighingManagementController extends Controller
 {
     public function __construct(
         private readonly OperationContextService $context,
-        private readonly JavaControlService $javaControl
+        private readonly JavaControlService $javaControl,
+        private readonly FinancialObligationService $financialObligations,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -276,6 +278,7 @@ class TicketWeighingManagementController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
             abort_unless($record->estado === Pesada::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
+            $this->assertFinancialDocumentsAreEditable((int) $selected->id);
             $before = $this->auditValues($record);
 
             $record->update([
@@ -302,6 +305,11 @@ class TicketWeighingManagementController extends Controller
                 $selected,
                 (int) $branch->empresa_id,
                 (int) $branch->id
+            );
+            $this->financialObligations->syncTicket(
+                (int) $branch->empresa_id,
+                $selected->fresh(),
+                $actor,
             );
 
             $this->writeAudit(
@@ -348,6 +356,7 @@ class TicketWeighingManagementController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
             abort_unless($record->estado === Pesada::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
+            $this->assertFinancialDocumentsAreEditable((int) $selected->id);
             $before = $this->auditValues($record);
 
             $record->update([
@@ -361,6 +370,11 @@ class TicketWeighingManagementController extends Controller
                 $selected,
                 (int) $branch->empresa_id,
                 (int) $branch->id
+            );
+            $this->financialObligations->syncTicket(
+                (int) $branch->empresa_id,
+                $selected->fresh(),
+                $actor,
             );
 
             $this->writeAudit(
@@ -586,6 +600,34 @@ class TicketWeighingManagementController extends Controller
             $this->isFromOperatingDate($ticket, $operatingDate),
             409,
             $message
+        );
+    }
+
+    private function assertFinancialDocumentsAreEditable(int $ticketId): void
+    {
+        $hasAppliedMovement = DB::table('pago_aplicaciones as aplicacion')
+            ->join('pagos as pago', 'pago.id', '=', 'aplicacion.pago_id')
+            ->where('pago.estado', 'REGISTRADO')
+            ->where(function ($query) use ($ticketId): void {
+                $query->whereExists(function ($pivot) use ($ticketId): void {
+                    $pivot->selectRaw('1')
+                        ->from('comprobante_tickets as comprobante_ticket')
+                        ->whereColumn('comprobante_ticket.comprobante_id', 'aplicacion.comprobante_id')
+                        ->where('comprobante_ticket.ticket_id', $ticketId);
+                })->orWhereExists(function ($pivot) use ($ticketId): void {
+                    $pivot->selectRaw('1')
+                        ->from('comprobante_pesadas as comprobante_pesada')
+                        ->join('pesadas as pesada_financiera', 'pesada_financiera.id', '=', 'comprobante_pesada.pesada_id')
+                        ->whereColumn('comprobante_pesada.comprobante_id', 'aplicacion.comprobante_id')
+                        ->where('pesada_financiera.ticket_id', $ticketId);
+                });
+            })
+            ->exists();
+
+        abort_if(
+            $hasAppliedMovement,
+            409,
+            'No se puede modificar la pesada porque el ticket ya tiene cobros o pagos aplicados. Anula primero los movimientos financieros relacionados.'
         );
     }
 

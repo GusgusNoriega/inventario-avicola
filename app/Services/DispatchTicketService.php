@@ -23,7 +23,8 @@ use Illuminate\Validation\ValidationException;
 class DispatchTicketService
 {
     public function __construct(
-        private readonly JavaControlService $javaControl
+        private readonly JavaControlService $javaControl,
+        private readonly FinancialObligationService $financialObligations
     ) {}
 
     /**
@@ -186,6 +187,7 @@ class DispatchTicketService
                 $companyId,
                 (int) $branch->id
             );
+            $this->financialObligations->syncTicket($companyId, $ticket, $actor);
 
             return [
                 'ticket' => $this->loadTicket($ticket),

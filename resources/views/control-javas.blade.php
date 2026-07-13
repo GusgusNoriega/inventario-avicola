@@ -3,28 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Control de Javas | Sistema Pollos</title>
+  <title>Control de Javas y Bandejas | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body class="java-control-page" data-java-page="dashboard">
   <main class="java-control-shell java-dashboard-shell">
     @include('partials.java-control-header', [
       'eyebrow' => 'Control de activos',
-      'title' => 'Control de javas',
-      'description' => 'Consulta el estado actual y entra únicamente a la tarea que necesitas realizar.',
+      'title' => 'Control de javas y bandejas',
+      'description' => 'Consulta el inventario actual y controla las entradas y salidas de ambos activos por cliente.',
       'showMenu' => true,
     ])
 
-    <section class="java-summary java-dashboard-summary" aria-label="Estado actual de las javas">
+    <section class="java-summary java-dashboard-summary" aria-label="Estado actual de javas y bandejas">
       <article class="java-summary-card card">
         <span>Disponibles en la empresa</span>
-        <strong id="javaCompanyInside">—</strong>
-        <small id="javaInventoryStatus">Calculando inventario actual</small>
+        <div class="java-asset-values">
+          <span><small>Javas</small><strong id="javaCompanyInside">—</strong></span>
+          <span><small>Bandejas</small><strong id="trayCompanyInside">—</strong></span>
+        </div>
+        <small id="javaInventoryStatus">Calculando ambos inventarios</small>
       </article>
       <article class="java-summary-card card">
         <span>Fuera con clientes</span>
-        <strong id="javaCompanyOutside">0</strong>
-        <small>Javas pendientes de retorno</small>
+        <div class="java-asset-values">
+          <span><small>Javas</small><strong id="javaCompanyOutside">0</strong></span>
+          <span><small>Bandejas</small><strong id="trayCompanyOutside">0</strong></span>
+        </div>
+        <small>Activos pendientes de retorno</small>
       </article>
       <article class="java-summary-card card">
         <span>Clientes con pendientes</span>
@@ -33,7 +39,10 @@
       </article>
       <article class="java-summary-card card">
         <span>Recibidas hoy</span>
-        <strong id="javaReceivedToday">0</strong>
+        <div class="java-asset-values">
+          <span><small>Javas</small><strong id="javaReceivedToday">0</strong></span>
+          <span><small>Bandejas</small><strong id="trayReceivedToday">0</strong></span>
+        </div>
         <small>Entradas registradas hoy</small>
       </article>
     </section>
@@ -47,14 +56,14 @@
         <p>Cada vista contiene solo la información y las acciones relacionadas con esa tarea.</p>
       </div>
 
-      <nav class="java-module-nav" aria-label="Vistas del control de javas">
+      <nav class="java-module-nav" aria-label="Vistas del control de javas y bandejas">
         <a class="java-module-card card" href="{{ route('control-javas.inventario') }}">
           <span class="java-module-icon is-inventory" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M4 5h16v5H4zM4 14h16v5H4z"></path><path d="M8 10v4M16 10v4"></path></svg>
           </span>
           <span class="java-module-copy">
             <strong>Inventario y conteo</strong>
-            <small>Existencias totales, disponibles y verificación física de la jornada.</small>
+            <small>Existencias de javas y bandejas, disponibles y verificación física de la jornada.</small>
           </span>
           <span class="java-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
@@ -65,7 +74,7 @@
           </span>
           <span class="java-module-copy">
             <strong>Pendientes y devoluciones</strong>
-            <small>Consulta qué debe cada cliente y registra las javas que regresan.</small>
+            <small>Consulta qué javas y bandejas debe cada cliente y registra lo que regresa.</small>
           </span>
           <span class="java-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>

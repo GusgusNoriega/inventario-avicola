@@ -6,14 +6,20 @@ use App\Models\JornadaOperativa;
 use App\Models\ListaPrecio;
 use App\Models\PrecioHistorial;
 use App\Models\Tercero;
+use App\Models\TicketDespacho;
 use App\Models\TicketPrecio;
 use App\Models\TipoPollo;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ClientJourneyPriceService
 {
+    public function __construct(
+        private readonly FinancialObligationService $financialObligations
+    ) {}
+
     /**
      * Revaloriza los tickets del cliente que pertenecen a la jornada vigente.
      *
@@ -54,6 +60,7 @@ class ClientJourneyPriceService
             ->lockForUpdate()
             ->get();
         $updated = 0;
+        $updatedTicketIds = [];
 
         foreach ($ticketPrices as $ticketPrice) {
             $applicable = $applicablePrices->get($ticketPrice->tipo_pollo_id);
@@ -88,6 +95,19 @@ class ClientJourneyPriceService
                 'created_at' => now(),
             ]);
             $updated++;
+            $updatedTicketIds[] = (int) $ticketPrice->ticket_id;
+        }
+
+        if ($updatedTicketIds !== []) {
+            $actor = User::query()->findOrFail($actorId);
+            TicketDespacho::query()
+                ->whereIn('id', array_values(array_unique($updatedTicketIds)))
+                ->get()
+                ->each(fn ($ticket) => $this->financialObligations->syncTicket(
+                    (int) $client->empresa_id,
+                    $ticket,
+                    $actor
+                ));
         }
 
         return $updated;

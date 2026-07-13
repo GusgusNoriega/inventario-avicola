@@ -82,6 +82,54 @@ class Tercero extends Model
     }
 
     /**
+     * @return HasMany<EntidadFinanciera, $this>
+     */
+    public function entidadesFinancieras(): HasMany
+    {
+        return $this->hasMany(EntidadFinanciera::class, 'proveedor_id');
+    }
+
+    /**
+     * @return HasMany<CostoCompraPesada, $this>
+     */
+    public function costosCompra(): HasMany
+    {
+        return $this->hasMany(CostoCompraPesada::class, 'proveedor_id');
+    }
+
+    /**
+     * @return HasMany<Comprobante, $this>
+     */
+    public function comprobantes(): HasMany
+    {
+        return $this->hasMany(Comprobante::class);
+    }
+
+    /**
+     * @return HasMany<Pago, $this>
+     */
+    public function pagosComoTercero(): HasMany
+    {
+        return $this->hasMany(Pago::class);
+    }
+
+    /**
+     * @return HasMany<Pago, $this>
+     */
+    public function pagosComoCliente(): HasMany
+    {
+        return $this->hasMany(Pago::class, 'cliente_id');
+    }
+
+    /**
+     * @return HasMany<Pago, $this>
+     */
+    public function pagosComoProveedor(): HasMany
+    {
+        return $this->hasMany(Pago::class, 'proveedor_id');
+    }
+
+    /**
      * @param  Builder<Tercero>  $query
      * @return Builder<Tercero>
      */

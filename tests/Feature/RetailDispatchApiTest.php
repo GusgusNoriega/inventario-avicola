@@ -32,6 +32,10 @@ class RetailDispatchApiTest extends TestCase
 
     private int $deliveryDriverId;
 
+    private int $cashAccountId;
+
+    private int $cashMethodId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -47,6 +51,31 @@ class RetailDispatchApiTest extends TestCase
             'updated_at' => now(),
         ]);
         $this->user->update(['sucursal_id' => $this->branchId]);
+
+        $financialEntityId = DB::table('entidades_financieras')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo' => 'PROPIA',
+            'tipo_documento' => 'RUC',
+            'numero_documento' => '20999999991',
+            'razon_social' => 'Caja minorista de prueba',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->cashAccountId = DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $financialEntityId,
+            'tipo' => 'CAJA',
+            'alias' => 'Caja principal',
+            'moneda' => 'PEN',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->cashMethodId = (int) DB::table('metodos_pago')
+            ->where('codigo', 'EFECTIVO')
+            ->value('id');
 
         $permissions = collect(['DESPACHOS_VER', 'DESPACHOS_CREAR'])
             ->map(fn (string $code) => Permission::query()->create([
@@ -148,6 +177,8 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA')
             ->assertJsonPath('data.scale.connection_mode', 'SERIAL')
             ->assertJsonPath('data.scale.configuration.baudRate', 9600)
+            ->assertJsonPath('data.financial.methods.2.code', 'EFECTIVO')
+            ->assertJsonPath('data.financial.own_accounts.0.id', $this->cashAccountId)
             ->assertJsonMissingPath('data.cage_types');
 
         $this->assertDatabaseHas('balanzas', [
@@ -274,7 +305,15 @@ class RetailDispatchApiTest extends TestCase
             'tara_total_kg' => 1,
             'peso_neto_kg' => 11.25,
         ]);
-        $this->assertDatabaseCount('movimientos_javas', 0);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $response->json('data.id'),
+            'cliente_id' => $this->clientId,
+            'tipo' => 'DESPACHO',
+            'cantidad' => 0,
+            'cantidad_bandejas' => 2,
+            'vehiculo_id' => $this->deliveryVehicleId,
+            'conductor_id' => $this->deliveryDriverId,
+        ]);
     }
 
     public function test_missing_adjustment_uses_the_company_default(): void
@@ -414,10 +453,12 @@ class RetailDispatchApiTest extends TestCase
         $first['client_id'] = null;
         unset($first['delivery']);
         $first['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 10.25];
+        $first['payments'] = [$this->paymentPayload(123)];
         $second = $this->payload();
         $second['client_id'] = null;
         unset($second['delivery']);
         $second['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 11.75];
+        $second['payments'] = [$this->paymentPayload(141)];
 
         $firstResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $first)
             ->assertCreated()
@@ -441,6 +482,7 @@ class RetailDispatchApiTest extends TestCase
             'precio_kg' => 11.75,
             'origen_precio' => 'MANUAL',
         ]);
+        $this->assertDatabaseCount('movimientos_javas', 0);
     }
 
     public function test_list_without_client_uses_the_current_general_price_when_it_has_no_override(): void
@@ -449,6 +491,7 @@ class RetailDispatchApiTest extends TestCase
         $payload = $this->payload();
         $payload['client_id'] = null;
         unset($payload['delivery']);
+        $payload['payments'] = [$this->paymentPayload(87)];
 
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
@@ -463,6 +506,28 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.prices.POLLO_VIVO.source', 'GENERAL')
             ->assertJsonPath('data.weighings.0.price_kg', 7.25)
             ->assertJsonPath('data.totals.amount', 87);
+
+        $this->assertDatabaseHas('pagos', [
+            'tipo' => 'COBRO_MINORISTA',
+            'cliente_id' => null,
+            'cuenta_destino_id' => $this->cashAccountId,
+            'importe' => 87,
+            'estado' => 'REGISTRADO',
+        ]);
+    }
+
+    public function test_anonymous_retail_sale_requires_full_payment(): void
+    {
+        $this->createGeneralPrice(7.25);
+        $payload = $this->payload();
+        $payload['client_id'] = null;
+        unset($payload['delivery']);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payments');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
     public function test_return_amounts_are_serialized_with_negative_sign(): void
@@ -483,6 +548,7 @@ class RetailDispatchApiTest extends TestCase
             'vehiculo_entrega_id' => null,
             'conductor_entrega_id' => null,
         ]);
+        $this->assertDatabaseCount('movimientos_javas', 0);
     }
 
     public function test_retail_dispatch_requires_raw_weight_and_rejects_browser_gross_weight(): void
@@ -538,6 +604,7 @@ class RetailDispatchApiTest extends TestCase
             'vehiculo_entrega_id' => null,
             'conductor_entrega_id' => null,
         ]);
+        $this->assertDatabaseCount('movimientos_javas', 0);
     }
 
     public function test_retail_dispatch_rejects_a_non_retail_weight_source(): void
@@ -658,5 +725,17 @@ class RetailDispatchApiTest extends TestCase
             'registrado_por' => $this->user->id,
             'created_at' => now(),
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function paymentPayload(float $amount): array
+    {
+        return [
+            'idempotency_key' => (string) Str::uuid(),
+            'metodo_pago_id' => $this->cashMethodId,
+            'cuenta_destino_id' => $this->cashAccountId,
+            'moneda' => 'PEN',
+            'importe' => $amount,
+        ];
     }
 }

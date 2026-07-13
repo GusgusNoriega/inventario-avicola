@@ -265,6 +265,31 @@
     </form>
   </div>
 
+  <div id="retailPaymentModal" class="rd-modal" hidden>
+    <form id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle">
+      <header class="rd-modal-head">
+        <div>
+          <p>Cobro de la venta</p>
+          <h2 id="retailPaymentModalTitle">Forma de pago</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailPaymentModal" aria-label="Cerrar">×</button>
+      </header>
+      <p id="retailPaymentSummary" class="rd-delivery-summary"></p>
+      <div id="retailPaymentRows" class="rd-payment-rows"></div>
+      <button id="retailAddPayment" class="rd-secondary-button rd-add-payment" type="button">+ Agregar otra forma de pago</button>
+      <div class="rd-payment-totals" aria-live="polite">
+        <span>Total de la venta <strong id="retailPaymentSaleTotal">S/ 0.00</strong></span>
+        <span>Total recibido <strong id="retailPaymentReceivedTotal">S/ 0.00</strong></span>
+        <span>Pendiente <strong id="retailPaymentPendingTotal">S/ 0.00</strong></span>
+      </div>
+      <p id="retailPaymentMessage" class="rd-settings-message" role="status" aria-live="polite"></p>
+      <div class="rd-modal-actions">
+        <button id="retailSkipPayment" type="button" class="rd-secondary-button">Dejar pendiente</button>
+        <button id="retailConfirmPayment" class="rd-primary-button" type="submit">Continuar</button>
+      </div>
+    </form>
+  </div>
+
   <div id="retailDeliveryModal" class="rd-modal" hidden>
     <form id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle">
       <header class="rd-modal-head">
