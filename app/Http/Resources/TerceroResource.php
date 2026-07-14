@@ -33,6 +33,9 @@ class TerceroResource extends JsonResource
             'dni' => $this->numero_documento,
             'numero_documento' => $this->numero_documento,
             'direccion' => $this->direccion,
+            'es_cliente_interno' => $role === TerceroRole::CLIENT
+                ? (bool) $this->es_cliente_interno
+                : false,
             'roles' => $this->roles->pluck('rol')->values(),
             'pricesKg' => [
                 'pollo_vivo' => $prices->get(TipoPollo::CHICKEN_LIVE),

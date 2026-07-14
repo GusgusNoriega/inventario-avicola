@@ -5,6 +5,7 @@ namespace App\Http\Requests\Directory;
 use App\Models\TerceroRole;
 use App\Models\TipoPollo;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreTerceroRequest extends FormRequest
 {
@@ -29,6 +30,11 @@ class StoreTerceroRequest extends FormRequest
             'nombre_razon_social' => ['required', 'string', 'max:180'],
             'numero_documento' => ['required', 'string', 'regex:/^(?:\d{8}|\d{11})$/'],
             'direccion' => ['required', 'string', 'max:250'],
+            'es_cliente_interno' => [
+                Rule::prohibitedIf($this->route('directory_role') !== TerceroRole::CLIENT),
+                'sometimes',
+                'boolean',
+            ],
             'precios' => $pricesAreRequired
                 ? ['required', 'array:'.implode(',', $priceCodes)]
                 : ['sometimes', 'array:'.implode(',', $priceCodes)],
@@ -56,6 +62,16 @@ class StoreTerceroRequest extends FormRequest
             'numero_documento' => preg_replace('/\D+/', '', (string) $this->input('numero_documento')),
             'direccion' => trim((string) $this->input('direccion')),
         ]);
+
+        if ($this->route('directory_role') === TerceroRole::CLIENT
+            && $this->has('es_cliente_interno')) {
+            $this->merge([
+                'es_cliente_interno' => filter_var(
+                    $this->input('es_cliente_interno'),
+                    FILTER_VALIDATE_BOOLEAN
+                ),
+            ]);
+        }
     }
 
     /**

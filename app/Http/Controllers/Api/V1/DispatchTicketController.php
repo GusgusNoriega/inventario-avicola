@@ -53,6 +53,7 @@ class DispatchTicketController extends Controller
                     'type' => 'CLIENTE',
                     'id' => $ticket->clienteDestino->id,
                     'name' => $ticket->clienteDestino->nombre_razon_social,
+                    'internal_client' => (bool) $ticket->clienteDestino->es_cliente_interno,
                 ]
                 : [
                     'type' => 'ALMACEN',

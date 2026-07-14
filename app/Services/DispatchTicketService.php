@@ -100,9 +100,11 @@ class DispatchTicketService
                 'cliente_destino_id' => $destination['client_id'],
                 'almacen_destino_id' => $destination['warehouse_id'],
                 'vehiculo_entrega_id' => $operationType === TicketDespacho::OPERATION_DISPATCH
+                    && ! $destination['internal_client']
                     ? $data['delivery']['vehicle_id']
                     : null,
                 'conductor_entrega_id' => $operationType === TicketDespacho::OPERATION_DISPATCH
+                    && ! $destination['internal_client']
                     ? $data['delivery']['driver_id']
                     : null,
                 'estado' => TicketDespacho::STATUS_CLOSED,
@@ -361,7 +363,7 @@ class DispatchTicketService
 
     /**
      * @param  array<string, mixed>  $destination
-     * @return array{client_id: ?int, warehouse_id: ?int}
+     * @return array{client_id: ?int, warehouse_id: ?int, internal_client: bool}
      */
     private function resolveDestination(
         int $companyId,
@@ -382,7 +384,11 @@ class DispatchTicketService
                 ]);
             }
 
-            return ['client_id' => $client->id, 'warehouse_id' => null];
+            return [
+                'client_id' => $client->id,
+                'warehouse_id' => null,
+                'internal_client' => (bool) $client->es_cliente_interno,
+            ];
         }
 
         if ($operationType === TicketDespacho::OPERATION_RETURN) {
@@ -403,7 +409,11 @@ class DispatchTicketService
             ]);
         }
 
-        return ['client_id' => null, 'warehouse_id' => (int) $warehouseId];
+        return [
+            'client_id' => null,
+            'warehouse_id' => (int) $warehouseId,
+            'internal_client' => false,
+        ];
     }
 
     /**

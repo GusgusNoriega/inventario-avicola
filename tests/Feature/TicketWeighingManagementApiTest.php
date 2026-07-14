@@ -273,6 +273,104 @@ class TicketWeighingManagementApiTest extends TestCase
         ]);
     }
 
+    public function test_show_lists_only_origin_trucks_from_the_ticket_journey(): void
+    {
+        $first = $this->createJourneyOriginTruck(
+            'Proveedor jornada uno',
+            '20900000001',
+            'JOR-001'
+        );
+        $second = $this->createJourneyOriginTruck(
+            'Proveedor jornada dos',
+            '20900000002',
+            'JOR-002'
+        );
+        $outside = $this->createJourneyOriginTruck(
+            'Proveedor otra jornada',
+            '20900000003',
+            'JOR-003',
+            '2026-06-26'
+        );
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.catalogs.origin_trucks')
+            ->assertJsonPath('data.catalogs.origin_trucks.0.program_detail_id', $first['program_detail_id'])
+            ->assertJsonPath('data.catalogs.origin_trucks.0.provider_name', 'Proveedor jornada uno')
+            ->assertJsonPath('data.catalogs.origin_trucks.0.plate', 'JOR-001')
+            ->assertJsonPath('data.catalogs.origin_trucks.1.program_detail_id', $second['program_detail_id'])
+            ->assertJsonMissing(['program_detail_id' => $outside['program_detail_id']]);
+    }
+
+    public function test_update_can_change_origin_to_a_truck_from_the_ticket_journey(): void
+    {
+        $origin = $this->createJourneyOriginTruck(
+            'Proveedor nuevo origen',
+            '20900000004',
+            'JOR-004'
+        );
+        $payload = $this->updatePayload();
+        $payload['origin_program_detail_id'] = $origin['program_detail_id'];
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.origin', 'Proveedor nuevo origen')
+            ->assertJsonPath('data.ticket.weighings.0.plate', 'JOR-004')
+            ->assertJsonPath(
+                'data.ticket.weighings.0.origin_program_detail_id',
+                $origin['program_detail_id']
+            );
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'proveedor_origen_id' => $origin['provider_id'],
+            'almacen_origen_id' => null,
+            'vehiculo_id' => $origin['vehicle_id'],
+            'programacion_recepcion_detalle_id' => $origin['program_detail_id'],
+            'placa_snapshot' => 'JOR-004',
+        ]);
+    }
+
+    public function test_update_rejects_origin_trucks_outside_the_ticket_journey(): void
+    {
+        $outside = $this->createJourneyOriginTruck(
+            'Proveedor fecha diferente',
+            '20900000005',
+            'JOR-005',
+            '2026-06-26'
+        );
+        $cancelled = $this->createJourneyOriginTruck(
+            'Proveedor cancelado',
+            '20900000006',
+            'JOR-006',
+            '2026-06-27',
+            'CANCELADA'
+        );
+
+        foreach ([$outside, $cancelled] as $origin) {
+            $payload = $this->updatePayload();
+            $payload['origin_program_detail_id'] = $origin['program_detail_id'];
+
+            $this->putJson(
+                "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+                $payload
+            )
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('origin_program_detail_id');
+        }
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'proveedor_origen_id' => null,
+            'vehiculo_id' => null,
+            'programacion_recepcion_detalle_id' => null,
+            'placa_snapshot' => null,
+        ]);
+    }
+
     public function test_update_resynchronizes_unpaid_sale_purchase_and_cost_documents(): void
     {
         $documents = $this->prepareFinancialObligations();
@@ -719,6 +817,86 @@ class TicketWeighingManagementApiTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    /** @return array{provider_id: int, vehicle_id: int, program_detail_id: int} */
+    private function createJourneyOriginTruck(
+        string $providerName,
+        string $document,
+        string $plate,
+        string $operatingDate = '2026-06-27',
+        string $detailStatus = 'PENDIENTE'
+    ): array {
+        $providerId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo_documento' => 'RUC',
+            'numero_documento' => $document,
+            'nombre_razon_social' => $providerName,
+            'direccion' => 'Origen de prueba',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $providerId,
+            'rol' => 'PROVEEDOR',
+            'created_at' => now(),
+        ]);
+        $vehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => $plate,
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $providerVehicleId = DB::table('proveedor_vehiculos')->insertGetId([
+            'proveedor_id' => $providerId,
+            'vehiculo_id' => $vehicleId,
+            'vigente_desde' => '2026-06-01',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $programId = DB::table('programaciones_recepcion')
+            ->where('sucursal_id', $this->branchId)
+            ->whereDate('fecha_operativa', $operatingDate)
+            ->value('id');
+
+        if (! $programId) {
+            $programId = DB::table('programaciones_recepcion')->insertGetId([
+                'sucursal_id' => $this->branchId,
+                'fecha_operativa' => $operatingDate,
+                'estado' => 'PUBLICADA',
+                'publicada_por' => $this->user->id,
+                'publicada_at' => now(),
+                'created_by' => $this->user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $order = DB::table('programacion_recepcion_detalles')
+            ->where('programacion_id', $programId)
+            ->count() + 1;
+        $programDetailId = DB::table('programacion_recepcion_detalles')->insertGetId([
+            'programacion_id' => $programId,
+            'proveedor_vehiculo_id' => $providerVehicleId,
+            'numero_visita' => 1,
+            'orden_llegada' => $order,
+            'estado' => $detailStatus,
+            'estado_actualizado_por' => $this->user->id,
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return [
+            'provider_id' => $providerId,
+            'vehicle_id' => $vehicleId,
+            'program_detail_id' => $programDetailId,
+        ];
     }
 
     /** @return array<string, mixed> */

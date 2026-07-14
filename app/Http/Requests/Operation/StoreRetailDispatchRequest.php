@@ -54,7 +54,6 @@ class StoreRetailDispatchRequest extends FormRequest
             'price_overrides' => [
                 'sometimes',
                 'array:'.implode(',', [
-                    TipoPollo::CHICKEN_LIVE,
                     TipoPollo::CHICKEN_DRESSED,
                     TipoPollo::CHICKEN_PROCESSED,
                 ]),
@@ -103,7 +102,6 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings.*.chicken_type_code' => [
                 'required',
                 Rule::in([
-                    TipoPollo::CHICKEN_LIVE,
                     TipoPollo::CHICKEN_DRESSED,
                     TipoPollo::CHICKEN_PROCESSED,
                 ]),

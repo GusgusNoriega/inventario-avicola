@@ -87,6 +87,29 @@ class DirectoryApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 0);
     }
 
+    public function test_client_can_be_marked_as_internal(): void
+    {
+        $this->postJson('/api/v1/clientes', $this->payload([
+            'es_cliente_interno' => true,
+        ]))
+            ->assertCreated()
+            ->assertJsonPath('data.es_cliente_interno', true);
+
+        $this->assertDatabaseHas('terceros', [
+            'numero_documento' => '20123456789',
+            'es_cliente_interno' => true,
+        ]);
+    }
+
+    public function test_provider_cannot_be_marked_as_internal_client(): void
+    {
+        $this->postJson('/api/v1/proveedores', $this->payload([
+            'es_cliente_interno' => true,
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('es_cliente_interno');
+    }
+
     public function test_provider_still_requires_all_specific_prices(): void
     {
         $payload = $this->payload();

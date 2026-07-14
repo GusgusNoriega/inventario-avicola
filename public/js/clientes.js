@@ -75,6 +75,8 @@ const elements = {
   name: document.getElementById("personName"),
   dni: document.getElementById("personDni"),
   address: document.getElementById("personAddress"),
+  internalClientField: document.getElementById("internalClientField"),
+  internalClient: document.getElementById("internalClient"),
   priceInputs: PRICE_FIELDS.reduce((acc, field) => {
     acc[field.key] = document.getElementById(field.inputId);
     return acc;
@@ -118,6 +120,7 @@ function normalizeRecord(record, type) {
     name: String(record.name || record.nombre || "").trim(),
     dni: String(record.dni || record.numero_documento || "").trim(),
     direccion: String(record.direccion || "").trim(),
+    isInternalClient: Boolean(record.es_cliente_interno),
     pricesKg: PRICE_FIELDS.reduce((prices, field) => {
       prices[field.key] = normalizePrice(record.pricesKg?.[field.key]);
       return prices;
@@ -262,6 +265,7 @@ function readFormRecord() {
       nombre_razon_social: name,
       numero_documento: dni,
       direccion,
+      ...(activeType === "clientes" ? { es_cliente_interno: elements.internalClient.checked } : {}),
       precios: prices
     }
   };
@@ -366,6 +370,7 @@ function editRecord(id) {
   elements.name.value = record.name;
   elements.dni.value = record.dni;
   elements.address.value = record.direccion;
+  elements.internalClient.checked = record.isInternalClient;
   PRICE_FIELDS.forEach((field) => {
     const price = record.pricesKg[field.key];
     elements.priceInputs[field.key].value = price === null || price === undefined
@@ -466,6 +471,7 @@ function renderFormHeader() {
   elements.formTitle.textContent = editingId ? meta.editTitle : meta.formTitle;
   elements.saveBtn.querySelector("span").textContent = editingId ? "Guardar cambios" : meta.saveLabel;
   elements.editBadge.hidden = !editingId;
+  elements.internalClientField.hidden = activeType !== "clientes";
   PRICE_FIELDS.forEach((field) => {
     const input = elements.priceInputs[field.key];
     input.required = activeType === "proveedores";
@@ -513,6 +519,9 @@ function renderRecordCard(record) {
         </a>
       `
     : "";
+  const recordTag = activeType === "clientes" && record.isInternalClient
+    ? "interno"
+    : meta.singular;
 
   return `
     <article class="directory-record card" data-record-id="${escapeHtml(record.id)}">
@@ -522,7 +531,7 @@ function renderRecordCard(record) {
           <strong>${escapeHtml(record.name)}</strong>
           <small>${escapeHtml(record.dni)}</small>
         </div>
-        <span class="directory-record-tag">${escapeHtml(meta.singular)}</span>
+        <span class="directory-record-tag">${escapeHtml(recordTag)}</span>
       </header>
       <p class="directory-address">${escapeHtml(record.direccion)}</p>
       <div class="directory-prices">

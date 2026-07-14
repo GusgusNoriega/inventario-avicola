@@ -95,6 +95,13 @@
           Peso bruto (kg)
           <input id="editGrossWeight" type="number" min="0.001" max="99999999.999" step="0.001" required>
         </label>
+        <label id="editOriginTruckField" class="field">
+          Camión de origen de la jornada
+          <select id="editOriginTruck">
+            <option value="">Mantener el origen actual</option>
+          </select>
+          <small id="editOriginTruckHelp" class="field-help">Solo aparecen camiones incluidos en la jornada de este ticket.</small>
+        </label>
         <label class="field">
           Origen del peso
           <select id="editWeightSource" required>

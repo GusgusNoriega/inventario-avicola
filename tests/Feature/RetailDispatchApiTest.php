@@ -92,8 +92,8 @@ class RetailDispatchApiTest extends TestCase
         Sanctum::actingAs($this->user, ['api']);
 
         $this->typeId = DB::table('tipos_pollo')->insertGetId([
-            'codigo' => TipoPollo::CHICKEN_LIVE,
-            'nombre' => 'Pollo vivo',
+            'codigo' => TipoPollo::CHICKEN_DRESSED,
+            'nombre' => 'Pollo pelado',
             'permite_despacho' => true,
             'estado' => TipoPollo::STATUS_ACTIVE,
             'created_at' => now(),
@@ -159,16 +159,38 @@ class RetailDispatchApiTest extends TestCase
 
     public function test_catalog_returns_prices_adjustments_and_the_exclusive_retail_scale(): void
     {
+        DB::table('tipos_pollo')->insert([
+            [
+                'codigo' => TipoPollo::CHICKEN_LIVE,
+                'nombre' => 'Pollo vivo',
+                'permite_despacho' => true,
+                'estado' => TipoPollo::STATUS_ACTIVE,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'codigo' => TipoPollo::CHICKEN_PROCESSED,
+                'nombre' => 'Pollo beneficiado',
+                'permite_despacho' => true,
+                'estado' => TipoPollo::STATUS_ACTIVE,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
             ->assertJsonPath('data.clients.0.id', $this->clientId)
-            ->assertJsonPath('data.clients.0.prices.POLLO_VIVO.price_kg', 8.5)
-            ->assertJsonPath('data.clients.0.prices.POLLO_VIVO.source', 'CLIENTE')
+            ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.5)
+            ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.source', 'CLIENTE')
             ->assertJsonPath('data.delivery_trucks.0.id', $this->deliveryVehicleId)
             ->assertJsonPath('data.delivery_trucks.0.plate', 'MIN-001')
             ->assertJsonPath('data.delivery_drivers.0.id', $this->deliveryDriverId)
             ->assertJsonPath('data.delivery_drivers.0.name', 'CHOFER MINORISTA')
-            ->assertJsonPath('data.chicken_types.0.code', TipoPollo::CHICKEN_LIVE)
+            ->assertJsonCount(2, 'data.chicken_types')
+            ->assertJsonPath('data.chicken_types.0.code', TipoPollo::CHICKEN_DRESSED)
+            ->assertJsonPath('data.chicken_types.1.code', TipoPollo::CHICKEN_PROCESSED)
+            ->assertJsonMissing(['code' => TipoPollo::CHICKEN_LIVE])
             ->assertJsonPath('data.tray_types.0.code', 'BANDEJA_ESTANDAR')
             ->assertJsonPath('data.tray_types.0.bird_capacity', 5)
             ->assertJsonPath('data.adjustments.0.code', AjustePesoMinorista::MALE_CLOSED)
@@ -428,13 +450,13 @@ class RetailDispatchApiTest extends TestCase
     public function test_client_price_always_prevails_over_a_submitted_list_override(): void
     {
         $payload = $this->payload();
-        $payload['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 10.25];
+        $payload['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
-            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 8.5)
-            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'CLIENTE')
-            ->assertJsonPath('data.prices.POLLO_VIVO.history_id', $this->priceHistoryId)
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 8.5)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'CLIENTE')
+            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId)
             ->assertJsonPath('data.weighings.0.price_origin', 'CLIENTE')
             ->assertJsonPath('data.totals.amount', 102);
 
@@ -452,25 +474,25 @@ class RetailDispatchApiTest extends TestCase
         $first = $this->payload();
         $first['client_id'] = null;
         unset($first['delivery']);
-        $first['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 10.25];
+        $first['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
         $first['payments'] = [$this->paymentPayload(123)];
         $second = $this->payload();
         $second['client_id'] = null;
         unset($second['delivery']);
-        $second['price_overrides'] = [TipoPollo::CHICKEN_LIVE => 11.75];
+        $second['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 11.75];
         $second['payments'] = [$this->paymentPayload(141)];
 
         $firstResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $first)
             ->assertCreated()
             ->assertJsonPath('data.client', null)
-            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 10.25)
-            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'MANUAL')
-            ->assertJsonPath('data.prices.POLLO_VIVO.history_id', $generalHistoryId);
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 10.25)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'MANUAL')
+            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $generalHistoryId);
         $secondResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $second)
             ->assertCreated()
             ->assertJsonPath('data.client', null)
-            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 11.75)
-            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'MANUAL');
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 11.75)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'MANUAL');
 
         $this->assertDatabaseHas('ticket_precios', [
             'ticket_id' => $firstResponse->json('data.id'),
@@ -495,15 +517,15 @@ class RetailDispatchApiTest extends TestCase
 
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
-            ->assertJsonPath('data.general_prices.POLLO_VIVO.price_kg', 7.25)
-            ->assertJsonPath('data.general_prices.POLLO_VIVO.source', 'GENERAL')
-            ->assertJsonPath('data.general_prices.POLLO_VIVO.history_id', $generalHistoryId);
+            ->assertJsonPath('data.general_prices.POLLO_PELADO.price_kg', 7.25)
+            ->assertJsonPath('data.general_prices.POLLO_PELADO.source', 'GENERAL')
+            ->assertJsonPath('data.general_prices.POLLO_PELADO.history_id', $generalHistoryId);
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
             ->assertJsonPath('data.client', null)
-            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 7.25)
-            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'GENERAL')
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 7.25)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'GENERAL')
             ->assertJsonPath('data.weighings.0.price_kg', 7.25)
             ->assertJsonPath('data.totals.amount', 87);
 
@@ -619,6 +641,18 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
+    public function test_retail_dispatch_rejects_live_chicken(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['chicken_type_code'] = TipoPollo::CHICKEN_LIVE;
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.chicken_type_code');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
     public function test_retail_dispatch_rejects_more_than_ten_birds_per_tray(): void
     {
         $payload = $this->payload();
@@ -690,7 +724,7 @@ class RetailDispatchApiTest extends TestCase
             ],
             'weighings' => [[
                 'local_id' => 1,
-                'chicken_type_code' => TipoPollo::CHICKEN_LIVE,
+                'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
                 'adjustment_code' => AjustePesoMinorista::MALE_CLOSED,
                 'tray_type_code' => 'BANDEJA_ESTANDAR',
                 'weight_source' => 'BALANZA_MINORISTA',

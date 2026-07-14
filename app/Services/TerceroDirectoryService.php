@@ -241,7 +241,7 @@ class TerceroDirectoryService
      */
     private function thirdPartyAttributes(int $companyId, array $data): array
     {
-        return [
+        $attributes = [
             'empresa_id' => $companyId,
             'tipo_documento' => strlen($data['numero_documento']) === 11 ? 'RUC' : 'DNI',
             'numero_documento' => $data['numero_documento'],
@@ -249,6 +249,12 @@ class TerceroDirectoryService
             'direccion' => $data['direccion'],
             'estado' => Tercero::STATUS_ACTIVE,
         ];
+
+        if (array_key_exists('es_cliente_interno', $data)) {
+            $attributes['es_cliente_interno'] = (bool) $data['es_cliente_interno'];
+        }
+
+        return $attributes;
     }
 
     private function ensurePriceList(Tercero $tercero, string $role, int $actorId): ListaPrecio

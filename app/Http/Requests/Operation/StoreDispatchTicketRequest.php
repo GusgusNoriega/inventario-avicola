@@ -34,12 +34,12 @@ class StoreDispatchTicketRequest extends FormRequest
             'destination.type' => ['required', Rule::in(['CLIENTE', 'ALMACEN'])],
             'destination.id' => ['required', 'integer', 'min:1'],
             'delivery' => [
-                Rule::requiredIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH),
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
                 'nullable',
                 'array:vehicle_id,driver_id',
             ],
             'delivery.vehicle_id' => [
-                Rule::requiredIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH),
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
                 'nullable',
                 'integer',
                 Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
@@ -47,7 +47,7 @@ class StoreDispatchTicketRequest extends FormRequest
                     ->where('estado', 'ACTIVO')),
             ],
             'delivery.driver_id' => [
-                Rule::requiredIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH),
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
                 'nullable',
                 'integer',
                 Rule::exists('conductores', 'id')->where(fn ($query) => $query
@@ -249,5 +249,24 @@ class StoreDispatchTicketRequest extends FormRequest
     {
         return (int) ($this->user()?->empresa_id
             ?? DB::table('empresas')->where('estado', 'ACTIVO')->orderBy('id')->value('id'));
+    }
+
+    private function requiresDelivery(): bool
+    {
+        if ($this->input('operation_type') !== TicketDespacho::OPERATION_DISPATCH) {
+            return false;
+        }
+
+        if ($this->input('destination.type') !== 'CLIENTE') {
+            return true;
+        }
+
+        $isInternalClient = DB::table('terceros')
+            ->where('empresa_id', $this->companyId())
+            ->where('estado', 'ACTIVO')
+            ->where('id', (int) $this->input('destination.id'))
+            ->value('es_cliente_interno');
+
+        return ! (bool) $isInternalClient;
     }
 }

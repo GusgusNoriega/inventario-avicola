@@ -97,6 +97,14 @@
               <input id="personAddress" type="text" autocomplete="street-address" placeholder="Ej: Av. Principal 123" required>
             </label>
 
+            <label id="internalClientField" class="field directory-field-wide">
+              <span>Ubicación del cliente</span>
+              <span class="directory-checkbox-option">
+                <input id="internalClient" type="checkbox">
+                <span>Cliente interno de la avícola (no requiere camión ni chofer)</span>
+              </span>
+            </label>
+
             <label class="field">
               Precio pollo vivo (kg)
               <input id="priceVivo" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el global">

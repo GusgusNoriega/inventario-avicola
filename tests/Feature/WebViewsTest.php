@@ -163,6 +163,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
         $this->assertStringContainsString('additional_grams', $javascript);
+        $this->assertStringContainsString('new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"])', $javascript);
+        $this->assertStringContainsString('availableChickenTypeCodes.has(item.chickenTypeCode)', $javascript);
         $this->assertStringContainsString('const birds = trayCount * birdsPerTray;', $javascript);
         $this->assertStringContainsString('const totalAdjustmentGrams = adjustmentGrams * birds;', $javascript);
         $this->assertStringContainsString('readWeight + totalAdjustmentGrams / 1000', $javascript);
@@ -517,6 +519,8 @@ class WebViewsTest extends TestCase
             ->assertSee('editTicketDeliveryModal', false)
             ->assertSee('editTicketVehicle', false)
             ->assertSee('editTicketDriver', false)
+            ->assertSee('editOriginTruck', false)
+            ->assertSee('Solo aparecen camiones incluidos en la jornada de este ticket.')
             ->assertSee(asset('js/gestion-pesadas.js'), false);
 
         $dispatchJavascript = file_get_contents(public_path('js/app.js'));
@@ -529,6 +533,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data-print-selected-ticket', $managementJavascript);
         $this->assertStringContainsString('data-edit-ticket-delivery', $managementJavascript);
         $this->assertStringContainsString('/transporte', $managementJavascript);
+        $this->assertStringContainsString('origin_trucks', $managementJavascript);
+        $this->assertStringContainsString('origin_program_detail_id', $managementJavascript);
+        $this->assertStringContainsString('editSelectProviderBtn', $dispatchJavascript);
+        $this->assertStringContainsString('selectedVehicleIds.has(String(vehicle.id))', $dispatchJavascript);
         $this->assertStringContainsString('printWeightControlTicket(buildSelectedTicketPrintData(ticket)', $managementJavascript);
         $this->assertStringContainsString('Despacho minorista', $managementJavascript);
         $this->assertStringContainsString('Venta externa', $managementJavascript);

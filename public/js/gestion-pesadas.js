@@ -26,6 +26,9 @@ const elements = {
   cages: document.getElementById("editCages"),
   cageType: document.getElementById("editCageType"),
   grossWeight: document.getElementById("editGrossWeight"),
+  originTruckField: document.getElementById("editOriginTruckField"),
+  originTruck: document.getElementById("editOriginTruck"),
+  originTruckHelp: document.getElementById("editOriginTruckHelp"),
   weightSource: document.getElementById("editWeightSource"),
   weighedAt: document.getElementById("editWeighedAt"),
   weightPreview: document.getElementById("editWeightPreview"),
@@ -48,7 +51,7 @@ const elements = {
 const state = {
   tickets: [],
   selectedTicket: null,
-  catalogs: { chicken_types: [], cage_types: [], delivery_trucks: [], delivery_drivers: [] },
+  catalogs: { chicken_types: [], cage_types: [], delivery_trucks: [], delivery_drivers: [], origin_trucks: [] },
   editingWeighing: null,
   editingChickenSex: "MACHO",
   deletingWeighing: null,
@@ -418,13 +421,13 @@ function renderSelectedTicket() {
         <div class="weighing-ticket-delivery">
           <span>
             <small>Camión de entrega</small>
-            <strong>${escapeHtml(ticket.delivery?.vehicle?.plate || "Sin camión asignado")}</strong>
+            <strong>${escapeHtml(ticket.internal_client ? "No aplica - cliente interno" : (ticket.delivery?.vehicle?.plate || "Sin camión asignado"))}</strong>
           </span>
           <span>
             <small>Chofer de entrega</small>
-            <strong>${escapeHtml(ticket.delivery?.driver?.name || "Sin chofer asignado")}</strong>
+            <strong>${escapeHtml(ticket.internal_client ? "No aplica - cliente interno" : (ticket.delivery?.driver?.name || "Sin chofer asignado"))}</strong>
           </span>
-          ${canEdit
+          ${canEdit && !ticket.internal_client
             ? '<button class="btn btn-secondary" type="button" data-edit-ticket-delivery>Editar transporte</button>'
             : ""}
         </div>
@@ -500,7 +503,8 @@ async function selectTicket(ticketId, showStatus = true) {
       chicken_types: [],
       cage_types: [],
       delivery_trucks: [],
-      delivery_drivers: []
+      delivery_drivers: [],
+      origin_trucks: []
     };
     renderSelectedTicket();
     setMessage("");
@@ -528,6 +532,11 @@ function openDeliveryModal() {
   const ticket = state.selectedTicket;
   if (!ticket || ticket.operation_type !== "DESPACHO") {
     setMessage("Solo los tickets de despacho tienen transporte de entrega.", true);
+    return;
+  }
+
+  if (ticket.internal_client) {
+    setMessage("El cliente interno no requiere transporte de entrega.", true);
     return;
   }
 
@@ -589,6 +598,12 @@ function renderEditOptions() {
   elements.cageType.innerHTML = (state.catalogs.cage_types || [])
     .map((type) => `<option value="${escapeHtml(type.code)}">${escapeHtml(type.name)} (${Number(type.weight_kg).toFixed(3)} kg)</option>`)
     .join("");
+  elements.originTruck.innerHTML = `
+    <option value="">Mantener el origen actual</option>
+    ${(state.catalogs.origin_trucks || []).map((truck) => `
+      <option value="${escapeHtml(truck.program_detail_id)}">${escapeHtml(truck.provider_name)} · ${escapeHtml(truck.plate)}</option>
+    `).join("")}
+  `;
 }
 
 function updateWeightPreview() {
@@ -624,6 +639,7 @@ function openEditModal(weighingId) {
   const isReturn = state.selectedTicket.operation_type === "DEVOLUCION";
   elements.chickenTypeField.hidden = isReturn;
   elements.chickenConditionField.hidden = !isReturn;
+  elements.originTruckField.hidden = isReturn;
   elements.chickenType.value = weighing.chicken_type?.code || "";
   elements.chickenCondition.value = weighing.chicken_condition || "VIVO";
   state.editingChickenSex = normalizeChickenSex(weighing.chicken_sex);
@@ -632,6 +648,13 @@ function openEditModal(weighingId) {
   elements.cages.value = weighing.cages;
   elements.cageType.value = weighing.cage_type?.code || "";
   elements.grossWeight.value = Number(weighing.gross_weight_kg).toFixed(3);
+  const currentOriginId = String(weighing.origin_program_detail_id || "");
+  const currentOriginIsAvailable = (state.catalogs.origin_trucks || [])
+    .some((truck) => String(truck.program_detail_id) === currentOriginId);
+  elements.originTruck.value = currentOriginIsAvailable ? currentOriginId : "";
+  elements.originTruckHelp.textContent = currentOriginIsAvailable
+    ? "Origen actual preseleccionado. Solo puedes cambiarlo por otro camión de esta jornada."
+    : `Origen actual: ${weighing.origin || "sin origen"}${weighing.plate ? ` · ${weighing.plate}` : ""}. Selecciona un camión de la jornada para cambiarlo.`;
   elements.weightSource.value = [...elements.weightSource.options].some((option) => option.value === weighing.weight_source)
     ? weighing.weight_source
     : "MANUAL";
@@ -673,6 +696,9 @@ async function saveWeighing(event) {
     gross_weight_kg: Number(elements.grossWeight.value),
     weighed_at: elements.weighedAt.value
   };
+  if (state.selectedTicket.operation_type !== "DEVOLUCION" && elements.originTruck.value) {
+    payload.origin_program_detail_id = Number(elements.originTruck.value);
+  }
 
   try {
     const response = await apiRequest(`/operacion/tickets/${ticketId}/pesadas/${weighingId}`, {

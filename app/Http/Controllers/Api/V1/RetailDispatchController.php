@@ -40,7 +40,6 @@ class RetailDispatchController extends Controller
             ->get(['id', 'nombre_razon_social', 'numero_documento']);
         $chickenTypes = TipoPollo::query()
             ->whereIn('codigo', [
-                TipoPollo::CHICKEN_LIVE,
                 TipoPollo::CHICKEN_DRESSED,
                 TipoPollo::CHICKEN_PROCESSED,
             ])

@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pesada;
+use App\Models\ProgramacionRecepcionDetalle;
+use App\Models\Tercero;
+use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TipoJava;
 use App\Models\TipoPollo;
@@ -127,6 +130,11 @@ class TicketWeighingManagementController extends Controller
             422,
             'Las devoluciones no tienen camión ni chofer de entrega.'
         );
+        abort_if(
+            (bool) $selected->clienteDestino?->es_cliente_interno,
+            422,
+            'Los clientes internos de la avícola no requieren camión ni chofer de entrega.'
+        );
 
         $validated = $request->validate([
             'vehicle_id' => [
@@ -187,8 +195,9 @@ class TicketWeighingManagementController extends Controller
     {
         $selected = $this->ticketForBranch($request, $ticket);
         $branch = $this->context->branch($request);
+        $companyId = (int) $branch->empresa_id;
         $currentOperatingDate = $this->currentOperatingDate(
-            (int) $branch->empresa_id,
+            $companyId,
             $branch->zona_horaria
         );
         $this->assertEditable($selected, $currentOperatingDate);
@@ -208,6 +217,14 @@ class TicketWeighingManagementController extends Controller
             'cages' => ['required', 'integer', 'min:0', 'max:10000'],
             'gross_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
             'weighed_at' => ['required', 'date'],
+            'origin_program_detail_id' => [
+                Rule::prohibitedIf(
+                    $selected->tipo_operacion === TicketDespacho::OPERATION_RETURN
+                ),
+                'sometimes',
+                'integer',
+                'min:1',
+            ],
         ]);
         $actor = $this->context->actor($request, (int) $branch->id);
         $typeCode = mb_strtoupper(trim($validated['chicken_type_code']), 'UTF-8');
@@ -270,7 +287,8 @@ class TicketWeighingManagementController extends Controller
             $tareWeight,
             $netWeight,
             $branch,
-            $actor
+            $actor,
+            $companyId
         ): void {
             $record = Pesada::query()
                 ->where('ticket_id', $selected->id)
@@ -280,8 +298,15 @@ class TicketWeighingManagementController extends Controller
             abort_unless($record->estado === Pesada::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
             $this->assertFinancialDocumentsAreEditable((int) $selected->id);
             $before = $this->auditValues($record);
+            $origin = array_key_exists('origin_program_detail_id', $validated)
+                ? $this->journeyOrigin(
+                    $selected,
+                    (int) $validated['origin_program_detail_id'],
+                    $companyId
+                )
+                : null;
 
-            $record->update([
+            $changes = [
                 'tipo_pollo_id' => $type->id,
                 'condicion_pollo' => $condition,
                 'sexo' => $validated['chicken_sex'],
@@ -299,21 +324,34 @@ class TicketWeighingManagementController extends Controller
                     $validated['weighed_at'],
                     $branch->zona_horaria
                 )->format('Y-m-d H:i:s'),
-            ]);
+            ];
+
+            if ($origin) {
+                $changes = [
+                    ...$changes,
+                    'proveedor_origen_id' => $origin->proveedorVehiculo->proveedor_id,
+                    'almacen_origen_id' => null,
+                    'vehiculo_id' => $origin->proveedorVehiculo->vehiculo_id,
+                    'programacion_recepcion_detalle_id' => $origin->id,
+                    'placa_snapshot' => $origin->proveedorVehiculo->vehiculo->placa,
+                ];
+            }
+
+            $record->update($changes);
 
             $this->javaControl->syncDispatchMovement(
                 $selected,
-                (int) $branch->empresa_id,
+                $companyId,
                 (int) $branch->id
             );
             $this->financialObligations->syncTicket(
-                (int) $branch->empresa_id,
+                $companyId,
                 $selected->fresh(),
                 $actor,
             );
 
             $this->writeAudit(
-                (int) $branch->empresa_id,
+                $companyId,
                 $actor->id,
                 $record->id,
                 'ACTUALIZAR',
@@ -466,6 +504,7 @@ class TicketWeighingManagementController extends Controller
             'client' => $this->formatClient($ticket),
             'destination' => $this->formatDestination($ticket),
             'delivery' => $this->formatDelivery($ticket),
+            'internal_client' => (bool) $ticket->clienteDestino?->es_cliente_interno,
             'closed_at' => $ticket->cerrado_at?->toISOString(),
             'prices' => $isRetail
                 ? $ticket->precios
@@ -528,6 +567,7 @@ class TicketWeighingManagementController extends Controller
                         ?? $record->almacenOrigen?->nombre
                         ?? ($ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? 'Devolución de cliente' : 'Sin origen'),
                     'plate' => $record->placa_snapshot ?: $record->vehiculo?->placa,
+                    'origin_program_detail_id' => $record->programacion_recepcion_detalle_id,
                     'weight_source' => $record->origen_peso,
                     'birds_per_cage' => (int) $record->aves_por_java,
                     'cages' => (int) $record->cantidad_javas,
@@ -765,7 +805,63 @@ class TicketWeighingManagementController extends Controller
                     'weight_kg' => (float) $type->peso_kg,
                 ])
                 ->values(),
+            'origin_trucks' => $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
+                ? $this->journeyOriginQuery($ticket, $companyId)
+                    ->get()
+                    ->map(fn (ProgramacionRecepcionDetalle $detail) => [
+                        'program_detail_id' => $detail->id,
+                        'provider_vehicle_id' => $detail->proveedor_vehiculo_id,
+                        'provider_id' => $detail->proveedorVehiculo->proveedor_id,
+                        'provider_name' => $detail->proveedorVehiculo->proveedor->nombre_razon_social,
+                        'vehicle_id' => $detail->proveedorVehiculo->vehiculo_id,
+                        'plate' => $detail->proveedorVehiculo->vehiculo->placa,
+                    ])
+                    ->values()
+                : collect(),
         ];
+    }
+
+    /** @return Builder<ProgramacionRecepcionDetalle> */
+    private function journeyOriginQuery(TicketDespacho $ticket, int $companyId): Builder
+    {
+        $ticket->loadMissing('jornada');
+
+        return ProgramacionRecepcionDetalle::query()
+            ->where('estado', '!=', ProgramacionRecepcionDetalle::STATUS_CANCELLED)
+            ->whereHas('programacion', fn (Builder $query) => $query
+                ->where('sucursal_id', $ticket->jornada->sucursal_id)
+                ->whereDate('fecha_operativa', $ticket->jornada->fecha_operativa->format('Y-m-d')))
+            ->whereHas('proveedorVehiculo', fn (Builder $query) => $query
+                ->vigente()
+                ->whereHas('proveedor', fn (Builder $providerQuery) => $providerQuery
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', Tercero::STATUS_ACTIVE)
+                    ->conRol(TerceroRole::PROVIDER))
+                ->whereHas('vehiculo', fn (Builder $vehicleQuery) => $vehicleQuery
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', 'ACTIVO')))
+            ->with(['proveedorVehiculo.proveedor', 'proveedorVehiculo.vehiculo'])
+            ->orderBy('orden_llegada')
+            ->orderBy('id');
+    }
+
+    private function journeyOrigin(
+        TicketDespacho $ticket,
+        int $programDetailId,
+        int $companyId
+    ): ProgramacionRecepcionDetalle {
+        $origin = $this->journeyOriginQuery($ticket, $companyId)
+            ->whereKey($programDetailId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $origin) {
+            throw ValidationException::withMessages([
+                'origin_program_detail_id' => 'El camión seleccionado no pertenece a la jornada del ticket.',
+            ]);
+        }
+
+        return $origin;
     }
 
     /** @return array<string, ?int> */
@@ -809,6 +905,11 @@ class TicketWeighingManagementController extends Controller
             'condicion_pollo' => $record->condicion_pollo,
             'sexo' => $record->sexo,
             'tipo_java_id' => $record->tipo_java_id,
+            'proveedor_origen_id' => $record->proveedor_origen_id,
+            'almacen_origen_id' => $record->almacen_origen_id,
+            'vehiculo_id' => $record->vehiculo_id,
+            'programacion_recepcion_detalle_id' => $record->programacion_recepcion_detalle_id,
+            'placa_snapshot' => $record->placa_snapshot,
             'origen_peso' => $record->origen_peso,
             'aves_por_java' => $record->aves_por_java,
             'cantidad_javas' => $record->cantidad_javas,

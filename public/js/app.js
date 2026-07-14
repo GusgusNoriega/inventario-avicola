@@ -775,6 +775,7 @@ function normalizeCatalogClient(record, source = "directory") {
     nombre: name,
     dni: String(record?.dni || "").trim(),
     direccion: String(record?.direccion || "").trim(),
+    isInternalClient: Boolean(record?.es_cliente_interno || record?.isInternalClient),
     source,
     destinationType: record?.destinationType === "almacen" ? "almacen" : "cliente",
     databaseId: String(record?.databaseId || (
@@ -829,6 +830,9 @@ function normalizeStoredDestination(record, fallbackId = null) {
     nombre: name,
     dni: String(record.dni || record.numero_documento || "").trim(),
     direccion: String(record.direccion || record.address || "").trim(),
+    isInternalClient: Boolean(
+      record.isInternalClient || record.es_cliente_interno || record.internal_client
+    ),
     source: record.source || "saved",
     destinationType,
     databaseId: String(
@@ -854,6 +858,14 @@ function normalizeStoredDestination(record, fallbackId = null) {
 
 function snapshotDestination(destination) {
   return normalizeStoredDestination(destination, destination?.id);
+}
+
+function isInternalClientDestination(destination) {
+  return Boolean(destination?.destinationType !== "almacen" && destination?.isInternalClient);
+}
+
+function requiresDelivery(truck) {
+  return !isReturnTicket(truck) && !isInternalClientDestination(getTruckDestination(truck));
 }
 
 function getClientCatalog() {
@@ -4723,7 +4735,7 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
     })
   };
 
-  if (!isReturn) {
+  if (!isReturn && !isInternalClientDestination(destination)) {
     ticketPayload.delivery = {
       vehicle_id: Number(deliverySelection?.vehicleId),
       driver_id: Number(deliverySelection?.driverId)
@@ -4786,7 +4798,7 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
     return;
   }
 
-  if (!isReturnTicket(truck) && !deliverySelection) {
+  if (requiresDelivery(truck) && !deliverySelection) {
     openDeliveryTruckModal(truck);
     return;
   }

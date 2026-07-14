@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'numero_documento',
     'nombre_razon_social',
     'direccion',
+    'es_cliente_interno',
     'telefono',
     'email',
     'observaciones',
@@ -24,6 +25,13 @@ class Tercero extends Model
     public const STATUS_ACTIVE = 'ACTIVO';
 
     public const STATUS_INACTIVE = 'INACTIVO';
+
+    protected function casts(): array
+    {
+        return [
+            'es_cliente_interno' => 'boolean',
+        ];
+    }
 
     /**
      * @return BelongsTo<Empresa, $this>

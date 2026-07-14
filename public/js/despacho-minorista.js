@@ -12,6 +12,7 @@ const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
 const LIST_COUNT = 4;
 const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
+const RETAIL_CHICKEN_TYPE_CODES = new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"]);
 const TYPOGRAPHY_STORAGE_KEY = "sistema-pollos-retail-typography-v1";
 const TYPOGRAPHY_GROUPS = [
   {
@@ -273,34 +274,44 @@ function persistLists() {
 }
 
 function recalculateDraftItems() {
+  const availableChickenTypeCodes = new Set(
+    state.catalog.chicken_types.map((type) => type.code)
+  );
+
   state.lists.forEach((list) => {
-    list.items = list.items.map((item) => {
-      const adjustment = state.catalog.adjustments.find((entry) => entry.code === item.adjustmentCode);
-      const tray = state.catalog.tray_types.find((entry) => entry.code === item.trayTypeCode);
-      if (!adjustment || !tray) return item;
+    list.priceOverrides = Object.fromEntries(
+      Object.entries(list.priceOverrides || {})
+        .filter(([code]) => availableChickenTypeCodes.has(code))
+    );
+    list.items = list.items
+      .filter((item) => availableChickenTypeCodes.has(item.chickenTypeCode))
+      .map((item) => {
+        const adjustment = state.catalog.adjustments.find((entry) => entry.code === item.adjustmentCode);
+        const tray = state.catalog.tray_types.find((entry) => entry.code === item.trayTypeCode);
+        if (!adjustment || !tray) return item;
 
-      const trayCount = Number(item.trayCount || 0);
-      const birdsPerTray = Number(item.birdsPerTray || 0);
-      const birds = trayCount * birdsPerTray;
-      const adjustmentGrams = Number(adjustment.additional_grams || 0);
-      const totalAdjustmentGrams = adjustmentGrams * birds;
-      const grossWeight = roundWeight(Number(item.readWeight || 0) + totalAdjustmentGrams / 1000);
-      const tareWeight = roundWeight(trayCount * Number(tray.weight_kg || 0));
+        const trayCount = Number(item.trayCount || 0);
+        const birdsPerTray = Number(item.birdsPerTray || 0);
+        const birds = trayCount * birdsPerTray;
+        const adjustmentGrams = Number(adjustment.additional_grams || 0);
+        const totalAdjustmentGrams = adjustmentGrams * birds;
+        const grossWeight = roundWeight(Number(item.readWeight || 0) + totalAdjustmentGrams / 1000);
+        const tareWeight = roundWeight(trayCount * Number(tray.weight_kg || 0));
 
-      return {
-        ...item,
-        adjustmentName: adjustment.name,
-        chickenSex: adjustment.sex,
-        presentation: adjustment.presentation,
-        adjustmentGrams,
-        totalAdjustmentGrams,
-        trayTypeName: tray.name,
-        birds,
-        grossWeight,
-        tareWeight,
-        netWeight: roundWeight(grossWeight - tareWeight)
-      };
-    });
+        return {
+          ...item,
+          adjustmentName: adjustment.name,
+          chickenSex: adjustment.sex,
+          presentation: adjustment.presentation,
+          adjustmentGrams,
+          totalAdjustmentGrams,
+          trayTypeName: tray.name,
+          birds,
+          grossWeight,
+          tareWeight,
+          netWeight: roundWeight(grossWeight - tareWeight)
+        };
+      });
   });
   persistLists();
 }
@@ -1723,7 +1734,8 @@ function normalizeCatalog(data) {
     general_prices: data.general_prices && typeof data.general_prices === "object"
       ? { ...data.general_prices }
       : {},
-    chicken_types: Array.isArray(data.chicken_types) ? data.chicken_types : [],
+    chicken_types: (Array.isArray(data.chicken_types) ? data.chicken_types : [])
+      .filter((type) => RETAIL_CHICKEN_TYPE_CODES.has(String(type?.code || "").toUpperCase())),
     tray_types: Array.isArray(data.tray_types) ? data.tray_types : [],
     delivery_trucks: Array.isArray(data.delivery_trucks) ? data.delivery_trucks : [],
     delivery_drivers: Array.isArray(data.delivery_drivers) ? data.delivery_drivers : [],

@@ -607,6 +607,51 @@ class DispatchTicketApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
+    public function test_internal_client_dispatch_does_not_require_delivery_and_keeps_java_control(): void
+    {
+        DB::table('terceros')
+            ->where('id', $this->clientId)
+            ->update(['es_cliente_interno' => true]);
+
+        $payload = $this->ticketPayload();
+        unset($payload['delivery']);
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.destination.internal_client', true)
+            ->assertJsonPath('data.delivery', null);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'cliente_destino_id' => $this->clientId,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'cliente_id' => $this->clientId,
+            'tipo' => 'DESPACHO',
+            'cantidad' => 3,
+            'vehiculo_id' => null,
+            'conductor_id' => null,
+        ]);
+    }
+
+    public function test_delivery_sent_for_internal_client_is_not_stored(): void
+    {
+        DB::table('terceros')
+            ->where('id', $this->clientId)
+            ->update(['es_cliente_interno' => true]);
+
+        $this->postJson('/api/v1/operacion/tickets', $this->ticketPayload())
+            ->assertCreated()
+            ->assertJsonPath('data.delivery', null);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'cliente_destino_id' => $this->clientId,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+        ]);
+    }
+
     public function test_weighing_time_is_stored_in_peru_timezone(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-26 12:00:00', 'America/Lima'));
