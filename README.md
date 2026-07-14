@@ -40,9 +40,11 @@ http://sistema-pollos.test
 - `/directorio`: clientes y proveedores.
 - `/directorio/clientes/{id}`: tickets, registros e histórico de precios del cliente.
 - `/directorio/proveedores/{id}`: pesadas, destinos y camiones del proveedor.
-- `/finanzas`: saldos, cartera y trazabilidad de depositos.
+- `/finanzas`: menú de Finanzas y tesorería.
+- `/finanzas/saldos`: saldos, cartera y trazabilidad de depósitos.
 - `/finanzas/entidades`: empresas receptoras y cuentas propias/externas.
 - `/finanzas/movimientos/nuevo`: registro de cobros, pagos y reembolsos.
+- `/compras`: compras a proveedores al contado o a crédito.
 
 La vista de operación todavía utiliza el almacenamiento local existente. El
 directorio de clientes y proveedores ya consulta y modifica la base de datos

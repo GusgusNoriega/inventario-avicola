@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
+use App\Http\Controllers\Api\V1\PurchaseController;
 use App\Http\Controllers\Api\V1\RetailDispatchController;
 use App\Http\Controllers\Api\V1\TicketWeighingManagementController;
 use App\Http\Controllers\Api\V1\TruckController;
@@ -67,6 +68,19 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/movimientos/{movimiento}/anular', [FinancialMovementController::class, 'void'])
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_ANULAR');
+    });
+
+    Route::prefix('compras')->middleware(['auth:sanctum', 'active'])->group(function (): void {
+        Route::middleware('permission:COMPRAS_VER')->group(function (): void {
+            Route::get('/catalogo', [PurchaseController::class, 'catalog']);
+            Route::get('/', [PurchaseController::class, 'index']);
+            Route::get('/{compra}', [PurchaseController::class, 'show'])->whereNumber('compra');
+        });
+        Route::post('/', [PurchaseController::class, 'store'])
+            ->middleware('permission:COMPRAS_REGISTRAR');
+        Route::post('/{compra}/anular', [PurchaseController::class, 'void'])
+            ->whereNumber('compra')
+            ->middleware('permission:COMPRAS_ANULAR');
     });
 
     $directoryMiddleware = config('directory.public_access')

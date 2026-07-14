@@ -25,6 +25,9 @@ class WebViewsTest extends TestCase
             ->assertSee(route('flota'), false)
             ->assertSee(route('finanzas'), false)
             ->assertSee('Finanzas y tesorería')
+            ->assertSee('Saldos, compras, cobros, pagos y cuentas')
+            ->assertDontSee(route('compras.index'), false)
+            ->assertDontSee('Compras a proveedores')
             ->assertSee(route('control-javas'), false)
             ->assertSee('Control de javas y bandejas')
             ->assertSee('Mi flota y choferes')
@@ -35,14 +38,38 @@ class WebViewsTest extends TestCase
 
     public function test_financial_views_are_available_without_database_queries(): void
     {
-        $this->get('/finanzas')
+        $financeMenu = $this->get('/finanzas')
+            ->assertOk()
+            ->assertSee('Finanzas y tesorería')
+            ->assertSee('¿Qué necesitas gestionar?')
+            ->assertSee('class="fin-module-grid"', false)
+            ->assertSee(route('finanzas.saldos'), false)
+            ->assertSee('Saldos y trazabilidad')
+            ->assertSee(route('compras.index'), false)
+            ->assertSee('Compras a proveedores')
+            ->assertSee(route('finanzas.entidades'), false)
+            ->assertSee('Empresas y cuentas')
+            ->assertSee(route('finanzas.movimientos.nuevo'), false)
+            ->assertSee('Registrar cobro o pago')
+            ->assertSee(route('menu'), false)
+            ->assertSee(asset('css/finanzas.css'), false)
+            ->assertDontSee('id="financeAvailableBalance"', false)
+            ->assertDontSee('id="financeAuthDialog"', false)
+            ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
+
+        $this->assertSame(4, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+
+        $this->get('/finanzas/saldos')
             ->assertOk()
             ->assertSee('Saldos y trazabilidad')
             ->assertSee('id="financeAvailableBalance"', false)
             ->assertSee('id="financeTraceRows"', false)
             ->assertSee('id="financeAuthDialog"', false)
+            ->assertSee(route('finanzas'), false)
+            ->assertSee(route('finanzas.saldos'), false)
             ->assertSee(route('finanzas.entidades'), false)
             ->assertSee(route('finanzas.movimientos.nuevo'), false)
+            ->assertSee(route('compras.index'), false)
             ->assertSee(asset('css/finanzas.css'), false)
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/finanzas-dashboard.js'), false);
@@ -104,6 +131,73 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('queryParameters.get("cliente_id")', $movementJavascript);
         $this->assertStringContainsString('queryParameters.get("proveedor_id")', $movementJavascript);
         $this->assertStringContainsString('method: "POST"', $movementJavascript);
+    }
+
+    public function test_purchase_views_are_available_without_database_queries(): void
+    {
+        $this->get('/compras')
+            ->assertOk()
+            ->assertSee('Compras a proveedores')
+            ->assertSee('id="purchaseTotalAmount"', false)
+            ->assertSee('id="purchaseLegacyAmount"', false)
+            ->assertSee('id="purchaseFilters"', false)
+            ->assertSee('id="purchaseFilterCurrency"', false)
+            ->assertSee('value="LEGADO"', false)
+            ->assertSee('Histórica sin clasificar')
+            ->assertSee('id="purchaseRows"', false)
+            ->assertSee('id="purchaseDetailDialog"', false)
+            ->assertSee('id="purchaseVoidReason"', false)
+            ->assertSee('Cliente → nuestra empresa', false)
+            ->assertSee('Cliente → proveedor', false)
+            ->assertSee(route('compras.create'), false)
+            ->assertSee('css/finanzas.css?v=', false)
+            ->assertSee(asset('js/compras.js'), false);
+
+        $this->get('/compras/nueva')
+            ->assertOk()
+            ->assertSee('Registrar compra')
+            ->assertSee('value="CREDITO"', false)
+            ->assertSee('value="CONTADO"', false)
+            ->assertSee('id="purchaseProvider"', false)
+            ->assertSee('id="purchaseLines"', false)
+            ->assertSee('id="purchaseCashPanel"', false)
+            ->assertSee('id="purchaseOriginAccount"', false)
+            ->assertSee('id="purchaseDestinationAccount"', false)
+            ->assertSee('id="purchasePaymentMethod"', false)
+            ->assertSee('id="purchaseTax"', false)
+            ->assertSee('css/finanzas.css?v=', false)
+            ->assertSee(asset('js/compra-form.js'), false);
+
+        $purchaseJavascript = file_get_contents(public_path('js/compras.js'));
+        $purchaseFormJavascript = file_get_contents(public_path('js/compra-form.js'));
+        $financeStylesheet = file_get_contents(public_path('css/finanzas.css'));
+
+        $this->assertIsString($purchaseJavascript);
+        $this->assertIsString($purchaseFormJavascript);
+        $this->assertIsString($financeStylesheet);
+        $this->assertStringContainsString('/compras/catalogo', $purchaseJavascript);
+        $this->assertStringContainsString('/compras?', $purchaseJavascript);
+        $this->assertStringContainsString('/anular', $purchaseJavascript);
+        $this->assertStringContainsString('tipo=PAGO_PROVEEDOR', $purchaseJavascript);
+        $this->assertStringContainsString('tipo=PAGO_DIRECTO', $purchaseJavascript);
+        $this->assertStringContainsString('sin_clasificar', $purchaseJavascript);
+        $this->assertStringContainsString('moneda: elements.filterCurrency.value', $purchaseJavascript);
+        $this->assertStringContainsString('Histórica sin clasificar', $purchaseJavascript);
+        $this->assertStringContainsString('Comprobante histórico conservado', $purchaseJavascript);
+        $this->assertStringContainsString('status === "ANULADO" || condition === "LEGADO"', $purchaseJavascript);
+        $this->assertStringContainsString('is-legacy', $purchaseJavascript);
+        $this->assertStringContainsString('/compras/catalogo', $purchaseFormJavascript);
+        $this->assertStringContainsString('cuentas_propias', $purchaseFormJavascript);
+        $this->assertStringContainsString('cuentas_proveedores', $purchaseFormJavascript);
+        $this->assertStringContainsString('condicion: condition()', $purchaseFormJavascript);
+        $this->assertStringContainsString('payload.pago =', $purchaseFormJavascript);
+        $this->assertStringContainsString('peso_kg:', $purchaseFormJavascript);
+        $this->assertStringContainsString('function roundMoney(value)', $purchaseFormJavascript);
+        $this->assertStringContainsString('idempotency_key:', $purchaseFormJavascript);
+        $this->assertStringContainsString('.fin-purchase-form-columns', $financeStylesheet);
+        $this->assertStringContainsString('.fin-purchase-dialog', $financeStylesheet);
+        $this->assertStringContainsString('.fin-purchase-condition-tag.is-legacy', $financeStylesheet);
+        $this->assertStringContainsString('.fin-purchase-legacy-note', $financeStylesheet);
     }
 
     public function test_retail_dispatch_view_is_available_without_database_queries(): void
@@ -583,6 +677,9 @@ class WebViewsTest extends TestCase
             ->assertSee('data-provider-id="20"', false)
             ->assertSee('id="providerFinanceSection"', false)
             ->assertSee('id="providerDirectDepositsSection"', false)
+            ->assertSee('id="providerFinanceCurrency"', false)
+            ->assertSee('Registrar compra')
+            ->assertSee(route('compras.create').'?proveedor_id=20', false)
             ->assertSee('tipo=PAGO_PROVEEDOR&amp;proveedor_id=20', false)
             ->assertSee(asset('js/proveedor-detalle.js'), false);
 
@@ -591,6 +688,7 @@ class WebViewsTest extends TestCase
         $this->assertIsString($javascript);
         $this->assertStringContainsString('Camión de mi empresa · Asignado desde', $javascript);
         $this->assertStringContainsString('El camión seguirá en Mi flota.', $javascript);
+        $this->assertStringContainsString('params.set("moneda", elements.financeCurrency.value)', $javascript);
     }
 
     public function test_legacy_html_urls_redirect_to_laravel_routes(): void

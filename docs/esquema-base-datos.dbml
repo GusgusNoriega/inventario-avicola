@@ -81,6 +81,17 @@ Enum estado_comprobante {
   ANULADO
 }
 
+Enum condicion_compra {
+  CONTADO
+  CREDITO
+  LEGADO
+}
+
+Enum estado_compra {
+  REGISTRADA
+  ANULADA
+}
+
 Enum direccion_pago {
   COBRO
   PAGO
@@ -593,14 +604,70 @@ Table existencias_almacen {
   }
 }
 
+Table compras {
+  id bigint [pk, increment]
+  empresa_id bigint [not null, ref: > empresas.id]
+  proveedor_id bigint [not null, ref: > terceros.id]
+  comprobante_id bigint [ref: - comprobantes.id, note: "Mismo comprobante CXP; también se reutiliza en compras LEGADO"]
+  pago_inicial_id bigint [ref: - pagos.id, note: "Solo para la compra al contado"]
+  codigo varchar(50)
+  idempotency_key varchar(100) [not null]
+  tipo_documento varchar(30) [not null]
+  numero_documento varchar(80)
+  numero_documento_activo varchar(80) [note: "Nulo al anular; controla unicidad solo entre compras activas"]
+  fecha_compra date [not null]
+  fecha_vencimiento date
+  condicion condicion_compra [not null, note: "LEGADO significa histórica sin clasificar"]
+  moneda char(3) [not null, default: 'PEN']
+  subtotal decimal(14,2) [not null]
+  impuesto decimal(14,2) [not null, default: 0]
+  total decimal(14,2) [not null]
+  estado estado_compra [not null, default: 'REGISTRADA']
+  observaciones text
+  created_by bigint [not null, ref: > usuarios.id]
+  anulada_por bigint [ref: > usuarios.id]
+  anulada_at timestamp
+  motivo_anulacion varchar(250)
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    comprobante_id [unique]
+    pago_inicial_id [unique]
+    (empresa_id, codigo) [unique]
+    (empresa_id, idempotency_key) [unique]
+    (empresa_id, proveedor_id, tipo_documento, numero_documento_activo) [unique]
+    (empresa_id, estado, fecha_compra)
+    (proveedor_id, condicion, fecha_compra)
+  }
+}
+
+Table compra_detalles {
+  id bigint [pk, increment]
+  compra_id bigint [not null, ref: > compras.id]
+  tipo_pollo_id bigint [ref: > tipos_pollo.id]
+  descripcion varchar(250) [not null]
+  cantidad_aves int
+  peso_kg decimal(12,3) [not null]
+  precio_kg decimal(12,4) [not null]
+  subtotal decimal(14,2) [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    (compra_id, tipo_pollo_id)
+  }
+}
+
 Table comprobantes {
   id bigint [pk, increment]
   empresa_id bigint [not null, ref: > empresas.id]
-  tercero_id bigint [not null, ref: > terceros.id]
+  tercero_id bigint [ref: > terceros.id]
   operacion operacion_comprobante [not null]
+  naturaleza varchar(20) [not null, default: 'CARGO']
   tipo_documento varchar(30) [not null, default: 'INTERNO']
   codigo varchar(50) [not null]
   origen_codigo origen_codigo_comprobante [not null]
+  origen_clave varchar(120) [note: "COMPRA:REGISTRO:* para compras nuevas; COMPRA:TICKET:* para CXP históricas"]
   fecha_emision date [not null]
   fecha_vencimiento date
   moneda char(3) [not null, default: 'PEN']
@@ -610,11 +677,15 @@ Table comprobantes {
   saldo_pendiente decimal(14,2) [not null]
   estado estado_comprobante [not null, default: 'BORRADOR']
   created_by bigint [not null, ref: > usuarios.id]
+  anulada_por bigint [ref: > usuarios.id]
+  anulada_at timestamp
+  motivo_anulacion varchar(250)
   created_at timestamp [not null]
   updated_at timestamp [not null]
 
   indexes {
     (empresa_id, codigo) [unique]
+    (empresa_id, origen_clave) [unique]
     (tercero_id, fecha_emision)
   }
 }

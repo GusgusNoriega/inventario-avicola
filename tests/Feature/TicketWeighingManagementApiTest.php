@@ -371,19 +371,15 @@ class TicketWeighingManagementApiTest extends TestCase
         ]);
     }
 
-    public function test_update_resynchronizes_unpaid_sale_purchase_and_cost_documents(): void
+    public function test_update_resynchronizes_the_unpaid_sale_without_creating_purchase_obligations(): void
     {
-        $documents = $this->prepareFinancialObligations();
+        $saleDocumentId = $this->prepareFinancialReceivable();
         $this->assertDatabaseHas('comprobantes', [
-            'id' => $documents['sale'],
+            'id' => $saleDocumentId,
             'total' => 260,
             'saldo_pendiente' => 260,
         ]);
-        $this->assertDatabaseHas('comprobantes', [
-            'id' => $documents['purchase'],
-            'total' => 156,
-            'saldo_pendiente' => 156,
-        ]);
+        $this->assertDatabaseMissing('comprobantes', ['operacion' => 'COMPRA']);
 
         $payload = $this->updatePayload();
         $payload['chicken_type_code'] = TipoPollo::CHICKEN_LIVE;
@@ -396,34 +392,19 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 20);
 
         $this->assertDatabaseHas('comprobantes', [
-            'id' => $documents['sale'],
+            'id' => $saleDocumentId,
             'total' => 200,
             'saldo_pendiente' => 200,
             'estado' => 'PENDIENTE',
         ]);
-        $this->assertDatabaseHas('comprobantes', [
-            'id' => $documents['purchase'],
-            'total' => 120,
-            'saldo_pendiente' => 120,
-            'estado' => 'PENDIENTE',
-        ]);
-        $this->assertDatabaseHas('costos_compra_pesadas', [
-            'pesada_id' => $this->weighingId,
-            'peso_kg' => 20,
-            'precio_kg' => 6,
-            'importe' => 120,
-            'estado' => 'ACTIVO',
-        ]);
-        $this->assertDatabaseHas('comprobante_pesadas', [
-            'comprobante_id' => $documents['purchase'],
-            'pesada_id' => $this->weighingId,
-            'importe_aplicado' => 120,
-        ]);
+        $this->assertDatabaseMissing('comprobantes', ['operacion' => 'COMPRA']);
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
+        $this->assertDatabaseCount('comprobante_pesadas', 0);
     }
 
     public function test_update_is_blocked_after_a_financial_movement_is_applied(): void
     {
-        $documents = $this->prepareFinancialObligations();
+        $saleDocumentId = $this->prepareFinancialReceivable();
         $account = $this->createOwnFinancialAccount();
         $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
         app(FinancialMovementService::class)->register(
@@ -439,7 +420,7 @@ class TicketWeighingManagementApiTest extends TestCase
                 'importe' => '20.00',
                 'aplicaciones' => [[
                     'lado' => 'CXC',
-                    'comprobante_id' => $documents['sale'],
+                    'comprobante_id' => $saleDocumentId,
                     'importe_aplicado' => '20.00',
                 ]],
             ],
@@ -464,7 +445,7 @@ class TicketWeighingManagementApiTest extends TestCase
             'estado' => Pesada::STATUS_ACTIVE,
         ]);
         $this->assertDatabaseHas('comprobantes', [
-            'id' => $documents['sale'],
+            'id' => $saleDocumentId,
             'total' => 260,
             'saldo_pendiente' => 240,
             'estado' => 'PARCIAL',
@@ -667,8 +648,7 @@ class TicketWeighingManagementApiTest extends TestCase
         $this->assertDatabaseCount('auditoria_eventos', 0);
     }
 
-    /** @return array{sale: int, purchase: int} */
-    private function prepareFinancialObligations(): array
+    private function prepareFinancialReceivable(): int
     {
         $provider = DB::table('terceros')->insertGetId([
             'empresa_id' => $this->user->empresa_id,
@@ -691,8 +671,6 @@ class TicketWeighingManagementApiTest extends TestCase
 
         $saleList = $this->createFinancialPriceList($this->clientId, 'VENTA');
         $saleHistory = $this->createFinancialPriceHistory($saleList, '10.0000');
-        $purchaseList = $this->createFinancialPriceList($provider, 'COMPRA');
-        $this->createFinancialPriceHistory($purchaseList, '6.0000');
         DB::table('ticket_precios')->insert([
             'ticket_id' => $this->ticketId,
             'tipo_pollo_id' => $this->liveTypeId,
@@ -709,10 +687,10 @@ class TicketWeighingManagementApiTest extends TestCase
             $this->user,
         );
 
-        return [
-            'sale' => (int) $result['sale_document_id'],
-            'purchase' => (int) collect($result['purchase_document_ids'])->first(),
-        ];
+        $this->assertSame([], $result['purchase_document_ids']);
+        $this->assertSame(0, $result['pending_purchase_costs']);
+
+        return (int) $result['sale_document_id'];
     }
 
     private function createFinancialPriceList(int $thirdParty, string $operation): int

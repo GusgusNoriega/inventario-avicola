@@ -35,9 +35,6 @@ class FinancialObligationServiceTest extends TestCase
 
     private int $salePriceHistoryId;
 
-    /** @var array<int, int> */
-    private array $purchasePriceHistoryIds = [];
-
     private int $ticketSequence = 0;
 
     protected function setUp(): void
@@ -81,12 +78,12 @@ class FinancialObligationServiceTest extends TestCase
             $this->clientId,
             '10.0000'
         );
-        $this->purchasePriceHistoryIds[$this->firstProviderId] = $this->createPrice(
+        $this->createPrice(
             ListaPrecio::OPERATION_PURCHASE,
             $this->firstProviderId,
             '6.2500'
         );
-        $this->purchasePriceHistoryIds[$this->secondProviderId] = $this->createPrice(
+        $this->createPrice(
             ListaPrecio::OPERATION_PURCHASE,
             $this->secondProviderId,
             '7.5000'
@@ -100,7 +97,9 @@ class FinancialObligationServiceTest extends TestCase
         $result = $this->sync($ticket);
 
         $this->assertNotNull($result['sale_document_id']);
-        $this->assertDatabaseCount('comprobantes', 2);
+        $this->assertSame([], $result['purchase_document_ids']);
+        $this->assertSame(0, $result['pending_purchase_costs']);
+        $this->assertDatabaseCount('comprobantes', 1);
         $this->assertDatabaseHas('comprobantes', [
             'id' => $result['sale_document_id'],
             'empresa_id' => $this->user->empresa_id,
@@ -117,9 +116,11 @@ class FinancialObligationServiceTest extends TestCase
             'ticket_id' => $ticket->id,
             'importe_aplicado' => 100,
         ]);
+        $this->assertDatabaseMissing('comprobantes', ['operacion' => 'COMPRA']);
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
     }
 
-    public function test_it_creates_separate_purchase_documents_for_a_ticket_with_multiple_providers(): void
+    public function test_it_keeps_provider_traceability_without_creating_purchase_obligations(): void
     {
         $ticket = $this->createTicket([
             $this->firstProviderId,
@@ -128,72 +129,20 @@ class FinancialObligationServiceTest extends TestCase
 
         $result = $this->sync($ticket);
 
-        $this->assertCount(2, $result['purchase_document_ids']);
-        $this->assertDatabaseCount('comprobantes', 3);
-        $this->assertDatabaseHas('comprobantes', [
-            'tercero_id' => $this->firstProviderId,
-            'operacion' => 'COMPRA',
-            'origen_clave' => "COMPRA:TICKET:{$ticket->id}:PROVEEDOR:{$this->firstProviderId}",
-            'total' => 62.50,
-        ]);
-        $this->assertDatabaseHas('comprobantes', [
-            'tercero_id' => $this->secondProviderId,
-            'operacion' => 'COMPRA',
-            'origen_clave' => "COMPRA:TICKET:{$ticket->id}:PROVEEDOR:{$this->secondProviderId}",
-            'total' => 150,
-        ]);
-
-        $purchaseDocuments = DB::table('comprobantes')
-            ->where('operacion', 'COMPRA')
-            ->pluck('id', 'tercero_id');
-        $weighings = DB::table('pesadas')
-            ->where('ticket_id', $ticket->id)
-            ->pluck('id', 'proveedor_origen_id');
-
-        $this->assertDatabaseHas('comprobante_pesadas', [
-            'comprobante_id' => $purchaseDocuments[$this->firstProviderId],
-            'pesada_id' => $weighings[$this->firstProviderId],
-            'importe_aplicado' => 62.50,
-        ]);
-        $this->assertDatabaseHas('comprobante_pesadas', [
-            'comprobante_id' => $purchaseDocuments[$this->secondProviderId],
-            'pesada_id' => $weighings[$this->secondProviderId],
-            'importe_aplicado' => 150,
-        ]);
-    }
-
-    public function test_it_freezes_the_purchase_price_snapshot_for_each_weighing(): void
-    {
-        $ticket = $this->createTicket([$this->firstProviderId]);
-        $weighingId = (int) DB::table('pesadas')
-            ->where('ticket_id', $ticket->id)
-            ->value('id');
-
-        $this->sync($ticket);
-
-        $this->assertDatabaseHas('costos_compra_pesadas', [
-            'pesada_id' => $weighingId,
-            'proveedor_id' => $this->firstProviderId,
-            'precio_historial_id' => $this->purchasePriceHistoryIds[$this->firstProviderId],
-            'precio_kg' => 6.25,
-            'peso_kg' => 10,
-            'importe' => 62.50,
-            'estado' => 'ACTIVO',
-            'origen' => 'LISTA_PROVEEDOR',
-        ]);
-
-        DB::table('precios_historial')
-            ->where('id', $this->purchasePriceHistoryIds[$this->firstProviderId])
-            ->update(['precio_kg' => 9.99]);
-
-        $this->sync($ticket->fresh());
-
-        $this->assertDatabaseHas('costos_compra_pesadas', [
-            'pesada_id' => $weighingId,
-            'precio_kg' => 6.25,
-            'importe' => 62.50,
-            'estado' => 'ACTIVO',
-        ]);
+        $this->assertSame([], $result['purchase_document_ids']);
+        $this->assertSame(0, $result['pending_purchase_costs']);
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseMissing('comprobantes', ['operacion' => 'COMPRA']);
+        $this->assertDatabaseCount('comprobante_pesadas', 0);
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
+        $this->assertEqualsCanonicalizing(
+            [$this->firstProviderId, $this->secondProviderId],
+            DB::table('pesadas')
+                ->where('ticket_id', $ticket->id)
+                ->pluck('proveedor_origen_id')
+                ->map(fn ($providerId): int => (int) $providerId)
+                ->all()
+        );
     }
 
     public function test_syncing_the_same_ticket_is_idempotent(): void
@@ -204,11 +153,11 @@ class FinancialObligationServiceTest extends TestCase
         $secondResult = $this->sync($ticket->fresh());
 
         $this->assertSame($firstResult, $secondResult);
-        $this->assertDatabaseCount('comprobantes', 2);
-        $this->assertDatabaseCount('comprobante_detalles', 2);
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseCount('comprobante_detalles', 1);
         $this->assertDatabaseCount('comprobante_tickets', 1);
-        $this->assertDatabaseCount('comprobante_pesadas', 1);
-        $this->assertDatabaseCount('costos_compra_pesadas', 1);
+        $this->assertDatabaseCount('comprobante_pesadas', 0);
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
     }
 
     public function test_a_return_creates_a_sale_credit_and_no_purchase_obligation(): void
@@ -235,7 +184,7 @@ class FinancialObligationServiceTest extends TestCase
         $this->assertDatabaseCount('costos_compra_pesadas', 0);
     }
 
-    public function test_it_marks_the_purchase_cost_as_pending_when_the_provider_has_no_price(): void
+    public function test_a_provider_without_purchase_price_does_not_create_pending_dispatch_costs(): void
     {
         $providerWithoutPrice = $this->createParty('Proveedor sin precio', '20444444444');
         $ticket = $this->createTicket([$providerWithoutPrice]);
@@ -243,15 +192,8 @@ class FinancialObligationServiceTest extends TestCase
         $result = $this->sync($ticket);
 
         $this->assertSame([], $result['purchase_document_ids']);
-        $this->assertSame(1, $result['pending_purchase_costs']);
-        $this->assertDatabaseHas('costos_compra_pesadas', [
-            'proveedor_id' => $providerWithoutPrice,
-            'precio_historial_id' => null,
-            'precio_kg' => 0,
-            'importe' => 0,
-            'estado' => 'PENDIENTE',
-            'origen' => 'SIN_PRECIO',
-        ]);
+        $this->assertSame(0, $result['pending_purchase_costs']);
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
         $this->assertDatabaseCount('comprobantes', 1);
         $this->assertDatabaseMissing('comprobantes', [
             'operacion' => 'COMPRA',
@@ -259,30 +201,19 @@ class FinancialObligationServiceTest extends TestCase
         ]);
     }
 
-    public function test_a_pending_purchase_cost_is_resolved_when_a_later_provider_price_is_added(): void
+    public function test_adding_a_provider_price_does_not_create_an_obligation_from_dispatch(): void
     {
-        $providerWithoutPrice = $this->createParty('Proveedor valorizado despues', '20555555555');
-        $ticket = $this->createTicket([$providerWithoutPrice]);
-        $weighingId = (int) DB::table('pesadas')
-            ->where('ticket_id', $ticket->id)
-            ->value('id');
-        DB::table('pesadas')->where('id', $weighingId)->update([
-            'pesada_at' => now()->subDays(3),
+        $providerId = $this->createParty('Proveedor valorizado despues', '20555555555');
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $providerId,
+            'rol' => TerceroRole::PROVIDER,
+            'created_at' => now(),
         ]);
+        $ticket = $this->createTicket([$providerId]);
 
         $this->sync($ticket->fresh());
 
-        $this->assertDatabaseHas('costos_compra_pesadas', [
-            'pesada_id' => $weighingId,
-            'estado' => 'PENDIENTE',
-            'origen' => 'SIN_PRECIO',
-        ]);
-        $this->assertDatabaseMissing('comprobantes', [
-            'operacion' => 'COMPRA',
-            'tercero_id' => $providerWithoutPrice,
-        ]);
-
-        $provider = Tercero::query()->findOrFail($providerWithoutPrice);
+        $provider = Tercero::query()->findOrFail($providerId);
         app(TerceroDirectoryService::class)->update(
             $provider,
             (int) $this->user->id,
@@ -295,37 +226,28 @@ class FinancialObligationServiceTest extends TestCase
             ],
         );
 
-        $priceHistoryId = (int) DB::table('precios_historial as precio')
-            ->join('listas_precios as lista', 'lista.id', '=', 'precio.lista_precio_id')
-            ->where('lista.tercero_id', $providerWithoutPrice)
-            ->where('precio.tipo_pollo_id', $this->chickenTypeId)
-            ->value('precio.id');
-        $this->assertDatabaseHas('costos_compra_pesadas', [
-            'pesada_id' => $weighingId,
-            'proveedor_id' => $providerWithoutPrice,
-            'precio_historial_id' => $priceHistoryId,
+        $this->assertDatabaseHas('precios_historial', [
             'precio_kg' => 8.125,
-            'peso_kg' => 10,
-            'importe' => 81.25,
-            'estado' => 'ACTIVO',
-            'origen' => 'LISTA_POSTERIOR',
         ]);
-        $this->assertDatabaseHas('comprobantes', [
+        $this->assertTrue(DB::table('precios_historial as precio')
+            ->join('listas_precios as lista', 'lista.id', '=', 'precio.lista_precio_id')
+            ->where('lista.tercero_id', $providerId)
+            ->where('lista.operacion', ListaPrecio::OPERATION_PURCHASE)
+            ->where('precio.tipo_pollo_id', $this->chickenTypeId)
+            ->exists());
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
+        $this->assertDatabaseMissing('comprobantes', [
             'operacion' => 'COMPRA',
-            'tercero_id' => $providerWithoutPrice,
-            'origen_clave' => "COMPRA:TICKET:{$ticket->id}:PROVEEDOR:{$providerWithoutPrice}",
-            'total' => 81.25,
-            'saldo_pendiente' => 81.25,
-            'estado' => 'PENDIENTE',
+            'tercero_id' => $providerId,
         ]);
     }
 
-    public function test_rebuild_command_dry_run_reports_but_does_not_write_and_real_runs_are_idempotent(): void
+    public function test_rebuild_command_only_rebuilds_sales_and_is_idempotent(): void
     {
         $this->createTicket([$this->firstProviderId]);
 
         $this->artisan('finanzas:reconstruir-obligaciones', ['--dry-run' => true])
-            ->expectsOutputToContain('Costos pendientes')
+            ->expectsOutputToContain('Documentos de venta')
             ->expectsOutputToContain('TOTAL')
             ->assertSuccessful();
 
@@ -338,11 +260,11 @@ class FinancialObligationServiceTest extends TestCase
         $this->artisan('finanzas:reconstruir-obligaciones')
             ->assertSuccessful();
 
-        $this->assertDatabaseCount('comprobantes', 2);
-        $this->assertDatabaseCount('comprobante_detalles', 2);
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseCount('comprobante_detalles', 1);
         $this->assertDatabaseCount('comprobante_tickets', 1);
-        $this->assertDatabaseCount('comprobante_pesadas', 1);
-        $this->assertDatabaseCount('costos_compra_pesadas', 1);
+        $this->assertDatabaseCount('comprobante_pesadas', 0);
+        $this->assertDatabaseCount('costos_compra_pesadas', 0);
     }
 
     /**

@@ -153,6 +153,14 @@ class Pago extends Model
     }
 
     /**
+     * @return HasOne<Compra, $this>
+     */
+    public function compraInicial(): HasOne
+    {
+        return $this->hasOne(Compra::class, 'pago_inicial_id');
+    }
+
+    /**
      * @return HasMany<PagoAplicacion, $this>
      */
     public function aplicaciones(): HasMany

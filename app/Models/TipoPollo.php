@@ -42,6 +42,14 @@ class TipoPollo extends Model
     }
 
     /**
+     * @return HasMany<CompraDetalle, $this>
+     */
+    public function detallesCompra(): HasMany
+    {
+        return $this->hasMany(CompraDetalle::class);
+    }
+
+    /**
      * @return BelongsTo<TipoPollo, $this>
      */
     public function precioFuente(): BelongsTo

@@ -75,6 +75,7 @@ class FinancialMovementService
         int $paymentId,
         string $reason,
         ?string $ip = null,
+        ?int $purchaseContextId = null,
     ): array {
         abort_unless(
             (int) $actor->empresa_id === $companyId && $actor->isActive(),
@@ -82,13 +83,31 @@ class FinancialMovementService
             'Usuario no autorizado para esta empresa.'
         );
 
-        return DB::transaction(function () use ($companyId, $actor, $paymentId, $reason, $ip): array {
+        return DB::transaction(function () use (
+            $companyId,
+            $actor,
+            $paymentId,
+            $reason,
+            $ip,
+            $purchaseContextId,
+        ): array {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
                 ->where('id', $paymentId)
                 ->lockForUpdate()
                 ->first();
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
+
+            $cashPurchase = DB::table('compras')
+                ->where('empresa_id', $companyId)
+                ->where('pago_inicial_id', $paymentId)
+                ->lockForUpdate()
+                ->first();
+            if ($cashPurchase && (int) $cashPurchase->id !== $purchaseContextId) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este pago pertenece a una compra al contado. Anula la compra completa desde el modulo de compras.',
+                ]);
+            }
 
             if ($payment->reversa_de_pago_id !== null) {
                 throw ValidationException::withMessages([
@@ -440,6 +459,22 @@ class FinancialMovementService
                     throw ValidationException::withMessages([
                         'aplicaciones' => 'Un pago directo debe aplicar al menos una cuenta por cobrar y una cuenta por pagar.',
                     ]);
+                }
+                foreach (['CXC', 'CXP'] as $side) {
+                    $applied = collect($data['aplicaciones'])
+                        ->where('lado', $side)
+                        ->reduce(
+                            fn (string $sum, array $application): string => FinancialMoney::add(
+                                $sum,
+                                $application['importe_aplicado']
+                            ),
+                            '0.00'
+                        );
+                    if (FinancialMoney::compare($applied, $data['importe']) !== 0) {
+                        throw ValidationException::withMessages([
+                            'aplicaciones' => "Un pago directo debe aplicar el importe completo tanto en {$side} como en la otra cartera.",
+                        ]);
+                    }
                 }
                 break;
 

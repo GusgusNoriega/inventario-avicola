@@ -60,4 +60,12 @@ class Empresa extends Model
     {
         return $this->hasMany(Pago::class);
     }
+
+    /**
+     * @return HasMany<Compra, $this>
+     */
+    public function compras(): HasMany
+    {
+        return $this->hasMany(Compra::class);
+    }
 }

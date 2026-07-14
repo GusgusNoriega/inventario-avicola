@@ -23,6 +23,12 @@ proyecto.
 | `/flota` | `flota.blade.php` | Camiones y choferes propios de la empresa |
 | `/directorio/clientes/{id}` | `cliente-detalle.blade.php` | Tickets, pesadas e histórico de precios |
 | `/directorio/proveedores/{id}` | `proveedor-detalle.blade.php` | Pesadas, destinos y placas asignadas |
+| `/finanzas` | `finanzas-menu.blade.php` | Portada con las cuatro áreas financieras |
+| `/finanzas/saldos` | `finanzas.blade.php` | Saldos, cartera y trazabilidad financiera |
+| `/finanzas/entidades` | `finanzas-entidades.blade.php` | Empresas receptoras y cuentas propias/externas |
+| `/finanzas/movimientos/nuevo` | `finanzas-movimiento.blade.php` | Registro de cobros, pagos y reembolsos |
+| `/compras` | `compras.blade.php` | Compras explícitas, CXP y registros históricos `LEGADO` |
+| `/compras/nueva` | `compra-form.blade.php` | Registro de compras al contado o a crédito |
 
 La migración a la API se realiza módulo por módulo. La vista de operación
 continúa pendiente.
@@ -80,6 +86,11 @@ una sola vez durante el login.
 | `GET` | `/api/v1/operacion/clientes` | `DESPACHOS_VER`; acceso público temporal en local |
 | `GET` | `/api/v1/operacion/proveedores` | `DESPACHOS_VER`; acceso público temporal en local |
 | `POST` | `/api/v1/operacion/tickets` | `DESPACHOS_CREAR`; acceso público temporal en local |
+| `GET` | `/api/v1/compras/catalogo` | `COMPRAS_VER` |
+| `GET` | `/api/v1/compras` | `COMPRAS_VER` |
+| `GET` | `/api/v1/compras/{id}` | `COMPRAS_VER` |
+| `POST` | `/api/v1/compras` | `COMPRAS_REGISTRAR` |
+| `POST` | `/api/v1/compras/{id}/anular` | `COMPRAS_ANULAR` |
 
 Los endpoints del directorio buscan exclusivamente por nombre o número de
 documento. La creación registra el tercero, su rol y su lista de precios con
@@ -141,11 +152,51 @@ Si falla cualquier pesada, la transacción se revierte completa. El campo
 `referencia_externa` contiene el UUID del borrador y evita duplicados cuando
 una solicitud se reintenta.
 
+Al cerrar el ticket se crea o sincroniza únicamente el comprobante de venta y
+la CXC del cliente. El proveedor, la placa y el producto de origen permanecen
+en cada pesada para consultar qué proveedor atendió a qué cliente, pero el
+despacho no crea una CXP nueva. La deuda con el proveedor nace en el módulo de
+Compras, no por inferencia desde las pesadas.
+
 Cuando se actualiza el precio específico de un cliente, la misma transacción
 revaloriza sus `ticket_precios` correspondientes a la jornada operativa
 vigente. Esto cubre despachos realizados después del corte de las 9:00 p. m.
 que se cobran durante la mañana siguiente. Los tickets de jornadas anteriores
 no se modifican y cada cambio queda registrado en `auditoria_eventos`.
+
+## Registro transaccional de compras
+
+`POST /api/v1/compras` recibe el proveedor, documento, condición de pago y sus
+detalles. El backend recalcula cada subtotal y el total, y usa una clave UUID de
+idempotencia para que un reintento idéntico no duplique la operación.
+
+- Una compra `CREDITO` crea la compra y un comprobante `COMPRA` de naturaleza
+  `CARGO`; el total queda como CXP pendiente.
+- Una compra `CONTADO` crea además un `PAGO_PROVEEDOR` totalmente aplicado al
+  mismo comprobante; la CXP queda pagada y disminuye la cuenta propia elegida.
+- Un `PAGO_DIRECTO` de un cliente al proveedor aplica exactamente el mismo
+  importe al conjunto de CXC y al conjunto de CXP seleccionadas, reduciendo
+  ambas obligaciones sin afectar una cuenta propia.
+- Un `COBRO_CLIENTE` depositado a la avícola reduce la CXC y aumenta el saldo
+  propio, pero no reduce la CXP.
+
+Las CXP generadas por el modelo anterior se identifican por
+`origen_clave = COMPRA:TICKET:*` y se importan como compras `LEGADO`. La compra
+histórica queda vinculada al comprobante ya existente y copia sus detalles para
+consulta. No se crean comprobantes ni pagos adicionales y no se alteran el
+saldo pendiente, las aplicaciones o el estado financiero original.
+
+Las consultas y mutaciones exigen Sanctum y usuario activo. Además de
+`COMPRAS_VER`, `COMPRAS_REGISTRAR` o `COMPRAS_ANULAR`, una compra al contado
+requiere permiso para registrar pagos y su anulación requiere permiso para
+anularlos. El pago inicial no se puede anular directamente desde Finanzas: la
+reversa debe iniciarse desde la compra. El listado y el resumen del proveedor
+aceptan `moneda` para consultar cada cartera sin mezclar divisas.
+
+Los datos de identificación del proveedor se leen del snapshot del comprobante
+y el número de documento solo es único entre compras activas. Una anulación
+conserva el documento histórico y permite registrar después una captura
+corregida con el mismo número.
 
 Durante el desarrollo puede utilizarse:
 

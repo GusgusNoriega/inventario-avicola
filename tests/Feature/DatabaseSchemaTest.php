@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(73, $migrationFiles);
+        $this->assertCount(78, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -29,7 +29,9 @@ class DatabaseSchemaTest extends TestCase
             $expectedOperations = match (basename($migrationFile)) {
                 '2026_06_26_000004_add_tickets_dia_permission.php',
                 '2026_06_27_000001_add_pesadas_gestionar_permission.php',
-                '2026_07_12_000009_add_financial_permissions.php' => 0,
+                '2026_07_12_000009_add_financial_permissions.php',
+                '2026_07_14_000004_add_purchase_permissions.php',
+                '2026_07_14_000005_backfill_legacy_dispatch_purchases.php' => 0,
                 '2026_07_12_000002_add_trays_to_java_movements.php' => 3,
                 '2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php' => 2,
                 default => 1,
@@ -98,6 +100,8 @@ class DatabaseSchemaTest extends TestCase
             'cuentas_financieras',
             'metodos_pago',
             'costos_compra_pesadas',
+            'compras',
+            'compra_detalles',
         ];
 
         foreach ($tables as $table) {
@@ -132,6 +136,8 @@ class DatabaseSchemaTest extends TestCase
             'pagos' => ['empresa_id', 'codigo', 'tercero_id', 'tipo', 'cliente_id', 'proveedor_id', 'cuenta_origen_id', 'cuenta_destino_id', 'metodo_pago_id', 'direccion', 'fecha_hora', 'metodo', 'referencia', 'importe', 'estado', 'idempotency_key', 'reversa_de_pago_id', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'pago_aplicaciones' => ['pago_id', 'comprobante_id', 'lado', 'importe_aplicado', 'created_by', 'created_at'],
             'auditoria_eventos' => ['usuario_id', 'entidad', 'entidad_id', 'accion', 'datos_antes', 'datos_despues'],
+            'compras' => ['empresa_id', 'proveedor_id', 'comprobante_id', 'pago_inicial_id', 'codigo', 'idempotency_key', 'tipo_documento', 'numero_documento', 'numero_documento_activo', 'fecha_compra', 'fecha_vencimiento', 'condicion', 'moneda', 'subtotal', 'impuesto', 'total', 'estado', 'observaciones', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
+            'compra_detalles' => ['compra_id', 'tipo_pollo_id', 'descripcion', 'cantidad_aves', 'peso_kg', 'precio_kg', 'subtotal', 'created_at'],
         ];
 
         foreach ($expectations as $table => $columns) {
@@ -168,6 +174,9 @@ class DatabaseSchemaTest extends TestCase
                 'PAGOS_REGISTRAR',
                 'PAGOS_ANULAR',
                 'SALDOS_AJUSTAR',
+                'COMPRAS_VER',
+                'COMPRAS_REGISTRAR',
+                'COMPRAS_ANULAR',
             ],
             DB::table('permisos')
                 ->whereIn('codigo', [
@@ -176,6 +185,9 @@ class DatabaseSchemaTest extends TestCase
                     'PAGOS_REGISTRAR',
                     'PAGOS_ANULAR',
                     'SALDOS_AJUSTAR',
+                    'COMPRAS_VER',
+                    'COMPRAS_REGISTRAR',
+                    'COMPRAS_ANULAR',
                 ])
                 ->pluck('codigo')
                 ->all()
@@ -216,6 +228,49 @@ class DatabaseSchemaTest extends TestCase
         );
     }
 
+    public function test_purchase_permission_migration_assigns_permissions_to_existing_administrators(): void
+    {
+        $user = User::factory()->create();
+        $administratorId = DB::table('roles')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'ADMINISTRADOR',
+            'nombre' => 'Administrador de compras existente',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $migration = require database_path(
+            'migrations/2026_07_14_000004_add_purchase_permissions.php'
+        );
+
+        $migration->down();
+        $migration->up();
+
+        $this->assertSame(
+            3,
+            DB::table('rol_permisos')
+                ->where('rol_id', $administratorId)
+                ->whereIn('permiso_id', DB::table('permisos')
+                    ->whereIn('codigo', ['COMPRAS_VER', 'COMPRAS_REGISTRAR', 'COMPRAS_ANULAR'])
+                    ->select('id'))
+                ->count()
+        );
+    }
+
+    public function test_active_purchase_document_migration_rolls_back_and_can_be_applied_again(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_07_14_000006_allow_reusing_voided_purchase_documents.php'
+        );
+
+        $this->assertTrue(Schema::hasColumn('compras', 'numero_documento_activo'));
+
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('compras', 'numero_documento_activo'));
+
+        $migration->up();
+        $this->assertTrue(Schema::hasColumn('compras', 'numero_documento_activo'));
+    }
+
     public function test_database_seeder_keeps_financial_catalogs_and_admin_permissions(): void
     {
         $this->seed();
@@ -227,7 +282,7 @@ class DatabaseSchemaTest extends TestCase
         $this->assertNotNull($administratorId);
         $this->assertSame(7, DB::table('metodos_pago')->count());
         $this->assertSame(
-            5,
+            8,
             DB::table('rol_permisos')
                 ->where('rol_id', $administratorId)
                 ->whereIn('permiso_id', DB::table('permisos')
@@ -237,6 +292,9 @@ class DatabaseSchemaTest extends TestCase
                         'PAGOS_REGISTRAR',
                         'PAGOS_ANULAR',
                         'SALDOS_AJUSTAR',
+                        'COMPRAS_VER',
+                        'COMPRAS_REGISTRAR',
+                        'COMPRAS_ANULAR',
                     ])
                     ->select('id'))
                 ->count()

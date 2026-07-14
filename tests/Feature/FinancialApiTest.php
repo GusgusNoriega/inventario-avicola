@@ -470,6 +470,37 @@ class FinancialApiTest extends TestCase
             ->assertJsonPath('pagos_proveedores.directos_clientes', '50.00');
     }
 
+    public function test_direct_customer_payment_requires_the_full_amount_on_both_portfolios(): void
+    {
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE DIRECTO DESIGUAL', '10222223');
+        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR DIRECTO DESIGUAL', '20222222223');
+        [, $externalAccount] = $this->externalAccount($provider);
+        $receivable = $this->document('VENTA', $client, '100.00', 'CXC-DIRECTO-DESIGUAL');
+        $payable = $this->document('COMPRA', $provider, '100.00', 'CXP-DIRECTO-DESIGUAL');
+        $method = DB::table('metodos_pago')->where('codigo', 'DEPOSITO')->value('id');
+
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'PAGO_DIRECTO',
+            'cliente_id' => $client,
+            'proveedor_id' => $provider,
+            'cuenta_destino_id' => $externalAccount,
+            'metodo_pago_id' => $method,
+            'moneda' => 'PEN',
+            'importe' => '50.00',
+            'referencia' => 'OP-DESIGUAL',
+            'aplicaciones' => [
+                ['lado' => 'CXC', 'comprobante_id' => $receivable, 'importe_aplicado' => '50.00'],
+                ['lado' => 'CXP', 'comprobante_id' => $payable, 'importe_aplicado' => '40.00'],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('aplicaciones');
+
+        $this->assertDatabaseCount('pagos', 0);
+        $this->assertDatabaseHas('comprobantes', ['id' => $receivable, 'saldo_pendiente' => '100']);
+        $this->assertDatabaseHas('comprobantes', ['id' => $payable, 'saldo_pendiente' => '100']);
+    }
+
     public function test_void_creates_reversal_restores_payable_and_nets_own_balance(): void
     {
         $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR REVERSA', '20333333333');
@@ -604,11 +635,29 @@ class FinancialApiTest extends TestCase
     {
         $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR RESUMEN', '20777777777');
         $this->createPendingPurchaseCost($provider, '10.123');
+        $this->document('COMPRA', $provider, '40.00', 'RESUMEN-PEN');
+        $usdDocument = $this->document('COMPRA', $provider, '60.00', 'RESUMEN-USD');
+        DB::table('comprobantes')->where('id', $usdDocument)->update(['moneda' => 'USD']);
 
         $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
             ->assertOk()
+            ->assertJsonPath('data.currency', 'PEN')
+            ->assertJsonPath('data.documented', '40.00')
             ->assertJsonPath('data.pending_costs.count', 1)
             ->assertJsonPath('data.pending_costs.weight_kg', '10.123');
+
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen?moneda=usd")
+            ->assertOk()
+            ->assertJsonPath('data.currency', 'USD')
+            ->assertJsonPath('data.documented', '60.00')
+            ->assertJsonPath('data.pending', '60.00');
+
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen?moneda=US")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('moneda');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen?moneda[]=USD")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('moneda');
 
         config()->set('directory.public_access', true);
         $this->app['auth']->forgetGuards();

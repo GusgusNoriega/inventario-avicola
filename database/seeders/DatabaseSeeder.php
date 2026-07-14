@@ -173,6 +173,9 @@ class DatabaseSeeder extends Seeder
             'PAGOS_REGISTRAR',
             'PAGOS_ANULAR',
             'SALDOS_AJUSTAR',
+            'COMPRAS_VER',
+            'COMPRAS_REGISTRAR',
+            'COMPRAS_ANULAR',
         ])->mapWithKeys(function (string $code): array {
             $permission = Permission::query()->updateOrCreate(
                 ['codigo' => $code],

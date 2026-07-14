@@ -138,6 +138,14 @@ class Tercero extends Model
     }
 
     /**
+     * @return HasMany<Compra, $this>
+     */
+    public function comprasComoProveedor(): HasMany
+    {
+        return $this->hasMany(Compra::class, 'proveedor_id');
+    }
+
+    /**
      * @param  Builder<Tercero>  $query
      * @return Builder<Tercero>
      */

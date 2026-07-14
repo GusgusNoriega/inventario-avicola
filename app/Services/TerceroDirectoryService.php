@@ -7,7 +7,6 @@ use App\Models\PrecioHistorial;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TipoPollo;
-use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -17,7 +16,6 @@ class TerceroDirectoryService
 {
     public function __construct(
         private readonly ClientJourneyPriceService $clientJourneyPriceService,
-        private readonly FinancialObligationService $financialObligations,
     ) {}
 
     /**
@@ -109,14 +107,6 @@ class TerceroDirectoryService
                 );
             }
 
-            if ($role === TerceroRole::PROVIDER && array_key_exists('precios', $data)) {
-                $this->financialObligations->refreshPendingPurchaseCosts(
-                    (int) $tercero->empresa_id,
-                    (int) $tercero->id,
-                    User::query()->findOrFail($actorId),
-                );
-            }
-
             return $this->loadForDirectory($tercero, $role);
         });
     }
@@ -199,13 +189,6 @@ class TerceroDirectoryService
                     );
                 }
 
-                if ($role === TerceroRole::PROVIDER && $list->tercero) {
-                    $this->financialObligations->refreshPendingPurchaseCosts(
-                        $companyId,
-                        (int) $list->tercero->id,
-                        User::query()->findOrFail($actorId),
-                    );
-                }
             }
 
             return $changes->count();

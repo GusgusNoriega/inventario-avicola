@@ -12,7 +12,7 @@ El diseño cubre:
 - programación diaria de proveedores y camiones esperados;
 - jornadas de trabajo, tickets de despacho y pesadas;
 - movimientos y existencias de inventario;
-- comprobantes, pagos y facturación futura;
+- compras explícitas, comprobantes, pagos y facturación futura;
 - usuarios, permisos y auditoría.
 
 La propuesta es compatible conceptualmente con MySQL/MariaDB, que suele ser la
@@ -54,9 +54,11 @@ flowchart LR
     C --> G
     G --> H["Movimiento de inventario"]
     H --> I["Existencias por almacén"]
-    E --> J["Comprobante"]
-    G --> J
-    J --> K["Pagos y saldo pendiente"]
+    E --> V["Comprobante de venta / CXC"]
+    A --> P["Compra explícita"]
+    P --> X["Comprobante de compra / CXP"]
+    V --> K["Pagos y saldo pendiente"]
+    X --> K
     L["Usuarios y roles"] --> D
     L --> M["Auditoría"]
 ```
@@ -125,6 +127,11 @@ erDiagram
 
     EMPRESAS ||--o{ COMPROBANTES : emite
     TERCEROS ||--o{ COMPROBANTES : contraparte
+    EMPRESAS ||--o{ COMPRAS : registra
+    TERCEROS ||--o{ COMPRAS : proveedor
+    COMPRAS ||--o{ COMPRA_DETALLES : contiene
+    TIPOS_POLLO o|--o{ COMPRA_DETALLES : clasifica
+    COMPRAS ||--o| COMPROBANTES : genera
     COMPROBANTES ||--o{ COMPROBANTE_DETALLES : detalla
     COMPROBANTES ||--o{ COMPROBANTE_TICKETS : relaciona
     TICKETS_DESPACHO ||--o{ COMPROBANTE_TICKETS : factura
@@ -324,10 +331,12 @@ fecha, almacén de origen, almacén de destino y auditoría.
 
 | Tabla | Responsabilidad |
 |---|---|
+| `compras` | Cabecera de una compra explícita al contado o a crédito; también proyecta CXP históricas como `LEGADO`. |
+| `compra_detalles` | Producto, aves, peso, precio y subtotal congelados al confirmar la compra. |
 | `comprobantes` | Documento interno de compra o venta con código único. |
 | `comprobante_detalles` | Productos, kilogramos, precio e importe del documento. |
 | `comprobante_tickets` | Vincula comprobantes de venta con tickets. |
-| `comprobante_pesadas` | Vincula comprobantes de compra con pesadas de proveedores. |
+| `comprobante_pesadas` | Relación histórica entre comprobantes de compra y pesadas; no se usa para crear las CXP nuevas. |
 | `pagos` | Cobros a clientes o pagos a proveedores. |
 | `pago_aplicaciones` | Distribuye un pago entre uno o varios comprobantes. |
 
@@ -335,6 +344,32 @@ Los comprobantes no representan facturación electrónica SUNAT. Su `codigo`
 puede generarse aleatoriamente o escribirse manualmente al generar el ticket,
 pero debe ser único. El campo `origen_codigo` conserva si fue `ALEATORIO` o
 `MANUAL`.
+
+La separación entre despacho y compra es deliberada. El cierre de un ticket
+crea la CXC del cliente y conserva en sus pesadas el proveedor de origen, pero
+no crea una CXP. Las CXP nuevas se originan al confirmar una fila de `compras`:
+
+- `CREDITO`: el comprobante queda con saldo pendiente;
+- `CONTADO`: `pago_inicial_id` enlaza el `PAGO_PROVEEDOR` que cancela el
+  comprobante y descuenta una cuenta propia;
+- `LEGADO`: identifica una proyección de una CXP histórica cuya
+  `origen_clave` era `COMPRA:TICKET:*`.
+
+La transición `LEGADO` reutiliza el mismo `comprobante_id` y copia los detalles
+existentes. No crea otra obligación o pago y no modifica el saldo pendiente,
+las aplicaciones ni el estado del comprobante histórico.
+
+`numero_documento` conserva el dato histórico del proveedor.
+`numero_documento_activo` replica ese valor únicamente mientras la compra está
+vigente y soporta la unicidad por empresa, proveedor y tipo de documento. Al
+anular, queda nulo: así se mantiene la captura anulada y se permite registrar
+una corrección con el mismo número sin admitir dos compras activas duplicadas.
+
+Cuando un cliente deposita directamente al proveedor, `PAGO_DIRECTO` aplica el
+mismo importe al conjunto de CXC y al conjunto de CXP seleccionadas. Cuando
+deposita a la avícola,
+`COBRO_CLIENTE` reduce la CXC y aumenta el saldo propio, mientras la CXP
+permanece sin cambios.
 
 ### Persistencia de balanzas y tickets
 
@@ -445,7 +480,7 @@ una balanza. El dato comercial principal sigue siendo `peso_kg`.
 3. Listas de precios, historial de versiones y precios congelados por ticket.
 4. Programación diaria, jornadas, tickets, lecturas de balanza y pesadas.
 5. Movimientos y existencias de inventario.
-6. Comprobantes, relaciones de facturación y pagos.
+6. Compras explícitas, comprobantes, relaciones de facturación y pagos.
 7. Auditoría, reportes, respaldos e índices de rendimiento.
 
 ## 8. Datos iniciales del sistema
@@ -459,7 +494,7 @@ Al instalar la base deben registrarse, como mínimo:
 | `almacenes` | `ALMACEN_1` y `ALMACEN_2` |
 | `balanzas` | `BALANZA_1` y `BALANZA_2` |
 | `roles` | `ADMINISTRADOR`, `OPERADOR`, `FACTURACION`, `CONSULTA` |
-| `permisos` | Programación, recepción no programada y `PRECIOS_GESTIONAR` |
+| `permisos` | Programación, recepción no programada, precios y `COMPRAS_VER`, `COMPRAS_REGISTRAR`, `COMPRAS_ANULAR` |
 | lista general | Precios iniciales de compra y venta por tipo de pollo, con fecha/hora de vigencia |
 | empresa | País `PE`, moneda `PEN`, zona `America/Lima`, corte `21:00`, SUNAT deshabilitado |
 

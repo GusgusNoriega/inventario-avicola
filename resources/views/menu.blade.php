@@ -131,7 +131,7 @@
           </span>
           <span class="menu-tile-text">
             <strong>Finanzas y tesorería</strong>
-            <small>Cobros, pagos, saldos y trazabilidad</small>
+            <small>Saldos, compras, cobros, pagos y cuentas</small>
           </span>
           <span class="menu-status">Disponible</span>
         </a>

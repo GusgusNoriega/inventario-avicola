@@ -18,13 +18,19 @@
         <h1 id="providerName">Cargando proveedor...</h1>
         <p id="providerMeta" class="customer-history-meta"></p>
       </div>
-      <a class="menu-return-btn" href="{{ route('directorio') }}#proveedores">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M19 12H5"></path>
-          <path d="M12 19l-7-7 7-7"></path>
-        </svg>
-        <span>Volver a proveedores</span>
-      </a>
+      <div class="directory-header-actions">
+        <a
+          class="btn btn-primary directory-btn"
+          href="{{ route('compras.create') }}?proveedor_id={{ request()->route('tercero') }}"
+        >Registrar compra</a>
+        <a class="menu-return-btn" href="{{ route('directorio') }}#proveedores">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M19 12H5"></path>
+            <path d="M12 19l-7-7 7-7"></path>
+          </svg>
+          <span>Volver a proveedores</span>
+        </a>
+      </div>
     </header>
 
     <p id="providerHistoryMessage" class="form-message customer-history-message" role="status" aria-live="polite"></p>
@@ -43,10 +49,20 @@
           <p class="eyebrow">Cuenta por pagar</p>
           <h2 id="providerFinanceTitle">Estado financiero</h2>
         </div>
-        <a
-          class="btn btn-success directory-btn"
-          href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR&amp;proveedor_id={{ request()->route('tercero') }}"
-        >Registrar pago</a>
+        <div class="directory-header-actions">
+          <label class="field">
+            Moneda
+            <select id="providerFinanceCurrency">
+              <option value="">Moneda de la empresa</option>
+              <option value="PEN">Soles (PEN)</option>
+              <option value="USD">Dólares (USD)</option>
+            </select>
+          </label>
+          <a
+            class="btn btn-success directory-btn"
+            href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR&amp;proveedor_id={{ request()->route('tercero') }}"
+          >Registrar pago</a>
+        </div>
       </div>
       <div class="customer-history-stats" aria-label="Resumen financiero del proveedor">
         <article class="directory-stat card"><span>Compras valorizadas</span><strong id="providerFinanceDocumented">S/ 0.00</strong></article>

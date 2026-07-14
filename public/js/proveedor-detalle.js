@@ -21,6 +21,7 @@ const elements = {
   financePending: document.getElementById("providerFinancePending"),
   financePendingCosts: document.getElementById("providerFinancePendingCosts"),
   financeHelp: document.getElementById("providerFinanceHelp"),
+  financeCurrency: document.getElementById("providerFinanceCurrency"),
   directDepositList: document.getElementById("providerDirectDepositList"),
   vehicleCount: document.getElementById("providerVehicleCount"),
   vehicleForm: document.getElementById("providerVehicleForm"),
@@ -42,6 +43,7 @@ const elements = {
 let currentPage = 1;
 let loading = false;
 let pendingVehicleRemoval = null;
+let financeSequence = 0;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -313,16 +315,27 @@ async function loadProviderHistory(page = 1) {
 }
 
 async function loadFinance() {
+  const sequence = ++financeSequence;
+  const params = new URLSearchParams();
+  if (elements.financeCurrency.value) {
+    params.set("moneda", elements.financeCurrency.value);
+  }
+  const query = params.toString();
+
   try {
-    const response = await apiRequest(`/finanzas/proveedores/${providerId}/resumen`);
+    const response = await apiRequest(`/finanzas/proveedores/${providerId}/resumen${query ? `?${query}` : ""}`);
+    if (sequence !== financeSequence) return;
     renderFinance(response.data);
   } catch (error) {
+    if (sequence !== financeSequence) return;
     renderFinance(null);
     if (![401, 403].includes(error?.status)) {
       setMessage(elements.message, "No fue posible cargar el resumen financiero del proveedor.", true);
     }
   }
 }
+
+elements.financeCurrency.addEventListener("change", () => void loadFinance());
 
 async function saveVehicle(event) {
   event.preventDefault();

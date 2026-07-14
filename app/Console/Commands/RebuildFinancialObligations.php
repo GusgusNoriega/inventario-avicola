@@ -14,7 +14,7 @@ class RebuildFinancialObligations extends Command
     protected $signature = 'finanzas:reconstruir-obligaciones
         {--dry-run : Simula la reconstruccion y revierte todos los cambios}';
 
-    protected $description = 'Reconstruye los comprobantes y costos de compra de los tickets cerrados';
+    protected $description = 'Reconstruye los comprobantes internos de venta de los tickets cerrados';
 
     public function handle(FinancialObligationService $obligations): int
     {
@@ -38,14 +38,13 @@ class RebuildFinancialObligations extends Command
         }
 
         $this->components->info($dryRun
-            ? 'Simulando la reconstruccion de obligaciones financieras...'
-            : 'Reconstruyendo obligaciones financieras...');
+            ? 'Simulando la reconstruccion de comprobantes de venta...'
+            : 'Reconstruyendo comprobantes de venta...');
 
         $rows = [];
         $totals = [
             'tickets' => 0,
             'documents' => 0,
-            'pending_costs' => 0,
             'errors' => 0,
         ];
 
@@ -53,7 +52,6 @@ class RebuildFinancialObligations extends Command
             $companyTotals = [
                 'tickets' => 0,
                 'documents' => 0,
-                'pending_costs' => 0,
                 'errors' => 0,
             ];
             $actors = [];
@@ -89,9 +87,7 @@ class RebuildFinancialObligations extends Command
                             );
 
                             $companyTotals['tickets']++;
-                            $companyTotals['documents'] += ($result['sale_document_id'] ? 1 : 0)
-                                + count($result['purchase_document_ids']);
-                            $companyTotals['pending_costs'] += $result['pending_purchase_costs'];
+                            $companyTotals['documents'] += $result['sale_document_id'] ? 1 : 0;
                         } catch (Throwable $exception) {
                             $companyTotals['errors']++;
                             $this->components->error(
@@ -105,7 +101,6 @@ class RebuildFinancialObligations extends Command
                 "{$company->razon_social} ({$company->id})",
                 $companyTotals['tickets'],
                 $companyTotals['documents'],
-                $companyTotals['pending_costs'],
                 $companyTotals['errors'],
             ];
 
@@ -118,11 +113,10 @@ class RebuildFinancialObligations extends Command
             'TOTAL',
             $totals['tickets'],
             $totals['documents'],
-            $totals['pending_costs'],
             $totals['errors'],
         ];
         $this->table(
-            ['Empresa', 'Tickets', 'Documentos', 'Costos pendientes', 'Errores'],
+            ['Empresa', 'Tickets', 'Documentos de venta', 'Errores'],
             $rows
         );
 

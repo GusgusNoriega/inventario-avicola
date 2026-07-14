@@ -49,9 +49,9 @@ class FinancialCounterpartySummaryService
     /**
      * @return array<string, mixed>
      */
-    public function forProvider(int $companyId, int $providerId): array
+    public function forProvider(int $companyId, int $providerId, ?string $requestedCurrency = null): array
     {
-        $currency = $this->companyCurrency($companyId);
+        $currency = $requestedCurrency ?: $this->companyCurrency($companyId);
         $documents = $this->documentTotals($companyId, $providerId, 'COMPRA', $currency);
         $payments = $this->paymentTotals(
             $companyId,

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'empresa_id',
@@ -121,6 +122,14 @@ class Comprobante extends Model
     {
         return $this->belongsToMany(Pesada::class, 'comprobante_pesadas', 'comprobante_id', 'pesada_id')
             ->withPivot('importe_aplicado');
+    }
+
+    /**
+     * @return HasOne<Compra, $this>
+     */
+    public function compra(): HasOne
+    {
+        return $this->hasOne(Compra::class);
     }
 
     protected function casts(): array
