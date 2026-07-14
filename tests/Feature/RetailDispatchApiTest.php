@@ -245,7 +245,7 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
-    public function test_retail_dispatch_calculates_adjusted_weight_on_server_and_stores_snapshots(): void
+    public function test_retail_dispatch_applies_adjustment_per_bird_and_stores_snapshots(): void
     {
         $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
         DB::table('ajustes_peso_minorista')
@@ -271,9 +271,9 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.totals.trays', 2)
             ->assertJsonPath('data.totals.birds', 10)
             ->assertJsonPath('data.totals.read_weight_kg', 12)
-            ->assertJsonPath('data.totals.gross_weight_kg', 12.25)
-            ->assertJsonPath('data.totals.net_weight_kg', 11.25)
-            ->assertJsonPath('data.totals.amount', 95.63)
+            ->assertJsonPath('data.totals.gross_weight_kg', 14.5)
+            ->assertJsonPath('data.totals.net_weight_kg', 13.5)
+            ->assertJsonPath('data.totals.amount', 114.75)
             ->assertJsonPath('data.weighings.0.chicken_sex', 'HEMBRA')
             ->assertJsonPath('data.weighings.0.presentation', 'CERRADA')
             ->assertJsonPath('data.weighings.0.adjustment.additional_grams', 250)
@@ -301,9 +301,9 @@ class RetailDispatchApiTest extends TestCase
             'cantidad_aves' => 10,
             'peso_bandeja_kg_snapshot' => 0.5,
             'peso_leido_kg' => 12,
-            'peso_bruto_kg' => 12.25,
+            'peso_bruto_kg' => 14.5,
             'tara_total_kg' => 1,
-            'peso_neto_kg' => 11.25,
+            'peso_neto_kg' => 13.5,
         ]);
         $this->assertDatabaseHas('movimientos_javas', [
             'ticket_despacho_id' => $response->json('data.id'),
@@ -582,22 +582,22 @@ class RetailDispatchApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.totals.trays', 0)
             ->assertJsonPath('data.totals.birds', 0)
-            ->assertJsonPath('data.totals.gross_weight_kg', 12.25)
-            ->assertJsonPath('data.totals.net_weight_kg', 12.25)
+            ->assertJsonPath('data.totals.gross_weight_kg', 12)
+            ->assertJsonPath('data.totals.net_weight_kg', 12)
             ->assertJsonPath('data.weighings.0.tray_count', 0)
             ->assertJsonPath('data.weighings.0.birds', 0)
             ->assertJsonPath('data.weighings.0.tare_weight_kg', 0)
-            ->assertJsonPath('data.weighings.0.gross_weight_kg', 12.25)
-            ->assertJsonPath('data.weighings.0.net_weight_kg', 12.25);
+            ->assertJsonPath('data.weighings.0.gross_weight_kg', 12)
+            ->assertJsonPath('data.weighings.0.net_weight_kg', 12);
 
         $this->assertDatabaseHas('pesadas', [
             'cantidad_bandejas' => 0,
             'cantidad_aves' => 0,
             'peso_leido_kg' => 12,
             'ajuste_peso_gramos' => 250,
-            'peso_bruto_kg' => 12.25,
+            'peso_bruto_kg' => 12,
             'tara_total_kg' => 0,
-            'peso_neto_kg' => 12.25,
+            'peso_neto_kg' => 12,
         ]);
         $this->assertDatabaseHas('tickets_despacho', [
             'cliente_destino_id' => $this->clientId,

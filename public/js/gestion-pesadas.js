@@ -364,7 +364,7 @@ function renderSelectedTicket() {
       </td>
       <td>${chickenSexBadge(weighing.chicken_sex)}</td>
       <td>${retail
-        ? `${escapeHtml(weighing.adjustment?.name || "Sin ajuste")}${weighing.adjustment?.additional_grams ? `<small><br>+${formatNumber(weighing.adjustment.additional_grams)} g</small>` : ""}`
+        ? `${escapeHtml(weighing.adjustment?.name || "Sin ajuste")}${weighing.adjustment?.additional_grams ? `<small><br>+${formatNumber(weighing.adjustment.additional_grams)} g/pollo</small>` : ""}`
         : `${escapeHtml(weighing.origin || "--")}<small>${weighing.plate ? `<br>${escapeHtml(weighing.plate)}` : ""}</small>`}
       </td>
       <td>${escapeHtml((retail ? weighing.tray_type?.name : weighing.cage_type?.name) || "--")}</td>

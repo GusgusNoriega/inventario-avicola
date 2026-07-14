@@ -163,6 +163,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
         $this->assertStringContainsString('additional_grams', $javascript);
+        $this->assertStringContainsString('const birds = trayCount * birdsPerTray;', $javascript);
+        $this->assertStringContainsString('const totalAdjustmentGrams = adjustmentGrams * birds;', $javascript);
+        $this->assertStringContainsString('readWeight + totalAdjustmentGrams / 1000', $javascript);
         $this->assertStringContainsString('priceEditingListIndex', $javascript);
         $this->assertStringContainsString('general_prices', $javascript);
         $this->assertStringContainsString('data-retail-clear-client', $javascript);

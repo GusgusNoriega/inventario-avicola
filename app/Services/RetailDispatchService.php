@@ -194,10 +194,12 @@ class RetailDispatchService
                 $adjustment = $adjustments->get($adjustmentCode);
                 $trayCount = (int) $weighing['tray_count'];
                 $birdsPerTray = (int) $weighing['birds_per_tray'];
+                $birdCount = $birdsPerTray * $trayCount;
                 $trayWeight = round((float) $tray->peso_kg, 3);
                 $readWeight = round((float) $weighing['read_weight_kg'], 3);
-                $additionalGrams = (int) $adjustment->gramos_adicionales;
-                $grossWeight = round($readWeight + ($additionalGrams / 1000), 3);
+                $additionalGramsPerBird = (int) $adjustment->gramos_adicionales;
+                $totalAdditionalGrams = $additionalGramsPerBird * $birdCount;
+                $grossWeight = round($readWeight + ($totalAdditionalGrams / 1000), 3);
                 $tareWeight = round($trayCount * $trayWeight, 3);
                 $netWeight = round($grossWeight - $tareWeight, 3);
 
@@ -228,11 +230,11 @@ class RetailDispatchService
                     'aves_por_bandeja' => $birdsPerTray,
                     'cantidad_javas' => null,
                     'cantidad_bandejas' => $trayCount,
-                    'cantidad_aves' => $birdsPerTray * $trayCount,
+                    'cantidad_aves' => $birdCount,
                     'peso_java_kg_snapshot' => null,
                     'peso_bandeja_kg_snapshot' => $trayWeight,
                     'peso_leido_kg' => $readWeight,
-                    'ajuste_peso_gramos' => $additionalGrams,
+                    'ajuste_peso_gramos' => $additionalGramsPerBird,
                     'peso_bruto_kg' => $grossWeight,
                     'tara_total_kg' => $tareWeight,
                     'peso_neto_kg' => $netWeight,

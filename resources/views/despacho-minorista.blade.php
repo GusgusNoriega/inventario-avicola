@@ -372,7 +372,7 @@
       <section class="rd-adjustment-settings">
         <div class="rd-settings-title">
           <div>
-            <span>Gramos adicionales</span>
+            <span>Gramos adicionales por pollo</span>
             <strong>Ajuste aplicado por sexo y presentación</strong>
           </div>
           <label class="rd-default-adjustment">

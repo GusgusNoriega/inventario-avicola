@@ -279,9 +279,13 @@ function recalculateDraftItems() {
       const tray = state.catalog.tray_types.find((entry) => entry.code === item.trayTypeCode);
       if (!adjustment || !tray) return item;
 
+      const trayCount = Number(item.trayCount || 0);
+      const birdsPerTray = Number(item.birdsPerTray || 0);
+      const birds = trayCount * birdsPerTray;
       const adjustmentGrams = Number(adjustment.additional_grams || 0);
-      const grossWeight = roundWeight(Number(item.readWeight || 0) + adjustmentGrams / 1000);
-      const tareWeight = roundWeight(Number(item.trayCount || 0) * Number(tray.weight_kg || 0));
+      const totalAdjustmentGrams = adjustmentGrams * birds;
+      const grossWeight = roundWeight(Number(item.readWeight || 0) + totalAdjustmentGrams / 1000);
+      const tareWeight = roundWeight(trayCount * Number(tray.weight_kg || 0));
 
       return {
         ...item,
@@ -289,7 +293,9 @@ function recalculateDraftItems() {
         chickenSex: adjustment.sex,
         presentation: adjustment.presentation,
         adjustmentGrams,
+        totalAdjustmentGrams,
         trayTypeName: tray.name,
+        birds,
         grossWeight,
         tareWeight,
         netWeight: roundWeight(grossWeight - tareWeight)
@@ -450,9 +456,11 @@ function previewValues(readWeightOverride = null) {
   const readWeight = Number(readWeightOverride ?? state.liveWeight ?? 0);
   const trayCount = Number(elements.trayCount.value || 0);
   const birdsPerTray = Number(elements.birdsPerTray.value || 0);
+  const birds = trayCount * birdsPerTray;
   const adjustmentGrams = Number(adjustment?.additional_grams || 0);
+  const totalAdjustmentGrams = adjustmentGrams * birds;
   const grossWeight = readWeight > 0
-    ? roundWeight(readWeight + adjustmentGrams / 1000)
+    ? roundWeight(readWeight + totalAdjustmentGrams / 1000)
     : 0;
   const tareWeight = roundWeight(trayCount * Number(tray?.weight_kg || 0));
   const netWeight = roundWeight(grossWeight - tareWeight);
@@ -464,10 +472,11 @@ function previewValues(readWeightOverride = null) {
     trayCount,
     birdsPerTray,
     adjustmentGrams,
+    totalAdjustmentGrams,
     grossWeight,
     tareWeight,
     netWeight,
-    birds: trayCount * birdsPerTray
+    birds
   };
 }
 
@@ -712,6 +721,7 @@ function addWeighingToList(listIndex, capturedReading) {
     chickenSex: values.adjustment.sex,
     presentation: values.adjustment.presentation,
     adjustmentGrams: values.adjustmentGrams,
+    totalAdjustmentGrams: values.totalAdjustmentGrams,
     trayTypeCode: values.tray.code,
     trayTypeName: values.tray.name,
     trayCount: values.trayCount,
@@ -1535,7 +1545,7 @@ function renderSettingsAdjustments() {
       <strong>${escapeHtml(adjustment.name)}</strong>
       <small>${escapeHtml(adjustment.sex)} · ${escapeHtml(adjustment.presentation)}</small>
       <label>
-        <span>Gramos</span>
+        <span>Gramos/pollo</span>
         <input type="number" min="0" max="100000" step="1" value="${Number(adjustment.additional_grams || 0)}" data-retail-setting-adjustment="${escapeHtml(adjustment.code)}" inputmode="numeric">
       </label>
     </article>
