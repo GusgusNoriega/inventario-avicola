@@ -59,6 +59,19 @@
       <div id="financeAccountBalances" class="fin-account-balance-grid" aria-live="polite"></div>
     </section>
 
+    <section class="fin-advances-panel fin-card" aria-labelledby="financeAdvancesTitle">
+      <div class="fin-section-head fin-section-head-wrap">
+        <div>
+          <p class="fin-eyebrow">Pagos pendientes de asignar</p>
+          <h2 id="financeAdvancesTitle">Anticipos por aplicar</h2>
+          <p class="fin-section-copy">Depósitos realizados a proveedores que todavía no reducen una deuda específica.</p>
+        </div>
+        <a class="fin-btn fin-btn-ghost fin-btn-small" href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR">Registrar pago</a>
+      </div>
+      <p id="financeAdvanceMessage" class="fin-message" role="status" aria-live="polite">Consultando anticipos...</p>
+      <div id="financeAdvanceList" class="fin-advance-list" aria-live="polite"></div>
+    </section>
+
     <section class="fin-trace-panel fin-card" aria-labelledby="financeTraceTitle">
       <div class="fin-section-head fin-section-head-wrap">
         <div>
@@ -139,6 +152,49 @@
       <div id="financeRecentMovements" class="fin-recent-list" aria-live="polite"></div>
     </section>
   </main>
+
+  <dialog id="financeAdvanceDialog" class="fin-purchase-dialog fin-advance-dialog" aria-labelledby="financeAdvanceDialogTitle" aria-describedby="financeAdvanceDialogDescription">
+    <form id="financeAdvanceForm" class="fin-purchase-dialog-card" novalidate>
+      <header class="fin-purchase-dialog-head">
+        <div>
+          <p class="fin-eyebrow">Asignación posterior</p>
+          <h2 id="financeAdvanceDialogTitle">Aplicar anticipo a una deuda</h2>
+        </div>
+        <button id="financeAdvanceClose" class="fin-dialog-close" type="button" aria-label="Cerrar aplicación">×</button>
+      </header>
+
+      <p id="financeAdvanceDialogDescription" class="fin-advance-dialog-copy">El depósito original no se modificará. Solo se vinculará su saldo disponible con las deudas que selecciones.</p>
+
+      <dl class="fin-advance-facts">
+        <div><dt>Movimiento</dt><dd id="financeAdvanceCode">—</dd></div>
+        <div><dt>Proveedor</dt><dd id="financeAdvanceProvider">—</dd></div>
+        <div><dt>Referencia</dt><dd id="financeAdvanceReference">—</dd></div>
+        <div><dt>Fecha</dt><dd id="financeAdvanceDate">—</dd></div>
+      </dl>
+
+      <div class="fin-advance-summary" aria-label="Resumen de aplicación">
+        <article><span>Importe del pago</span><strong id="financeAdvanceTotal">S/ 0.00</strong></article>
+        <article><span>Disponible</span><strong id="financeAdvanceAvailable">S/ 0.00</strong></article>
+        <article><span>Seleccionado</span><strong id="financeAdvanceSelected">S/ 0.00</strong></article>
+        <article><span>Quedará como anticipo</span><strong id="financeAdvanceRemaining">S/ 0.00</strong></article>
+      </div>
+
+      <section class="fin-debt-panel fin-advance-debts" aria-labelledby="financeAdvanceDebtsTitle">
+        <div class="fin-debt-head">
+          <div><span class="fin-debt-side fin-debt-side-cxp">CXP</span><h3 id="financeAdvanceDebtsTitle">Deudas del proveedor</h3></div>
+          <span id="financeAdvanceDebtTotal" class="fin-debt-total">Pendiente S/ 0.00</span>
+        </div>
+        <p id="financeAdvanceDebtMessage" class="fin-message" role="status" aria-live="polite"></p>
+        <div id="financeAdvanceDebtList" class="fin-debt-list"></div>
+      </section>
+
+      <p id="financeAdvanceFormMessage" class="fin-message" role="status" aria-live="polite"></p>
+      <footer class="fin-purchase-dialog-actions">
+        <button id="financeAdvanceCancel" class="fin-btn fin-btn-ghost" type="button">Cancelar</button>
+        <button id="financeAdvanceSubmit" class="fin-btn fin-btn-primary" type="submit">Aplicar a las deudas seleccionadas</button>
+      </footer>
+    </form>
+  </dialog>
 
   <script type="module" src="{{ asset('js/finanzas-dashboard.js') }}"></script>
 </body>

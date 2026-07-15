@@ -65,6 +65,9 @@ Route::prefix('v1')->group(function (): void {
 
         Route::post('/movimientos', [FinancialMovementController::class, 'store'])
             ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/movimientos/{movimiento}/aplicaciones', [FinancialMovementController::class, 'applyProviderPayment'])
+            ->whereNumber('movimiento')
+            ->middleware('permission:PAGOS_REGISTRAR');
         Route::post('/movimientos/{movimiento}/anular', [FinancialMovementController::class, 'void'])
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_ANULAR');

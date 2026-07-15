@@ -52,17 +52,293 @@ class FinancialMovementService
             );
         } catch (QueryException $exception) {
             // A concurrent request may have won the unique idempotency-key race.
-            $existing = DB::table('pagos')
+            return DB::transaction(function () use ($companyId, $data, $exception): array {
+                $existing = DB::table('pagos')
+                    ->where('empresa_id', $companyId)
+                    ->where('idempotency_key', $data['idempotency_key'])
+                    ->lockForUpdate()
+                    ->first();
+                if (! $existing) {
+                    throw $exception;
+                }
+
+                $this->assertSameIdempotentRequest($existing, $data);
+
+                return ['pago_id' => (int) $existing->id, 'idempotent' => true];
+            }, 3);
+        }
+    }
+
+    /**
+     * Apply the still-unassigned balance of an existing provider payment to payables.
+     * The cash movement remains immutable; only its accounting allocation changes.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{pago_id: int, operacion_id: int, idempotent: bool}
+     */
+    public function applyProviderPayment(
+        int $companyId,
+        User $actor,
+        int $paymentId,
+        array $data,
+        ?string $ip = null,
+    ): array {
+        abort_unless(
+            (int) $actor->empresa_id === $companyId && $actor->isActive(),
+            403,
+            'Usuario no autorizado para esta empresa.'
+        );
+        $data = $this->normalizeProviderApplicationPayload($data);
+
+        try {
+            return DB::transaction(function () use (
+                $companyId,
+                $actor,
+                $paymentId,
+                $data,
+                $ip,
+            ): array {
+                $payment = DB::table('pagos')
+                    ->where('empresa_id', $companyId)
+                    ->where('id', $paymentId)
+                    ->lockForUpdate()
+                    ->first();
+                abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
+
+                $payloadHash = $this->providerApplicationPayloadHash($paymentId, $data);
+                $existingOperation = DB::table('pago_aplicacion_operaciones')
+                    ->where('empresa_id', $companyId)
+                    ->where('idempotency_key', $data['idempotency_key'])
+                    ->lockForUpdate()
+                    ->first();
+                if ($existingOperation) {
+                    $this->assertSameProviderApplicationOperation(
+                        $existingOperation,
+                        $paymentId,
+                        $payloadHash,
+                    );
+
+                    return [
+                        'pago_id' => $paymentId,
+                        'operacion_id' => (int) $existingOperation->id,
+                        'idempotent' => true,
+                    ];
+                }
+
+                if ($payment->tipo !== 'PAGO_PROVEEDOR') {
+                    throw ValidationException::withMessages([
+                        'movimiento' => 'Solo los pagos realizados por la empresa a un proveedor admiten una aplicación posterior.',
+                    ]);
+                }
+                if ($payment->estado !== 'REGISTRADO' || $payment->reversa_de_pago_id !== null) {
+                    throw ValidationException::withMessages([
+                        'movimiento' => 'El movimiento está anulado, es una reversa o ya no admite aplicaciones.',
+                    ]);
+                }
+                if ($payment->proveedor_id === null) {
+                    throw ValidationException::withMessages([
+                        'movimiento' => 'El pago no tiene un proveedor asociado.',
+                    ]);
+                }
+
+                $currentApplications = DB::table('pago_aplicaciones')
+                    ->where('pago_id', $paymentId)
+                    ->where('lado', 'CXP')
+                    ->orderBy('comprobante_id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('comprobante_id');
+                $currentlyApplied = $currentApplications->reduce(
+                    fn (string $sum, object $application): string => FinancialMoney::add(
+                        $sum,
+                        (string) $application->importe_aplicado,
+                    ),
+                    '0.00',
+                );
+                $available = FinancialMoney::subtract(
+                    (string) $payment->importe,
+                    $currentlyApplied,
+                );
+                if (FinancialMoney::compare($available, '0.00') <= 0) {
+                    throw ValidationException::withMessages([
+                        'aplicaciones' => 'Este pago ya está aplicado por completo.',
+                    ]);
+                }
+
+                $requestedTotal = collect($data['aplicaciones'])->reduce(
+                    fn (string $sum, array $application): string => FinancialMoney::add(
+                        $sum,
+                        $application['importe_aplicado'],
+                    ),
+                    '0.00',
+                );
+                if (FinancialMoney::compare($requestedTotal, $available) > 0) {
+                    throw ValidationException::withMessages([
+                        'aplicaciones' => "El importe seleccionado supera el saldo disponible del pago ({$available} {$payment->moneda}).",
+                    ]);
+                }
+
+                $documentIds = collect($data['aplicaciones'])
+                    ->pluck('comprobante_id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->sort()
+                    ->values();
+                $documents = DB::table('comprobantes')
+                    ->where('empresa_id', $companyId)
+                    ->whereIn('id', $documentIds->all())
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+                if ($documents->count() !== $documentIds->count()) {
+                    throw ValidationException::withMessages([
+                        'aplicaciones' => 'Una o más deudas no existen o pertenecen a otra empresa.',
+                    ]);
+                }
+
+                $before = [
+                    'importe' => FinancialMoney::normalize((string) $payment->importe),
+                    'importe_aplicado' => $currentlyApplied,
+                    'importe_sin_aplicar' => $available,
+                    'aplicaciones' => $this->applicationSnapshot($currentApplications),
+                ];
+                $now = now();
+
+                foreach ($data['aplicaciones'] as $index => $application) {
+                    $document = $documents->get((int) $application['comprobante_id']);
+                    $amount = $application['importe_aplicado'];
+
+                    if (! in_array($document->estado, ['PENDIENTE', 'PARCIAL'], true)
+                        || FinancialMoney::compare((string) $document->saldo_pendiente, '0.00') <= 0) {
+                        throw ValidationException::withMessages([
+                            "aplicaciones.{$index}.comprobante_id" => 'La deuda todavía no está emitida, fue anulada o ya fue pagada.',
+                        ]);
+                    }
+                    if ($document->operacion !== 'COMPRA' || $document->naturaleza !== 'CARGO') {
+                        throw ValidationException::withMessages([
+                            "aplicaciones.{$index}.comprobante_id" => 'Solo se puede aplicar el pago a una cuenta por pagar.',
+                        ]);
+                    }
+                    if ((int) $document->tercero_id !== (int) $payment->proveedor_id) {
+                        throw ValidationException::withMessages([
+                            "aplicaciones.{$index}.comprobante_id" => 'La deuda pertenece a otro proveedor.',
+                        ]);
+                    }
+                    if ($document->moneda !== $payment->moneda) {
+                        throw ValidationException::withMessages([
+                            "aplicaciones.{$index}.comprobante_id" => 'La moneda de la deuda no coincide con la del pago.',
+                        ]);
+                    }
+                    if (FinancialMoney::compare($amount, (string) $document->saldo_pendiente) > 0) {
+                        throw ValidationException::withMessages([
+                            "aplicaciones.{$index}.importe_aplicado" => 'El importe excede el saldo pendiente de la deuda.',
+                        ]);
+                    }
+
+                    $storedApplication = $currentApplications->get((int) $document->id);
+                    if ($storedApplication) {
+                        DB::table('pago_aplicaciones')
+                            ->where('pago_id', $paymentId)
+                            ->where('comprobante_id', $document->id)
+                            ->update([
+                                'importe_aplicado' => FinancialMoney::add(
+                                    (string) $storedApplication->importe_aplicado,
+                                    $amount,
+                                ),
+                            ]);
+                    } else {
+                        DB::table('pago_aplicaciones')->insert([
+                            'pago_id' => $paymentId,
+                            'comprobante_id' => $document->id,
+                            'lado' => 'CXP',
+                            'importe_aplicado' => $amount,
+                            'created_by' => $actor->id,
+                            'created_at' => $now,
+                        ]);
+                    }
+
+                    $newBalance = FinancialMoney::subtract(
+                        (string) $document->saldo_pendiente,
+                        $amount,
+                    );
+                    DB::table('comprobantes')->where('id', $document->id)->update([
+                        'saldo_pendiente' => $newBalance,
+                        'estado' => FinancialMoney::compare($newBalance, '0.00') === 0
+                            ? 'PAGADO'
+                            : 'PARCIAL',
+                        'updated_at' => $now,
+                    ]);
+                }
+
+                $operationId = DB::table('pago_aplicacion_operaciones')->insertGetId([
+                    'empresa_id' => $companyId,
+                    'pago_id' => $paymentId,
+                    'idempotency_key' => $data['idempotency_key'],
+                    'payload_hash' => $payloadHash,
+                    'importe_total' => $requestedTotal,
+                    'aplicaciones' => json_encode(
+                        $data['aplicaciones'],
+                        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+                    ),
+                    'observaciones' => $data['observaciones'],
+                    'created_by' => $actor->id,
+                    'created_at' => $now,
+                ]);
+
+                $updatedApplications = DB::table('pago_aplicaciones')
+                    ->where('pago_id', $paymentId)
+                    ->where('lado', 'CXP')
+                    ->orderBy('comprobante_id')
+                    ->get();
+                $updatedApplied = FinancialMoney::add($currentlyApplied, $requestedTotal);
+                $after = [
+                    'importe' => FinancialMoney::normalize((string) $payment->importe),
+                    'importe_aplicado' => $updatedApplied,
+                    'importe_sin_aplicar' => FinancialMoney::subtract(
+                        (string) $payment->importe,
+                        $updatedApplied,
+                    ),
+                    'aplicaciones' => $this->applicationSnapshot($updatedApplications),
+                    'operacion_id' => $operationId,
+                    'observaciones' => $data['observaciones'],
+                ];
+                $this->audit->record(
+                    $companyId,
+                    $actor->id,
+                    'pagos',
+                    $paymentId,
+                    'APLICAR_ANTICIPO',
+                    $before,
+                    $after,
+                    $ip,
+                );
+
+                return [
+                    'pago_id' => $paymentId,
+                    'operacion_id' => $operationId,
+                    'idempotent' => false,
+                ];
+            }, 3);
+        } catch (QueryException $exception) {
+            $operation = DB::table('pago_aplicacion_operaciones')
                 ->where('empresa_id', $companyId)
                 ->where('idempotency_key', $data['idempotency_key'])
                 ->first();
-            if (! $existing) {
+            if (! $operation) {
                 throw $exception;
             }
 
-            $this->assertSameIdempotentRequest($existing, $data);
+            $this->assertSameProviderApplicationOperation(
+                $operation,
+                $paymentId,
+                $this->providerApplicationPayloadHash($paymentId, $data),
+            );
 
-            return ['pago_id' => (int) $existing->id, 'idempotent' => true];
+            return [
+                'pago_id' => $paymentId,
+                'operacion_id' => (int) $operation->id,
+                'idempotent' => true,
+            ];
         }
     }
 
@@ -610,8 +886,8 @@ class FinancialMovementService
             $side = $application['lado'];
             $amount = $application['importe_aplicado'];
 
-            if ($document->estado === 'ANULADO') {
-                throw ValidationException::withMessages(["aplicaciones.{$index}.comprobante_id" => 'No se puede aplicar a un comprobante anulado.']);
+            if (! in_array($document->estado, ['PENDIENTE', 'PARCIAL'], true)) {
+                throw ValidationException::withMessages(["aplicaciones.{$index}.comprobante_id" => 'Solo se puede aplicar a un comprobante pendiente o parcialmente pagado.']);
             }
             $expectedNature = $data['tipo'] === 'REEMBOLSO_CLIENTE' ? 'ABONO' : 'CARGO';
             if ($document->naturaleza !== $expectedNature) {
@@ -717,6 +993,101 @@ class FinancialMovementService
         ];
     }
 
+    /** @param array<string, mixed> $data @return array<string, mixed> */
+    private function normalizeProviderApplicationPayload(array $data): array
+    {
+        $key = strtolower(trim((string) ($data['idempotency_key'] ?? '')));
+        if (! Str::isUuid($key)) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'Debe enviarse una clave UUID de idempotencia válida.',
+            ]);
+        }
+
+        $applications = [];
+        foreach (($data['aplicaciones'] ?? []) as $index => $application) {
+            $documentId = (int) ($application['comprobante_id'] ?? 0);
+            if ($documentId <= 0) {
+                throw ValidationException::withMessages([
+                    "aplicaciones.{$index}.comprobante_id" => 'El comprobante no es válido.',
+                ]);
+            }
+
+            try {
+                $amount = FinancialMoney::normalize(
+                    $application['importe_aplicado'] ?? $application['importe'] ?? '',
+                );
+            } catch (Throwable) {
+                throw ValidationException::withMessages([
+                    "aplicaciones.{$index}.importe_aplicado" => 'El importe aplicado no es válido.',
+                ]);
+            }
+            if (FinancialMoney::compare($amount, '0.00') <= 0) {
+                throw ValidationException::withMessages([
+                    "aplicaciones.{$index}.importe_aplicado" => 'El importe aplicado debe ser mayor que cero.',
+                ]);
+            }
+
+            $applications[] = [
+                'comprobante_id' => $documentId,
+                'importe_aplicado' => $amount,
+            ];
+        }
+        if ($applications === []) {
+            throw ValidationException::withMessages([
+                'aplicaciones' => 'Selecciona al menos una deuda para aplicar el pago.',
+            ]);
+        }
+        if (collect($applications)->pluck('comprobante_id')->unique()->count() !== count($applications)) {
+            throw ValidationException::withMessages([
+                'aplicaciones' => 'Una deuda no puede aparecer más de una vez.',
+            ]);
+        }
+
+        return [
+            'idempotency_key' => $key,
+            'aplicaciones' => collect($applications)->sortBy('comprobante_id')->values()->all(),
+            'observaciones' => isset($data['observaciones'])
+                && trim((string) $data['observaciones']) !== ''
+                    ? trim((string) $data['observaciones'])
+                    : null,
+        ];
+    }
+
+    /** @param array<string, mixed> $data */
+    private function providerApplicationPayloadHash(int $paymentId, array $data): string
+    {
+        return hash('sha256', json_encode([
+            'pago_id' => $paymentId,
+            'aplicaciones' => $data['aplicaciones'],
+            'observaciones' => $data['observaciones'],
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function assertSameProviderApplicationOperation(
+        object $operation,
+        int $paymentId,
+        string $payloadHash,
+    ): void {
+        if ((int) $operation->pago_id !== $paymentId
+            || ! hash_equals((string) $operation->payload_hash, $payloadHash)) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'La clave de idempotencia ya fue usada con una aplicación diferente.',
+            ]);
+        }
+    }
+
+    /** @param Collection<int|string, object> $applications @return list<array<string, mixed>> */
+    private function applicationSnapshot(Collection $applications): array
+    {
+        return $applications->map(fn (object $application): array => [
+            'lado' => $application->lado,
+            'comprobante_id' => (int) $application->comprobante_id,
+            'importe_aplicado' => FinancialMoney::normalize(
+                (string) $application->importe_aplicado,
+            ),
+        ])->values()->all();
+    }
+
     /** @param array<string, mixed> $data */
     private function assertSameIdempotentRequest(object $payment, array $data): void
     {
@@ -733,15 +1104,43 @@ class FinancialMovementService
             && ($payment->referencia ?? null) === $data['referencia']
             && ($payment->observaciones ?? null) === $data['observaciones'];
 
+        $posteriorAmounts = [];
+        DB::table('pago_aplicacion_operaciones')
+            ->where('pago_id', $payment->id)
+            ->orderBy('id')
+            ->pluck('aplicaciones')
+            ->each(function (string $encodedApplications) use (&$posteriorAmounts): void {
+                foreach (json_decode($encodedApplications, true, 512, JSON_THROW_ON_ERROR) as $application) {
+                    $key = 'CXP:'.(int) $application['comprobante_id'];
+                    $posteriorAmounts[$key] = FinancialMoney::add(
+                        $posteriorAmounts[$key] ?? '0.00',
+                        (string) $application['importe_aplicado'],
+                    );
+                }
+            });
+
         $storedApplications = DB::table('pago_aplicaciones')
             ->where('pago_id', $payment->id)
             ->orderBy('comprobante_id')
             ->get(['lado', 'comprobante_id', 'importe_aplicado'])
-            ->map(fn (object $application): array => [
-                'lado' => $application->lado,
-                'comprobante_id' => (int) $application->comprobante_id,
-                'importe_aplicado' => FinancialMoney::normalize((string) $application->importe_aplicado),
-            ])->all();
+            ->map(function (object $application) use ($posteriorAmounts): array {
+                $key = $application->lado.':'.(int) $application->comprobante_id;
+
+                return [
+                    'lado' => $application->lado,
+                    'comprobante_id' => (int) $application->comprobante_id,
+                    'importe_aplicado' => FinancialMoney::subtract(
+                        (string) $application->importe_aplicado,
+                        $posteriorAmounts[$key] ?? '0.00',
+                    ),
+                ];
+            })
+            ->filter(fn (array $application): bool => FinancialMoney::compare(
+                $application['importe_aplicado'],
+                '0.00',
+            ) > 0)
+            ->values()
+            ->all();
         $requestedApplications = collect($data['aplicaciones'])->sortBy('comprobante_id')->values()->all();
 
         if (! $same || $storedApplications !== $requestedApplications) {

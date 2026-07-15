@@ -64,6 +64,10 @@ class WebViewsTest extends TestCase
             ->assertSee('Saldos y trazabilidad')
             ->assertSee('id="financeAvailableBalance"', false)
             ->assertSee('id="financeTraceRows"', false)
+            ->assertSee('id="financeAdvanceList"', false)
+            ->assertSee('id="financeAdvanceDialog"', false)
+            ->assertSee('aria-describedby="financeAdvanceDialogDescription"', false)
+            ->assertSee('Anticipos por aplicar')
             ->assertSee('id="financeAuthDialog"', false)
             ->assertSee(route('finanzas'), false)
             ->assertSee(route('finanzas.saldos'), false)
@@ -117,6 +121,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/saldos', $dashboardJavascript);
         $this->assertStringContainsString('/finanzas/trazabilidad', $dashboardJavascript);
         $this->assertStringContainsString('/finanzas/movimientos?per_page=6', $dashboardJavascript);
+        $this->assertStringContainsString('aplicacion_estado=CON_SALDO', $dashboardJavascript);
+        $this->assertStringContainsString('/aplicaciones', $dashboardJavascript);
+        $this->assertStringContainsString('data-advance-apply', $dashboardJavascript);
+        $this->assertStringContainsString('["ANULADO", "REVERSA"]', $dashboardJavascript);
+        $this->assertStringContainsString('state.savingAdvance && !force', $dashboardJavascript);
         $this->assertStringContainsString('/finanzas/entidades', $entitiesJavascript);
         $this->assertStringContainsString('include=cuentas&per_page=100', $entitiesJavascript);
         $this->assertStringNotContainsString('include=cuentas&per_page=200', $entitiesJavascript);

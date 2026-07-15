@@ -1,7 +1,8 @@
 # Migraciones de la base de datos
 
-La estructura aprobada está implementada en `database/migrations` mediante
-43 archivos. Cada archivo crea exactamente una tabla.
+La estructura aprobada está implementada incrementalmente en
+`database/migrations`. Las migraciones iniciales crean las tablas base y las
+posteriores amplían los módulos de despacho, javas, finanzas y compras.
 
 ## Orden de creación
 
@@ -15,10 +16,13 @@ La estructura aprobada está implementada en `database/migrations` mediante
 | `000034`–`000036` | Movimientos y existencias de inventario |
 | `000037`–`000042` | Comprobantes y pagos |
 | `000043` | Auditoría |
+| `2026_06_26`–`2026_07_04` | Evolución de despacho, flota, javas y minorista |
+| `2026_07_12` | Finanzas, cuentas y trazabilidad de pagos |
+| `2026_07_14` | Clientes internos, compras y aplicación posterior de pagos a proveedores |
 
 ## Relaciones
 
-Las migraciones incluyen 89 claves foráneas. Como política general:
+Las migraciones incluyen 137 claves foráneas. Como política general:
 
 - las tablas históricas usan `restrictOnDelete`;
 - las referencias opcionales de responsables usan `nullOnDelete`;
@@ -57,6 +61,28 @@ php artisan migrate:fresh --seed
 
 Este último comando elimina todos los datos y solo debe utilizarse durante el
 desarrollo.
+
+### Limpiar únicamente los datos de prueba
+
+Para reiniciar compras, finanzas, despachos, jornadas e inventarios sin borrar
+los clientes, proveedores, camiones ni choferes, ejecutar:
+
+```bash
+php artisan db:seed --class=DevelopmentDataCleanupSeeder
+```
+
+El comando solicita confirmación y solo funciona con `APP_ENV=local` o
+`APP_ENV=testing`. No forma parte de `DatabaseSeeder`, por lo que una ejecución
+normal de `php artisan db:seed` nunca dispara esta limpieza.
+
+Se conservan también los roles de clientes/proveedores, las asignaciones de
+camiones a proveedores, usuarios, permisos y catálogos técnicos necesarios
+para que la aplicación siga funcionando. Las listas de precios, las entidades
+y cuentas financieras se eliminan junto con los datos de prueba, por lo que
+deben configurarse nuevamente después de la limpieza.
+
+También se vacían sesiones, tokens, caché y colas pendientes para evitar datos
+derivados obsoletos; por ello será necesario iniciar sesión nuevamente.
 
 Consultar el estado:
 

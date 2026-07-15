@@ -16,6 +16,9 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
                 'REEMBOLSO_CLIENTE', 'SALDO_INICIAL', 'AJUSTE', 'TRANSFERENCIA_INTERNA',
             ])],
             'estado' => ['nullable', Rule::in(['REGISTRADO', 'ANULADO'])],
+            'aplicacion_estado' => ['nullable', Rule::in([
+                'SIN_APLICAR', 'PARCIAL', 'APLICADO', 'CON_SALDO',
+            ])],
             'cliente_id' => ['nullable', 'integer', 'min:1'],
             'proveedor_id' => ['nullable', 'integer', 'min:1'],
             'cuenta_id' => ['nullable', 'integer', 'min:1'],
@@ -24,5 +27,20 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'tipo' => $this->filled('tipo')
+                ? strtoupper(trim((string) $this->input('tipo')))
+                : null,
+            'estado' => $this->filled('estado')
+                ? strtoupper(trim((string) $this->input('estado')))
+                : null,
+            'aplicacion_estado' => $this->filled('aplicacion_estado')
+                ? strtoupper(trim((string) $this->input('aplicacion_estado')))
+                : null,
+        ]);
     }
 }

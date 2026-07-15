@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\ApplyProviderPaymentRequest;
 use App\Http\Requests\Finance\ListFinancialMovementsRequest;
 use App\Http\Requests\Finance\StoreFinancialMovementRequest;
 use App\Http\Requests\Finance\VoidFinancialMovementRequest;
@@ -50,6 +51,33 @@ class FinancialMovementController extends Controller
         return response()->json([
             'data' => $this->queries->movement((int) $request->user()->empresa_id, $movimiento),
         ]);
+    }
+
+    public function applyProviderPayment(
+        ApplyProviderPaymentRequest $request,
+        int $movimiento,
+    ): JsonResponse {
+        $result = $this->movements->applyProviderPayment(
+            (int) $request->user()->empresa_id,
+            $request->user(),
+            $movimiento,
+            $request->validated(),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => $result['idempotent']
+                ? 'Esta aplicación ya había sido procesada.'
+                : 'El anticipo fue aplicado correctamente a las deudas seleccionadas.',
+            'data' => $this->queries->movement(
+                (int) $request->user()->empresa_id,
+                $result['pago_id'],
+            ),
+            'meta' => [
+                'idempotent' => $result['idempotent'],
+                'operacion_id' => $result['operacion_id'],
+            ],
+        ], $result['idempotent'] ? 200 : 201);
     }
 
     public function void(VoidFinancialMovementRequest $request, int $movimiento): JsonResponse

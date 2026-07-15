@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(78, $migrationFiles);
+        $this->assertCount(79, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -92,6 +92,7 @@ class DatabaseSchemaTest extends TestCase
             'comprobante_pesadas',
             'pagos',
             'pago_aplicaciones',
+            'pago_aplicacion_operaciones',
             'auditoria_eventos',
             'movimientos_javas',
             'inventarios_javas',
@@ -135,6 +136,7 @@ class DatabaseSchemaTest extends TestCase
             'comprobantes' => ['operacion', 'naturaleza', 'codigo', 'origen_codigo', 'origen_clave', 'total', 'saldo_pendiente', 'contraparte_tipo_documento_snapshot', 'contraparte_numero_documento_snapshot', 'contraparte_nombre_snapshot', 'contraparte_direccion_snapshot', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'pagos' => ['empresa_id', 'codigo', 'tercero_id', 'tipo', 'cliente_id', 'proveedor_id', 'cuenta_origen_id', 'cuenta_destino_id', 'metodo_pago_id', 'direccion', 'fecha_hora', 'metodo', 'referencia', 'importe', 'estado', 'idempotency_key', 'reversa_de_pago_id', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'pago_aplicaciones' => ['pago_id', 'comprobante_id', 'lado', 'importe_aplicado', 'created_by', 'created_at'],
+            'pago_aplicacion_operaciones' => ['empresa_id', 'pago_id', 'idempotency_key', 'payload_hash', 'importe_total', 'aplicaciones', 'observaciones', 'created_by', 'created_at'],
             'auditoria_eventos' => ['usuario_id', 'entidad', 'entidad_id', 'accion', 'datos_antes', 'datos_despues'],
             'compras' => ['empresa_id', 'proveedor_id', 'comprobante_id', 'pago_inicial_id', 'codigo', 'idempotency_key', 'tipo_documento', 'numero_documento', 'numero_documento_activo', 'fecha_compra', 'fecha_vencimiento', 'condicion', 'moneda', 'subtotal', 'impuesto', 'total', 'estado', 'observaciones', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'compra_detalles' => ['compra_id', 'tipo_pollo_id', 'descripcion', 'cantidad_aves', 'peso_kg', 'precio_kg', 'subtotal', 'created_at'],

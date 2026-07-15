@@ -1,5 +1,6 @@
 import { apiRequest } from "./api-client.js";
 import {
+  createIdempotencyKey,
   errorMessage,
   escapeHtml,
   fillSelect,
@@ -51,14 +52,40 @@ const elements = {
   traceNext: document.getElementById("financeTraceNext"),
   tracePage: document.getElementById("financeTracePage"),
   movementMessage: document.getElementById("financeMovementMessage"),
-  recentMovements: document.getElementById("financeRecentMovements")
+  recentMovements: document.getElementById("financeRecentMovements"),
+  advanceMessage: document.getElementById("financeAdvanceMessage"),
+  advanceList: document.getElementById("financeAdvanceList"),
+  advanceDialog: document.getElementById("financeAdvanceDialog"),
+  advanceForm: document.getElementById("financeAdvanceForm"),
+  advanceClose: document.getElementById("financeAdvanceClose"),
+  advanceCancel: document.getElementById("financeAdvanceCancel"),
+  advanceSubmit: document.getElementById("financeAdvanceSubmit"),
+  advanceCode: document.getElementById("financeAdvanceCode"),
+  advanceProvider: document.getElementById("financeAdvanceProvider"),
+  advanceReference: document.getElementById("financeAdvanceReference"),
+  advanceDate: document.getElementById("financeAdvanceDate"),
+  advanceTotal: document.getElementById("financeAdvanceTotal"),
+  advanceAvailable: document.getElementById("financeAdvanceAvailable"),
+  advanceSelected: document.getElementById("financeAdvanceSelected"),
+  advanceRemaining: document.getElementById("financeAdvanceRemaining"),
+  advanceDebtTotal: document.getElementById("financeAdvanceDebtTotal"),
+  advanceDebtMessage: document.getElementById("financeAdvanceDebtMessage"),
+  advanceDebtList: document.getElementById("financeAdvanceDebtList"),
+  advanceFormMessage: document.getElementById("financeAdvanceFormMessage")
 };
 
 const state = {
   page: 1,
   lastPage: 1,
   perPage: 25,
-  loadingTrace: false
+  loadingTrace: false,
+  advances: [],
+  advancePayment: null,
+  advanceDebts: [],
+  advanceApplications: new Map(),
+  advanceIdempotencyKey: createIdempotencyKey(),
+  advanceRequestSequence: 0,
+  savingAdvance: false
 };
 
 function partyLabel(record, keys, fallback = "—") {
@@ -77,6 +104,54 @@ function movementAmount(record) {
 
 function movementCurrency(record) {
   return String(firstDefined(record, ["moneda", "currency", "movimiento.moneda"], "PEN"));
+}
+
+function movementApplication(record) {
+  return firstDefined(record, ["aplicacion", "application", "resumen_aplicacion"], null);
+}
+
+function movementUnapplied(record) {
+  return numericValue(firstDefined(movementApplication(record) || {}, [
+    "importe_sin_aplicar",
+    "unapplied",
+    "available"
+  ], 0));
+}
+
+function movementApplicationStatus(record) {
+  return String(firstDefined(movementApplication(record) || {}, ["estado", "status"], "")).toUpperCase();
+}
+
+function formatAdvanceDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return formatDateTime(value);
+
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return new Intl.DateTimeFormat("es-PE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(date);
+}
+
+function currencyInputPrefix(currency) {
+  return ({ PEN: "S/", USD: "US$", EUR: "€" })[String(currency).toUpperCase()] || currency;
+}
+
+async function allPaginatedRecords(endpoint, keys) {
+  const records = [];
+  let page = 1;
+  let lastPage = 1;
+
+  do {
+    const separator = endpoint.includes("?") ? "&" : "?";
+    const response = await apiRequest(`${endpoint}${separator}page=${page}`);
+    records.push(...responseCollection(response, keys));
+    lastPage = Math.max(1, numericValue(firstDefined(responseMeta(response), ["last_page"], 1), 1));
+    page += 1;
+  } while (page <= lastPage);
+
+  return records;
 }
 
 function isOutgoing(record, type = movementType(record)) {
@@ -223,6 +298,17 @@ function renderTrace(records) {
     const reference = firstDefined(record, ["referencia", "reference", "numero_operacion", "ticket.numero"], "—");
     const date = firstDefined(record, ["fecha_hora", "fecha", "created_at", "date", "movimiento.fecha_hora"], null);
     const status = String(firstDefined(record, ["estado", "status"], "REGISTRADO"));
+    const unapplied = movementUnapplied(record);
+    const applicationStatus = movementApplicationStatus(record);
+    const applicationNote = type === "PAGO_PROVEEDOR"
+      ? ["ANULADO", "REVERSA"].includes(applicationStatus)
+        ? applicationStatus === "ANULADO" ? "Pago anulado" : "Movimiento de reversa"
+        : applicationStatus === "APLICADO"
+        ? "Aplicado por completo"
+        : unapplied > 0
+          ? `${applicationStatus === "PARCIAL" ? "Aplicación parcial" : "Anticipo sin aplicar"} · ${formatMoney(unapplied, movementCurrency(record))}`
+          : applicationStatus.replaceAll("_", " ")
+      : "";
 
     return `
       <tr>
@@ -233,9 +319,314 @@ function renderTrace(records) {
         <td>${escapeHtml(provider)}</td>
         <td>${escapeHtml(method)}</td>
         <td>${escapeHtml(reference)}</td>
-        <td class="fin-text-right fin-table-amount">${escapeHtml(formatMoney(movementAmount(record), movementCurrency(record)))}</td>
+        <td class="fin-text-right fin-table-amount">
+          <strong>${escapeHtml(formatMoney(movementAmount(record), movementCurrency(record)))}</strong>
+          ${applicationNote ? `<small class="fin-application-note ${unapplied > 0 ? "is-pending" : ""}">${escapeHtml(applicationNote)}</small>` : ""}
+        </td>
       </tr>`;
   }).join("");
+}
+
+function renderAdvances(records) {
+  if (!records.length) {
+    elements.advanceList.innerHTML = `
+      <article class="fin-advance-empty">
+        <strong>No hay anticipos pendientes</strong>
+        <span>Todos los pagos a proveedores están asociados a sus deudas.</span>
+      </article>`;
+    return;
+  }
+
+  elements.advanceList.innerHTML = records.map((record) => {
+    const id = firstDefined(record, ["id", "movimiento.id"], "");
+    const provider = partyLabel(record, ["proveedor", "provider"], "Proveedor sin nombre");
+    const code = firstDefined(record, ["codigo", "code"], `Movimiento ${id}`);
+    const reference = firstDefined(record, ["referencia", "reference"], "Sin referencia");
+    const date = firstDefined(record, ["fecha_hora", "fecha", "created_at"], null);
+    const currency = movementCurrency(record);
+    const available = movementUnapplied(record);
+    const applicationStatus = movementApplicationStatus(record);
+    const statusLabel = applicationStatus === "PARCIAL" ? "Aplicación parcial" : "Sin aplicar";
+    const actionLabel = `Aplicar ${formatMoney(available, currency)} de ${provider}, movimiento ${code}, a una deuda`;
+
+    return `
+      <article class="fin-advance-item">
+        <div class="fin-advance-mark" aria-hidden="true">${escapeHtml(currencyInputPrefix(currency))}</div>
+        <div class="fin-advance-copy">
+          <div><strong>${escapeHtml(provider)}</strong><span class="fin-advance-status">${escapeHtml(statusLabel)}</span></div>
+          <small>${escapeHtml(code)} · ${escapeHtml(reference)} · ${escapeHtml(formatDateTime(date))}</small>
+        </div>
+        <div class="fin-advance-amount">
+          <span>Disponible</span>
+          <strong>${escapeHtml(formatMoney(available, currency))}</strong>
+        </div>
+        <button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-advance-apply="${escapeHtml(id)}" aria-label="${escapeHtml(actionLabel)}">Aplicar a deuda</button>
+      </article>`;
+  }).join("");
+}
+
+async function loadAdvances() {
+  setMessage(elements.advanceMessage, "Consultando anticipos por aplicar...");
+
+  try {
+    state.advances = await allPaginatedRecords(
+      "/finanzas/movimientos?aplicacion_estado=CON_SALDO&per_page=100",
+      ["movimientos", "items", "records"]
+    );
+    renderAdvances(state.advances);
+    setMessage(elements.advanceMessage, state.advances.length
+      ? `${state.advances.length} anticipo${state.advances.length === 1 ? "" : "s"} con saldo disponible`
+      : "");
+    markFinanceAccessReady();
+  } catch (error) {
+    state.advances = [];
+    elements.advanceList.innerHTML = `
+      <article class="fin-advance-empty">
+        <strong>No se pudieron cargar los anticipos</strong>
+        <span>Reintenta cuando la conexión esté disponible.</span>
+      </article>`;
+    setMessage(elements.advanceMessage, errorMessage(error, "No se pudieron consultar los anticipos."), "error");
+  }
+}
+
+function normalizeAdvanceDebt(rawDebt) {
+  return {
+    id: firstDefined(rawDebt, ["comprobante_id", "document_id", "id"], null),
+    code: String(firstDefined(rawDebt, ["codigo", "numero_comprobante", "origen_clave"], "Documento")),
+    pending: numericValue(firstDefined(rawDebt, ["saldo_pendiente", "saldo", "pendiente"], 0)),
+    total: numericValue(firstDefined(rawDebt, ["total", "importe_total"], 0)),
+    date: firstDefined(rawDebt, ["fecha_emision", "fecha", "created_at"], null),
+    status: String(firstDefined(rawDebt, ["estado", "status"], "PENDIENTE"))
+  };
+}
+
+function advanceSelectedTotal() {
+  return [...state.advanceApplications.values()]
+    .reduce((total, amount) => total + numericValue(amount), 0);
+}
+
+function currentAdvanceAvailable() {
+  return movementUnapplied(state.advancePayment || {});
+}
+
+function advanceApplicationError() {
+  for (const [documentId, rawAmount] of state.advanceApplications.entries()) {
+    const debt = state.advanceDebts.find((item) => String(item.id) === String(documentId));
+    const amount = numericValue(rawAmount);
+    if (!debt || amount < .01) {
+      return "Cada deuda seleccionada debe tener un importe mayor que cero.";
+    }
+    if (Math.abs(amount * 100 - Math.round(amount * 100)) > .000001) {
+      return `El importe para ${debt.code} debe tener como máximo dos decimales.`;
+    }
+    if (amount > debt.pending + .001) {
+      return `El importe para ${debt.code} supera su saldo pendiente.`;
+    }
+  }
+
+  if (advanceSelectedTotal() > currentAdvanceAvailable() + .001) {
+    return "Lo seleccionado supera el saldo disponible del anticipo.";
+  }
+
+  return "";
+}
+
+function updateAdvanceSummary() {
+  const payment = state.advancePayment || {};
+  const currency = movementCurrency(payment);
+  const available = currentAdvanceAvailable();
+  const selected = advanceSelectedTotal();
+  const remaining = Math.max(0, available - selected);
+  const validationError = advanceApplicationError();
+
+  elements.advanceTotal.textContent = formatMoney(movementAmount(payment), currency);
+  elements.advanceAvailable.textContent = formatMoney(available, currency);
+  elements.advanceSelected.textContent = formatMoney(selected, currency);
+  elements.advanceRemaining.textContent = formatMoney(remaining, currency);
+  elements.advanceSelected.classList.toggle("is-error", validationError !== "");
+  elements.advanceSubmit.disabled = state.savingAdvance || selected <= 0 || validationError !== "";
+  elements.advanceClose.disabled = state.savingAdvance;
+  elements.advanceCancel.disabled = state.savingAdvance;
+  elements.advanceSubmit.textContent = selected > 0
+    ? `Aplicar ${formatMoney(selected, currency)}`
+    : "Aplicar a las deudas seleccionadas";
+}
+
+function renderAdvanceDebts() {
+  const selected = state.advanceApplications;
+  const currency = movementCurrency(state.advancePayment || {});
+  const currencyPrefix = currencyInputPrefix(currency);
+  const totalPending = state.advanceDebts.reduce((total, debt) => total + debt.pending, 0);
+  elements.advanceDebtTotal.textContent = `Pendiente ${formatMoney(totalPending, currency)}`;
+
+  if (!state.advanceDebts.length) {
+    elements.advanceDebtList.innerHTML = "";
+    setMessage(elements.advanceDebtMessage, "Este proveedor no tiene deudas pendientes en la moneda del pago.");
+    updateAdvanceSummary();
+    return;
+  }
+
+  setMessage(elements.advanceDebtMessage, `${state.advanceDebts.length} deuda${state.advanceDebts.length === 1 ? "" : "s"} disponible${state.advanceDebts.length === 1 ? "" : "s"}`);
+  elements.advanceDebtList.innerHTML = state.advanceDebts.map((debt) => {
+    const key = String(debt.id);
+    const checked = selected.has(key);
+    const amount = checked ? numericValue(selected.get(key)) : 0;
+    return `
+      <label class="fin-debt-item ${checked ? "is-selected" : ""}">
+        <input class="fin-debt-check" type="checkbox" data-advance-debt-toggle="${escapeHtml(key)}" ${checked ? "checked" : ""}>
+        <span class="fin-debt-copy">
+          <strong>${escapeHtml(debt.code)}</strong>
+          <small>${escapeHtml(formatAdvanceDate(debt.date))} · ${escapeHtml(debt.status)} · saldo ${escapeHtml(formatMoney(debt.pending, currency))}</small>
+        </span>
+        <span class="fin-debt-amount">${escapeHtml(currencyPrefix)}<input type="number" min="0.01" max="${debt.pending}" step="0.01" inputmode="decimal" data-advance-debt-amount="${escapeHtml(key)}" value="${amount > 0 ? amount.toFixed(2) : ""}" ${checked ? "" : "disabled"} aria-label="Importe que se aplicará a ${escapeHtml(debt.code)}"></span>
+      </label>`;
+  }).join("");
+  updateAdvanceSummary();
+}
+
+function resetAdvanceDialog() {
+  state.advanceRequestSequence += 1;
+  state.advancePayment = null;
+  state.advanceDebts = [];
+  state.advanceApplications.clear();
+  state.advanceIdempotencyKey = createIdempotencyKey();
+  state.savingAdvance = false;
+  elements.advanceForm.reset();
+  setMessage(elements.advanceDebtMessage);
+  setMessage(elements.advanceFormMessage);
+  elements.advanceDebtList.innerHTML = "";
+  updateAdvanceSummary();
+}
+
+function closeAdvanceDialog(force = false) {
+  if (state.savingAdvance && !force) {
+    setMessage(elements.advanceFormMessage, "Espera a que termine la aplicación antes de cerrar.", "error");
+    return false;
+  }
+
+  if (elements.advanceDialog?.open) elements.advanceDialog.close();
+  resetAdvanceDialog();
+  return true;
+}
+
+async function openAdvanceDialog(paymentId) {
+  if (state.savingAdvance) return;
+  resetAdvanceDialog();
+  const requestSequence = state.advanceRequestSequence;
+  if (typeof elements.advanceDialog?.showModal === "function") elements.advanceDialog.showModal();
+  else elements.advanceDialog?.setAttribute("open", "");
+  setMessage(elements.advanceFormMessage, "Consultando el pago y las deudas disponibles...");
+
+  try {
+    const movementResponse = await apiRequest(`/finanzas/movimientos/${encodeURIComponent(paymentId)}`);
+    if (requestSequence !== state.advanceRequestSequence) return;
+    const payment = firstDefined(movementResponse, ["data"], movementResponse);
+    const providerId = firstDefined(payment, ["proveedor.id", "provider.id", "proveedor_id"], null);
+    const available = movementUnapplied(payment);
+    if (!providerId || movementType(payment) !== "PAGO_PROVEEDOR" || available <= 0) {
+      throw new Error("Este movimiento ya no tiene saldo disponible para aplicar.");
+    }
+
+    state.advancePayment = payment;
+    state.advanceIdempotencyKey = createIdempotencyKey();
+    elements.advanceCode.textContent = String(firstDefined(payment, ["codigo", "code"], `Movimiento ${paymentId}`));
+    elements.advanceProvider.textContent = partyLabel(payment, ["proveedor", "provider"], "—");
+    elements.advanceReference.textContent = String(firstDefined(payment, ["referencia", "reference"], "Sin referencia"));
+    elements.advanceDate.textContent = formatDateTime(firstDefined(payment, ["fecha_hora", "fecha", "created_at"], null));
+    updateAdvanceSummary();
+
+    const params = new URLSearchParams({
+      lado: "CXP",
+      proveedor_id: String(providerId),
+      moneda: movementCurrency(payment),
+      naturaleza: "CARGO",
+      solo_pendientes: "true",
+      per_page: "100"
+    });
+    const portfolioRecords = await allPaginatedRecords(`/finanzas/cartera?${params.toString()}`, [
+      "cartera", "comprobantes", "documentos", "items", "CXP", "cxp"
+    ]);
+    if (requestSequence !== state.advanceRequestSequence) return;
+
+    state.advanceDebts = portfolioRecords
+      .map(normalizeAdvanceDebt)
+      .filter((debt) => debt.id && debt.pending > 0);
+    renderAdvanceDebts();
+    setMessage(elements.advanceFormMessage);
+  } catch (error) {
+    if (requestSequence !== state.advanceRequestSequence) return;
+    setMessage(elements.advanceFormMessage, errorMessage(error, "No se pudo preparar la aplicación del anticipo."), "error");
+    state.advanceDebts = [];
+    state.advanceApplications.clear();
+    elements.advanceDebtList.innerHTML = "";
+    elements.advanceDebtTotal.textContent = `Pendiente ${formatMoney(0, movementCurrency(state.advancePayment || {}))}`;
+    setMessage(elements.advanceDebtMessage);
+    updateAdvanceSummary();
+  }
+}
+
+function toggleAdvanceDebt(id, checked) {
+  const key = String(id);
+  if (!checked) {
+    state.advanceApplications.delete(key);
+  } else {
+    const debt = state.advanceDebts.find((item) => String(item.id) === key);
+    const remaining = Math.max(0, currentAdvanceAvailable() - advanceSelectedTotal());
+    if (!debt || remaining <= 0) {
+      setMessage(elements.advanceFormMessage, "El saldo del anticipo ya está completamente seleccionado.", "error");
+      renderAdvanceDebts();
+      return;
+    }
+    state.advanceApplications.set(key, Math.min(debt.pending, remaining));
+    setMessage(elements.advanceFormMessage);
+  }
+  renderAdvanceDebts();
+}
+
+async function applyAdvance(event) {
+  event.preventDefault();
+  if (state.savingAdvance || !state.advancePayment) return;
+
+  const applications = [...state.advanceApplications.entries()]
+    .map(([documentId, amount]) => ({
+      comprobante_id: Number(documentId),
+      importe_aplicado: numericValue(amount).toFixed(2)
+    }))
+    .filter((application) => numericValue(application.importe_aplicado) > 0);
+  if (!applications.length) {
+    setMessage(elements.advanceFormMessage, "Selecciona al menos una deuda e indica el importe que deseas aplicar.", "error");
+    return;
+  }
+  const validationError = advanceApplicationError();
+  if (validationError) {
+    setMessage(elements.advanceFormMessage, validationError, "error");
+    return;
+  }
+
+  state.savingAdvance = true;
+  updateAdvanceSummary();
+  setMessage(elements.advanceFormMessage, "Aplicando el anticipo...");
+
+  try {
+    const paymentId = firstDefined(state.advancePayment, ["id"], null);
+    const response = await apiRequest(`/finanzas/movimientos/${encodeURIComponent(paymentId)}/aplicaciones`, {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: state.advanceIdempotencyKey,
+        aplicaciones: applications,
+        observaciones: "Aplicación posterior desde Tesorería"
+      })
+    });
+    const message = response?.message || "El anticipo fue aplicado correctamente.";
+    closeAdvanceDialog(true);
+    await Promise.allSettled([loadAdvances(), loadBalances(), loadTrace(), loadRecentMovements()]);
+    setMessage(elements.advanceMessage, message, "success");
+  } catch (error) {
+    setMessage(elements.advanceFormMessage, errorMessage(error, "No se pudo aplicar el anticipo."), "error");
+  } finally {
+    state.savingAdvance = false;
+    updateAdvanceSummary();
+  }
 }
 
 async function loadTrace() {
@@ -304,7 +695,7 @@ async function loadRecentMovements() {
 }
 
 async function loadAll() {
-  await Promise.allSettled([loadCatalog(), loadBalances(), loadTrace(), loadRecentMovements()]);
+  await Promise.allSettled([loadCatalog(), loadBalances(), loadAdvances(), loadTrace(), loadRecentMovements()]);
 }
 
 elements.filters.addEventListener("submit", (event) => {
@@ -329,6 +720,36 @@ elements.traceNext.addEventListener("click", () => {
   if (state.page >= state.lastPage) return;
   state.page += 1;
   void loadTrace();
+});
+
+elements.advanceList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-advance-apply]");
+  if (button) void openAdvanceDialog(button.dataset.advanceApply);
+});
+
+elements.advanceDebtList.addEventListener("change", (event) => {
+  const checkbox = event.target.closest("[data-advance-debt-toggle]");
+  if (checkbox) toggleAdvanceDebt(checkbox.dataset.advanceDebtToggle, checkbox.checked);
+});
+
+elements.advanceDebtList.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-advance-debt-amount]");
+  if (!input) return;
+  const key = String(input.dataset.advanceDebtAmount);
+  if (state.advanceApplications.has(key)) {
+    state.advanceApplications.set(key, Math.max(0, numericValue(input.value)));
+    const validationError = advanceApplicationError();
+    setMessage(elements.advanceFormMessage, validationError, validationError ? "error" : "");
+    updateAdvanceSummary();
+  }
+});
+
+elements.advanceForm.addEventListener("submit", applyAdvance);
+elements.advanceClose.addEventListener("click", () => closeAdvanceDialog());
+elements.advanceCancel.addEventListener("click", () => closeAdvanceDialog());
+elements.advanceDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeAdvanceDialog();
 });
 
 initFinanceAccess(loadAll);

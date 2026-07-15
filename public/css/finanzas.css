@@ -460,6 +460,7 @@ body.fin-page {
 .fin-summary-payable > strong { color: #ff9c9c; }
 
 .fin-accounts-panel,
+.fin-advances-panel,
 .fin-trace-panel,
 .fin-recent-panel,
 .fin-accounts-admin,
@@ -677,6 +678,7 @@ body.fin-page {
 .fin-table td small { display: block; margin-top: 3px; color: var(--fin-muted); }
 .fin-table .fin-text-right { text-align: right; }
 .fin-table-amount { color: #fff !important; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-application-note.is-pending { color: var(--fin-yellow) !important; }
 
 .fin-empty-cell {
   padding: 34px !important;
@@ -759,6 +761,59 @@ body.fin-page {
 .fin-recent-copy strong { color: #fff; font-size: 12px; }
 .fin-recent-copy small { margin-top: 3px; color: var(--fin-muted); font-size: 10px; }
 .fin-recent-item > strong { color: #fff; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.fin-advance-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.fin-advance-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 13px;
+  padding: 13px;
+  align-items: center;
+  border: 1px solid rgba(242, 194, 48, .26);
+  border-radius: 11px;
+  background: linear-gradient(145deg, rgba(45, 36, 13, .28), rgba(5, 10, 17, .72));
+}
+
+.fin-advance-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--fin-yellow);
+  border: 1px solid rgba(242, 194, 48, .35);
+  border-radius: 10px;
+  background: rgba(242, 194, 48, .08);
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.fin-advance-copy { min-width: 0; }
+.fin-advance-copy > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fin-advance-copy strong { color: #fff; font-size: 13px; }
+.fin-advance-copy small { display: block; margin-top: 4px; overflow: hidden; color: var(--fin-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.fin-advance-status { padding: 4px 7px; color: #ffe28c; border: 1px solid rgba(242, 194, 48, .34); border-radius: 999px; background: rgba(242, 194, 48, .08); font-size: 8px; font-weight: 950; letter-spacing: .06em; text-transform: uppercase; }
+.fin-advance-amount { min-width: 125px; text-align: right; }
+.fin-advance-amount span,
+.fin-advance-amount strong { display: block; }
+.fin-advance-amount span { color: var(--fin-muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.fin-advance-amount strong { margin-top: 4px; color: var(--fin-yellow); font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.fin-advance-empty {
+  display: grid;
+  min-height: 84px;
+  padding: 16px;
+  place-content: center;
+  border: 1px dashed var(--fin-border-strong);
+  border-radius: 10px;
+  text-align: center;
+}
+.fin-advance-empty strong { color: #fff; font-size: 13px; }
+.fin-advance-empty span { margin-top: 5px; color: var(--fin-muted); font-size: 10px; }
 
 /* Empresas y cuentas */
 .fin-entity-workspace {
@@ -1169,6 +1224,36 @@ body.fin-page {
 .fin-purchase-void-panel .fin-form-actions { margin-top: 11px; }
 .fin-purchase-dialog-actions { display: flex; margin-top: 16px; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
+.fin-advance-dialog { width: min(900px, calc(100% - 28px)); }
+.fin-advance-dialog-copy { margin: 12px 0 0; color: var(--fin-soft); font-size: 11px; line-height: 1.55; }
+.fin-advance-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 15px 0 0;
+}
+.fin-advance-facts > div,
+.fin-advance-summary article {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--fin-border);
+  border-radius: 9px;
+  background: rgba(5, 10, 17, .62);
+}
+.fin-advance-facts dt,
+.fin-advance-facts dd,
+.fin-advance-summary span,
+.fin-advance-summary strong { display: block; margin: 0; }
+.fin-advance-facts dt,
+.fin-advance-summary span { color: var(--fin-muted); font-size: 8px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.fin-advance-facts dd { margin-top: 5px; overflow: hidden; color: #fff; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.fin-advance-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.fin-advance-summary strong { margin-top: 6px; color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
+.fin-advance-summary article:nth-child(2) strong,
+.fin-advance-summary article:nth-child(4) strong { color: var(--fin-yellow); }
+.fin-advance-summary strong.is-error { color: var(--fin-red); }
+.fin-advance-debts { margin-top: 12px; max-height: 390px; overflow-y: auto; }
+
 .fin-purchase-form-guide {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1319,6 +1404,7 @@ body.fin-page {
   .fin-summary-card { min-height: 116px; padding: 14px; }
   .fin-summary-card > strong { font-size: 22px; }
   .fin-accounts-panel,
+  .fin-advances-panel,
   .fin-trace-panel,
   .fin-recent-panel,
   .fin-accounts-admin,
@@ -1330,6 +1416,8 @@ body.fin-page {
   .fin-list-panel { padding: 15px; }
   .fin-section-head-wrap { align-items: stretch; flex-direction: column; }
   .fin-account-balance-grid,
+  .fin-advance-facts,
+  .fin-advance-summary,
   .fin-recent-list,
   .fin-filter-grid,
   .fin-form-grid,
@@ -1359,6 +1447,10 @@ body.fin-page {
   .fin-purchase-dialog-card { padding: 17px; }
   .fin-purchase-dialog-actions { align-items: stretch; flex-direction: column; }
   .fin-purchase-dialog-actions .fin-btn { width: 100%; }
+  .fin-advance-item { grid-template-columns: auto minmax(0, 1fr); }
+  .fin-advance-amount { grid-column: 2; min-width: 0; text-align: left; }
+  .fin-advance-item > .fin-btn { grid-column: 2; width: 100%; }
+  .fin-advance-debts { max-height: none; overflow: visible; }
   .fin-purchase-detail-lines article { align-items: flex-start; }
   .fin-module-shell { align-content: start; gap: 16px; }
   .fin-module-grid { grid-template-columns: 1fr; }

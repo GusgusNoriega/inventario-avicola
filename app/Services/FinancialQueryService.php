@@ -276,6 +276,20 @@ class FinancialQueryService
             ->where('pago.empresa_id', $companyId)
             ->when($filters['tipo'] ?? null, fn (Builder $query, string $type) => $query->where('pago.tipo', $type))
             ->when($filters['estado'] ?? null, fn (Builder $query, string $status) => $query->where('pago.estado', $status))
+            ->when($filters['aplicacion_estado'] ?? null, function (Builder $query, string $status): void {
+                $appliedSql = "(SELECT COALESCE(SUM(pa.importe_aplicado), 0) FROM pago_aplicaciones pa WHERE pa.pago_id = pago.id AND pa.lado = 'CXP')";
+                $query->where('pago.tipo', 'PAGO_PROVEEDOR')
+                    ->where('pago.estado', 'REGISTRADO')
+                    ->whereNull('pago.reversa_de_pago_id');
+
+                match ($status) {
+                    'SIN_APLICAR' => $query->whereRaw("{$appliedSql} = 0"),
+                    'PARCIAL' => $query->whereRaw("{$appliedSql} > 0")
+                        ->whereRaw("pago.importe > {$appliedSql}"),
+                    'APLICADO' => $query->whereRaw("pago.importe <= {$appliedSql}"),
+                    'CON_SALDO' => $query->whereRaw("pago.importe > {$appliedSql}"),
+                };
+            })
             ->when($filters['cliente_id'] ?? null, fn (Builder $query, int|string $id) => $query->where('pago.cliente_id', $id))
             ->when($filters['proveedor_id'] ?? null, fn (Builder $query, int|string $id) => $query->where('pago.proveedor_id', $id))
             ->when($filters['metodo_pago_id'] ?? null, fn (Builder $query, int|string $id) => $query->where('pago.metodo_pago_id', $id))
@@ -374,6 +388,38 @@ class FinancialQueryService
                 ];
             })->all();
 
+            $providerApplication = null;
+            if ($payment->tipo === 'PAGO_PROVEEDOR') {
+                $applied = collect($items)
+                    ->where('lado', 'CXP')
+                    ->reduce(
+                        fn (string $sum, array $application): string => FinancialMoney::add(
+                            $sum,
+                            $application['importe_aplicado'],
+                        ),
+                        '0.00',
+                    );
+                $unapplied = FinancialMoney::subtract((string) $payment->importe, $applied);
+                if (FinancialMoney::compare($unapplied, '0.00') < 0) {
+                    $unapplied = '0.00';
+                }
+                $applicationStatus = match (true) {
+                    $payment->estado === 'ANULADO' => 'ANULADO',
+                    $payment->reversa_de_pago_id !== null => 'REVERSA',
+                    FinancialMoney::compare($applied, '0.00') === 0 => 'SIN_APLICAR',
+                    FinancialMoney::compare($unapplied, '0.00') > 0 => 'PARCIAL',
+                    default => 'APLICADO',
+                };
+                $providerApplication = [
+                    'lado' => 'CXP',
+                    'importe_aplicado' => $applied,
+                    'importe_sin_aplicar' => $unapplied,
+                    'estado' => $applicationStatus,
+                    'puede_aplicar' => $applicationStatus === 'SIN_APLICAR'
+                        || $applicationStatus === 'PARCIAL',
+                ];
+            }
+
             return [
                 'id' => (int) $payment->id,
                 'codigo' => $payment->codigo,
@@ -409,6 +455,7 @@ class FinancialQueryService
                 'anulada_at' => $payment->anulada_at,
                 'motivo_anulacion' => $payment->motivo_anulacion,
                 'aplicaciones' => $items,
+                'aplicacion' => $providerApplication,
                 'created_by' => (int) $payment->created_by,
                 'created_at' => $payment->created_at,
             ];
