@@ -25,6 +25,15 @@ const elements = {
   trayCompanyInside: byId("trayCompanyInside"),
   companyOutside: byId("javaCompanyOutside"),
   trayCompanyOutside: byId("trayCompanyOutside"),
+  externalCompanyJavas: byId("javaExternalCompanyJavas"),
+  externalCompanyTrays: byId("trayExternalCompanyQuantity"),
+  externalClientsCount: byId("javaExternalClientsCount"),
+  internalCompanyJavas: byId("javaInternalCompanyJavas"),
+  internalCompanyTrays: byId("trayInternalCompanyQuantity"),
+  internalClientsCount: byId("javaInternalClientsCount"),
+  countJourneyTitle: byId("javaCountJourneyTitle"),
+  countJourneyWindow: byId("javaCountJourneyWindow"),
+  countJourneyState: byId("javaCountJourneyState"),
   inventoryStatus: byId("javaInventoryStatus"),
   inventoryOpen: byId("javaInventoryOpen"),
   inventoryModal: byId("javaInventoryModal"),
@@ -37,7 +46,6 @@ const elements = {
   trayInventoryOutsideHint: byId("trayInventoryOutsideHint"),
   inventorySubmit: byId("javaInventorySubmit"),
   inventoryMessage: byId("javaInventoryMessage"),
-  dailyOpen: byId("javaDailyOpen"),
   dailyStatus: byId("javaDailyStatus"),
   dailyQuantity: byId("javaDailyQuantity"),
   trayDailyQuantity: byId("trayDailyQuantity"),
@@ -46,17 +54,34 @@ const elements = {
   dailyDifference: byId("javaDailyDifference"),
   trayDailyDifference: byId("trayDailyDifference"),
   dailyDifferenceLabel: byId("javaDailyDifferenceLabel"),
-  trayDailyDifferenceLabel: byId("trayDailyDifferenceLabel"),
-  dailyModal: byId("javaDailyModal"),
-  dailyClose: byId("javaDailyClose"),
-  dailyCancel: byId("javaDailyCancel"),
   dailyForm: byId("javaDailyForm"),
-  dailyCountQuantity: byId("javaDailyCountQuantity"),
-  trayDailyCountQuantity: byId("trayDailyCountQuantity"),
-  dailyExpectedHint: byId("javaDailyExpectedHint"),
-  trayDailyExpectedHint: byId("trayDailyExpectedHint"),
+  dailyLocalQuantity: byId("javaDailyLocalQuantity"),
+  trayDailyLocalQuantity: byId("trayDailyLocalQuantity"),
+  dailyTruckInputs: byId("javaDailyTruckInputs"),
+  dailyLocalTotal: byId("javaDailyLocalTotal"),
+  trayDailyLocalTotal: byId("trayDailyLocalTotal"),
+  dailyTruckTotal: byId("javaDailyTruckTotal"),
+  trayDailyTruckTotal: byId("trayDailyTruckTotal"),
+  dailyInternalTotal: byId("javaDailyInternalTotal"),
+  trayDailyInternalTotal: byId("trayDailyInternalTotal"),
+  dailyInsideTotal: byId("javaDailyInsideTotal"),
+  trayDailyInsideTotal: byId("trayDailyInsideTotal"),
+  dailyExternalTotal: byId("javaDailyExternalTotal"),
+  trayDailyExternalTotal: byId("trayDailyExternalTotal"),
+  dailyAccountedTotal: byId("javaDailyAccountedTotal"),
+  trayDailyAccountedTotal: byId("trayDailyAccountedTotal"),
+  dailyPropertyTotal: byId("javaDailyPropertyTotal"),
+  trayDailyPropertyTotal: byId("trayDailyPropertyTotal"),
   dailySubmit: byId("javaDailySubmit"),
   dailyMessage: byId("javaDailyMessage"),
+  externalHolderCount: byId("javaExternalHolderCount"),
+  externalHolderJavas: byId("javaExternalHolderJavas"),
+  externalHolderTrays: byId("trayExternalHolderQuantity"),
+  externalHolderList: byId("javaExternalHolderList"),
+  internalHolderCount: byId("javaInternalHolderCount"),
+  internalHolderJavas: byId("javaInternalHolderJavas"),
+  internalHolderTrays: byId("trayInternalHolderQuantity"),
+  internalHolderList: byId("javaInternalHolderList"),
   search: byId("javaClientSearch"),
   clientRows: byId("javaClientRows"),
   clientPagination: byId("javaClientPagination"),
@@ -80,8 +105,12 @@ const elements = {
 const state = {
   clients: [],
   clientOptions: [],
+  clientHolders: null,
   inventory: null,
+  countBreakdown: null,
+  trucks: [],
   journeys: [],
+  activeJourneyId: null,
   truckActivity: [],
   movements: [],
   pagination: {
@@ -160,6 +189,7 @@ function metricQuantity(source, metric, asset, legacyKey = metric) {
 function normalizeClient(client) {
   return {
     ...client,
+    is_internal_client: Boolean(client?.is_internal_client ?? client?.internal_client),
     java_balance: numericValue(client?.java_balance, client?.java_quantity, client?.balance),
     tray_balance: numericValue(client?.tray_balance, client?.tray_quantity)
   };
@@ -182,6 +212,69 @@ function normalizeActivity(activity) {
     tray_received: metricQuantity(activity, "received", "trays"),
     java_net: metricQuantity(activity, "net", "javas"),
     tray_net: metricQuantity(activity, "net", "trays")
+  };
+}
+
+function nullableNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeHolderGroup(group) {
+  const clients = (group?.clients || []).map(normalizeClient);
+  return {
+    clients,
+    clients_count: numericValue(group?.clients_count, clients.length),
+    java_quantity: numericValue(group?.java_quantity),
+    tray_quantity: numericValue(group?.tray_quantity)
+  };
+}
+
+function normalizeClientHolders(rawHolders) {
+  return {
+    external: normalizeHolderGroup(rawHolders?.external),
+    internal: normalizeHolderGroup(rawHolders?.internal),
+    totals: rawHolders?.totals || {}
+  };
+}
+
+function normalizeCountBreakdown(rawBreakdown, trucks = []) {
+  const raw = rawBreakdown || {};
+  const pair = (value) => ({
+    javas: nullableNumber(value?.javas),
+    trays: nullableNumber(value?.trays)
+  });
+  const rows = (raw.trucks || trucks || []).map((truck) => ({
+    id: Number(truck.id),
+    plate: truck.plate || truck.current_plate || `Camión #${truck.id}`,
+    current_plate: truck.current_plate || truck.plate || null,
+    active: truck.active !== false,
+    recorded: Boolean(truck.recorded),
+    java_quantity: numericValue(truck.java_quantity),
+    tray_quantity: numericValue(truck.tray_quantity)
+  }));
+
+  return {
+    configured: Boolean(raw.configured),
+    detailed: Boolean(raw.detailed),
+    legacy: Boolean(raw.legacy),
+    stale: Boolean(raw.stale),
+    fleet_changed: Boolean(raw.fleet_changed),
+    journey_id: raw.journey_id ? Number(raw.journey_id) : null,
+    counted_at: raw.counted_at || null,
+    counted_by: raw.counted_by || null,
+    local: pair(raw.local),
+    trucks_total: pair(raw.trucks_total),
+    direct_total: pair(raw.direct_total),
+    expected_direct: pair(raw.expected_direct),
+    difference: pair(raw.difference),
+    external_clients: pair(raw.external_clients),
+    internal_clients: pair(raw.internal_clients),
+    inside_avicola: pair(raw.inside_avicola),
+    accounted_total: pair(raw.accounted_total),
+    property_total: pair(raw.property_total),
+    trucks: rows
   };
 }
 
@@ -219,6 +312,8 @@ function normalizeInventory(rawInventory) {
       total: numericValue(nested.total, nested.quantity, raw[`${prefix}_total`], raw[`${prefix}_quantity`], legacy.total),
       inside: numericValue(nested.inside, raw[`${prefix}_inside`], legacy.inside),
       outside: numericValue(nested.outside, raw[`${prefix}_outside`], legacy.outside),
+      assigned_external: numericValue(nested.assigned_external),
+      assigned_internal: numericValue(nested.assigned_internal),
       updated_at: nested.updated_at || raw.updated_at || null,
       daily_count: normalizeDailyCount(
         nested.daily_count
@@ -315,6 +410,86 @@ function renderJourneys(selectedJourneyId) {
     : "Selecciona la jornada que deseas consultar.");
 }
 
+function renderCountJourney() {
+  if (!elements.countJourneyTitle) return;
+  const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
+  const journey = state.journeys.find(
+    (item) => Number(item.id) === Number(state.activeJourneyId || breakdown.journey_id)
+  );
+
+  setText(
+    elements.countJourneyTitle,
+    journey ? `Jornada del ${formatOperatingDate(journey.operating_date)}` : "Jornada pendiente de apertura"
+  );
+  setText(
+    elements.countJourneyWindow,
+    journey
+      ? `${formatDate(journey.starts_at)} a ${formatDate(journey.ends_at)} · Estado: ${journey.status}`
+      : "La jornada vigente se creará automáticamente al guardar el primer conteo."
+  );
+
+  const stateLabel = breakdown.stale
+    ? "Requiere recuento"
+    : breakdown.configured
+      ? "Conteo registrado"
+      : "Sin conteo";
+  setText(elements.countJourneyState, stateLabel);
+  elements.countJourneyState?.classList.toggle("is-counted", breakdown.configured && !breakdown.stale);
+  elements.countJourneyState?.classList.toggle("is-stale", breakdown.stale);
+}
+
+function renderHolderGroup(group, countElement, javaElement, trayElement, listElement) {
+  setText(countElement, `${group.clients_count} ${group.clients_count === 1 ? "cliente" : "clientes"}`);
+  setText(javaElement, group.java_quantity);
+  setText(trayElement, group.tray_quantity);
+
+  if (!listElement) return;
+  if (!group.clients.length) {
+    listElement.innerHTML = '<p class="java-holder-empty">No hay clientes con javas o bandejas pendientes.</p>';
+    return;
+  }
+
+  listElement.innerHTML = group.clients.map((client) => {
+    const inactive = client.status && client.status !== "ACTIVO";
+    return `
+      <div class="java-holder-row">
+        <span class="java-holder-client">
+          <strong>${escapeHtml(client.name)}</strong>
+          <small>${escapeHtml(client.document_number || "Sin documento")}${inactive ? ' · <em>Inactivo con saldo</em>' : ""}</small>
+        </span>
+        <span class="java-holder-asset"><small>Javas</small><strong>${client.java_balance}</strong></span>
+        <span class="java-holder-asset"><small>Bandejas</small><strong>${client.tray_balance}</strong></span>
+      </div>`;
+  }).join("");
+}
+
+function renderClientHolders() {
+  const holders = state.clientHolders || normalizeClientHolders(null);
+  const external = holders.external;
+  const internal = holders.internal;
+
+  setText(elements.externalCompanyJavas, external.java_quantity);
+  setText(elements.externalCompanyTrays, external.tray_quantity);
+  setText(elements.externalClientsCount, external.clients_count);
+  setText(elements.internalCompanyJavas, internal.java_quantity);
+  setText(elements.internalCompanyTrays, internal.tray_quantity);
+  setText(elements.internalClientsCount, internal.clients_count);
+  renderHolderGroup(
+    external,
+    elements.externalHolderCount,
+    elements.externalHolderJavas,
+    elements.externalHolderTrays,
+    elements.externalHolderList
+  );
+  renderHolderGroup(
+    internal,
+    elements.internalHolderCount,
+    elements.internalHolderJavas,
+    elements.internalHolderTrays,
+    elements.internalHolderList
+  );
+}
+
 function renderInventory() {
   const inventory = state.inventory || normalizeInventory(null);
   const javas = inventory.javas;
@@ -344,61 +519,183 @@ function renderInventory() {
 
   setText(elements.inventoryStatus, page === "dashboard"
     ? `${assetPairText(javas.total, trays.total)} en total`
-    : `Actualizado ${formatDate(javas.updated_at || trays.updated_at)}. El disponible descuenta los activos que están fuera.`);
+    : `Actualizado: ${formatDate(javas.updated_at || trays.updated_at)} · El conteo directo descuenta los activos asignados a clientes.`);
 }
 
-function renderDailyCount() {
-  if (!elements.dailyOpen) return;
-  const inventory = state.inventory || normalizeInventory(null);
-  const ready = inventory.javas.configured && inventory.trays.configured;
-  elements.dailyOpen.disabled = !ready;
+function renderDailyTruckInputs() {
+  if (!elements.dailyTruckInputs) return;
+  const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
+  const activeTrucks = breakdown.trucks.filter((truck) => truck.active);
 
-  const renderAssetDaily = (asset, assetName, quantityElement, expectedElement, differenceElement, labelElement, hintElement) => {
-    const daily = asset.daily_count;
-    setText(hintElement, asset.inside);
-
-    if (!asset.configured) {
-      setText(quantityElement, "—");
-      setText(expectedElement, "Esperadas: —");
-      setText(differenceElement, "—");
-      setText(labelElement, "Primero define el total general");
-      return;
-    }
-
-    if (!daily.configured) {
-      setText(quantityElement, "—");
-      setText(expectedElement, `Esperadas: ${asset.inside}`);
-      setText(differenceElement, "—");
-      differenceElement?.classList.remove("is-negative-stock", "is-positive-stock");
-      setText(labelElement, "Sin conteo para esta jornada");
-      return;
-    }
-
-    const difference = Number(daily.difference);
-    setText(quantityElement, daily.quantity);
-    setText(expectedElement, `Esperadas al contar: ${daily.expected}`);
-    setText(differenceElement, difference > 0 ? `+${difference}` : String(difference));
-    differenceElement?.classList.toggle("is-negative-stock", difference !== 0);
-    differenceElement?.classList.toggle("is-positive-stock", difference === 0);
-    setText(labelElement, difference < 0
-      ? `${Math.abs(difference)} ${assetName} faltantes`
-      : difference > 0
-        ? `${difference} ${assetName} sobrantes`
-        : "Sin diferencias");
-  };
-
-  renderAssetDaily(inventory.javas, "javas", elements.dailyQuantity, elements.dailyExpected, elements.dailyDifference, elements.dailyDifferenceLabel, elements.dailyExpectedHint);
-  renderAssetDaily(inventory.trays, "bandejas", elements.trayDailyQuantity, elements.trayDailyExpected, elements.trayDailyDifference, elements.trayDailyDifferenceLabel, elements.trayDailyExpectedHint);
-
-  if (!ready) {
-    setText(elements.dailyStatus, "El conteo se habilitará después de configurar ambos inventarios.");
+  if (!activeTrucks.length) {
+    elements.dailyTruckInputs.innerHTML = '<tr><td colspan="4" class="java-empty-cell">No hay camiones activos en la flota de la empresa.</td></tr>';
     return;
   }
 
-  const countedAt = inventory.javas.daily_count.counted_at || inventory.trays.daily_count.counted_at;
-  setText(elements.dailyStatus, countedAt
-    ? `Último conteo: ${formatDate(countedAt)}.`
-    : "Aún no se ha registrado el conteo físico de la jornada actual.");
+  elements.dailyTruckInputs.innerHTML = activeTrucks.map((truck) => `
+    <tr data-daily-truck-id="${truck.id}">
+      <td data-label="Camión">
+        <strong>${escapeHtml(truck.current_plate || truck.plate)}</strong>
+        <small class="java-truck-company-label">Flota de la empresa</small>
+      </td>
+      <td data-label="Javas que quedan">
+        <input class="java-truck-count-input" data-daily-truck-java type="number" min="0" step="1" inputmode="numeric" value="${breakdown.detailed ? truck.java_quantity : 0}" aria-label="Javas que quedan en el camión ${escapeHtml(truck.current_plate || truck.plate)}" required>
+      </td>
+      <td data-label="Bandejas que quedan">
+        <input class="java-truck-count-input" data-daily-truck-tray type="number" min="0" step="1" inputmode="numeric" value="${breakdown.detailed ? truck.tray_quantity : 0}" aria-label="Bandejas que quedan en el camión ${escapeHtml(truck.current_plate || truck.plate)}" required>
+      </td>
+      <td data-label="Registro"><span class="java-truck-count-state ${breakdown.detailed && truck.recorded ? "is-recorded" : ""}">${breakdown.detailed && truck.recorded ? "Registrado" : "Por contar"}</span></td>
+    </tr>`).join("");
+}
+
+function readNonNegativeInteger(input) {
+  if (!input || input.value.trim() === "") return null;
+  const value = Number(input.value);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function readDailyDraft() {
+  const localJavas = readNonNegativeInteger(elements.dailyLocalQuantity);
+  const localTrays = readNonNegativeInteger(elements.trayDailyLocalQuantity);
+  const trucks = [...(elements.dailyTruckInputs?.querySelectorAll("[data-daily-truck-id]") || [])].map((row) => ({
+    vehicle_id: Number(row.dataset.dailyTruckId),
+    java_quantity: readNonNegativeInteger(row.querySelector("[data-daily-truck-java]")),
+    tray_quantity: readNonNegativeInteger(row.querySelector("[data-daily-truck-tray]"))
+  }));
+  const valid = localJavas !== null
+    && localTrays !== null
+    && trucks.every((truck) => truck.java_quantity !== null && truck.tray_quantity !== null);
+
+  return { valid, localJavas, localTrays, trucks };
+}
+
+function signedQuantity(value) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function differenceDescription(javaDifference, trayDifference) {
+  if (javaDifference === 0 && trayDifference === 0) {
+    return "Cuadre correcto: todas las javas y bandejas están explicadas.";
+  }
+  const describe = (value, asset) => value < 0
+    ? `faltan ${Math.abs(value)} ${asset}`
+    : value > 0
+      ? `sobran ${value} ${asset}`
+      : `${asset} cuadradas`;
+  return `Revisa el conteo: ${describe(javaDifference, "javas")} y ${describe(trayDifference, "bandejas")}.`;
+}
+
+function updateDailyReconciliation() {
+  if (!elements.dailyForm) return;
+  const inventory = state.inventory || normalizeInventory(null);
+  const holders = state.clientHolders || normalizeClientHolders(null);
+  const draft = readDailyDraft();
+  const ready = inventory.javas.configured && inventory.trays.configured;
+  const localJavas = draft.localJavas ?? 0;
+  const localTrays = draft.localTrays ?? 0;
+  const truckJavas = draft.trucks.reduce((total, truck) => total + (truck.java_quantity ?? 0), 0);
+  const truckTrays = draft.trucks.reduce((total, truck) => total + (truck.tray_quantity ?? 0), 0);
+  const directJavas = localJavas + truckJavas;
+  const directTrays = localTrays + truckTrays;
+  const externalJavas = holders.external.java_quantity;
+  const externalTrays = holders.external.tray_quantity;
+  const internalJavas = holders.internal.java_quantity;
+  const internalTrays = holders.internal.tray_quantity;
+  const insideJavas = directJavas + internalJavas;
+  const insideTrays = directTrays + internalTrays;
+  const accountedJavas = insideJavas + externalJavas;
+  const accountedTrays = insideTrays + externalTrays;
+  const propertyJavas = ready ? inventory.javas.total : null;
+  const propertyTrays = ready ? inventory.trays.total : null;
+  const expectedJavas = ready ? inventory.javas.inside : null;
+  const expectedTrays = ready ? inventory.trays.inside : null;
+  const javaDifference = ready ? directJavas - expectedJavas : null;
+  const trayDifference = ready ? directTrays - expectedTrays : null;
+
+  setText(elements.dailyLocalTotal, localJavas);
+  setText(elements.trayDailyLocalTotal, localTrays);
+  setText(elements.dailyTruckTotal, truckJavas);
+  setText(elements.trayDailyTruckTotal, truckTrays);
+  setText(elements.dailyQuantity, directJavas);
+  setText(elements.trayDailyQuantity, directTrays);
+  setText(elements.dailyExpected, expectedJavas ?? "—");
+  setText(elements.trayDailyExpected, expectedTrays ?? "—");
+  setText(elements.dailyInternalTotal, internalJavas);
+  setText(elements.trayDailyInternalTotal, internalTrays);
+  setText(elements.dailyInsideTotal, insideJavas);
+  setText(elements.trayDailyInsideTotal, insideTrays);
+  setText(elements.dailyExternalTotal, externalJavas);
+  setText(elements.trayDailyExternalTotal, externalTrays);
+  setText(elements.dailyAccountedTotal, accountedJavas);
+  setText(elements.trayDailyAccountedTotal, accountedTrays);
+  setText(elements.dailyPropertyTotal, propertyJavas ?? "—");
+  setText(elements.trayDailyPropertyTotal, propertyTrays ?? "—");
+  setText(elements.dailyDifference, javaDifference === null ? "—" : signedQuantity(javaDifference));
+  setText(elements.trayDailyDifference, trayDifference === null ? "—" : signedQuantity(trayDifference));
+
+  [elements.dailyDifference, elements.trayDailyDifference].forEach((element, index) => {
+    const difference = index === 0 ? javaDifference : trayDifference;
+    element?.classList.toggle("is-negative-stock", difference !== null && difference !== 0);
+    element?.classList.toggle("is-positive-stock", difference === 0);
+  });
+
+  if (!ready) {
+    setText(elements.dailyDifferenceLabel, "Primero define los totales generales de javas y bandejas.");
+  } else if (!draft.valid) {
+    setText(elements.dailyDifferenceLabel, "Todas las cantidades deben ser enteros iguales o mayores que cero.");
+  } else {
+    setText(elements.dailyDifferenceLabel, differenceDescription(javaDifference, trayDifference));
+  }
+}
+
+function handleDailyDraftInput(event) {
+  updateDailyReconciliation();
+  setMessage(elements.dailyMessage);
+  setText(elements.countJourneyState, "Cambios sin guardar");
+  elements.countJourneyState?.classList.remove("is-counted");
+  elements.countJourneyState?.classList.add("is-stale");
+
+  const row = event.target.closest("[data-daily-truck-id]");
+  const rowState = row?.querySelector(".java-truck-count-state");
+  if (rowState) {
+    rowState.textContent = "Sin guardar";
+    rowState.classList.remove("is-recorded");
+  }
+}
+
+function renderDailyCount() {
+  if (!elements.dailyForm) return;
+  const inventory = state.inventory || normalizeInventory(null);
+  const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
+  const ready = inventory.javas.configured && inventory.trays.configured;
+  const activeJourney = state.journeys.find(
+    (journey) => Number(journey.id) === Number(state.activeJourneyId)
+  );
+  const canEdit = ready && (!activeJourney || activeJourney.status === "ABIERTA");
+
+  elements.dailyLocalQuantity.value = breakdown.detailed ? String(breakdown.local.javas ?? 0) : "0";
+  elements.trayDailyLocalQuantity.value = breakdown.detailed ? String(breakdown.local.trays ?? 0) : "0";
+  renderDailyTruckInputs();
+  elements.dailyForm.querySelectorAll("input").forEach((input) => { input.disabled = !canEdit; });
+  elements.dailySubmit.disabled = !canEdit;
+
+  if (!ready) {
+    setText(elements.dailyStatus, "El conteo se habilitará después de configurar ambos inventarios generales.");
+  } else if (activeJourney && activeJourney.status !== "ABIERTA") {
+    setText(elements.dailyStatus, "La jornada operativa está cerrada. El registro se conserva solo para consulta.");
+  } else if (breakdown.legacy) {
+    setText(elements.dailyStatus, "Existe un conteo agregado anterior. Completa local y camiones para convertirlo en un informe detallado.");
+  } else if (breakdown.stale) {
+    setText(elements.dailyStatus, "El inventario, los saldos o la flota cambiaron después del último conteo. Revisa y vuelve a guardar.");
+  } else if (breakdown.configured) {
+    const actor = breakdown.counted_by?.name ? ` · Registrado por ${breakdown.counted_by.name}` : "";
+    setText(elements.dailyStatus, `Último conteo: ${formatDate(breakdown.counted_at)}${actor}`);
+  } else {
+    setText(elements.dailyStatus, "Aún no se ha registrado el conteo detallado de la jornada actual.");
+  }
+
+  renderCountJourney();
+  updateDailyReconciliation();
 }
 
 function openInventoryModal() {
@@ -417,26 +714,6 @@ function closeInventoryModal() {
   elements.inventoryModal.hidden = true;
   document.body.classList.remove("java-inventory-modal-open");
   elements.inventoryOpen.focus();
-}
-
-function openDailyModal() {
-  const inventory = state.inventory || normalizeInventory(null);
-  const javaDaily = inventory.javas.daily_count;
-  const trayDaily = inventory.trays.daily_count;
-  elements.dailyCountQuantity.value = javaDaily.configured ? String(javaDaily.quantity) : "";
-  elements.trayDailyCountQuantity.value = trayDaily.configured ? String(trayDaily.quantity) : "";
-  setText(elements.dailyExpectedHint, inventory.javas.inside);
-  setText(elements.trayDailyExpectedHint, inventory.trays.inside);
-  setMessage(elements.dailyMessage);
-  elements.dailyModal.hidden = false;
-  document.body.classList.add("java-inventory-modal-open");
-  elements.dailyCountQuantity.focus();
-}
-
-function closeDailyModal() {
-  elements.dailyModal.hidden = true;
-  document.body.classList.remove("java-inventory-modal-open");
-  elements.dailyOpen.focus();
 }
 
 function selectedClient() {
@@ -608,18 +885,28 @@ async function loadControl({
     const data = response.data;
     state.clients = (data.clients || []).map(normalizeClient);
     state.clientOptions = (data.client_options || data.clients || []).map(normalizeClient);
+    state.trucks = data.trucks || [];
+    state.clientHolders = normalizeClientHolders(
+      data.client_holders || data.inventory?.client_holders
+    );
     state.inventory = normalizeInventory(data.inventory);
+    state.countBreakdown = normalizeCountBreakdown(
+      data.inventory?.count_breakdown,
+      state.trucks
+    );
     state.journeys = data.journeys || [];
+    state.activeJourneyId = data.active_journey_id || state.countBreakdown.journey_id;
     state.truckActivity = (data.truck_activity || []).map(normalizeActivity);
     state.movements = (data.movements || []).map(normalizeMovement);
     state.pagination = data.clients_pagination || state.pagination;
 
     renderSummary(data);
     renderInventory();
-    renderDailyCount();
     renderJourneys(data.selected_journey_id);
+    renderClientHolders();
+    renderDailyCount();
     renderClientOptions();
-    renderFleetOptions(data.trucks || [], data.drivers || []);
+    renderFleetOptions(state.trucks, data.drivers || []);
     renderClients();
     renderClientPagination();
     renderTruckActivity();
@@ -676,10 +963,9 @@ async function submitInventory(event) {
 async function submitDailyCount(event) {
   event.preventDefault();
   setMessage(elements.dailyMessage);
-  const javaQuantity = Number(elements.dailyCountQuantity.value);
-  const trayQuantity = Number(elements.trayDailyCountQuantity.value);
-  if (![javaQuantity, trayQuantity].every((quantity) => Number.isInteger(quantity) && quantity >= 0)) {
-    setMessage(elements.dailyMessage, "Ambos conteos deben ser números enteros iguales o mayores que cero.", true);
+  const draft = readDailyDraft();
+  if (!draft.valid) {
+    setMessage(elements.dailyMessage, "Completa el local y todos los camiones con números enteros iguales o mayores que cero.", true);
     return;
   }
 
@@ -688,20 +974,23 @@ async function submitDailyCount(event) {
     const response = await apiRequest("/control-javas/conteo-diario", {
       method: "POST",
       body: JSON.stringify({
-        quantity: javaQuantity,
-        java_quantity: javaQuantity,
-        tray_quantity: trayQuantity
+        local_java_quantity: draft.localJavas,
+        local_tray_quantity: draft.localTrays,
+        truck_counts: draft.trucks
       })
     });
-    state.inventory = normalizeInventory(response.data);
-    renderInventory();
-    renderDailyCount();
-    closeDailyModal();
-    setText(elements.dailyStatus, response.message);
+    await loadControl({ keepMessages: true });
+    setMessage(elements.dailyMessage, response.message);
   } catch (error) {
     setMessage(elements.dailyMessage, errorMessage(error), true);
   } finally {
-    elements.dailySubmit.disabled = false;
+    const inventory = state.inventory || normalizeInventory(null);
+    const activeJourney = state.journeys.find(
+      (journey) => Number(journey.id) === Number(state.activeJourneyId)
+    );
+    elements.dailySubmit.disabled = !inventory.javas.configured
+      || !inventory.trays.configured
+      || Boolean(activeJourney && activeJourney.status !== "ABIERTA");
   }
 }
 
@@ -790,13 +1079,8 @@ on(elements.inventoryForm, "submit", submitInventory);
 on(elements.inventoryModal, "click", (event) => {
   if (event.target === elements.inventoryModal) closeInventoryModal();
 });
-on(elements.dailyOpen, "click", openDailyModal);
-on(elements.dailyClose, "click", closeDailyModal);
-on(elements.dailyCancel, "click", closeDailyModal);
+on(elements.dailyForm, "input", handleDailyDraftInput);
 on(elements.dailyForm, "submit", submitDailyCount);
-on(elements.dailyModal, "click", (event) => {
-  if (event.target === elements.dailyModal) closeDailyModal();
-});
 on(elements.journey, "change", () => loadControl({ pageNumber: 1 }));
 on(elements.historyClient, "change", () => loadControl());
 on(elements.clientRows, "click", (event) => {
@@ -808,7 +1092,6 @@ on(elements.form, "submit", submitReceipt);
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (elements.inventoryModal && !elements.inventoryModal.hidden) closeInventoryModal();
-  if (elements.dailyModal && !elements.dailyModal.hidden) closeDailyModal();
 });
 
 initializeTraceTabs();

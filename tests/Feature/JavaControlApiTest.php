@@ -243,7 +243,10 @@ class JavaControlApiTest extends TestCase
         ])
             ->assertCreated()
             ->assertJsonPath('data.daily_count.quantity', 40)
-            ->assertJsonPath('data.javas.daily_count.quantity', 40);
+            ->assertJsonPath('data.javas.daily_count.quantity', 40)
+            ->assertJsonPath('data.count_breakdown.legacy', true)
+            ->assertJsonPath('data.count_breakdown.detailed', false)
+            ->assertJsonPath('data.count_breakdown.local.javas', null);
 
         $this->postJson('/api/v1/control-javas/recepciones', [
             'client_id' => $this->client->id,
@@ -262,6 +265,7 @@ class JavaControlApiTest extends TestCase
             'cantidad' => 2,
             'cantidad_bandejas' => 0,
         ]);
+        $this->assertDatabaseCount('conteos_diarios_javas_camiones', 0);
     }
 
     public function test_company_total_cannot_be_less_than_javas_outside(): void
@@ -359,6 +363,201 @@ class JavaControlApiTest extends TestCase
             ->assertJsonPath('data.trays.daily_count.missing', 0);
 
         $this->assertDatabaseCount('conteos_diarios_javas', 1);
+    }
+
+    public function test_daily_count_separates_clients_local_and_every_active_truck(): void
+    {
+        $internalClient = Tercero::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo_documento' => 'NIT',
+            'numero_documento' => '900123457',
+            'nombre_razon_social' => 'CLIENTE INTERNO DE LA AVICOLA',
+            'direccion' => 'Dentro de la avicola',
+            'es_cliente_interno' => true,
+            'estado' => Tercero::STATUS_ACTIVE,
+        ]);
+        TerceroRole::query()->create([
+            'tercero_id' => $internalClient->id,
+            'rol' => TerceroRole::CLIENT,
+        ]);
+        MovimientoJava::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'cliente_id' => $internalClient->id,
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 5,
+            'cantidad_bandejas' => 4,
+            'fecha_movimiento' => now(),
+            'created_by' => $this->user->id,
+        ]);
+        $emptyTruck = Vehiculo::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'JAV-002',
+            'estado' => Vehiculo::STATUS_ACTIVE,
+        ]);
+
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.summary.external_clients_count', 1)
+            ->assertJsonPath('data.summary.external_java_pending', 10)
+            ->assertJsonPath('data.summary.external_tray_pending', 8)
+            ->assertJsonPath('data.summary.internal_clients_count', 1)
+            ->assertJsonPath('data.summary.internal_java_pending', 5)
+            ->assertJsonPath('data.summary.internal_tray_pending', 4)
+            ->assertJsonPath('data.client_holders.external.clients.0.id', $this->client->id)
+            ->assertJsonPath('data.client_holders.internal.clients.0.id', $internalClient->id)
+            ->assertJsonPath('data.client_holders.internal.clients.0.is_internal_client', true)
+            ->assertJsonPath('data.inventory.javas.outside', 15)
+            ->assertJsonPath('data.inventory.javas.assigned_external', 10)
+            ->assertJsonPath('data.inventory.javas.assigned_internal', 5)
+            ->assertJsonPath('data.inventory.count_breakdown.configured', false)
+            ->assertJsonCount(2, 'data.inventory.count_breakdown.trucks')
+            ->assertJsonPath('data.inventory.count_breakdown.trucks.1.plate', 'JAV-002')
+            ->assertJsonPath('data.inventory.count_breakdown.trucks.1.java_quantity', 0);
+
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'java_quantity' => 60,
+            'tray_quantity' => 40,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.javas.inside', 45)
+            ->assertJsonPath('data.trays.inside', 28);
+
+        $this->postJson('/api/v1/control-javas/conteo-diario', [
+            'local_java_quantity' => 35,
+            'local_tray_quantity' => 20,
+            'truck_counts' => [
+                [
+                    'vehicle_id' => $this->truck->id,
+                    'java_quantity' => 10,
+                    'tray_quantity' => 8,
+                ],
+                [
+                    'vehicle_id' => $emptyTruck->id,
+                    'java_quantity' => 0,
+                    'tray_quantity' => 0,
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.javas.daily_count.quantity', 45)
+            ->assertJsonPath('data.javas.daily_count.expected', 45)
+            ->assertJsonPath('data.javas.daily_count.difference', 0)
+            ->assertJsonPath('data.trays.daily_count.quantity', 28)
+            ->assertJsonPath('data.trays.daily_count.expected', 28)
+            ->assertJsonPath('data.trays.daily_count.difference', 0)
+            ->assertJsonPath('data.count_breakdown.configured', true)
+            ->assertJsonPath('data.count_breakdown.detailed', true)
+            ->assertJsonPath('data.count_breakdown.legacy', false)
+            ->assertJsonPath('data.count_breakdown.local.javas', 35)
+            ->assertJsonPath('data.count_breakdown.local.trays', 20)
+            ->assertJsonPath('data.count_breakdown.trucks_total.javas', 10)
+            ->assertJsonPath('data.count_breakdown.trucks_total.trays', 8)
+            ->assertJsonPath('data.count_breakdown.direct_total.javas', 45)
+            ->assertJsonPath('data.count_breakdown.internal_clients.javas', 5)
+            ->assertJsonPath('data.count_breakdown.inside_avicola.javas', 50)
+            ->assertJsonPath('data.count_breakdown.external_clients.javas', 10)
+            ->assertJsonPath('data.count_breakdown.accounted_total.javas', 60)
+            ->assertJsonPath('data.count_breakdown.property_total.javas', 60)
+            ->assertJsonPath('data.count_breakdown.difference.javas', 0)
+            ->assertJsonPath('data.count_breakdown.trucks.1.recorded', true)
+            ->assertJsonPath('data.count_breakdown.trucks.1.java_quantity', 0);
+
+        $this->assertDatabaseHas('conteos_diarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_en_local' => 35,
+            'cantidad_en_local_bandejas' => 20,
+            'cantidad_en_empresa' => 45,
+            'cantidad_en_empresa_bandejas' => 28,
+            'cantidad_clientes_externos' => 10,
+            'cantidad_clientes_externos_bandejas' => 8,
+            'cantidad_clientes_internos' => 5,
+            'cantidad_clientes_internos_bandejas' => 4,
+            'cantidad_total_inventario' => 60,
+            'cantidad_total_inventario_bandejas' => 40,
+            'diferencia' => 0,
+            'diferencia_bandejas' => 0,
+        ]);
+        $this->assertDatabaseHas('conteos_diarios_javas_camiones', [
+            'vehiculo_id' => $this->truck->id,
+            'placa_snapshot' => 'JAV-001',
+            'cantidad_javas' => 10,
+            'cantidad_bandejas' => 8,
+        ]);
+        $this->assertDatabaseHas('conteos_diarios_javas_camiones', [
+            'vehiculo_id' => $emptyTruck->id,
+            'placa_snapshot' => 'JAV-002',
+            'cantidad_javas' => 0,
+            'cantidad_bandejas' => 0,
+        ]);
+        $this->assertDatabaseCount('conteos_diarios_javas_camiones', 2);
+    }
+
+    public function test_detailed_count_requires_the_complete_active_company_fleet(): void
+    {
+        Vehiculo::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'JAV-002',
+            'estado' => Vehiculo::STATUS_ACTIVE,
+        ]);
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'java_quantity' => 50,
+            'tray_quantity' => 30,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/control-javas/conteo-diario', [
+            'local_java_quantity' => 30,
+            'local_tray_quantity' => 20,
+            'truck_counts' => [[
+                'vehicle_id' => $this->truck->id,
+                'java_quantity' => 10,
+                'tray_quantity' => 2,
+            ]],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('truck_counts');
+
+        $this->assertDatabaseCount('conteos_diarios_javas', 0);
+        $this->assertDatabaseCount('conteos_diarios_javas_camiones', 0);
+    }
+
+    public function test_detailed_count_works_with_local_only_when_there_are_no_active_trucks(): void
+    {
+        $this->truck->update(['estado' => Vehiculo::STATUS_INACTIVE]);
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'java_quantity' => 50,
+            'tray_quantity' => 30,
+        ])->assertCreated();
+
+        $this->postJson('/api/v1/control-javas/conteo-diario', [
+            'local_java_quantity' => 40,
+            'local_tray_quantity' => 22,
+            'truck_counts' => [],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.count_breakdown.detailed', true)
+            ->assertJsonPath('data.count_breakdown.local.javas', 40)
+            ->assertJsonPath('data.count_breakdown.trucks_total.javas', 0)
+            ->assertJsonPath('data.count_breakdown.direct_total.javas', 40)
+            ->assertJsonPath('data.count_breakdown.difference.javas', 0)
+            ->assertJsonCount(0, 'data.count_breakdown.trucks');
+
+        $this->assertDatabaseCount('conteos_diarios_javas', 1);
+        $this->assertDatabaseCount('conteos_diarios_javas_camiones', 0);
+    }
+
+    public function test_inactive_clients_with_assets_remain_visible_in_the_daily_report(): void
+    {
+        $this->client->update(['estado' => Tercero::STATUS_INACTIVE]);
+
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.summary.total_pending', 10)
+            ->assertJsonPath('data.summary.clients_with_balance', 1)
+            ->assertJsonPath('data.client_holders.external.clients.0.id', $this->client->id)
+            ->assertJsonPath('data.client_holders.external.clients.0.status', Tercero::STATUS_INACTIVE)
+            ->assertJsonPath('data.inventory.javas.outside', 10)
+            ->assertJsonCount(0, 'data.client_options');
     }
 
     public function test_receipt_timestamp_is_assigned_by_the_server_and_manual_value_is_ignored(): void

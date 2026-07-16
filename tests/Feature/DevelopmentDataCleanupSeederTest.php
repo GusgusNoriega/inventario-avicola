@@ -541,7 +541,7 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
-        DB::table('conteos_diarios_javas')->insert([
+        $dailyJavaCountId = DB::table('conteos_diarios_javas')->insertGetId([
             'empresa_id' => $companyId,
             'jornada_id' => $journeyId,
             'cantidad_en_empresa' => 99,
@@ -552,6 +552,15 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'diferencia_bandejas' => 0,
             'contado_at' => $now,
             'contado_por' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('conteos_diarios_javas_camiones')->insert([
+            'conteo_diario_java_id' => $dailyJavaCountId,
+            'vehiculo_id' => $truck->id,
+            'placa_snapshot' => $truck->placa,
+            'cantidad_javas' => 0,
+            'cantidad_bandejas' => 0,
             'created_at' => $now,
             'updated_at' => $now,
         ]);

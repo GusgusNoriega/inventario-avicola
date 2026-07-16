@@ -71,6 +71,10 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
+        if (in_array('ADMINISTRADOR', $this->roleCodes(), true)) {
+            return true;
+        }
+
         return in_array($permission, $this->permissionCodes(), true);
     }
 

@@ -82,23 +82,6 @@ class JavaControlController extends Controller
             })
             ->where('terceros.empresa_id', $companyId)
             ->where('terceros.estado', 'ACTIVO');
-        $summary = (clone $clientBaseQuery)
-            ->selectRaw(
-                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN saldos_javas.saldo ELSE 0 END), 0) AS total_pending'
-            )
-            ->selectRaw(
-                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 OR COALESCE(saldos_javas.saldo_bandejas, 0) > 0 THEN 1 ELSE 0 END), 0) AS clients_with_balance'
-            )
-            ->selectRaw(
-                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo, 0) > 0 THEN 1 ELSE 0 END), 0) AS java_clients_with_balance'
-            )
-            ->selectRaw(
-                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo_bandejas, 0) > 0 THEN saldos_javas.saldo_bandejas ELSE 0 END), 0) AS tray_total_pending'
-            )
-            ->selectRaw(
-                'COALESCE(SUM(CASE WHEN COALESCE(saldos_javas.saldo_bandejas, 0) > 0 THEN 1 ELSE 0 END), 0) AS tray_clients_with_balance'
-            )
-            ->first();
         $clientPaginator = (clone $clientBaseQuery)
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
@@ -112,6 +95,7 @@ class JavaControlController extends Controller
                 'terceros.id',
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
+                'terceros.es_cliente_interno',
                 DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
                 DB::raw('COALESCE(saldos_javas.saldo_bandejas, 0) AS saldo_bandejas'),
             ], 'page', $page);
@@ -120,6 +104,7 @@ class JavaControlController extends Controller
                 'id' => (int) $client->id,
                 'name' => $client->nombre_razon_social,
                 'document_number' => $client->numero_documento,
+                'is_internal_client' => (bool) $client->es_cliente_interno,
                 'balance' => max(0, (int) $client->saldo),
                 'java_balance' => max(0, (int) $client->saldo),
                 'tray_balance' => max(0, (int) $client->saldo_bandejas),
@@ -131,6 +116,7 @@ class JavaControlController extends Controller
                 'terceros.id',
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
+                'terceros.es_cliente_interno',
                 DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
                 DB::raw('COALESCE(saldos_javas.saldo_bandejas, 0) AS saldo_bandejas'),
             ])
@@ -138,6 +124,7 @@ class JavaControlController extends Controller
                 'id' => (int) $client->id,
                 'name' => $client->nombre_razon_social,
                 'document_number' => $client->numero_documento,
+                'is_internal_client' => (bool) $client->es_cliente_interno,
                 'balance' => max(0, (int) $client->saldo),
                 'java_balance' => max(0, (int) $client->saldo),
                 'tray_balance' => max(0, (int) $client->saldo_bandejas),
@@ -286,6 +273,12 @@ class JavaControlController extends Controller
             ->first();
         $javasReceivedToday = (int) ($receivedToday?->javas ?? 0);
         $traysReceivedToday = (int) ($receivedToday?->trays ?? 0);
+        $inventory = $this->javaControl->currentInventory(
+            $companyId,
+            $activeJourneyId ?: null
+        );
+        $clientHolders = $inventory['client_holders'];
+        $holderTotals = $clientHolders['totals'];
 
         return response()->json(['data' => [
             'branch' => [
@@ -294,26 +287,32 @@ class JavaControlController extends Controller
                 'timezone' => $branch->zona_horaria,
             ],
             'summary' => [
-                'total_pending' => (int) ($summary->total_pending ?? 0),
-                'clients_with_balance' => (int) ($summary->clients_with_balance ?? 0),
+                'total_pending' => (int) $holderTotals['all_clients_javas'],
+                'clients_with_balance' => (int) $holderTotals['all_clients_count'],
                 'received_today' => $javasReceivedToday,
                 'dispatched' => $dispatched,
                 'received' => $received,
                 'net' => $dispatched - $received,
-                'java_total_pending' => (int) ($summary->total_pending ?? 0),
-                'java_clients_with_balance' => (int) ($summary->java_clients_with_balance ?? 0),
+                'java_total_pending' => (int) $holderTotals['all_clients_javas'],
+                'java_clients_with_balance' => (int) $holderTotals['all_java_clients_count'],
                 'java_received_today' => $javasReceivedToday,
                 'java_dispatched' => $dispatched,
                 'java_received' => $received,
                 'java_net' => $dispatched - $received,
-                'tray_total_pending' => (int) ($summary->tray_total_pending ?? 0),
-                'tray_clients_with_balance' => (int) ($summary->tray_clients_with_balance ?? 0),
+                'tray_total_pending' => (int) $holderTotals['all_clients_trays'],
+                'tray_clients_with_balance' => (int) $holderTotals['all_tray_clients_count'],
                 'tray_received_today' => $traysReceivedToday,
                 'tray_dispatched' => $traysDispatched,
                 'tray_received' => $traysReceived,
                 'tray_net' => $traysDispatched - $traysReceived,
                 'trucks_count' => (int) ($journeyTotals->trucks_count ?? 0),
                 'movements_count' => (int) ($journeyTotals->movements_count ?? 0),
+                'external_clients_count' => (int) $holderTotals['external_clients_count'],
+                'external_java_pending' => (int) $holderTotals['external_javas'],
+                'external_tray_pending' => (int) $holderTotals['external_trays'],
+                'internal_clients_count' => (int) $holderTotals['internal_clients_count'],
+                'internal_java_pending' => (int) $holderTotals['internal_javas'],
+                'internal_tray_pending' => (int) $holderTotals['internal_trays'],
             ],
             'current_summary' => [
                 'journey_id' => $currentJourneyId ?: null,
@@ -328,10 +327,8 @@ class JavaControlController extends Controller
                 'tray_net' => $currentTraysDispatched - $currentTraysReceived,
                 'trucks_count' => (int) ($currentJourneyTotals->trucks_count ?? 0),
             ],
-            'inventory' => $this->javaControl->currentInventory(
-                $companyId,
-                $activeJourneyId ?: null
-            ),
+            'inventory' => $inventory,
+            'client_holders' => $clientHolders,
             'journeys' => $journeys->map(fn (JornadaOperativa $journey): array => [
                 'id' => (int) $journey->id,
                 'operating_date' => $journey->fecha_operativa?->format('Y-m-d'),
@@ -339,6 +336,7 @@ class JavaControlController extends Controller
                 'starts_at' => $journey->inicio_at?->toISOString(),
                 'ends_at' => ($journey->cerrada_at ?: $journey->cierre_programado_at)?->toISOString(),
             ])->values(),
+            'active_journey_id' => $activeJourneyId ?: null,
             'selected_journey_id' => $selectedJourneyId ?: null,
             'clients' => $clients,
             'client_options' => $clientOptions,

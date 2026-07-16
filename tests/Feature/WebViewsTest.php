@@ -561,17 +561,23 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Inventario y conteo físico')
             ->assertSee('Total propiedad de la empresa')
-            ->assertSee('Disponibles dentro')
+            ->assertSee('Para conteo directo')
             ->assertSee('id="javaInventoryOpen"', false)
             ->assertSee('id="javaInventoryModal"', false)
             ->assertSee('id="javaInventoryQuantity"', false)
             ->assertSee('id="trayInventoryQuantity"', false)
             ->assertSee('id="trayCompanyTotal"', false)
-            ->assertSee('Registrar conteo físico')
-            ->assertSee('id="javaDailyModal"', false)
-            ->assertSee('id="javaDailyCountQuantity"', false)
-            ->assertSee('id="trayDailyCountQuantity"', false)
+            ->assertSee('Local y camiones de la empresa')
+            ->assertSee('Clientes que tienen javas o bandejas')
+            ->assertSee('id="javaExternalHolderList"', false)
+            ->assertSee('id="javaInternalHolderList"', false)
+            ->assertSee('id="javaDailyForm"', false)
+            ->assertSee('id="javaDailyLocalQuantity"', false)
+            ->assertSee('id="trayDailyLocalQuantity"', false)
+            ->assertSee('id="javaDailyTruckInputs"', false)
+            ->assertSee('id="javaDailyAccountedTotal"', false)
             ->assertSee('id="trayDailyDifference"', false)
+            ->assertDontSee('id="javaDailyModal"', false)
             ->assertDontSee('id="javaClientRows"', false)
             ->assertDontSee('id="javaJourneyFilter"', false)
             ->assertSee(route('control-javas'), false);
@@ -620,6 +626,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('journey_id', $javascript);
         $this->assertStringContainsString('java_quantity: javaQuantity', $javascript);
         $this->assertStringContainsString('tray_quantity: trayQuantity', $javascript);
+        $this->assertStringContainsString('local_java_quantity: draft.localJavas', $javascript);
+        $this->assertStringContainsString('local_tray_quantity: draft.localTrays', $javascript);
+        $this->assertStringContainsString('truck_counts: draft.trucks', $javascript);
+        $this->assertStringContainsString('renderClientHolders()', $javascript);
+        $this->assertStringContainsString('updateDailyReconciliation()', $javascript);
         $this->assertStringContainsString('java_balance: numericValue', $javascript);
         $this->assertStringContainsString('tray_balance: numericValue', $javascript);
         $this->assertStringContainsString('javaQuantity === 0 && trayQuantity === 0', $javascript);

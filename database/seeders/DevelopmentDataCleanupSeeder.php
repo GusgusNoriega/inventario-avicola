@@ -28,6 +28,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'movimiento_detalles',
         'movimientos_inventario',
         'movimientos_javas',
+        'conteos_diarios_javas_camiones',
         'conteos_diarios_javas',
         'inventarios_javas',
         'existencias_almacen',

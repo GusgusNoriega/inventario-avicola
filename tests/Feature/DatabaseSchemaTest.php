@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(80, $migrationFiles);
+        $this->assertCount(82, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -98,6 +98,7 @@ class DatabaseSchemaTest extends TestCase
             'movimientos_javas',
             'inventarios_javas',
             'conteos_diarios_javas',
+            'conteos_diarios_javas_camiones',
             'entidades_financieras',
             'cuentas_financieras',
             'metodos_pago',
@@ -124,7 +125,8 @@ class DatabaseSchemaTest extends TestCase
             'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id'],
             'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'cantidad_bandejas', 'vehiculo_id', 'fecha_movimiento'],
             'inventarios_javas' => ['empresa_id', 'cantidad_total', 'cantidad_total_bandejas', 'updated_by'],
-            'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_esperada', 'diferencia', 'cantidad_en_empresa_bandejas', 'cantidad_esperada_bandejas', 'diferencia_bandejas', 'contado_at', 'contado_por'],
+            'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_en_local', 'cantidad_esperada', 'diferencia', 'cantidad_en_empresa_bandejas', 'cantidad_en_local_bandejas', 'cantidad_esperada_bandejas', 'cantidad_clientes_externos', 'cantidad_clientes_externos_bandejas', 'cantidad_clientes_internos', 'cantidad_clientes_internos_bandejas', 'cantidad_total_inventario', 'cantidad_total_inventario_bandejas', 'diferencia_bandejas', 'contado_at', 'contado_por'],
+            'conteos_diarios_javas_camiones' => ['conteo_diario_java_id', 'vehiculo_id', 'placa_snapshot', 'cantidad_javas', 'cantidad_bandejas'],
             'tipos_bandeja' => ['codigo', 'nombre', 'peso_kg', 'capacidad_aves', 'estado'],
             'ajustes_peso_minorista' => ['empresa_id', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],

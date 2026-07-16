@@ -72,12 +72,26 @@ class OperationContextService
                 'sucursal_id' => $branchId,
                 'nombre' => 'Sistema operación local',
                 'password_hash' => Hash::make(Str::random(64)),
-                'estado' => User::STATUS_INACTIVE,
+                'estado' => User::STATUS_ACTIVE,
             ]
         );
 
+        $updates = [];
+
         if (! $actor->sucursal_id) {
-            $actor->update(['sucursal_id' => $branchId]);
+            $updates['sucursal_id'] = $branchId;
+        }
+
+        // Public local operation routes still need a valid audit actor when a
+        // retail sale registers its payment through FinancialMovementService.
+        // The random password and invalid local domain keep this service account
+        // from being usable as an installation login.
+        if (! $actor->isActive()) {
+            $updates['estado'] = User::STATUS_ACTIVE;
+        }
+
+        if ($updates !== []) {
+            $actor->update($updates);
         }
 
         return $actor;

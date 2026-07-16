@@ -105,7 +105,7 @@ class AuthApiTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_permission_middleware_uses_current_database_permissions(): void
+    public function test_administrator_role_is_not_blocked_by_a_missing_permission_assignment(): void
     {
         Route::middleware(['api', 'auth:sanctum', 'permission:PRECIOS_GESTIONAR'])
             ->get('/api/test/precios', fn () => response()->json(['ok' => true]));
@@ -133,6 +133,36 @@ class AuthApiTest extends TestCase
 
         $this->withToken($token)
             ->getJson('/api/test/precios')
+            ->assertOk();
+    }
+
+    public function test_non_administrator_permissions_use_current_database_assignments(): void
+    {
+        Route::middleware(['api', 'auth:sanctum', 'permission:PRECIOS_GESTIONAR'])
+            ->get('/api/test/precios-operador', fn () => response()->json(['ok' => true]));
+
+        $permission = Permission::query()->create([
+            'codigo' => 'PRECIOS_GESTIONAR',
+            'descripcion' => 'Gestionar precios',
+        ]);
+        $user = User::factory()->create();
+        $role = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'OPERADOR',
+            'nombre' => 'Operador',
+        ]);
+        $role->permissions()->attach($permission);
+        $user->roles()->attach($role);
+        $token = $user->createToken('prueba', ['api'])->plainTextToken;
+
+        $this->withToken($token)
+            ->getJson('/api/test/precios-operador')
+            ->assertOk();
+
+        $role->permissions()->detach($permission);
+
+        $this->withToken($token)
+            ->getJson('/api/test/precios-operador')
             ->assertForbidden();
     }
 
