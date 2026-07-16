@@ -102,6 +102,7 @@ class WebViewsTest extends TestCase
             ->assertSee('value="REEMBOLSO_CLIENTE"', false)
             ->assertSee('id="financeCxcList"', false)
             ->assertSee('id="financeCxpList"', false)
+            ->assertSee('id="financeApplicationsInstructions"', false)
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/finanzas-movimiento.js'), false);
 

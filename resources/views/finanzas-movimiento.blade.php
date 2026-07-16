@@ -134,7 +134,7 @@
           <div>
             <p class="fin-eyebrow">Paso 3</p>
             <h2 id="financeApplicationsTitle">Aplicar a documentos pendientes</h2>
-            <p>Marca las ventas o compras que cancela este movimiento. Los abonos parciales son válidos.</p>
+            <p id="financeApplicationsInstructions">Primero ingresa el importe del movimiento. Luego marca las ventas o compras que cancela; los abonos parciales son válidos.</p>
           </div>
           <button id="financeApplicationsRefresh" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Actualizar cartera</button>
         </div>

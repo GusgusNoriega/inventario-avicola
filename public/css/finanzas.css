@@ -1058,6 +1058,8 @@ body.fin-page {
 .fin-debt-item { display: grid; grid-template-columns: auto minmax(0, 1fr) 125px; gap: 10px; padding: 11px; align-items: center; border: 1px solid var(--fin-border); border-radius: 9px; background: #080d15; }
 .fin-debt-item.is-selected { border-color: rgba(50, 202, 255, .55); background: rgba(50, 202, 255, .06); }
 .fin-debt-check { width: 18px; height: 18px; accent-color: var(--fin-blue); }
+.fin-applications-panel.is-amount-required .fin-debt-item { opacity: .62; cursor: not-allowed; }
+.fin-applications-panel.is-amount-required .fin-debt-check { cursor: not-allowed; }
 .fin-debt-copy { min-width: 0; }
 .fin-debt-copy strong,
 .fin-debt-copy small { display: block; }

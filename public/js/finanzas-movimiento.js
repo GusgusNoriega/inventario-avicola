@@ -130,6 +130,7 @@ const elements = {
   save: document.getElementById("financeMovementSave"),
   reset: document.getElementById("financeMovementReset"),
   applicationsPanel: document.getElementById("financeApplicationsPanel"),
+  applicationsInstructions: document.getElementById("financeApplicationsInstructions"),
   applicationColumns: document.querySelector(".fin-application-columns"),
   refresh: document.getElementById("financeApplicationsRefresh"),
   cxcPanel: document.getElementById("financeCxcPanel"),
@@ -343,10 +344,31 @@ function appliedTotal(side) {
   return [...state.applications[side].values()].reduce((total, amount) => total + numericValue(amount), 0);
 }
 
+function movementAmount() {
+  return Math.max(0, numericValue(elements.amount.value));
+}
+
+function reconcileApplicationsWithAmount(side) {
+  let available = movementAmount();
+
+  for (const [id, applied] of state.applications[side].entries()) {
+    const debt = state.debts[side].find((item) => String(item.id) === String(id));
+    const adjusted = Math.min(numericValue(applied), debt?.pending || 0, available);
+
+    if (adjusted > 0) {
+      state.applications[side].set(id, adjusted);
+      available -= adjusted;
+    } else {
+      state.applications[side].delete(id);
+    }
+  }
+}
+
 function renderDebt(side) {
   const refs = sideElements(side);
   const records = state.debts[side];
   const selected = state.applications[side];
+  const canApply = movementAmount() > 0;
   const totalPending = records.reduce((total, debt) => total + debt.pending, 0);
   refs.total.textContent = `Pendiente ${formatMoney(totalPending, elements.currency.value)}`;
 
@@ -360,7 +382,7 @@ function renderDebt(side) {
     const applied = checked ? numericValue(selected.get(String(debt.id))) : 0;
     return `
       <label class="fin-debt-item ${checked ? "is-selected" : ""}">
-        <input class="fin-debt-check" type="checkbox" data-debt-toggle="${side}" data-debt-id="${escapeHtml(debt.id)}" ${checked ? "checked" : ""}>
+        <input class="fin-debt-check" type="checkbox" data-debt-toggle="${side}" data-debt-id="${escapeHtml(debt.id)}" ${checked ? "checked" : ""} ${canApply ? "" : "disabled"} title="${canApply ? "" : "Ingresa primero el importe del movimiento"}">
         <span class="fin-debt-copy">
           <strong>${escapeHtml(debt.number)}${debt.ticket ? ` · Ticket ${escapeHtml(debt.ticket)}` : ""}</strong>
           <small>${escapeHtml(formatDateTime(debt.date))} · ${escapeHtml(debt.status)} · saldo ${escapeHtml(formatMoney(debt.pending, elements.currency.value))}</small>
@@ -372,7 +394,7 @@ function renderDebt(side) {
 
 function updateSummary() {
   const mode = currentMode();
-  const amount = Math.max(0, numericValue(elements.amount.value));
+  const amount = movementAmount();
   const cxc = appliedTotal("CXC");
   const cxp = appliedTotal("CXP");
   const consumed = Math.max(mode.cxc ? cxc : 0, mode.cxp ? cxp : 0);
@@ -384,6 +406,10 @@ function updateSummary() {
   elements.cxpApplied.textContent = formatMoney(cxp, currency);
   elements.unapplied.textContent = formatMoney(unapplied, currency);
   elements.unapplied.classList.toggle("is-error", consumed > amount);
+  elements.applicationsPanel.classList.toggle("is-amount-required", amount <= 0);
+  elements.applicationsInstructions.textContent = amount > 0
+    ? "Marca las ventas o compras que cancela este movimiento. Los abonos parciales son válidos."
+    : "Primero ingresa un importe mayor a cero para poder seleccionar las deudas. Luego podrás registrar abonos parciales.";
 }
 
 function toggleDebt(side, id, checked) {
@@ -391,18 +417,38 @@ function toggleDebt(side, id, checked) {
   if (!checked) {
     state.applications[side].delete(key);
   } else {
+    const amount = movementAmount();
+    if (amount <= 0) {
+      elements.amount.focus();
+      setMessage(elements.message, "Ingresa primero el importe del movimiento antes de seleccionar una deuda.", "error");
+      renderDebt(side);
+      return;
+    }
     const debt = state.debts[side].find((item) => String(item.id) === key);
-    const remaining = Math.max(0, numericValue(elements.amount.value) - appliedTotal(side));
-    state.applications[side].set(key, Math.min(debt?.pending || 0, remaining || debt?.pending || 0));
+    const remaining = Math.max(0, amount - appliedTotal(side));
+    if (remaining <= 0) {
+      setMessage(elements.message, "El importe del movimiento ya está aplicado por completo.", "error");
+      renderDebt(side);
+      return;
+    }
+    state.applications[side].set(key, Math.min(debt?.pending || 0, remaining));
+    setMessage(elements.message);
   }
   renderDebt(side);
   updateSummary();
 }
 
-function updateDebtAmount(side, id, value) {
+function updateDebtAmount(side, id, value, input) {
   const key = String(id);
   if (!state.applications[side].has(key)) return;
-  state.applications[side].set(key, Math.max(0, numericValue(value)));
+  const debt = state.debts[side].find((item) => String(item.id) === key);
+  const otherApplied = appliedTotal(side) - numericValue(state.applications[side].get(key));
+  const maximum = Math.max(0, Math.min(debt?.pending || 0, movementAmount() - otherApplied));
+  const requested = Math.max(0, numericValue(value));
+  const adjusted = Math.min(requested, maximum);
+  state.applications[side].set(key, adjusted);
+  input.max = maximum.toFixed(2);
+  if (requested > maximum) input.value = maximum.toFixed(2);
   updateSummary();
 }
 
@@ -640,7 +686,14 @@ elements.provider.addEventListener("change", () => {
   populateAccounts();
   void loadPortfolio("CXP");
 });
-elements.amount.addEventListener("input", updateSummary);
+elements.amount.addEventListener("input", () => {
+  reconcileApplicationsWithAmount("CXC");
+  reconcileApplicationsWithAmount("CXP");
+  renderDebt("CXC");
+  renderDebt("CXP");
+  setMessage(elements.message);
+  updateSummary();
+});
 elements.method.addEventListener("change", updateMethodConstraints);
 elements.currency.addEventListener("change", () => {
   clearApplications("CXC");
@@ -659,7 +712,7 @@ elements.applicationsPanel.addEventListener("change", (event) => {
 
 elements.applicationsPanel.addEventListener("input", (event) => {
   const input = event.target.closest("[data-debt-amount]");
-  if (input) updateDebtAmount(input.dataset.debtAmount, input.dataset.debtId, input.value);
+  if (input) updateDebtAmount(input.dataset.debtAmount, input.dataset.debtId, input.value, input);
 });
 
 initFinanceAccess(loadCatalogData);
