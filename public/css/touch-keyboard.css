@@ -1,0 +1,130 @@
+.touch-keyboard[hidden] { display: none; }
+
+.touch-keyboard {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1800;
+  padding: 8px;
+  pointer-events: none;
+}
+
+.touch-keyboard-card {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 10px;
+  overflow: hidden;
+  border: 2px solid #52657d;
+  border-radius: 14px;
+  color: #f7fbff;
+  background: linear-gradient(160deg, #182230, #0a0f16 68%);
+  box-shadow: 0 -12px 42px rgb(0 0 0 / 68%);
+  pointer-events: auto;
+}
+
+.touch-keyboard-head {
+  display: grid;
+  grid-template-columns: minmax(150px, .7fr) minmax(220px, 1.5fr) 48px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.touch-keyboard-head > div { display: grid; gap: 1px; }
+.touch-keyboard-head span {
+  color: #8ea1b9;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.touch-keyboard-head strong {
+  overflow: hidden;
+  color: #f7fbff;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.touch-keyboard-head output {
+  min-height: 43px;
+  padding: 9px 12px;
+  overflow: hidden;
+  border: 1px solid #52657d;
+  border-radius: 8px;
+  color: #fff;
+  background: #05080d;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 23px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.touch-keyboard-head output.is-password { letter-spacing: .18em; }
+
+.touch-keyboard button {
+  min-height: 46px;
+  border: 1px solid #52657d;
+  border-radius: 8px;
+  color: #f7fbff;
+  background: linear-gradient(#263548, #172230);
+  font: inherit;
+  font-size: 1.14rem;
+  font-weight: 900;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.touch-keyboard-head > button { min-width: 48px; font-size: 1.65rem; }
+.touch-keyboard-keys { display: grid; gap: 5px; }
+.touch-keyboard-row { display: flex; justify-content: center; gap: 5px; }
+.touch-keyboard-row button { flex: 1 1 0; max-width: 88px; }
+.touch-keyboard-row.is-short button:not(.is-shift) { max-width: 92px; }
+.touch-keyboard-row button.is-shift { flex: 1.35 1 0; max-width: 112px; font-size: .9rem; }
+.touch-keyboard-row button.is-shift.is-active { border-color: #f0c438; color: #fff2a8; background: #5b4a13; }
+.touch-keyboard-row.is-controls button.is-layout { flex: 1.35 1 0; max-width: 112px; color: #bcecff; }
+.touch-keyboard-row button.is-space { flex: 4 1 0; max-width: 420px; }
+
+.touch-keyboard-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.touch-keyboard-actions button { font-size: .95rem; }
+.touch-keyboard-actions button.is-accept { border-color: #258457; background: linear-gradient(#258457, #17613f); }
+.touch-keyboard button:active { transform: translateY(1px); filter: brightness(1.2); }
+.touch-keyboard button:focus-visible { outline: 3px solid #2bc7ff; outline-offset: 1px; }
+[data-touch-keyboard-input] { touch-action: manipulation; }
+
+@media (max-width: 720px) {
+  .touch-keyboard { padding: 4px; }
+  .touch-keyboard-card { padding: 7px; border-radius: 10px; }
+  .touch-keyboard-head { grid-template-columns: minmax(0, 1fr) 44px; }
+  .touch-keyboard-head > div { display: none; }
+  .touch-keyboard-head output { min-width: 0; }
+  .touch-keyboard button { min-height: 43px; font-size: 1rem; }
+  .touch-keyboard-row { gap: 3px; }
+  .touch-keyboard-keys { gap: 3px; }
+  .touch-keyboard-row button.is-shift,
+  .touch-keyboard-row.is-controls button.is-layout { max-width: 74px; font-size: .72rem; }
+}
+
+@media (max-height: 720px) {
+  .touch-keyboard button { min-height: 38px; }
+  .touch-keyboard-head { margin-bottom: 5px; }
+  .touch-keyboard-head output { min-height: 38px; padding-block: 6px; }
+  .touch-keyboard-actions { margin-top: 5px; }
+}
+
+@media (max-height: 800px) {
+  .login-page.has-touch-keyboard .login-card {
+    align-self: start;
+    margin-top: 20px;
+  }
+}

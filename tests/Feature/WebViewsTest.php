@@ -382,6 +382,31 @@ class WebViewsTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/font-size:\s*(?:\d|\.)/', $stylesheet);
     }
 
+    public function test_login_view_provides_a_reusable_touch_keyboard_for_credentials(): void
+    {
+        auth()->logout();
+
+        $this->get('/login')
+            ->assertOk()
+            ->assertSee('id="loginTouchKeyboard"', false)
+            ->assertSee('data-touch-keyboard-input="email"', false)
+            ->assertSee('data-touch-keyboard-input="password"', false)
+            ->assertSee('inputmode="none"', false)
+            ->assertSee('Teclado táctil')
+            ->assertSee(asset('js/touch-keyboard.js'), false)
+            ->assertSee(asset('css/touch-keyboard.css'), false);
+
+        $javascript = file_get_contents(public_path('js/touch-keyboard.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('state.target.type === "password"', $javascript);
+        $this->assertStringContainsString('"•".repeat(state.buffer.length)', $javascript);
+        $this->assertStringContainsString('["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"]', $javascript);
+        $this->assertStringContainsString('data-touch-keyboard-action="symbols"', $javascript);
+        $this->assertStringContainsString('case "backspace"', $javascript);
+        $this->assertStringContainsString('case "accept"', $javascript);
+    }
+
     public function test_second_retail_dispatch_view_uses_an_independent_station_namespace(): void
     {
         $this->get('/despacho-minorista-2')

@@ -7,6 +7,7 @@
   <title>Iniciar sesión | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/access-control.css') }}?v={{ filemtime(public_path('css/access-control.css')) }}">
+  <link rel="stylesheet" href="{{ asset('css/touch-keyboard.css') }}?v={{ filemtime(public_path('css/touch-keyboard.css')) }}">
 </head>
 <body
   class="access-page login-page"
@@ -77,6 +78,12 @@
               autocomplete="username"
               autocapitalize="none"
               spellcheck="false"
+              inputmode="none"
+              data-touch-keyboard-input="email"
+              data-touch-keyboard-label="Correo o usuario"
+              aria-haspopup="dialog"
+              aria-controls="loginTouchKeyboard"
+              aria-expanded="false"
               placeholder="correo@empresa.com"
               aria-describedby="loginIdentifierError"
               value="{{ old('login', old('email')) }}"
@@ -100,6 +107,12 @@
               type="password"
               maxlength="255"
               autocomplete="current-password"
+              inputmode="none"
+              data-touch-keyboard-input="password"
+              data-touch-keyboard-label="Contraseña"
+              aria-haspopup="dialog"
+              aria-controls="loginTouchKeyboard"
+              aria-expanded="false"
               placeholder="Tu contraseña"
               aria-describedby="loginPasswordError loginCapsLock"
               @if ($errors->has('password')) aria-invalid="true" @endif
@@ -135,6 +148,9 @@
     </section>
   </main>
 
+  <x-touch-keyboard id="loginTouchKeyboard" />
+
+  <script type="module" src="{{ asset('js/touch-keyboard.js') }}?v={{ filemtime(public_path('js/touch-keyboard.js')) }}"></script>
   <script type="module" src="{{ asset('js/login.js') }}?v={{ filemtime(public_path('js/login.js')) }}"></script>
 </body>
 </html>
