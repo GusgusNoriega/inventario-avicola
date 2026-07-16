@@ -58,7 +58,7 @@ class StoreRetailDispatchRequest extends FormRequest
                     TipoPollo::CHICKEN_PROCESSED,
                 ]),
             ],
-            'price_overrides.*' => ['numeric', 'gt:0', 'max:99999999.9999'],
+            'price_overrides.*' => ['numeric', 'decimal:0,2', 'gt:0', 'max:99999999.99'],
             'payments' => [
                 Rule::requiredIf(fn (): bool => $this->requiresImmediatePayment()),
                 Rule::prohibitedIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_RETURN),
@@ -216,6 +216,8 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings.*.read_weight_kg.required' => 'Captura o ingresa el peso leido por la balanza.',
             'payments.required' => 'Una venta sin cliente debe registrar el pago completo.',
             'payments.prohibited' => 'Los reembolsos de devoluciones se registran desde Finanzas.',
+            'price_overrides.*.decimal' => 'Los precios manuales minoristas solo pueden usar hasta dos decimales.',
+            'payments.*.importe.decimal' => 'Los importes de pago solo pueden usar hasta dos decimales.',
             'payments.*.cuenta_destino_id.exists' => 'Selecciona una cuenta o caja activa de la empresa.',
             'payments.*.metodo_pago_id.exists' => 'Selecciona un metodo de pago activo.',
         ];

@@ -104,6 +104,7 @@
           <div class="rd-value-card">
             <span>Tara de bandejas</span>
             <strong id="retailTarePreview">0.000 kg</strong>
+            <small id="retailTareDetail">0 × 2.500 kg por bandeja</small>
           </div>
           <div class="rd-value-card is-net">
             <span>Peso neto</span>
@@ -221,7 +222,7 @@
       <p class="rd-modal-copy">Este valor se guarda internamente; la pantalla principal mostrará únicamente el peso final con el ajuste seleccionado.</p>
       <label class="rd-manual-weight-field">
         <span>Peso leído (kg)</span>
-        <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="decimal" required autocomplete="off" placeholder="Ej. 12.500">
+        <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="none" readonly required autocomplete="off" placeholder="Ej. 12.500" data-retail-keyboard="decimal" data-retail-keyboard-label="Peso leído en kilogramos">
       </label>
       <div class="rd-modal-actions">
         <button type="button" class="rd-secondary-button" data-retail-close-modal="retailManualWeightModal">Cancelar</button>
@@ -241,7 +242,7 @@
       </header>
       <label class="rd-search-field">
         <span>Buscar por nombre o documento</span>
-        <input id="retailClientSearch" type="search" placeholder="Escribe para buscar..." autocomplete="off">
+        <input id="retailClientSearch" type="search" placeholder="Toca para buscar..." autocomplete="off" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-label="Buscar cliente por nombre o documento">
       </label>
       <div id="retailClientOptions" class="rd-client-options" role="listbox" aria-label="Clientes disponibles"></div>
     </section>
@@ -345,7 +346,7 @@
           <div class="rd-manual-reading">
             <label>
               <span>Lectura manual de prueba (kg)</span>
-              <input id="retailManualScaleInput" type="number" min="0" step="0.001" inputmode="decimal" placeholder="Ej. 12.450">
+              <input id="retailManualScaleInput" type="number" min="0" step="0.001" inputmode="none" readonly placeholder="Ej. 12.450" data-retail-keyboard="decimal" data-retail-keyboard-label="Lectura manual de prueba">
             </label>
             <button id="retailApplyManualScale" class="rd-secondary-button" type="button">Aplicar</button>
           </div>
@@ -360,7 +361,7 @@
             </div>
           </div>
           <div class="rd-serial-fields">
-            <label><span>Baudios</span><input id="retailBaudRate" type="number" min="300" step="1" value="9600"></label>
+            <label><span>Baudios</span><input id="retailBaudRate" type="number" min="300" step="1" value="9600" inputmode="none" readonly data-retail-keyboard="integer" data-retail-keyboard-label="Baudios del puerto serial"></label>
             <label><span>Bits</span><select id="retailDataBits"><option value="8">8</option><option value="7">7</option></select></label>
             <label><span>Parada</span><select id="retailStopBits"><option value="1">1</option><option value="2">2</option></select></label>
             <label><span>Paridad</span><select id="retailParity"><option value="none">Ninguna</option><option value="even">Par</option><option value="odd">Impar</option></select></label>
@@ -416,6 +417,25 @@
     <footer class="rd-typography-footer">
       <button id="retailTypographyReset" class="rd-secondary-button" type="button">Restaurar predeterminados</button>
     </footer>
+  </aside>
+
+  <aside id="retailTouchKeyboard" class="rd-touch-keyboard" hidden aria-hidden="true">
+    <section class="rd-touch-keyboard-card" role="dialog" aria-labelledby="retailTouchKeyboardTitle" aria-describedby="retailTouchKeyboardValue">
+      <header class="rd-touch-keyboard-head">
+        <div>
+          <span>Teclado táctil</span>
+          <strong id="retailTouchKeyboardTitle">Ingresar texto</strong>
+        </div>
+        <output id="retailTouchKeyboardValue">&nbsp;</output>
+        <button type="button" data-retail-keyboard-action="cancel" aria-label="Cancelar y cerrar teclado">×</button>
+      </header>
+      <div id="retailTouchKeyboardKeys" class="rd-touch-keyboard-keys"></div>
+      <footer class="rd-touch-keyboard-actions">
+        <button type="button" data-retail-keyboard-action="clear">Limpiar</button>
+        <button type="button" data-retail-keyboard-action="backspace">⌫ Borrar</button>
+        <button type="button" class="is-accept" data-retail-keyboard-action="accept">Aceptar</button>
+      </footer>
+    </section>
   </aside>
 
   <script type="module" src="{{ asset('js/despacho-minorista.js') }}?v={{ filemtime(public_path('js/despacho-minorista.js')) }}"></script>

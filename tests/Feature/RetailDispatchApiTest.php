@@ -192,6 +192,7 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.chicken_types.1.code', TipoPollo::CHICKEN_PROCESSED)
             ->assertJsonMissing(['code' => TipoPollo::CHICKEN_LIVE])
             ->assertJsonPath('data.tray_types.0.code', 'BANDEJA_ESTANDAR')
+            ->assertJsonPath('data.tray_types.0.weight_kg', 2.5)
             ->assertJsonPath('data.tray_types.0.bird_capacity', 5)
             ->assertJsonPath('data.adjustments.0.code', AjustePesoMinorista::MALE_CLOSED)
             ->assertJsonPath('data.adjustments.0.is_default', true)
@@ -458,7 +459,9 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.prices.POLLO_PELADO.source', 'CLIENTE')
             ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId)
             ->assertJsonPath('data.weighings.0.price_origin', 'CLIENTE')
-            ->assertJsonPath('data.totals.amount', 102);
+            ->assertJsonPath('data.weighings.0.tare_weight_kg', 5)
+            ->assertJsonPath('data.weighings.0.net_weight_kg', 7)
+            ->assertJsonPath('data.totals.amount', 59.5);
 
         $this->assertDatabaseHas('ticket_precios', [
             'tipo_pollo_id' => $this->typeId,
@@ -468,19 +471,54 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
+    public function test_retail_prices_are_rounded_to_two_decimals_in_catalog_and_ticket(): void
+    {
+        DB::table('precios_historial')
+            ->where('id', $this->priceHistoryId)
+            ->update(['precio_kg' => 8.5678]);
+
+        $this->getJson('/api/v1/despacho-minorista/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.57);
+
+        $response = $this->postJson('/api/v1/despacho-minorista/tickets', $this->payload())
+            ->assertCreated()
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 8.57)
+            ->assertJsonPath('data.weighings.0.price_kg', 8.57)
+            ->assertJsonPath('data.weighings.0.amount', 59.99)
+            ->assertJsonPath('data.totals.amount', 59.99);
+
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $response->json('data.id'),
+            'precio_kg' => 8.57,
+        ]);
+    }
+
+    public function test_retail_dispatch_rejects_manual_prices_with_more_than_two_decimals(): void
+    {
+        $payload = $this->payload();
+        $payload['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.251];
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('price_overrides.'.TipoPollo::CHICKEN_DRESSED);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
     public function test_lists_without_client_keep_their_own_manual_prices(): void
     {
         $generalHistoryId = $this->createGeneralPrice(7.25);
         $first = $this->payload();
         $first['client_id'] = null;
         unset($first['delivery']);
-        $first['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
-        $first['payments'] = [$this->paymentPayload(123)];
+        $first['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => '10.25'];
+        $first['payments'] = [$this->paymentPayload('71.75')];
         $second = $this->payload();
         $second['client_id'] = null;
         unset($second['delivery']);
         $second['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 11.75];
-        $second['payments'] = [$this->paymentPayload(141)];
+        $second['payments'] = [$this->paymentPayload(82.25)];
 
         $firstResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $first)
             ->assertCreated()
@@ -513,7 +551,7 @@ class RetailDispatchApiTest extends TestCase
         $payload = $this->payload();
         $payload['client_id'] = null;
         unset($payload['delivery']);
-        $payload['payments'] = [$this->paymentPayload(87)];
+        $payload['payments'] = [$this->paymentPayload(50.75)];
 
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
@@ -527,13 +565,13 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 7.25)
             ->assertJsonPath('data.prices.POLLO_PELADO.source', 'GENERAL')
             ->assertJsonPath('data.weighings.0.price_kg', 7.25)
-            ->assertJsonPath('data.totals.amount', 87);
+            ->assertJsonPath('data.totals.amount', 50.75);
 
         $this->assertDatabaseHas('pagos', [
             'tipo' => 'COBRO_MINORISTA',
             'cliente_id' => null,
             'cuenta_destino_id' => $this->cashAccountId,
-            'importe' => 87,
+            'importe' => 50.75,
             'estado' => 'REGISTRADO',
         ]);
     }
@@ -552,6 +590,47 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
+    public function test_retail_dispatch_rejects_payment_amounts_with_more_than_two_decimals(): void
+    {
+        $this->createGeneralPrice(7.25);
+        $payload = $this->payload();
+        $payload['client_id'] = null;
+        unset($payload['delivery']);
+        $payload['payments'] = [$this->paymentPayload(50.755)];
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payments.0.importe');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pagos', 0);
+    }
+
+    public function test_retail_total_sums_each_weighing_after_rounding_it_to_cents(): void
+    {
+        $this->createGeneralPrice(1.23);
+        $payload = $this->payload();
+        $payload['client_id'] = null;
+        unset($payload['delivery']);
+        $payload['weighings'][0]['tray_count'] = 0;
+        $payload['weighings'][0]['read_weight_kg'] = 1.004;
+        $payload['weighings'][] = [
+            ...$payload['weighings'][0],
+            'local_id' => 2,
+        ];
+        $payload['payments'] = [$this->paymentPayload(2.46)];
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.weighings.0.amount', 1.23)
+            ->assertJsonPath('data.weighings.1.amount', 1.23)
+            ->assertJsonPath('data.totals.amount', 2.46);
+
+        $this->assertDatabaseHas('pagos', [
+            'importe' => 2.46,
+        ]);
+    }
+
     public function test_return_amounts_are_serialized_with_negative_sign(): void
     {
         $payload = $this->payload();
@@ -561,8 +640,8 @@ class RetailDispatchApiTest extends TestCase
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
             ->assertJsonPath('data.operation_type', TicketDespacho::OPERATION_RETURN)
-            ->assertJsonPath('data.weighings.0.amount', -102)
-            ->assertJsonPath('data.totals.amount', -102);
+            ->assertJsonPath('data.weighings.0.amount', -59.5)
+            ->assertJsonPath('data.totals.amount', -59.5);
 
         $this->assertDatabaseHas('tickets_despacho', [
             'canal' => TicketDespacho::CHANNEL_RETAIL,
@@ -762,7 +841,7 @@ class RetailDispatchApiTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function paymentPayload(float $amount): array
+    private function paymentPayload(float|string $amount): array
     {
         return [
             'idempotency_key' => (string) Str::uuid(),

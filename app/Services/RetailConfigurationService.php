@@ -236,7 +236,9 @@ class RetailConfigurationService
                 }
 
                 $prices[$type->codigo] = [
-                    'price_kg' => $history ? (float) $history->precio_kg : null,
+                    'price_kg' => $history
+                        ? round((float) $history->precio_kg, 2, PHP_ROUND_HALF_UP)
+                        : null,
                     'source' => $source,
                     'history_id' => $history?->id,
                 ];
@@ -274,7 +276,9 @@ class RetailConfigurationService
                 ->firstWhere('tipo_pollo_id', $type->priceSourceTypeId());
 
             return [$type->codigo => [
-                'price_kg' => $history ? (float) $history->precio_kg : null,
+                'price_kg' => $history
+                    ? round((float) $history->precio_kg, 2, PHP_ROUND_HALF_UP)
+                    : null,
                 'source' => $history ? 'GENERAL' : null,
                 'history_id' => $history?->id,
             ]];

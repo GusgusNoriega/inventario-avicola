@@ -23,7 +23,7 @@ return new class extends Migration
             [
                 'codigo' => 'BANDEJA_ESTANDAR',
                 'nombre' => 'Bandeja estandar',
-                'peso_kg' => 0,
+                'peso_kg' => 2.500,
                 'capacidad_aves' => 5,
                 'estado' => 'ACTIVO',
                 'created_at' => now(),

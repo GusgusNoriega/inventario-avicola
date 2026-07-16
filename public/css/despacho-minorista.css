@@ -1214,6 +1214,204 @@ body.retail-dispatch-page {
   backdrop-filter: blur(5px);
 }
 
+.rd-touch-keyboard[hidden] {
+  display: none;
+}
+
+.rd-touch-keyboard {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 180;
+  padding: 8px;
+  pointer-events: none;
+}
+
+.rd-touch-keyboard-card {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 10px;
+  overflow: hidden;
+  border: 2px solid #52657d;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #182230, #0a0f16 68%);
+  box-shadow: 0 -12px 42px rgb(0 0 0 / 58%);
+  pointer-events: auto;
+}
+
+.rd-touch-keyboard-head {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1.5fr) 48px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.rd-touch-keyboard-head > div {
+  display: grid;
+  gap: 1px;
+}
+
+.rd-touch-keyboard-head span {
+  color: #8ea1b9;
+  font-size: calc(var(--rd-font-modal-text) * 0.92);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rd-touch-keyboard-head strong {
+  overflow: hidden;
+  color: #f7fbff;
+  font-size: calc(var(--rd-font-modal-title) * 0.75);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rd-touch-keyboard-head output {
+  min-height: 43px;
+  padding: 9px 12px;
+  overflow: hidden;
+  border: 1px solid #52657d;
+  border-radius: 8px;
+  background: #05080d;
+  color: #fff;
+  font-size: calc(var(--rd-font-modal-field) * 1.5);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rd-touch-keyboard-head > button,
+.rd-touch-keyboard-keys button,
+.rd-touch-keyboard-actions button {
+  min-height: 46px;
+  border: 1px solid #52657d;
+  border-radius: 8px;
+  background: linear-gradient(#263548, #172230);
+  color: #f7fbff;
+  font: inherit;
+  font-size: calc(var(--rd-font-modal-button) * 1.42);
+  font-weight: 900;
+  touch-action: manipulation;
+}
+
+.rd-touch-keyboard-head > button {
+  min-width: 48px;
+  font-size: calc(var(--rd-font-modal-button) * 2.08);
+}
+
+.rd-touch-keyboard-keys {
+  display: grid;
+  gap: 5px;
+}
+
+.rd-touch-keyboard-keys.is-numeric {
+  width: min(430px, 100%);
+  margin: 0 auto;
+}
+
+.rd-touch-keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.rd-touch-keyboard-row button {
+  flex: 1 1 0;
+  max-width: 88px;
+}
+
+.rd-touch-keyboard-keys.is-numeric button {
+  max-width: none;
+  min-height: 52px;
+  font-size: calc(var(--rd-font-modal-button) * 1.92);
+}
+
+.rd-touch-keyboard-row button.is-shift {
+  flex: 1.35 1 0;
+  max-width: 112px;
+  font-size: calc(var(--rd-font-modal-button) * 1.08);
+}
+
+.rd-touch-keyboard-row button.is-shift.is-active {
+  border-color: #f0c438;
+  background: #5b4a13;
+  color: #fff2a8;
+}
+
+.rd-touch-keyboard-row button.is-space {
+  flex-basis: 50%;
+  max-width: 520px;
+}
+
+.rd-touch-keyboard-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.rd-touch-keyboard-actions button {
+  font-size: calc(var(--rd-font-modal-button) * 1.17);
+}
+
+.rd-touch-keyboard-actions button.is-accept {
+  border-color: #258457;
+  background: linear-gradient(#258457, #17613f);
+}
+
+.rd-touch-keyboard button:active {
+  transform: translateY(1px);
+  filter: brightness(1.2);
+}
+
+[data-retail-keyboard][readonly]:not(:disabled) {
+  cursor: pointer;
+  caret-color: transparent;
+}
+
+@media (max-width: 720px) {
+  .rd-touch-keyboard {
+    padding: 4px;
+  }
+
+  .rd-touch-keyboard-card {
+    padding: 7px;
+    border-radius: 10px;
+  }
+
+  .rd-touch-keyboard-head {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .rd-touch-keyboard-head > div {
+    display: none;
+  }
+
+  .rd-touch-keyboard-head output {
+    min-width: 0;
+    font-size: calc(var(--rd-font-modal-field) * 1.25);
+  }
+
+  .rd-touch-keyboard-row,
+  .rd-touch-keyboard-keys {
+    gap: 3px;
+  }
+
+  .rd-touch-keyboard-keys button {
+    min-width: 0;
+    min-height: 42px;
+    padding: 4px 2px;
+    font-size: calc(var(--rd-font-modal-button) * 1.17);
+  }
+
+  .rd-touch-keyboard-row button.is-shift {
+    font-size: calc(var(--rd-font-modal-button) * 0.83);
+  }
+}
+
 .rd-modal-card {
   width: min(760px, calc(100vw - 36px));
   max-height: calc(100vh - 36px);

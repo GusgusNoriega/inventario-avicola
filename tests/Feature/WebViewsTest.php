@@ -251,6 +251,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailDeliveryDriver"', false)
             ->assertSee('Guardar e imprimir / PDF')
             ->assertSee('Grabar')
+            ->assertSee('id="retailTareDetail"', false)
+            ->assertSee('id="retailTouchKeyboard"', false)
+            ->assertSee('data-retail-keyboard="text"', false)
+            ->assertSee('data-retail-keyboard="decimal"', false)
+            ->assertSee('data-retail-keyboard="integer"', false)
+            ->assertSee('Teclado táctil')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false)
             ->assertSee(route('menu'), false)
@@ -287,6 +293,27 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('elements.birdsPerTray.value = birdsOption.dataset.retailBirdsPerTrayOption', $javascript);
         $this->assertStringContainsString('openModal(elements.birdsPerTrayModal)', $javascript);
         $this->assertStringContainsString('elements.birdsPerTrayModal,', $javascript);
+        $this->assertStringContainsString('["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"]', $javascript);
+        $this->assertStringContainsString('["Á", "É", "Í", "Ó", "Ú", "Ü", "-", "/", "."]', $javascript);
+        $this->assertStringContainsString('function openTouchKeyboard(input)', $javascript);
+        $this->assertStringContainsString('data-retail-keyboard-key=" ">Espacio', $javascript);
+        $this->assertStringContainsString('const current = touchKeyboardState.buffer;', $javascript);
+        $this->assertStringContainsString('const next = `${current}${key}`;', $javascript);
+        $this->assertStringContainsString('setTouchKeyboardInputValue(current.slice(0, -1));', $javascript);
+        $this->assertStringContainsString('target.dispatchEvent(new Event("input", { bubbles: true }))', $javascript);
+        $this->assertStringContainsString('data-retail-keyboard="text"', $javascript);
+        $this->assertStringContainsString('data-retail-keyboard="decimal"', $javascript);
+        $this->assertStringContainsString('data-retail-keyboard="integer"', $javascript);
+        $this->assertStringContainsString('const MONEY_DECIMALS = 2;', $javascript);
+        $this->assertStringContainsString('function roundMoney(value)', $javascript);
+        $this->assertStringContainsString('function moneyToCents(value)', $javascript);
+        $this->assertStringContainsString('function lineAmount(list, item)', $javascript);
+        $this->assertStringContainsString('step="0.01"', $javascript);
+        $this->assertStringContainsString('acceptedKey = key.slice(0, remaining);', $javascript);
+        $this->assertStringContainsString('importe: formatMoneyValue(row.amount)', $javascript);
+        $this->assertStringContainsString('[code, formatMoneyValue(value)]', $javascript);
+        $this->assertStringNotContainsString('toFixed(4)', $javascript);
+        $this->assertStringNotContainsString('step="0.0001"', $javascript);
         $this->assertStringContainsString('from "./ticket-printer.js"', $javascript);
         $this->assertStringContainsString('function requiresDelivery(list)', $javascript);
         $this->assertStringContainsString('delivery_trucks', $javascript);
@@ -300,6 +327,25 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('cage_type_code', $javascript);
         $this->assertStringNotContainsString('cantidad_javas', $javascript);
 
+        $blade = file_get_contents(resource_path('views/despacho-minorista.blade.php'));
+        $this->assertIsString($blade);
+        preg_match_all('/<input\b[^>]*>/i', $blade, $retailInputs);
+        foreach ($retailInputs[0] as $input) {
+            if (str_contains($input, 'type="hidden"')) {
+                continue;
+            }
+            $this->assertStringContainsString('data-retail-keyboard=', $input);
+            $this->assertStringContainsString('inputmode="none"', $input);
+            $this->assertStringContainsString('readonly', $input);
+        }
+
+        preg_match_all('/<input\b[^>]*type="(?:number|text)"[^>]*>/i', $javascript, $dynamicRetailInputs);
+        foreach ($dynamicRetailInputs[0] as $input) {
+            $this->assertStringContainsString('data-retail-keyboard=', $input);
+            $this->assertStringContainsString('inputmode="none"', $input);
+            $this->assertStringContainsString('readonly', $input);
+        }
+
         $scaleJavascript = file_get_contents(public_path('js/despacho-minorista-balanza.js'));
 
         $this->assertIsString($scaleJavascript);
@@ -312,6 +358,7 @@ class WebViewsTest extends TestCase
         $this->assertIsString($stylesheet);
         $this->assertStringContainsString('--rd-font-base:', $stylesheet);
         $this->assertStringContainsString('--rd-font-chicken-type:', $stylesheet);
+        $this->assertStringContainsString('.rd-touch-keyboard-card', $stylesheet);
         $this->assertStringContainsString('--rd-font-presentation:', $stylesheet);
         $this->assertStringContainsString('--rd-font-table-cell:', $stylesheet);
         $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);

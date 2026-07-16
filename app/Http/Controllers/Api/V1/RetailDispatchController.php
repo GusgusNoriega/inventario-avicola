@@ -199,7 +199,11 @@ class RetailDispatchController extends Controller
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
         $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
         $totalAmount = $ticket->pesadas->sum(function ($weighing) use ($prices, $sign): float {
-            $price = (float) ($prices->get($weighing->tipo_pollo_id)?->precio_kg ?? 0);
+            $price = round(
+                (float) ($prices->get($weighing->tipo_pollo_id)?->precio_kg ?? 0),
+                2,
+                PHP_ROUND_HALF_UP
+            );
 
             return $sign * round((float) $weighing->peso_neto_kg * $price, 2);
         });
@@ -239,7 +243,7 @@ class RetailDispatchController extends Controller
                 : null,
             'prices' => $ticket->precios->mapWithKeys(fn ($price): array => [
                 $price->tipoPollo?->codigo ?? (string) $price->tipo_pollo_id => [
-                    'price_kg' => (float) $price->precio_kg,
+                    'price_kg' => round((float) $price->precio_kg, 2, PHP_ROUND_HALF_UP),
                     'source' => $price->origen_precio,
                     'history_id' => $price->precio_historial_id,
                 ],
@@ -256,7 +260,11 @@ class RetailDispatchController extends Controller
             ],
             'weighings' => $ticket->pesadas->map(function ($weighing) use ($prices, $sign): array {
                 $frozenPrice = $prices->get($weighing->tipo_pollo_id);
-                $price = (float) ($frozenPrice?->precio_kg ?? 0);
+                $price = round(
+                    (float) ($frozenPrice?->precio_kg ?? 0),
+                    2,
+                    PHP_ROUND_HALF_UP
+                );
 
                 return [
                     'id' => $weighing->id,

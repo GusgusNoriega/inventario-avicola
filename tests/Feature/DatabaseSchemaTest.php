@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(79, $migrationFiles);
+        $this->assertCount(80, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -31,7 +31,8 @@ class DatabaseSchemaTest extends TestCase
                 '2026_06_27_000001_add_pesadas_gestionar_permission.php',
                 '2026_07_12_000009_add_financial_permissions.php',
                 '2026_07_14_000004_add_purchase_permissions.php',
-                '2026_07_14_000005_backfill_legacy_dispatch_purchases.php' => 0,
+                '2026_07_14_000005_backfill_legacy_dispatch_purchases.php',
+                '2026_07_15_000001_set_standard_tray_weight.php' => 0,
                 '2026_07_12_000002_add_trays_to_java_movements.php' => 3,
                 '2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php' => 2,
                 default => 1,

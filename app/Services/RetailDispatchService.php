@@ -489,8 +489,8 @@ class RetailDispatchService
                 'history' => $history,
                 'source' => $isManual ? 'MANUAL' : ($specificPrice ? 'CLIENTE' : 'GENERAL'),
                 'price_kg' => $isManual
-                    ? round((float) $overrides->get($type->codigo), 4)
-                    : (float) $history->precio_kg,
+                    ? round((float) $overrides->get($type->codigo), 2, PHP_ROUND_HALF_UP)
+                    : round((float) $history->precio_kg, 2, PHP_ROUND_HALF_UP),
             ];
         }
 

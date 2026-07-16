@@ -11,6 +11,8 @@ const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
 const LIST_COUNT = 4;
+const MONEY_DECIMALS = 2;
+const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
 const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
 const RETAIL_CHICKEN_TYPE_CODES = new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"]);
 const TYPOGRAPHY_STORAGE_KEY = "sistema-pollos-retail-typography-v1";
@@ -89,6 +91,7 @@ const elements = {
   priceSource: document.querySelector("#retailPriceSource"),
   grossPreview: document.querySelector("#retailGrossPreview"),
   tarePreview: document.querySelector("#retailTarePreview"),
+  tareDetail: document.querySelector("#retailTareDetail"),
   netPreview: document.querySelector("#retailNetPreview"),
   birdTotalPreview: document.querySelector("#retailBirdTotalPreview"),
   chickenTypes: document.querySelector("#retailChickenTypes"),
@@ -159,7 +162,11 @@ const elements = {
   typographyDrawer: document.querySelector("#retailTypographyDrawer"),
   typographyControls: document.querySelector("#retailTypographyControls"),
   typographyReset: document.querySelector("#retailTypographyReset"),
-  typographyClose: document.querySelector("#retailTypographyClose")
+  typographyClose: document.querySelector("#retailTypographyClose"),
+  touchKeyboard: document.querySelector("#retailTouchKeyboard"),
+  touchKeyboardTitle: document.querySelector("#retailTouchKeyboardTitle"),
+  touchKeyboardValue: document.querySelector("#retailTouchKeyboardValue"),
+  touchKeyboardKeys: document.querySelector("#retailTouchKeyboardKeys")
 };
 
 const state = {
@@ -196,6 +203,16 @@ const state = {
   paymentRows: []
 };
 const modalFocusOrigins = new Map();
+const touchKeyboardState = {
+  target: null,
+  initialValue: "",
+  buffer: "",
+  mode: "text",
+  decimalPlaces: null,
+  uppercase: true,
+  replaceOnNextKey: false,
+  suppressOpen: false
+};
 
 function createDraftId() {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -228,7 +245,11 @@ function normalizeList(list) {
     clientId: String(source.clientId || ""),
     operationType: source.operationType === OPERATION_RETURN ? OPERATION_RETURN : OPERATION_SALE,
     priceOverrides: source.priceOverrides && typeof source.priceOverrides === "object"
-      ? { ...source.priceOverrides }
+      ? Object.fromEntries(
+        Object.entries(source.priceOverrides)
+          .map(([code, value]) => [code, roundMoney(value)])
+          .filter(([, value]) => value > 0)
+      )
       : {},
     items: Array.isArray(source.items)
       ? source.items
@@ -282,6 +303,8 @@ function recalculateDraftItems() {
     list.priceOverrides = Object.fromEntries(
       Object.entries(list.priceOverrides || {})
         .filter(([code]) => availableChickenTypeCodes.has(code))
+        .map(([code, value]) => [code, roundMoney(value)])
+        .filter(([, value]) => value > 0)
     );
     list.items = list.items
       .filter((item) => availableChickenTypeCodes.has(item.chickenTypeCode))
@@ -329,14 +352,37 @@ function roundWeight(value) {
   return Math.round((Number(value || 0) + Number.EPSILON) * 1000) / 1000;
 }
 
+function roundMoney(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 0;
+  const sign = Math.sign(amount) || 1;
+  return sign * Math.round((Math.abs(amount) + Number.EPSILON) * MONEY_FACTOR) / MONEY_FACTOR;
+}
+
+function formatMoneyValue(value) {
+  return roundMoney(value).toFixed(MONEY_DECIMALS);
+}
+
+function moneyToCents(value) {
+  return Math.round(roundMoney(value) * MONEY_FACTOR);
+}
+
+function centsToMoney(value) {
+  return Number(value || 0) / MONEY_FACTOR;
+}
+
+function hasAtMostMoneyDecimals(value) {
+  return /^\d+(?:\.\d{1,2})?$/.test(String(value ?? "").trim());
+}
+
 function formatWeight(value) {
   return `${Number(value || 0).toFixed(3)} kg`;
 }
 
 function formatMoney(value, signed = false) {
-  const amount = Number(value || 0);
+  const amount = roundMoney(value);
   const prefix = signed && amount > 0 ? "+" : "";
-  return `${prefix}S/ ${amount.toFixed(2)}`;
+  return `${prefix}S/ ${formatMoneyValue(amount)}`;
 }
 
 function setMessage(message, isError = false) {
@@ -379,14 +425,16 @@ function priceEditingList() {
 function normalizePriceRecord(record) {
   if (record === null || record === undefined || record === "") return null;
   if (typeof record === "object") {
-    const value = Number(record.price_kg ?? record.priceKg ?? record.value);
-    return Number.isFinite(value)
+    const rawValue = Number(record.price_kg ?? record.priceKg ?? record.value);
+    const value = roundMoney(rawValue);
+    return Number.isFinite(rawValue) && value > 0
       ? { value, source: String(record.source || record.origin || "VIGENTE") }
       : null;
   }
 
-  const value = Number(record);
-  return Number.isFinite(value) ? { value, source: "VIGENTE" } : null;
+  const rawValue = Number(record);
+  const value = roundMoney(rawValue);
+  return Number.isFinite(rawValue) && value > 0 ? { value, source: "VIGENTE" } : null;
 }
 
 function currentClientPrice(list, chickenTypeCode) {
@@ -420,8 +468,9 @@ function effectivePrice(list, chickenTypeCode) {
 
   const override = list.priceOverrides?.[chickenTypeCode];
   if (override !== undefined && override !== null && override !== "") {
-    const value = Number(override);
-    if (Number.isFinite(value)) return { value, source: "MANUAL" };
+    const rawValue = Number(override);
+    const value = roundMoney(rawValue);
+    if (Number.isFinite(rawValue) && value > 0) return { value, source: "MANUAL" };
   }
 
   return general;
@@ -432,17 +481,24 @@ function missingPriceTypes(list) {
     .filter((code) => !effectivePrice(list, code));
 }
 
+function lineAmount(list, item) {
+  const price = effectivePrice(list, item.chickenTypeCode)?.value;
+  if (!Number.isFinite(price)) return null;
+  return roundMoney(Number(item.netWeight || 0) * price);
+}
+
 function listTotals(list) {
   const sign = list.operationType === OPERATION_RETURN ? -1 : 1;
 
   return list.items.reduce((totals, item) => {
-    const price = effectivePrice(list, item.chickenTypeCode)?.value;
+    const amount = lineAmount(list, item);
     totals.trays += Number(item.trayCount || 0);
     totals.birds += Number(item.birds || 0);
     totals.gross += Number(item.grossWeight || 0);
     totals.tare += Number(item.tareWeight || 0);
     totals.net += Number(item.netWeight || 0);
-    if (Number.isFinite(price)) totals.amount += sign * Number(item.netWeight || 0) * price;
+    if (amount !== null) totals.amountCents += sign * moneyToCents(amount);
+    totals.amount = centsToMoney(totals.amountCents);
     return totals;
   }, {
     weighings: list.items.length,
@@ -451,7 +507,8 @@ function listTotals(list) {
     gross: 0,
     tare: 0,
     net: 0,
-    amount: 0
+    amount: 0,
+    amountCents: 0
   });
 }
 
@@ -504,6 +561,7 @@ function renderWeightPreview() {
   elements.adjustedWeight.textContent = values.grossWeight.toFixed(3);
   elements.grossPreview.textContent = formatWeight(values.grossWeight);
   elements.tarePreview.textContent = formatWeight(values.tareWeight);
+  elements.tareDetail.textContent = `${values.trayCount} × ${Number(values.tray?.weight_kg || 0).toFixed(3)} kg por bandeja`;
   elements.netPreview.textContent = formatWeight(Math.max(values.netWeight, 0));
   elements.netPreview.classList.toggle("is-invalid", values.readWeight > 0 && values.netWeight <= 0);
   elements.birdTotalPreview.textContent = values.trayCount === 0
@@ -515,10 +573,12 @@ function renderWeightPreview() {
   elements.captureWeight.classList.remove("is-captured");
   elements.captureWeight.lastChild.textContent = ` Capturar en lista ${state.activeList + 1}`;
   elements.captureWeight.setAttribute("aria-label", `Capturar el peso actual en la lista ${state.activeList + 1}`);
-  const liveAmount = price && values.netWeight > 0 ? values.netWeight * price.value : null;
+  const liveAmount = price && values.netWeight > 0
+    ? roundMoney(values.netWeight * price.value)
+    : null;
   elements.pricePreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
   elements.priceSource.textContent = price
-    ? `S/ ${price.value.toFixed(4)} por kg · ${price.source === "MANUAL" ? "puntual" : price.source.toLowerCase()}`
+    ? `S/ ${formatMoneyValue(price.value)} por kg · ${price.source === "MANUAL" ? "puntual" : price.source.toLowerCase()}`
     : (clientFor() ? "Precio del cliente no configurado" : "Asigna un precio a la lista");
   elements.trayCountValue.textContent = values.trayCount;
   elements.trayCountLabel.textContent = values.trayCount === 0
@@ -595,12 +655,14 @@ function renderLists() {
     const rows = list.items.length
       ? list.items.map((item) => {
         const selected = state.selectedItem?.listIndex === listIndex && state.selectedItem?.id === item.id;
+        const amount = lineAmount(list, item) || 0;
+        const signedAmount = list.operationType === OPERATION_RETURN ? -amount : amount;
         return `
           <tr class="rd-list-row ${selected ? "is-selected" : ""}" data-retail-item="${listIndex}:${escapeHtml(item.id)}" tabindex="0" aria-selected="${selected}">
             <td>${escapeHtml(item.chickenShortName || item.chickenTypeName || "Pollo")}<small>${escapeHtml(item.adjustmentName || item.adjustmentCode)}</small></td>
             <td>${Number(item.trayCount) === 0 ? '<span class="rd-no-trays">Sin bandeja</span>' : item.trayCount}</td>
             <td>${item.birds}</td>
-            <td>${Number(item.netWeight).toFixed(3)}<small>S/ ${Number((effectivePrice(list, item.chickenTypeCode)?.value || 0) * item.netWeight).toFixed(2)}</small></td>
+            <td>${Number(item.netWeight).toFixed(3)}<small>${formatMoney(signedAmount)}</small></td>
           </tr>
         `;
       }).join("")
@@ -787,6 +849,9 @@ function openModal(modal) {
 
 function closeModal(modal) {
   if (!modal) return;
+  if (touchKeyboardState.target && modal.contains(touchKeyboardState.target)) {
+    closeTouchKeyboard(true);
+  }
   modal.hidden = true;
   const hasOpenModal = [
     elements.trayCountModal,
@@ -794,6 +859,7 @@ function closeModal(modal) {
     elements.manualWeightModal,
     elements.clientModal,
     elements.priceModal,
+    elements.paymentModal,
     elements.deliveryModal,
     elements.settingsModal
   ].some((entry) => entry && !entry.hidden);
@@ -804,6 +870,207 @@ function closeModal(modal) {
   const origin = modalFocusOrigins.get(modal.id);
   modalFocusOrigins.delete(modal.id);
   origin?.focus?.();
+}
+
+function updateTouchKeyboardValue() {
+  const target = touchKeyboardState.target;
+  if (!target || !elements.touchKeyboardValue) return;
+  const value = touchKeyboardState.mode === "text" ? target.value : touchKeyboardState.buffer;
+  elements.touchKeyboardValue.textContent = value || target.placeholder || "Campo vacío";
+}
+
+function renderTouchKeyboard() {
+  if (!elements.touchKeyboardKeys) return;
+
+  if (touchKeyboardState.mode !== "text") {
+    elements.touchKeyboardKeys.setAttribute("aria-label", "Teclado numérico táctil");
+    const decimalKey = touchKeyboardState.mode === "decimal"
+      ? '<button type="button" data-retail-keyboard-key=".">,</button>'
+      : '<button type="button" class="is-disabled" disabled aria-label="Decimales no permitidos">,</button>';
+    elements.touchKeyboardKeys.className = "rd-touch-keyboard-keys is-numeric";
+    elements.touchKeyboardKeys.innerHTML = `
+      <div class="rd-touch-keyboard-row">
+        ${["7", "8", "9"].map((key) => `<button type="button" data-retail-keyboard-key="${key}">${key}</button>`).join("")}
+      </div>
+      <div class="rd-touch-keyboard-row">
+        ${["4", "5", "6"].map((key) => `<button type="button" data-retail-keyboard-key="${key}">${key}</button>`).join("")}
+      </div>
+      <div class="rd-touch-keyboard-row">
+        ${["1", "2", "3"].map((key) => `<button type="button" data-retail-keyboard-key="${key}">${key}</button>`).join("")}
+      </div>
+      <div class="rd-touch-keyboard-row">
+        <button type="button" data-retail-keyboard-key="0">0</button>
+        <button type="button" data-retail-keyboard-key="00">00</button>
+        ${decimalKey}
+      </div>
+    `;
+    return;
+  }
+
+  const rows = [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+    ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+    ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
+    ["Z", "X", "C", "V", "B", "N", "M"],
+    ["Á", "É", "Í", "Ó", "Ú", "Ü", "-", "/", "."]
+  ];
+  const caseKey = (key) => touchKeyboardState.uppercase ? key : key.toLocaleLowerCase("es");
+  elements.touchKeyboardKeys.setAttribute("aria-label", "Teclado español táctil");
+  elements.touchKeyboardKeys.className = "rd-touch-keyboard-keys is-text";
+  elements.touchKeyboardKeys.innerHTML = rows.map((row, index) => `
+    <div class="rd-touch-keyboard-row ${index === 3 ? "is-short" : ""}">
+      ${index === 3 ? `<button type="button" class="is-shift ${touchKeyboardState.uppercase ? "is-active" : ""}" data-retail-keyboard-action="shift" aria-pressed="${touchKeyboardState.uppercase}">Mayús</button>` : ""}
+      ${row.map((key) => `<button type="button" data-retail-keyboard-key="${escapeHtml(caseKey(key))}">${escapeHtml(caseKey(key))}</button>`).join("")}
+    </div>
+  `).join("") + `
+    <div class="rd-touch-keyboard-row">
+      <button type="button" class="is-space" data-retail-keyboard-key=" ">Espacio</button>
+    </div>
+  `;
+}
+
+function openTouchKeyboard(input) {
+  if (!input || input.disabled || touchKeyboardState.suppressOpen || !elements.touchKeyboard) return;
+
+  const mode = input.dataset.retailKeyboard;
+  if (!['text', 'decimal', 'integer'].includes(mode)) return;
+
+  touchKeyboardState.target?.setAttribute("aria-expanded", "false");
+  touchKeyboardState.target = input;
+  touchKeyboardState.initialValue = input.value;
+  touchKeyboardState.buffer = input.value;
+  touchKeyboardState.mode = mode;
+  const step = String(input.getAttribute("step") || "");
+  const stepMatch = /^\d+\.(\d+)$/.exec(step);
+  touchKeyboardState.decimalPlaces = mode === "decimal" && stepMatch
+    ? stepMatch[1].length
+    : null;
+  touchKeyboardState.uppercase = true;
+  touchKeyboardState.replaceOnNextKey = mode !== "text";
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-controls", "retailTouchKeyboard");
+  elements.touchKeyboardTitle.textContent = input.dataset.retailKeyboardLabel || "Ingresar valor";
+  renderTouchKeyboard();
+  updateTouchKeyboardValue();
+  elements.touchKeyboard.hidden = false;
+  elements.touchKeyboard.setAttribute("aria-hidden", "false");
+  document.body.classList.add("has-retail-touch-keyboard");
+}
+
+function closeTouchKeyboard(commit = true) {
+  if (!elements.touchKeyboard || elements.touchKeyboard.hidden) return;
+  const target = touchKeyboardState.target;
+
+  if (!commit && target) {
+    target.value = touchKeyboardState.initialValue;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (commit && target) {
+    if (touchKeyboardState.mode !== "text") {
+      let normalized = touchKeyboardState.buffer.endsWith(".")
+        ? touchKeyboardState.buffer.slice(0, -1)
+        : touchKeyboardState.buffer;
+      if (
+        normalized !== ""
+        && touchKeyboardState.mode === "decimal"
+        && Number.isInteger(touchKeyboardState.decimalPlaces)
+        && Number.isFinite(Number(normalized))
+      ) {
+        normalized = Number(normalized).toFixed(touchKeyboardState.decimalPlaces);
+      }
+      target.value = normalized;
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  elements.touchKeyboard.hidden = true;
+  elements.touchKeyboard.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("has-retail-touch-keyboard");
+  target?.setAttribute("aria-expanded", "false");
+  touchKeyboardState.target = null;
+  touchKeyboardState.initialValue = "";
+  touchKeyboardState.buffer = "";
+  touchKeyboardState.decimalPlaces = null;
+  touchKeyboardState.replaceOnNextKey = false;
+  touchKeyboardState.suppressOpen = true;
+  target?.focus({ preventScroll: true });
+  queueMicrotask(() => {
+    touchKeyboardState.suppressOpen = false;
+  });
+}
+
+function setTouchKeyboardInputValue(value) {
+  const target = touchKeyboardState.target;
+  if (!target) return;
+  touchKeyboardState.buffer = value;
+  if (touchKeyboardState.mode !== "text" && value.endsWith(".")) {
+    updateTouchKeyboardValue();
+    return;
+  }
+  target.value = value;
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+  updateTouchKeyboardValue();
+}
+
+function appendTouchKeyboardKey(key) {
+  const target = touchKeyboardState.target;
+  if (!target) return;
+
+  if (touchKeyboardState.mode !== "text") {
+    const current = touchKeyboardState.replaceOnNextKey ? "" : touchKeyboardState.buffer;
+    touchKeyboardState.replaceOnNextKey = false;
+    if (key === "." && touchKeyboardState.mode !== "decimal") return;
+    if (key === "." && current.includes(".")) return;
+    let acceptedKey = key;
+    if (
+      key !== "."
+      && current.includes(".")
+      && Number.isInteger(touchKeyboardState.decimalPlaces)
+    ) {
+      const decimalsUsed = current.split(".")[1]?.length || 0;
+      const remaining = touchKeyboardState.decimalPlaces - decimalsUsed;
+      if (remaining <= 0) return;
+      acceptedKey = key.slice(0, remaining);
+    }
+    const next = acceptedKey === "." && !current ? "0." : `${current}${acceptedKey}`;
+    if (next.length <= 16) setTouchKeyboardInputValue(next);
+    return;
+  }
+
+  const current = touchKeyboardState.buffer;
+  const next = `${current}${key}`;
+  const maximum = target.maxLength > 0 ? target.maxLength : 120;
+  if (next.length > maximum) return;
+  setTouchKeyboardInputValue(next);
+}
+
+function backspaceTouchKeyboardInput() {
+  const target = touchKeyboardState.target;
+  if (!target) return;
+  const current = touchKeyboardState.buffer;
+
+  if (touchKeyboardState.mode !== "text") {
+    touchKeyboardState.replaceOnNextKey = false;
+    setTouchKeyboardInputValue(current.slice(0, -1));
+    return;
+  }
+
+  setTouchKeyboardInputValue(current.slice(0, -1));
+}
+
+function handleTouchKeyboardAction(action) {
+  if (action === "accept") return closeTouchKeyboard(true);
+  if (action === "cancel") return closeTouchKeyboard(false);
+  if (action === "clear") {
+    touchKeyboardState.replaceOnNextKey = false;
+    return setTouchKeyboardInputValue("");
+  }
+  if (action === "backspace") return backspaceTouchKeyboardInput();
+  if (action === "shift") {
+    touchKeyboardState.uppercase = !touchKeyboardState.uppercase;
+    renderTouchKeyboard();
+  }
 }
 
 function defaultTypographyValues() {
@@ -895,7 +1162,7 @@ function renderTypographyControls() {
             <span>${escapeHtml(control.label)}</span>
             <div class="rd-typography-stepper">
               <button type="button" data-typography-step="-1" data-typography-variable="${control.variable}" aria-label="Disminuir ${escapeHtml(control.label)}">&minus;</button>
-              <input id="${inputId}" type="number" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" inputmode="numeric" data-typography-variable="${control.variable}" aria-label="${escapeHtml(control.label)} en píxeles">
+              <input id="${inputId}" type="number" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" inputmode="none" readonly data-retail-keyboard="integer" data-retail-keyboard-label="${escapeHtml(control.label)} en píxeles" data-typography-variable="${control.variable}" aria-label="${escapeHtml(control.label)} en píxeles">
               <button type="button" data-typography-step="1" data-typography-variable="${control.variable}" aria-label="Aumentar ${escapeHtml(control.label)}">&plus;</button>
             </div>
           </label>
@@ -956,6 +1223,9 @@ function openTypographyDrawer() {
 
 function closeTypographyDrawer() {
   if (!elements.typographyDrawer || elements.typographyDrawer.hidden) return;
+  if (touchKeyboardState.target && elements.typographyDrawer.contains(touchKeyboardState.target)) {
+    closeTouchKeyboard(true);
+  }
   elements.typographyDrawer.hidden = true;
   elements.typographyDrawer.setAttribute("aria-hidden", "true");
   elements.openTypography?.setAttribute("aria-expanded", "false");
@@ -1011,6 +1281,7 @@ function openClientModal() {
   renderClientOptions();
   openModal(elements.clientModal);
   elements.clientSearch.focus();
+  openTouchKeyboard(elements.clientSearch);
 }
 
 function assignClient(clientId) {
@@ -1040,18 +1311,19 @@ function renderPriceFields() {
       ? currentClientPrice(list, type.code)
       : currentGeneralPrice(type.code);
     const current = client || !vigente ? "" : list.priceOverrides?.[type.code];
+    const hasCurrent = current !== undefined && current !== null && current !== "";
     return `
       <label class="rd-price-field">
         <span>${escapeHtml(type.name)}</span>
-        <input type="number" min="0.0001" max="99999999.9999" step="0.0001" inputmode="decimal" data-retail-price-code="${escapeHtml(type.code)}" value="${current ?? ""}" placeholder="${vigente ? vigente.value.toFixed(4) : "Sin precio base"}" ${client || !vigente ? "disabled" : ""}>
+        <input type="number" min="0.01" max="99999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Precio de ${escapeHtml(type.name)} por kilogramo" data-retail-price-code="${escapeHtml(type.code)}" value="${hasCurrent ? formatMoneyValue(current) : ""}" placeholder="${vigente ? formatMoneyValue(vigente.value) : "Sin precio base"}" ${client || !vigente ? "disabled" : ""}>
         <small>${client
           ? (vigente
-            ? `Precio del cliente: S/ ${vigente.value.toFixed(4)} · ${escapeHtml(vigente.source)}`
+            ? `Precio del cliente: S/ ${formatMoneyValue(vigente.value)} · ${escapeHtml(vigente.source)}`
             : "Este cliente no tiene un precio vigente configurado en Directorio")
-          : (current
-            ? `Precio personalizado de la lista: S/ ${Number(current).toFixed(4)}`
+          : (hasCurrent
+            ? `Precio personalizado de la lista: S/ ${formatMoneyValue(current)}`
             : (vigente
-              ? `Precio general vigente: S/ ${vigente.value.toFixed(4)} · ${escapeHtml(vigente.source)}`
+              ? `Precio general vigente: S/ ${formatMoneyValue(vigente.value)} · ${escapeHtml(vigente.source)}`
               : "Configura primero el precio general vigente en Directorio"))}</small>
       </label>
     `;
@@ -1070,6 +1342,7 @@ function openPriceModal() {
   openModal(elements.priceModal);
   const firstInput = elements.priceFields.querySelector("input");
   firstInput?.focus();
+  if (firstInput && !firstInput.disabled) openTouchKeyboard(firstInput);
 }
 
 function applyPrices(event) {
@@ -1087,15 +1360,20 @@ function applyPrices(event) {
     const raw = input.value.trim();
     if (!raw) return;
     const value = Number(raw);
-    if (!Number.isFinite(value) || value <= 0) {
+    if (
+      !hasAtMostMoneyDecimals(raw)
+      || !Number.isFinite(value)
+      || value < 0.01
+      || value > 99999999.99
+    ) {
       invalid = true;
       return;
     }
-    prices[input.dataset.retailPriceCode] = Number(value.toFixed(4));
+    prices[input.dataset.retailPriceCode] = roundMoney(value);
   });
 
   if (invalid) {
-    setMessage("Los precios manuales deben ser mayores que cero.", true);
+    setMessage("Los precios manuales deben estar entre S/ 0.01 y S/ 99,999,999.99 y usar como máximo dos decimales.", true);
     return;
   }
 
@@ -1149,7 +1427,7 @@ function newPaymentRow(amount = 0) {
     key: createDraftId(),
     methodId: methods[0]?.id || "",
     accountId: accounts[0]?.id || "",
-    amount: Math.max(0, Number(amount || 0)).toFixed(2),
+    amount: formatMoneyValue(Math.max(0, Number(amount || 0))),
     reference: ""
   };
 }
@@ -1172,11 +1450,11 @@ function renderPaymentRows() {
         </label>
         <label>
           <span>Importe</span>
-          <input data-payment-amount type="number" min="0.01" step="0.01" inputmode="decimal" value="${escapeHtml(row.amount)}" required>
+          <input data-payment-amount type="number" min="0.01" max="999999999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Importe de la forma de pago ${index + 1}" value="${escapeHtml(row.amount)}" required>
         </label>
         <label>
           <span>Referencia</span>
-          <input data-payment-reference type="text" maxlength="100" value="${escapeHtml(row.reference)}" placeholder="Número de operación">
+          <input data-payment-reference type="text" maxlength="100" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-label="Referencia de la forma de pago ${index + 1}" value="${escapeHtml(row.reference)}" placeholder="Número de operación">
         </label>
       </div>
     </article>
@@ -1196,18 +1474,21 @@ function syncPaymentRowsFromForm() {
 }
 
 function paymentReceivedTotal() {
-  return state.paymentRows.reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+  return centsToMoney(state.paymentRows.reduce(
+    (sum, row) => sum + Math.max(0, moneyToCents(row.amount)),
+    0
+  ));
 }
 
 function renderPaymentTotals() {
   syncPaymentRowsFromForm();
-  const total = Number(listTotals(activeList()).amount || 0);
+  const total = roundMoney(listTotals(activeList()).amount || 0);
   const received = paymentReceivedTotal();
-  const pending = Math.max(0, total - received);
+  const pending = centsToMoney(Math.max(0, moneyToCents(total) - moneyToCents(received)));
   elements.paymentSaleTotal.textContent = formatMoney(total);
   elements.paymentReceivedTotal.textContent = formatMoney(received);
   elements.paymentPendingTotal.textContent = formatMoney(pending);
-  elements.paymentPendingTotal.classList.toggle("is-settled", pending < 0.005);
+  elements.paymentPendingTotal.classList.toggle("is-settled", moneyToCents(pending) === 0);
 }
 
 function openPaymentModal() {
@@ -1249,21 +1530,29 @@ function submitPayment(event) {
   event.preventDefault();
   syncPaymentRowsFromForm();
   const list = activeList();
-  const saleTotal = Number(listTotals(list).amount || 0);
+  const saleTotal = roundMoney(listTotals(list).amount || 0);
   const received = paymentReceivedTotal();
+  const saleTotalCents = moneyToCents(saleTotal);
+  const receivedCents = moneyToCents(received);
   const client = clientFor(list);
 
-  if (state.paymentRows.some((row) => !Number(row.methodId) || !Number(row.accountId) || Number(row.amount) <= 0)) {
-    elements.paymentMessage.textContent = "Completa método, cuenta e importe en cada forma de pago.";
+  if (state.paymentRows.some((row) => (
+    !Number(row.methodId)
+    || !Number(row.accountId)
+    || !hasAtMostMoneyDecimals(row.amount)
+    || Number(row.amount) < 0.01
+    || Number(row.amount) > 999999999999.99
+  ))) {
+    elements.paymentMessage.textContent = "Completa método, cuenta e importe con un máximo de dos decimales en cada forma de pago.";
     elements.paymentMessage.classList.add("is-error");
     return;
   }
-  if (received > saleTotal + 0.005) {
+  if (receivedCents > saleTotalCents) {
     elements.paymentMessage.textContent = "El total recibido no puede superar el importe de la venta.";
     elements.paymentMessage.classList.add("is-error");
     return;
   }
-  if (!client && Math.abs(received - saleTotal) >= 0.005) {
+  if (!client && receivedCents !== saleTotalCents) {
     elements.paymentMessage.textContent = "La venta sin cliente debe quedar pagada completamente.";
     elements.paymentMessage.classList.add("is-error");
     return;
@@ -1285,7 +1574,7 @@ function submitPayment(event) {
     metodo_pago_id: Number(row.methodId),
     cuenta_destino_id: Number(row.accountId),
     moneda: "PEN",
-    importe: Number(Number(row.amount).toFixed(2)),
+    importe: formatMoneyValue(row.amount),
     referencia: String(row.reference || "").trim() || null
   }));
   closeModal(elements.paymentModal);
@@ -1302,7 +1591,10 @@ function skipPayment() {
 function addPaymentRow() {
   if (state.paymentRows.length >= 5) return;
   syncPaymentRowsFromForm();
-  const remaining = Math.max(0, Number(listTotals(activeList()).amount || 0) - paymentReceivedTotal());
+  const remaining = centsToMoney(Math.max(
+    0,
+    moneyToCents(listTotals(activeList()).amount) - moneyToCents(paymentReceivedTotal())
+  ));
   state.paymentRows.push(newPaymentRow(remaining));
   renderPaymentRows();
 }
@@ -1390,7 +1682,7 @@ function buildRetailTicketPrintData(ticket) {
     destinationName: ticket.client?.name || "Venta externa",
     customerKind: ticket.client?.id ? "CLIENTE_REGISTRADO" : "VENTA_EXTERNA",
     emittedAt: ticket.registered_at,
-    totalAmount: ticket.totals?.amount,
+    totalAmount: roundMoney(ticket.totals?.amount),
     delivery: ticket.delivery,
     records: (ticket.weighings || []).map((weighing) => ({
       typeCode: printedChickenTypeCode(weighing.chicken_type_code),
@@ -1399,8 +1691,8 @@ function buildRetailTicketPrintData(ticket) {
       grossWeight: Number(weighing.gross_weight_kg) || 0,
       tareWeight: Number(weighing.tare_weight_kg) || 0,
       netWeight: Number(weighing.net_weight_kg) || 0,
-      priceKg: Number(weighing.price_kg) || 0,
-      amount: Number(weighing.amount) || 0
+      priceKg: roundMoney(weighing.price_kg),
+      amount: roundMoney(weighing.amount)
     }))
   };
 }
@@ -1462,8 +1754,8 @@ async function saveDispatch(delivery = null, payments = []) {
       ? {}
       : Object.fromEntries(
         Object.entries(list.priceOverrides || {})
-          .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0)
-          .map(([code, value]) => [code, Number(value)])
+          .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
+          .map(([code, value]) => [code, formatMoneyValue(value)])
       );
     const response = await apiRequest("/despacho-minorista/tickets", {
       method: "POST",
@@ -1557,7 +1849,7 @@ function renderSettingsAdjustments() {
       <small>${escapeHtml(adjustment.sex)} · ${escapeHtml(adjustment.presentation)}</small>
       <label>
         <span>Gramos/pollo</span>
-        <input type="number" min="0" max="100000" step="1" value="${Number(adjustment.additional_grams || 0)}" data-retail-setting-adjustment="${escapeHtml(adjustment.code)}" inputmode="numeric">
+        <input type="number" min="0" max="100000" step="1" value="${Number(adjustment.additional_grams || 0)}" data-retail-setting-adjustment="${escapeHtml(adjustment.code)}" inputmode="none" readonly data-retail-keyboard="integer" data-retail-keyboard-label="Gramos adicionales para ${escapeHtml(adjustment.name)}">
       </label>
     </article>
   `).join("");
@@ -1705,6 +1997,7 @@ function openManualWeightModal() {
   elements.manualWeightEntry.value = state.liveWeight > 0 ? state.liveWeight.toFixed(3) : "";
   openModal(elements.manualWeightModal);
   elements.manualWeightEntry.focus();
+  openTouchKeyboard(elements.manualWeightEntry);
 }
 
 function applyMainManualWeight(event) {
@@ -1889,7 +2182,31 @@ elements.connectSerial.addEventListener("click", connectSerial);
 elements.disconnectScale.addEventListener("click", disconnectScale);
 elements.applyManualScale.addEventListener("click", applyManualScaleReading);
 
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches("[data-retail-keyboard]")) {
+    openTouchKeyboard(event.target);
+  }
+});
+
 document.addEventListener("click", (event) => {
+  const keyboardKey = event.target.closest("[data-retail-keyboard-key]");
+  if (keyboardKey) {
+    appendTouchKeyboardKey(keyboardKey.dataset.retailKeyboardKey);
+    return;
+  }
+
+  const keyboardAction = event.target.closest("[data-retail-keyboard-action]");
+  if (keyboardAction) {
+    handleTouchKeyboardAction(keyboardAction.dataset.retailKeyboardAction);
+    return;
+  }
+
+  const keyboardInput = event.target.closest("[data-retail-keyboard]");
+  if (keyboardInput) {
+    openTouchKeyboard(keyboardInput);
+    return;
+  }
+
   const closeTypographyButton = event.target.closest("[data-retail-close-typography]");
   if (closeTypographyButton) {
     closeTypographyDrawer();
@@ -1995,6 +2312,10 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    if (elements.touchKeyboard && !elements.touchKeyboard.hidden) {
+      closeTouchKeyboard(false);
+      return;
+    }
     closeTypographyDrawer();
     [
       elements.trayCountModal,
