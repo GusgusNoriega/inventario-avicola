@@ -2615,6 +2615,10 @@ button:focus-visible {
   box-shadow: 0 20px 42px rgba(0, 0, 0, 0.78);
 }
 
+.error-modal {
+  z-index: 300;
+}
+
 .error-modal-head {
   display: flex;
   justify-content: space-between;
@@ -5630,12 +5634,130 @@ body.menu-page {
 }
 
 .menu-hero {
+  position: relative;
   padding: 18px;
+  padding-right: 230px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: end;
   background: linear-gradient(180deg, #151515, #090909);
+}
+
+.menu-fullscreen-button {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  min-width: 194px;
+  min-height: 54px;
+  padding: 10px 14px;
+  border: 1px solid #2f82a8;
+  border-radius: 10px;
+  color: #d8f4ff;
+  background: linear-gradient(180deg, #16354a, #08131b);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  font: inherit;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.menu-fullscreen-button:hover,
+.menu-fullscreen-button:focus-visible {
+  border-color: #6cdbff;
+  background: linear-gradient(180deg, #1c4965, #0a1c27);
+  outline: 3px solid rgba(72, 205, 252, 0.25);
+  outline-offset: 2px;
+}
+
+.menu-fullscreen-button:active {
+  transform: scale(0.97);
+}
+
+.menu-fullscreen-button.is-active {
+  border-color: var(--secondary);
+  color: #fff2a8;
+  background: linear-gradient(180deg, #4b4116, #171304);
+}
+
+.menu-fullscreen-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.menu-fullscreen-icon {
+  position: relative;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+}
+
+.menu-fullscreen-icon > span {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-color: currentColor;
+  border-style: solid;
+  transition: inset 0.18s ease, border-width 0.18s ease;
+}
+
+.menu-fullscreen-icon > span:nth-child(1) {
+  top: 0;
+  left: 0;
+  border-width: 2px 0 0 2px;
+}
+
+.menu-fullscreen-icon > span:nth-child(2) {
+  top: 0;
+  right: 0;
+  border-width: 2px 2px 0 0;
+}
+
+.menu-fullscreen-icon > span:nth-child(3) {
+  right: 0;
+  bottom: 0;
+  border-width: 0 2px 2px 0;
+}
+
+.menu-fullscreen-icon > span:nth-child(4) {
+  bottom: 0;
+  left: 0;
+  border-width: 0 0 2px 2px;
+}
+
+.menu-fullscreen-button.is-active .menu-fullscreen-icon > span:nth-child(1) {
+  top: 2px;
+  left: 2px;
+  border-width: 0 2px 2px 0;
+}
+
+.menu-fullscreen-button.is-active .menu-fullscreen-icon > span:nth-child(2) {
+  top: 2px;
+  right: 2px;
+  border-width: 0 0 2px 2px;
+}
+
+.menu-fullscreen-button.is-active .menu-fullscreen-icon > span:nth-child(3) {
+  right: 2px;
+  bottom: 2px;
+  border-width: 2px 0 0 2px;
+}
+
+.menu-fullscreen-button.is-active .menu-fullscreen-icon > span:nth-child(4) {
+  bottom: 2px;
+  left: 2px;
+  border-width: 2px 2px 0 0;
+}
+
+.menu-fullscreen-label {
+  white-space: nowrap;
 }
 
 .menu-hero h1 {
@@ -5816,6 +5938,19 @@ body.menu-page {
   .menu-hero {
     grid-template-columns: 1fr;
     padding: 14px;
+    padding-right: 78px;
+  }
+
+  .menu-fullscreen-button {
+    top: 14px;
+    right: 14px;
+    min-width: 52px;
+    min-height: 52px;
+    padding: 10px;
+  }
+
+  .menu-fullscreen-label {
+    display: none;
   }
 
   .menu-hero h1 {
@@ -5902,6 +6037,30 @@ body.menu-page {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+.touch-text-control {
+  min-height: 60px !important;
+  border-width: 2px !important;
+  border-color: #5c542d !important;
+  background: linear-gradient(180deg, #171717, #080808) !important;
+  color: #ffffff !important;
+  font-size: clamp(1rem, 1.2vw, 1.25rem) !important;
+  font-weight: 800 !important;
+  cursor: pointer;
+  caret-color: transparent;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-text-control:hover,
+.touch-text-control:focus-visible {
+  border-color: var(--secondary) !important;
+  box-shadow: 0 0 0 3px rgba(255, 208, 42, 0.14) !important;
+}
+
+.touch-text-control::placeholder {
+  color: #99917a;
 }
 
 .touch-number-control:hover,
@@ -6075,6 +6234,168 @@ body.menu-page {
 .numeric-key:focus-visible {
   border-color: var(--secondary);
   background: linear-gradient(180deg, #30280d, #151105);
+}
+
+/* Teclado alfabético táctil para buscadores de la operación mayorista */
+.text-touch-keyboard[hidden] {
+  display: none;
+}
+
+.text-touch-keyboard {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 280;
+  padding: 8px;
+  pointer-events: none;
+}
+
+.text-touch-keyboard-card {
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  margin: 0 auto;
+  padding: 10px;
+  overflow-y: auto;
+  border: 2px solid #665a29;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #1d1b12, #090909 68%);
+  box-shadow: 0 -12px 42px rgba(0, 0, 0, 0.72);
+  pointer-events: auto;
+}
+
+.text-touch-keyboard-head {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1.5fr) 52px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.text-touch-keyboard-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.text-touch-keyboard-head span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.text-touch-keyboard-head strong {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 1.08rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-touch-keyboard-head output {
+  min-width: 0;
+  min-height: 48px;
+  padding: 9px 12px;
+  overflow: hidden;
+  border: 2px solid #665a29;
+  border-radius: 9px;
+  background: #050505;
+  color: var(--secondary);
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-touch-keyboard-head > button,
+.text-touch-keyboard-keys button,
+.text-touch-keyboard-actions button {
+  min-height: 48px;
+  border: 2px solid #4d4d4d;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #242424, #101010);
+  color: #ffffff;
+  padding: 6px;
+  font: inherit;
+  font-size: clamp(1rem, 1.65vw, 1.3rem);
+  font-weight: 900;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.text-touch-keyboard-head > button {
+  min-width: 52px;
+  border-color: #6b4b4b;
+  color: #ffd4d4;
+  font-size: 2rem;
+}
+
+.text-touch-keyboard-keys {
+  display: grid;
+  gap: 5px;
+}
+
+.text-touch-keyboard-row {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.text-touch-keyboard-row button {
+  min-width: 0;
+  max-width: 96px;
+  flex: 1 1 0;
+}
+
+.text-touch-keyboard-row button.is-shift {
+  max-width: 122px;
+  flex: 1.35 1 0;
+  border-color: #665a29;
+  font-size: clamp(0.8rem, 1.25vw, 1rem);
+}
+
+.text-touch-keyboard-row button.is-shift.is-active {
+  border-color: var(--secondary);
+  background: linear-gradient(180deg, #5b4a13, #2b240b);
+  color: #fff2a8;
+}
+
+.text-touch-keyboard-row button.is-space {
+  max-width: 520px;
+  flex-basis: 50%;
+}
+
+.text-touch-keyboard-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.text-touch-keyboard-actions button {
+  min-height: 56px;
+}
+
+.text-touch-keyboard-actions button.is-accept {
+  border-color: #258457;
+  background: linear-gradient(180deg, #258457, #17613f);
+}
+
+.text-touch-keyboard button:hover,
+.text-touch-keyboard button:focus-visible {
+  border-color: var(--secondary);
+  background: linear-gradient(180deg, #30280d, #151105);
+  outline: none;
+}
+
+.text-touch-keyboard button:active {
+  transform: translateY(1px);
+  filter: brightness(1.2);
 }
 
 /* Recepción en escritorio: controles arriba y tickets a todo el ancho */
@@ -6348,6 +6669,11 @@ body.menu-page {
     font-size: 1.35rem;
   }
 
+  .touch-text-control {
+    min-height: 64px;
+    font-size: 1.15rem !important;
+  }
+
   .touch-select-card {
     width: min(98dvw, 720px);
     max-height: calc(100dvh - 12px);
@@ -6390,6 +6716,138 @@ body.menu-page {
   .numeric-key {
     min-height: 62px;
   }
+
+  .text-touch-keyboard {
+    padding: 4px;
+  }
+
+  .text-touch-keyboard-card {
+    padding: 7px;
+    border-radius: 10px;
+  }
+
+  .text-touch-keyboard-head {
+    grid-template-columns: minmax(0, 1fr) 46px;
+    gap: 5px;
+  }
+
+  .text-touch-keyboard-head > div {
+    display: none;
+  }
+
+  .text-touch-keyboard-row,
+  .text-touch-keyboard-keys {
+    gap: 3px;
+  }
+
+  .text-touch-keyboard-keys button {
+    min-height: 44px;
+    padding: 4px 2px;
+    font-size: clamp(0.82rem, 3vw, 1rem);
+  }
+
+  .text-touch-keyboard-row button.is-shift {
+    font-size: 0.72rem;
+  }
+
+  .text-touch-keyboard-actions {
+    gap: 5px;
+    margin-top: 5px;
+  }
+
+  .text-touch-keyboard-actions button {
+    min-height: 48px;
+    padding-inline: 3px;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-height: 650px) {
+  .text-touch-keyboard-card {
+    padding: 6px;
+  }
+
+  .text-touch-keyboard-head {
+    margin-bottom: 4px;
+  }
+
+  .text-touch-keyboard-head > div {
+    display: none;
+  }
+
+  .text-touch-keyboard-head {
+    grid-template-columns: minmax(0, 1fr) 46px;
+  }
+
+  .text-touch-keyboard-head output,
+  .text-touch-keyboard-head > button,
+  .text-touch-keyboard-keys button {
+    min-height: 44px;
+  }
+
+  .text-touch-keyboard-keys,
+  .text-touch-keyboard-row {
+    gap: 3px;
+  }
+
+  .text-touch-keyboard-actions {
+    gap: 5px;
+    margin-top: 5px;
+  }
+
+  .text-touch-keyboard-actions button {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 981px) and (max-height: 650px) {
+  .operation-touch-page .columns-section {
+    grid-template-rows: auto minmax(220px, 1fr) auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .operation-touch-page .truck-grid {
+    min-height: 220px;
+  }
+}
+
+/* Objetivos mínimos para operación completa con dedos o lápiz táctil */
+.operation-touch-page button,
+.operation-touch-page input,
+.operation-touch-page select,
+.operation-touch-page a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.operation-touch-page .config-menu-btn,
+.operation-touch-page .config-close-btn,
+.operation-touch-page .scale-settings-btn,
+.operation-touch-page .scale-connect-actions .btn,
+.operation-touch-page .font-size-stepper button,
+.operation-touch-page .assign-client-btn,
+.operation-touch-page .clear-column-btn,
+.operation-touch-page .register-ticket-btn,
+.operation-touch-page .print-ticket-btn,
+.operation-touch-page .type-btn,
+.operation-touch-page .sex-btn,
+.operation-touch-page .mobile-tab,
+.operation-touch-page .menu-return-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.operation-touch-page .entry-section .weighing-submit-button {
+  min-height: 64px;
+}
+
+.operation-touch-page .cage-row {
+  min-height: 44px;
+}
+
+.operation-touch-page .cage-row > td {
+  height: 44px;
 }
 
 /* Totales del ticket seleccionado: lectura ampliada para pantallas táctiles */

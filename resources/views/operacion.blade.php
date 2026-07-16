@@ -6,7 +6,7 @@
   <title>Entrada de Camiones | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
 </head>
-<body>
+<body class="operation-touch-page">
   <section class="scale-strip-mobile card" aria-label="Pesos de balanzas">
     <article class="scale-strip-item">
       <span>Balanza 1</span>
@@ -320,7 +320,7 @@
       <p id="clientModalTruckLabel" class="client-modal-truck">--</p>
       <label class="client-search">
         <span>Buscar cliente o almacén</span>
-        <input id="clientSearch" type="search" placeholder="Escribe un nombre o almacén..." autocomplete="off">
+        <input id="clientSearch" type="search" placeholder="Escribe un nombre o almacén..." autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar cliente o almacén">
       </label>
       <div id="clientList" class="client-list" role="listbox" aria-label="Lista de clientes y almacenes"></div>
     </div>
@@ -338,7 +338,7 @@
       <p id="deliveryTruckTicketLabel" class="client-modal-truck">--</p>
       <label class="client-search">
         <span>Buscar en mi flota</span>
-        <input id="deliveryTruckSearch" type="search" placeholder="Placa, marca o modelo..." autocomplete="off">
+        <input id="deliveryTruckSearch" type="search" placeholder="Placa, marca o modelo..." autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar camión de entrega">
       </label>
       <div id="deliveryTruckList" class="delivery-fleet-list" role="listbox" aria-label="Camiones propios disponibles"></div>
     </div>
@@ -356,7 +356,7 @@
       <p id="deliveryDriverTicketLabel" class="client-modal-truck">--</p>
       <label class="client-search">
         <span>Buscar en mis choferes</span>
-        <input id="deliveryDriverSearch" type="search" placeholder="Nombre o documento..." autocomplete="off">
+        <input id="deliveryDriverSearch" type="search" placeholder="Nombre o documento..." autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar chofer de entrega">
       </label>
       <div id="deliveryDriverList" class="delivery-fleet-list" role="listbox" aria-label="Choferes disponibles"></div>
     </div>
@@ -470,7 +470,7 @@
 
       <label class="field provider-search">
         Buscar proveedor o almacén
-        <input id="providerSearch" type="search" placeholder="Nombre, almacén, DNI/RUC o dirección" autocomplete="off">
+        <input id="providerSearch" type="search" placeholder="Nombre, almacén, DNI/RUC o dirección" autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar proveedor o almacén de origen">
       </label>
 
       <p id="providerModalSelection" class="provider-modal-selection">Ningún origen seleccionado.</p>
@@ -544,6 +544,27 @@
       </div>
     </div>
   </div>
+
+  <aside id="textTouchKeyboard" class="text-touch-keyboard" hidden aria-hidden="true">
+    <section class="text-touch-keyboard-card card" role="dialog" aria-labelledby="textTouchKeyboardTitle" aria-describedby="textTouchKeyboardValue">
+      <header class="text-touch-keyboard-head">
+        <div>
+          <span>Teclado táctil</span>
+          <strong id="textTouchKeyboardTitle">Ingresar texto</strong>
+        </div>
+        <output id="textTouchKeyboardValue">&nbsp;</output>
+        <button type="button" data-text-keyboard-action="cancel" aria-label="Cancelar y cerrar teclado">×</button>
+      </header>
+
+      <div id="textTouchKeyboardKeys" class="text-touch-keyboard-keys" aria-label="Teclado español táctil"></div>
+
+      <footer class="text-touch-keyboard-actions">
+        <button type="button" data-text-keyboard-action="clear">Limpiar</button>
+        <button type="button" data-text-keyboard-action="backspace">⌫ Borrar</button>
+        <button type="button" class="is-accept" data-text-keyboard-action="accept">Aceptar</button>
+      </footer>
+    </section>
+  </aside>
 
   <script type="module" src="{{ asset('js/app.js') }}?v={{ filemtime(public_path('js/app.js')) }}"></script>
 </body>

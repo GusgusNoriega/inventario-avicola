@@ -15,6 +15,24 @@
           <h1 id="menuTitle">Menú principal</h1>
           <p class="menu-copy">Acceso rápido a las áreas de recepción, despacho y registros del sistema.</p>
         </div>
+
+        <button
+          id="menuFullscreenButton"
+          class="menu-fullscreen-button"
+          type="button"
+          aria-label="Activar pantalla completa"
+          aria-pressed="false"
+          title="Activar pantalla completa"
+        >
+          <span class="menu-fullscreen-icon" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+          <span id="menuFullscreenLabel" class="menu-fullscreen-label">Pantalla completa</span>
+        </button>
+        <p id="menuFullscreenStatus" class="sr-only" role="status" aria-live="polite"></p>
       </header>
 
       <nav class="menu-grid" aria-label="Vistas del sistema">
@@ -175,5 +193,6 @@
     </div>
   </section>
 
+  <script src="{{ asset('js/menu.js') }}?v={{ filemtime(public_path('js/menu.js')) }}"></script>
 </body>
 </html>

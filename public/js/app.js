@@ -323,6 +323,10 @@ const elements = {
   numericPadClearBtn: document.getElementById("numericPadClearBtn"),
   numericPadOkBtn: document.getElementById("numericPadOkBtn"),
   numericPadKeys: document.querySelectorAll("[data-keypad-key]"),
+  textTouchKeyboard: document.getElementById("textTouchKeyboard"),
+  textTouchKeyboardTitle: document.getElementById("textTouchKeyboardTitle"),
+  textTouchKeyboardValue: document.getElementById("textTouchKeyboardValue"),
+  textTouchKeyboardKeys: document.getElementById("textTouchKeyboardKeys"),
   scaleDisplays: {
     1: document.getElementById("display-scale-1"),
     2: document.getElementById("display-scale-2")
@@ -400,9 +404,18 @@ let keypadContext = {
   targetInput: null,
   value: "",
   allowDecimal: true,
+  decimalPlaces: null,
+  replaceOnNextKey: false,
   fieldLabel: "",
   validationMessage: ""
 };
+let textKeyboardContext = {
+  targetInput: null,
+  initialValue: "",
+  value: "",
+  uppercase: true
+};
+let suppressTextKeyboardOpen = false;
 let touchSelectContext = {
   targetSelect: null,
   fieldLabel: ""
@@ -1516,6 +1529,16 @@ function inputAllowsDecimal(input) {
   return !Number.isInteger(numericStep);
 }
 
+function getInputDecimalPlaces(input) {
+  if (!inputAllowsDecimal(input)) {
+    return 0;
+  }
+
+  const step = String(input?.getAttribute("step") || "");
+  const match = /^\d+\.(\d+)$/.exec(step);
+  return match ? match[1].length : null;
+}
+
 function getKeypadFieldLabel(input) {
   if (input.dataset.keypadLabel) {
     return input.dataset.keypadLabel;
@@ -1537,6 +1560,8 @@ function resetKeypadContext() {
     targetInput: null,
     value: "",
     allowDecimal: true,
+    decimalPlaces: null,
+    replaceOnNextKey: false,
     fieldLabel: "",
     validationMessage: ""
   };
@@ -1581,6 +1606,7 @@ function openNumericPadForInput(input) {
     return;
   }
 
+  closeTextTouchKeyboard(true, false);
   closeTouchSelect();
 
   if (!elements.numericPadModal.hidden && keypadContext.targetInput === input) {
@@ -1589,6 +1615,8 @@ function openNumericPadForInput(input) {
 
   keypadContext.targetInput = input;
   keypadContext.allowDecimal = inputAllowsDecimal(input);
+  keypadContext.decimalPlaces = getInputDecimalPlaces(input);
+  keypadContext.replaceOnNextKey = true;
   keypadContext.fieldLabel = getKeypadFieldLabel(input);
   keypadContext.value = sanitizeNumericBuffer(input.value, keypadContext.allowDecimal);
   keypadContext.validationMessage = "";
@@ -1615,6 +1643,7 @@ function handleNumericKeyPress(key) {
 
   if (key === "clear") {
     keypadContext.value = "";
+    keypadContext.replaceOnNextKey = false;
     clearNumericPadValidation();
     renderNumericPad();
     return;
@@ -1622,6 +1651,7 @@ function handleNumericKeyPress(key) {
 
   if (key === "backspace") {
     keypadContext.value = value.slice(0, -1);
+    keypadContext.replaceOnNextKey = false;
     clearNumericPadValidation();
     renderNumericPad();
     return;
@@ -1632,6 +1662,8 @@ function handleNumericKeyPress(key) {
       return;
     }
 
+    value = keypadContext.replaceOnNextKey ? "" : value;
+    keypadContext.replaceOnNextKey = false;
     keypadContext.value = value ? `${value}.` : "0.";
     clearNumericPadValidation();
     renderNumericPad();
@@ -1642,11 +1674,26 @@ function handleNumericKeyPress(key) {
     return;
   }
 
+  if (keypadContext.replaceOnNextKey) {
+    value = "";
+    keypadContext.replaceOnNextKey = false;
+  }
+
   if (value === "0" && !value.includes(".")) {
     value = "";
   }
 
-  keypadContext.value = `${value}${key}`.slice(0, 14);
+  let acceptedKey = key;
+  if (value.includes(".") && Number.isInteger(keypadContext.decimalPlaces)) {
+    const decimalsUsed = value.split(".")[1]?.length || 0;
+    const remaining = keypadContext.decimalPlaces - decimalsUsed;
+    if (remaining <= 0) {
+      return;
+    }
+    acceptedKey = key.slice(0, remaining);
+  }
+
+  keypadContext.value = `${value}${acceptedKey}`.slice(0, 14);
   clearNumericPadValidation();
   renderNumericPad();
 }
@@ -1658,7 +1705,9 @@ function confirmNumericPadValue() {
   }
 
   const targetInput = keypadContext.targetInput;
-  const nextValue = keypadContext.value;
+  const nextValue = keypadContext.value.endsWith(".")
+    ? keypadContext.value.slice(0, -1)
+    : keypadContext.value;
   const validationMessage = validateNumericPadValue(targetInput, nextValue);
   if (validationMessage) {
     keypadContext.validationMessage = validationMessage;
@@ -1761,6 +1810,207 @@ function bindNumericInputs() {
 
 }
 
+function resetTextKeyboardContext() {
+  textKeyboardContext = {
+    targetInput: null,
+    initialValue: "",
+    value: "",
+    uppercase: true
+  };
+}
+
+function updateTextTouchKeyboardValue() {
+  const target = textKeyboardContext.targetInput;
+  if (!target || !elements.textTouchKeyboardValue) {
+    return;
+  }
+
+  elements.textTouchKeyboardValue.textContent = textKeyboardContext.value
+    || target.placeholder
+    || "Campo vacío";
+}
+
+function renderTextTouchKeyboard() {
+  if (!elements.textTouchKeyboardKeys) {
+    return;
+  }
+
+  const rows = [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+    ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+    ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
+    ["Z", "X", "C", "V", "B", "N", "M"],
+    ["Á", "É", "Í", "Ó", "Ú", "Ü", "-", "/", "."]
+  ];
+  const keyForCurrentCase = (key) => textKeyboardContext.uppercase
+    ? key
+    : key.toLocaleLowerCase("es");
+
+  elements.textTouchKeyboardKeys.innerHTML = rows.map((row, index) => `
+    <div class="text-touch-keyboard-row ${index === 3 ? "is-short" : ""}">
+      ${index === 3 ? `
+        <button
+          type="button"
+          class="is-shift ${textKeyboardContext.uppercase ? "is-active" : ""}"
+          data-text-keyboard-action="shift"
+          aria-pressed="${textKeyboardContext.uppercase}"
+        >Mayús</button>
+      ` : ""}
+      ${row.map((key) => {
+        const displayKey = keyForCurrentCase(key);
+        return `<button type="button" data-text-keyboard-key="${escapeHtml(displayKey)}">${escapeHtml(displayKey)}</button>`;
+      }).join("")}
+    </div>
+  `).join("") + `
+    <div class="text-touch-keyboard-row">
+      <button type="button" class="is-space" data-text-keyboard-key=" ">Espacio</button>
+    </div>
+  `;
+}
+
+function openTextTouchKeyboard(input) {
+  if (
+    !input
+    || input.disabled
+    || input.dataset.touchKeyboard !== "text"
+    || suppressTextKeyboardOpen
+    || !elements.textTouchKeyboard
+  ) {
+    return;
+  }
+
+  if (!elements.textTouchKeyboard.hidden && textKeyboardContext.targetInput === input) {
+    return;
+  }
+
+  if (!elements.textTouchKeyboard.hidden) {
+    closeTextTouchKeyboard(true, false);
+  }
+
+  closeNumericPad();
+  closeTouchSelect();
+  textKeyboardContext.targetInput?.setAttribute("aria-expanded", "false");
+  textKeyboardContext = {
+    targetInput: input,
+    initialValue: input.value,
+    value: input.value,
+    uppercase: true
+  };
+
+  input.setAttribute("aria-controls", "textTouchKeyboard");
+  input.setAttribute("aria-expanded", "true");
+  elements.textTouchKeyboardTitle.textContent = input.dataset.touchKeyboardLabel || "Ingresar texto";
+  renderTextTouchKeyboard();
+  updateTextTouchKeyboardValue();
+  elements.textTouchKeyboard.hidden = false;
+  elements.textTouchKeyboard.setAttribute("aria-hidden", "false");
+  document.body.classList.add("text-touch-keyboard-open");
+}
+
+function closeTextTouchKeyboard(commit = true, restoreFocus = true) {
+  if (!elements.textTouchKeyboard || elements.textTouchKeyboard.hidden) {
+    return;
+  }
+
+  const target = textKeyboardContext.targetInput;
+  if (target && !commit) {
+    target.value = textKeyboardContext.initialValue;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  if (target && commit) {
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  elements.textTouchKeyboard.hidden = true;
+  elements.textTouchKeyboard.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("text-touch-keyboard-open");
+  target?.setAttribute("aria-expanded", "false");
+  resetTextKeyboardContext();
+
+  suppressTextKeyboardOpen = true;
+  if (restoreFocus) {
+    target?.focus({ preventScroll: true });
+  }
+  queueMicrotask(() => {
+    suppressTextKeyboardOpen = false;
+  });
+}
+
+function setTextTouchKeyboardValue(value) {
+  const target = textKeyboardContext.targetInput;
+  if (!target) {
+    return;
+  }
+
+  const maximumLength = target.maxLength > 0 ? target.maxLength : 120;
+  textKeyboardContext.value = String(value).slice(0, maximumLength);
+  target.value = textKeyboardContext.value;
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+  updateTextTouchKeyboardValue();
+}
+
+function appendTextTouchKeyboardKey(key) {
+  if (!textKeyboardContext.targetInput || typeof key !== "string") {
+    return;
+  }
+
+  setTextTouchKeyboardValue(`${textKeyboardContext.value}${key}`);
+}
+
+function handleTextTouchKeyboardAction(action) {
+  if (action === "accept") {
+    closeTextTouchKeyboard(true);
+    return;
+  }
+  if (action === "cancel") {
+    closeTextTouchKeyboard(false);
+    return;
+  }
+  if (action === "clear") {
+    setTextTouchKeyboardValue("");
+    return;
+  }
+  if (action === "backspace") {
+    setTextTouchKeyboardValue(textKeyboardContext.value.slice(0, -1));
+    return;
+  }
+  if (action === "shift") {
+    textKeyboardContext.uppercase = !textKeyboardContext.uppercase;
+    renderTextTouchKeyboard();
+  }
+}
+
+function bindTextTouchInputs() {
+  document.querySelectorAll('input[data-touch-keyboard="text"]').forEach((input) => {
+    if (input.dataset.touchKeyboardBound === "true") {
+      return;
+    }
+
+    input.dataset.touchKeyboardBound = "true";
+    input.readOnly = true;
+    input.setAttribute("inputmode", "none");
+    input.classList.add("touch-text-control");
+    input.setAttribute("aria-haspopup", "dialog");
+    input.setAttribute("aria-controls", "textTouchKeyboard");
+    input.setAttribute("aria-expanded", "false");
+
+    input.addEventListener("click", (event) => {
+      event.preventDefault();
+      input.focus({ preventScroll: true });
+      openTextTouchKeyboard(input);
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      openTextTouchKeyboard(input);
+    });
+  });
+}
+
 function getTouchSelectFieldLabel(select) {
   if (select.dataset.touchLabel) {
     return select.dataset.touchLabel;
@@ -1824,15 +2074,18 @@ function openTouchSelect(select) {
     return;
   }
 
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeConfigMenu();
   touchSelectContext.targetSelect = select;
   touchSelectContext.fieldLabel = getTouchSelectFieldLabel(select);
   renderTouchSelectOptions();
   elements.touchSelectModal.hidden = false;
+  select.setAttribute("aria-expanded", "true");
 }
 
 function closeTouchSelect() {
+  touchSelectContext.targetSelect?.setAttribute("aria-expanded", "false");
   if (elements.touchSelectModal) {
     elements.touchSelectModal.hidden = true;
   }
@@ -1854,19 +2107,71 @@ function selectTouchOption(index) {
 
 function bindTouchSelects() {
   document.querySelectorAll("select").forEach((select) => {
+    if (select.dataset.touchSelectBound === "true") {
+      return;
+    }
+
+    select.dataset.touchSelectBound = "true";
     select.classList.add("touch-select-control");
     select.setAttribute("aria-haspopup", "dialog");
+    select.setAttribute("aria-controls", "touchSelectModal");
+    select.setAttribute("aria-expanded", "false");
+
+    let tapState = null;
+    let suppressNextClick = false;
 
     select.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || select.disabled) {
         return;
       }
+
       event.preventDefault();
-      openTouchSelect(select);
+      suppressNextClick = false;
+      tapState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startedAt: Date.now(),
+        moved: false
+      };
+    });
+
+    select.addEventListener("pointermove", (event) => {
+      if (!tapState || tapState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const deltaX = Math.abs(event.clientX - tapState.startX);
+      const deltaY = Math.abs(event.clientY - tapState.startY);
+      if (deltaX > TAP_MAX_MOVEMENT_PX || deltaY > TAP_MAX_MOVEMENT_PX) {
+        tapState.moved = true;
+      }
+    });
+
+    select.addEventListener("pointercancel", () => {
+      tapState = null;
+      suppressNextClick = true;
+    });
+
+    select.addEventListener("pointerup", (event) => {
+      if (!tapState || tapState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const holdMs = Date.now() - tapState.startedAt;
+      const isTouchLikePointer = event.pointerType === "touch" || event.pointerType === "pen";
+      const maxHoldMs = isTouchLikePointer ? TOUCH_TAP_MAX_HOLD_MS : Number.POSITIVE_INFINITY;
+      suppressNextClick = tapState.moved || holdMs > maxHoldMs;
+      tapState = null;
     });
 
     select.addEventListener("click", (event) => {
       event.preventDefault();
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return;
+      }
+      openTouchSelect(select);
     });
 
     select.addEventListener("keydown", (event) => {
@@ -2297,6 +2602,7 @@ function setFontSidebarOpen(isOpen) {
 function openFontSidebar() {
   closeConfigMenu();
   closeAllScaleSettings();
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
   renderFontSizeControls();
@@ -2346,6 +2652,7 @@ function closeAllScaleSettings() {
 
 function openScaleSettings(scaleId) {
   closeConfigMenu();
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
   closeAllScaleSettings();
@@ -3726,6 +4033,10 @@ function showErrorModal(message, options = {}) {
     return;
   }
 
+  closeTextTouchKeyboard(true, false);
+  closeNumericPad();
+  closeTouchSelect();
+
   const details = normalizeErrorDetails(options.details);
   elements.errorModalTitle.textContent = options.title || "Revisa los datos";
   elements.errorModalMessage.textContent = message || "Ocurrió un error.";
@@ -3747,6 +4058,7 @@ function showErrorModal(message, options = {}) {
   });
 
   elements.errorModal.hidden = false;
+  queueMicrotask(() => elements.closeErrorModalBtn?.focus({ preventScroll: true }));
 }
 
 function closeErrorModal() {
@@ -3987,9 +4299,6 @@ function updateTruckPlateField(origin, select, field, help, options = {}) {
       `<option value="${escapeHtml(vehicle.plate)}">${escapeHtml(vehicle.plate + alias)}</option>`
     );
   });
-
-  elements.scaleSetButtons[1].addEventListener("click", () => updateScale(1));
-  elements.scaleSetButtons[2].addEventListener("click", () => updateScale(2));
 
   if (historicalPlate) {
     optionMarkup.push(
@@ -4587,15 +4896,22 @@ function renderDeliveryDriverList() {
 }
 
 function openDeliveryTruckModal(truck) {
+  closeTextTouchKeyboard(true, false);
+  closeNumericPad();
+  closeTouchSelect();
   deliverySelectionContext = { truckId: truck.id, vehicleId: null };
   elements.deliveryTruckSearch.value = "";
   elements.deliveryTruckTicketLabel.textContent = `${truck.name} · ${getTruckClientName(truck)}`;
   renderDeliveryTruckList();
   elements.deliveryTruckModal.hidden = false;
-  window.setTimeout(() => elements.deliveryTruckSearch.focus(), 0);
+  window.setTimeout(() => {
+    elements.deliveryTruckSearch.focus({ preventScroll: true });
+    openTextTouchKeyboard(elements.deliveryTruckSearch);
+  }, 0);
 }
 
 function closeDeliverySelection() {
+  closeTextTouchKeyboard(true, false);
   deliverySelectionContext = null;
   elements.deliveryTruckModal.hidden = true;
   elements.deliveryDriverModal.hidden = true;
@@ -4610,12 +4926,16 @@ function selectDeliveryTruck(vehicleId) {
   }
 
   deliverySelectionContext.vehicleId = normalizedVehicleId;
+  closeTextTouchKeyboard(true, false);
   elements.deliveryTruckModal.hidden = true;
   elements.deliveryDriverSearch.value = "";
   elements.deliveryDriverTicketLabel.textContent = `Camión ${truck.plate} · Selecciona el chofer`;
   renderDeliveryDriverList();
   elements.deliveryDriverModal.hidden = false;
-  window.setTimeout(() => elements.deliveryDriverSearch.focus(), 0);
+  window.setTimeout(() => {
+    elements.deliveryDriverSearch.focus({ preventScroll: true });
+    openTextTouchKeyboard(elements.deliveryDriverSearch);
+  }, 0);
 }
 
 function selectDeliveryDriver(driverId) {
@@ -5435,6 +5755,7 @@ function openJsonModal() {
   closeConfigMenu();
   closeAllScaleSettings();
   closeFontSidebar();
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
   renderJson();
@@ -5499,6 +5820,7 @@ function toggleTicketOperation() {
 }
 
 function openClientModal(truckId, mode = "destination") {
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
 
@@ -5530,10 +5852,14 @@ function openClientModal(truckId, mode = "destination") {
   elements.clientModalTruckLabel.textContent = `${truck.name} - ${getTicketOperationLabel(truck)} - ${getTruckClientName(truck)}`;
   renderClientList(truck.id);
   elements.clientModal.hidden = false;
-  window.setTimeout(() => elements.clientSearch?.focus(), 0);
+  window.setTimeout(() => {
+    elements.clientSearch?.focus({ preventScroll: true });
+    openTextTouchKeyboard(elements.clientSearch);
+  }, 0);
 }
 
 function closeClientModal() {
+  closeTextTouchKeyboard(true, false);
   clientModalTruckId = null;
   clientModalMode = "destination";
   elements.clientModal.hidden = true;
@@ -5595,6 +5921,7 @@ function assignClientToTruck(clientId) {
 }
 
 function openProviderModal(context = "entry") {
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
   providerPickerContext = context === "edit" ? "edit" : "entry";
@@ -5617,10 +5944,14 @@ function openProviderModal(context = "entry") {
   elements.providerSearch.value = "";
   renderProviderList();
   elements.providerModal.hidden = false;
-  window.setTimeout(() => elements.providerSearch.focus(), 0);
+  window.setTimeout(() => {
+    elements.providerSearch.focus({ preventScroll: true });
+    openTextTouchKeyboard(elements.providerSearch);
+  }, 0);
 }
 
 function closeProviderModal() {
+  closeTextTouchKeyboard(true, false);
   providerPickerContext = null;
   elements.providerModal.hidden = true;
   elements.providerSearch.value = "";
@@ -5662,6 +5993,7 @@ function selectOrigin(originId) {
 }
 
 function openCageModal(truckId, cageId) {
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
 
@@ -5737,6 +6069,7 @@ function openCageModal(truckId, cageId) {
 }
 
 function closeItemModal() {
+  closeTextTouchKeyboard(true, false);
   editingContext = null;
   editSelectedOrigin = null;
   editingChickenSex = DEFAULT_CHICKEN_SEX;
@@ -6000,6 +6333,7 @@ function resetDay() {
   closeClientModal();
   closeProviderModal();
   closeErrorModal();
+  closeTextTouchKeyboard(true, false);
   closeNumericPad();
   closeTouchSelect();
   closeConfigMenu();
@@ -6010,6 +6344,7 @@ function resetDay() {
 
 function bindEvents() {
   elements.backToMenuBtn?.addEventListener("click", () => {
+    closeTextTouchKeyboard(true, false);
     closeNumericPad();
     closeTouchSelect();
     closeConfigMenu();
@@ -6061,6 +6396,8 @@ function bindEvents() {
 
   elements.scaleCaptureButtons[1].addEventListener("click", () => captureScale(1));
   elements.scaleCaptureButtons[2].addEventListener("click", () => captureScale(2));
+  elements.scaleSetButtons[1].addEventListener("click", () => updateScale(1));
+  elements.scaleSetButtons[2].addEventListener("click", () => updateScale(2));
   elements.scaleSettingsOpenButtons[1]?.addEventListener("click", () => openScaleSettings(1));
   elements.scaleSettingsOpenButtons[2]?.addEventListener("click", () => openScaleSettings(2));
   elements.scaleSettingsCloseButtons[1]?.addEventListener("click", () => closeScaleSettings(1));
@@ -6194,6 +6531,18 @@ function bindEvents() {
   elements.numericPadClearBtn.addEventListener("click", () => handleNumericKeyPress("clear"));
   elements.numericPadOkBtn.addEventListener("click", confirmNumericPadValue);
   elements.numericPadCloseBtn.addEventListener("click", closeNumericPad);
+  elements.textTouchKeyboard?.addEventListener("click", (event) => {
+    const key = event.target.closest("[data-text-keyboard-key]");
+    if (key) {
+      appendTextTouchKeyboardKey(key.dataset.textKeyboardKey);
+      return;
+    }
+
+    const action = event.target.closest("[data-text-keyboard-action]");
+    if (action) {
+      handleTextTouchKeyboardAction(action.dataset.textKeyboardAction);
+    }
+  });
   elements.touchSelectCloseBtn?.addEventListener("click", closeTouchSelect);
   elements.touchSelectOptions?.addEventListener("click", (event) => {
     const option = event.target.closest("[data-touch-select-index]");
@@ -6285,6 +6634,11 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") {
+      return;
+    }
+
+    if (elements.textTouchKeyboard && !elements.textTouchKeyboard.hidden) {
+      closeTextTouchKeyboard(false);
       return;
     }
 
@@ -6419,6 +6773,7 @@ function bindEvents() {
 renderEditTypeOptions();
 renderCrateTypeOptions();
 bindNumericInputs();
+bindTextTouchInputs();
 bindTouchSelects();
 applyFontSizePreference(loadFontSizePreference(), false);
 applyCustomFontSizes();
