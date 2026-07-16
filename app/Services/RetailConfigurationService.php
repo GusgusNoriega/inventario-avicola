@@ -14,6 +14,8 @@ class RetailConfigurationService
 {
     public const SCALE_CODE = 'BALANZA_MINORISTA';
 
+    public const SCALE_CODE_2 = 'BALANZA_MINORISTA_2';
+
     /** @return array{baudRate: int, dataBits: int, stopBits: int, parity: string, flowControl: string} */
     public static function defaultSerialConfiguration(): array
     {
@@ -37,7 +39,7 @@ class RetailConfigurationService
         ];
     }
 
-    public function ensureDefaults(int $companyId, int $branchId): void
+    public function ensureDefaults(int $companyId, int $branchId, int $station = 1): void
     {
         $now = now();
         $rows = collect(self::adjustmentDefinitions())->map(fn (array $definition): array => [
@@ -75,10 +77,12 @@ class RetailConfigurationService
                 ]);
         }
 
+        $scaleCode = $this->scaleCode($station);
+        $scaleName = $this->scaleName($station);
         DB::table('balanzas')->insertOrIgnore([
             'sucursal_id' => $branchId,
-            'codigo' => self::SCALE_CODE,
-            'nombre' => 'Balanza despacho minorista',
+            'codigo' => $scaleCode,
+            'nombre' => $scaleName,
             'modo_conexion' => 'SERIAL',
             'dispositivo' => null,
             'configuracion' => json_encode(self::defaultSerialConfiguration(), JSON_THROW_ON_ERROR),
@@ -94,13 +98,15 @@ class RetailConfigurationService
      *     adjustments: Collection<int, array<string, mixed>>
      * }
      */
-    public function configuration(int $companyId, int $branchId): array
+    public function configuration(int $companyId, int $branchId, int $station = 1): array
     {
-        $this->ensureDefaults($companyId, $branchId);
+        $this->ensureDefaults($companyId, $branchId, $station);
+        $scaleCode = $this->scaleCode($station);
+        $scaleName = $this->scaleName($station);
 
         $scale = DB::table('balanzas')
             ->where('sucursal_id', $branchId)
-            ->where('codigo', self::SCALE_CODE)
+            ->where('codigo', $scaleCode)
             ->first();
         $storedConfiguration = is_string($scale?->configuracion)
             ? json_decode($scale->configuracion, true)
@@ -112,8 +118,8 @@ class RetailConfigurationService
 
         return [
             'scale' => [
-                'code' => self::SCALE_CODE,
-                'name' => $scale?->nombre ?? 'Balanza despacho minorista',
+                'code' => $scaleCode,
+                'name' => $scale?->nombre ?? $scaleName,
                 'connection_mode' => $scale?->modo_conexion ?? 'SERIAL',
                 'device' => $scale?->dispositivo,
                 'configuration' => $serialConfiguration,
@@ -139,11 +145,12 @@ class RetailConfigurationService
      * @param  array<string, mixed>  $data
      * @return array{scale: array<string, mixed>, adjustments: Collection<int, array<string, mixed>>}
      */
-    public function update(int $companyId, int $branchId, array $data): array
+    public function update(int $companyId, int $branchId, array $data, int $station = 1): array
     {
-        $this->ensureDefaults($companyId, $branchId);
+        $this->ensureDefaults($companyId, $branchId, $station);
+        $scaleCode = $this->scaleCode($station);
 
-        DB::transaction(function () use ($companyId, $branchId, $data): void {
+        DB::transaction(function () use ($companyId, $branchId, $data, $scaleCode): void {
             $adjustments = AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
                 ->whereIn('codigo', collect($data['adjustments'])->pluck('code'))
@@ -180,7 +187,7 @@ class RetailConfigurationService
 
             DB::table('balanzas')
                 ->where('sucursal_id', $branchId)
-                ->where('codigo', self::SCALE_CODE)
+                ->where('codigo', $scaleCode)
                 ->update([
                     'modo_conexion' => $data['scale']['connection_mode'],
                     'dispositivo' => $data['scale']['device'],
@@ -190,7 +197,17 @@ class RetailConfigurationService
                 ]);
         }, 3);
 
-        return $this->configuration($companyId, $branchId);
+        return $this->configuration($companyId, $branchId, $station);
+    }
+
+    public function scaleCode(int $station): string
+    {
+        return $station === 2 ? self::SCALE_CODE_2 : self::SCALE_CODE;
+    }
+
+    private function scaleName(int $station): string
+    {
+        return $station === 2 ? 'Balanza despacho minorista 2' : 'Balanza despacho minorista';
     }
 
     /**

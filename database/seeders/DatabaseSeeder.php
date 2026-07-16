@@ -185,6 +185,13 @@ class DatabaseSeeder extends Seeder
             return [$code => $permission];
         });
 
+        foreach (config('access_modules.modules', []) as $moduleCode => $module) {
+            $permissions->put($moduleCode, Permission::query()->updateOrCreate(
+                ['codigo' => $moduleCode],
+                ['descripcion' => (string) ($module['name'] ?? $moduleCode)]
+            ));
+        }
+
         $administrator = Role::query()->updateOrCreate(
             ['empresa_id' => $empresaId, 'codigo' => 'ADMINISTRADOR'],
             ['nombre' => 'Administrador']
@@ -195,18 +202,31 @@ class DatabaseSeeder extends Seeder
             ['empresa_id' => $empresaId, 'codigo' => 'OPERADOR'],
             ['nombre' => 'Operador']
         );
+        $operatorModules = [
+            'MODULO_DESPACHO_MAYORISTA',
+            'MODULO_DESPACHO_MINORISTA_1',
+            'MODULO_DESPACHO_MINORISTA_2',
+            'MODULO_RESUMEN_JORNADA',
+            'MODULO_GESTION_PESADAS',
+            'MODULO_CONTROL_JAVAS',
+        ];
+        $operatorPermissionCodes = collect($operatorModules)
+            ->flatMap(fn (string $moduleCode): array => [
+                $moduleCode,
+                ...config("access_modules.modules.{$moduleCode}.technical_permissions", []),
+            ])
+            ->merge([
+                'DASHBOARD_VER',
+                'RECEPCIONES_VER',
+                'RECEPCIONES_CREAR',
+                'DESPACHOS_VER',
+                'TICKETS_DIA_VER',
+                'DESPACHOS_CREAR',
+                'PESADAS_GESTIONAR',
+            ])
+            ->unique();
         $operator->permissions()->sync(
-            $permissions
-                ->only([
-                    'DASHBOARD_VER',
-                    'RECEPCIONES_VER',
-                    'RECEPCIONES_CREAR',
-                    'DESPACHOS_VER',
-                    'TICKETS_DIA_VER',
-                    'DESPACHOS_CREAR',
-                    'PESADAS_GESTIONAR',
-                ])
-                ->pluck('id')
+            $permissions->only($operatorPermissionCodes->all())->pluck('id')
         );
 
         if (env('ADMIN_EMAIL') && env('ADMIN_PASSWORD')) {

@@ -2,12 +2,27 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use DOMDocument;
 use DOMXPath;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\InteractsWithAccessControl;
 use Tests\TestCase;
 
 class MenuFullscreenTest extends TestCase
 {
+    use InteractsWithAccessControl;
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $user = User::factory()->create();
+        $this->makeAdministrator($user);
+        $this->actingAs($user);
+    }
+
     public function test_main_menu_exposes_an_accessible_fullscreen_toggle(): void
     {
         $response = $this->get('/')

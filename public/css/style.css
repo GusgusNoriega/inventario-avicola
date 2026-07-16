@@ -5636,12 +5636,74 @@ body.menu-page {
 .menu-hero {
   position: relative;
   padding: 18px;
-  padding-right: 230px;
+  padding-right: 18px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: end;
   background: linear-gradient(180deg, #151515, #090909);
+}
+
+.menu-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.menu-user-summary {
+  min-width: 150px;
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.menu-user-summary span,
+.menu-user-summary small {
+  color: var(--text-muted);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.menu-user-summary strong {
+  color: #fff;
+  font-size: .94rem;
+}
+
+.menu-account-link,
+.menu-logout-button {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #3f526a;
+  border-radius: 9px;
+  color: #d9e7f8;
+  background: #0b121c;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.menu-logout-button {
+  border-color: #714141;
+  color: #ffb9b9;
+}
+
+.menu-user-actions form { margin: 0; }
+
+.menu-user-actions .menu-fullscreen-button {
+  position: static;
+  min-width: 178px;
+  min-height: 44px;
+}
+
+.menu-tile-access {
+  border-color: #7f6721;
+  background: linear-gradient(180deg, #302811, #080808);
 }
 
 .menu-fullscreen-button {
@@ -5789,6 +5851,19 @@ body.menu-page {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
+
+.menu-empty-state {
+  grid-column: 1 / -1;
+  min-height: 180px;
+  padding: 28px;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.menu-empty-state strong { color: #fff; font-size: 1.2rem; }
+.menu-empty-state span { color: var(--text-soft); }
 
 .menu-tile {
   min-width: 0;
@@ -5938,15 +6013,21 @@ body.menu-page {
   .menu-hero {
     grid-template-columns: 1fr;
     padding: 14px;
-    padding-right: 78px;
   }
 
-  .menu-fullscreen-button {
-    top: 14px;
-    right: 14px;
+  .menu-user-actions .menu-fullscreen-button {
     min-width: 52px;
     min-height: 52px;
     padding: 10px;
+  }
+
+  .menu-user-actions {
+    justify-content: flex-start;
+  }
+
+  .menu-user-summary {
+    flex: 1 1 100%;
+    text-align: left;
   }
 
   .menu-fullscreen-label {

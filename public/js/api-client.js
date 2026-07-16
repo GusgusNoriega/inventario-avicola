@@ -2,6 +2,7 @@ const API_BASE_URL = window.SISTEMA_POLLOS_API_URL
   || "/api/v1";
 const AUTH_TOKEN_KEY = "sistema-pollos-auth-token";
 const AUTH_EXPIRES_KEY = "sistema-pollos-auth-expires-at";
+let csrfCookiePromise = null;
 
 export const authSession = {
   getToken() {
@@ -30,6 +31,7 @@ export const authSession = {
 export async function apiRequest(path, options = {}) {
   const token = authSession.getToken();
   const headers = new Headers(options.headers || {});
+  const method = String(options.method || "GET").toUpperCase();
 
   headers.set("Accept", "application/json");
 
@@ -39,14 +41,24 @@ export async function apiRequest(path, options = {}) {
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  } else if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    await ensureCsrfCookie();
+    const csrfToken = cookieValue("XSRF-TOKEN");
+    if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
-    headers
+    headers,
+    credentials: "same-origin"
   });
 
-  const data = response.status === 204 ? null : await response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const data = response.status === 204
+    ? null
+    : contentType.includes("application/json")
+      ? await response.json()
+      : { message: response.ok ? "" : "La sesión no pudo completar la solicitud." };
 
   if (response.status === 401) {
     authSession.clear();
@@ -61,6 +73,41 @@ export async function apiRequest(path, options = {}) {
   }
 
   return data;
+}
+
+function cookieValue(name) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+
+  if (!cookie) return null;
+
+  try {
+    return decodeURIComponent(cookie.slice(prefix.length));
+  } catch {
+    return cookie.slice(prefix.length);
+  }
+}
+
+async function ensureCsrfCookie() {
+  if (cookieValue("XSRF-TOKEN")) return;
+
+  if (!csrfCookiePromise) {
+    csrfCookiePromise = fetch("/sanctum/csrf-cookie", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin"
+    }).finally(() => {
+      csrfCookiePromise = null;
+    });
+  }
+
+  const response = await csrfCookiePromise;
+  if (!response.ok) {
+    throw new Error("No se pudo preparar la sesión segura.");
+  }
 }
 
 export async function login(identifier, password, deviceName = "frontend-web") {

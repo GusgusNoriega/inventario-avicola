@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\AccessSessionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -54,6 +56,11 @@ class AuthController extends Controller
             'ultimo_acceso_ip' => $request->ip(),
         ])->save();
 
+        if ($request->hasSession()) {
+            Auth::guard('web')->login($user);
+            $request->session()->regenerate();
+        }
+
         return response()->json([
             'message' => 'Inicio de sesión correcto.',
             'token_type' => 'Bearer',
@@ -72,6 +79,12 @@ class AuthController extends Controller
     {
         PersonalAccessToken::findToken((string) $request->bearerToken())?->delete();
 
+        if ($request->hasSession() && Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+
         return response()->json([
             'message' => 'Sesión cerrada.',
         ]);
@@ -79,7 +92,13 @@ class AuthController extends Controller
 
     public function logoutAll(Request $request): JsonResponse
     {
-        $request->user()->tokens()->delete();
+        app(AccessSessionService::class)->revokeAll($request->user());
+
+        if ($request->hasSession() && Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         return response()->json([
             'message' => 'Todas las sesiones fueron cerradas.',

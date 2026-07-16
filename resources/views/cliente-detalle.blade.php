@@ -38,6 +38,7 @@
       <article class="directory-stat card directory-stat-accent"><span>Importe</span><strong id="historyAmount">S/ 0.00</strong></article>
     </section>
 
+    @if (auth()->user()->hasModule('MODULO_FINANZAS'))
     <section id="customerFinanceSection" class="customer-history-section" aria-labelledby="customerFinanceTitle" hidden>
       <div class="customer-history-section-head">
         <div>
@@ -57,6 +58,7 @@
       </div>
       <p id="customerFinanceHelp" class="customer-history-meta"></p>
     </section>
+    @endif
 
     <section class="customer-history-filters card" aria-labelledby="historyFiltersTitle">
       <div class="section-head">

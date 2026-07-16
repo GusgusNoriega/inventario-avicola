@@ -1,20 +1,25 @@
+@php
+  $retailStation = $retailStation ?? 1;
+  $retailTitle = $retailTitle ?? 'Despacho minorista';
+  $retailApiBase = $retailApiBase ?? '/despacho-minorista';
+@endphp
 <!doctype html>
 <html lang="es" class="retail-dispatch-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Despacho minorista | Sistema Pollos</title>
+  <title>{{ $retailTitle }} | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-minorista.css') }}?v={{ filemtime(public_path('css/despacho-minorista.css')) }}">
 </head>
 <body class="retail-dispatch-page">
-  <main id="retailStation" class="rd-station">
+  <main id="retailStation" class="rd-station" data-retail-station="{{ $retailStation }}" data-retail-api-base="{{ $retailApiBase }}">
     <header class="rd-topbar">
       <div class="rd-brand">
         <span class="rd-brand-mark" aria-hidden="true">PM</span>
         <div>
           <p>Estación de venta</p>
-          <h1>Despacho minorista</h1>
+          <h1>{{ $retailTitle }}</h1>
         </div>
       </div>
 
@@ -117,18 +122,22 @@
       <section class="rd-selection-bar" aria-label="Características y destino de la pesada">
         <div class="rd-chicken-types" id="retailChickenTypes" role="group" aria-label="Tipo de pollo"></div>
 
-        <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo"></div>
+        <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo" @if($retailStation === 2) hidden @endif></div>
       </section>
     </form>
 
     <section class="rd-workspace" aria-label="Listas de venta minorista">
       <div class="rd-lists-stage">
         <div class="rd-add-buttons" aria-label="Seleccionar lista de destino">
-          <p class="rd-list-selection-hint">Selecciona una columna y captura; la pesada se agregará directamente.</p>
-          <button type="button" class="is-active" data-retail-add-list="0" aria-pressed="true">Seleccionar lista 1</button>
-          <button type="button" data-retail-add-list="1" aria-pressed="false">Seleccionar lista 2</button>
-          <button type="button" data-retail-add-list="2" aria-pressed="false">Seleccionar lista 3</button>
-          <button type="button" data-retail-add-list="3" aria-pressed="false">Seleccionar lista 4</button>
+          @if($retailStation === 2)
+            <p id="retailListSelectionHint" class="rd-list-selection-hint">Toca una columna para seleccionar la presentación.</p>
+          @else
+            <p id="retailListSelectionHint" class="rd-list-selection-hint">Selecciona una columna y captura; la pesada se agregará directamente.</p>
+            <button type="button" class="is-active" data-retail-add-list="0" aria-pressed="true">Seleccionar lista 1</button>
+            <button type="button" data-retail-add-list="1" aria-pressed="false">Seleccionar lista 2</button>
+            <button type="button" data-retail-add-list="2" aria-pressed="false">Seleccionar lista 3</button>
+            <button type="button" data-retail-add-list="3" aria-pressed="false">Seleccionar lista 4</button>
+          @endif
         </div>
         <div id="retailListsGrid" class="rd-lists-grid"></div>
       </div>

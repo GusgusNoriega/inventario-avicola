@@ -30,13 +30,9 @@ class FinancialApiTest extends TestCase
             'codigo' => 'FINANZAS_TEST',
             'nombre' => 'Finanzas test',
         ]);
-        $role->permissions()->attach(Permission::query()->whereIn('codigo', [
-            'FINANZAS_VER',
-            'CUENTAS_FINANCIERAS_GESTIONAR',
-            'PAGOS_REGISTRAR',
-            'PAGOS_ANULAR',
-            'SALDOS_AJUSTAR',
-        ])->pluck('id'));
+        $role->permissions()->attach(
+            Permission::query()->where('codigo', 'MODULO_FINANZAS')->value('id')
+        );
         $this->user->roles()->attach($role);
         Sanctum::actingAs($this->user, ['api']);
     }
@@ -597,11 +593,11 @@ class FinancialApiTest extends TestCase
                 ->assertJsonValidationErrors('aplicaciones.0.comprobante_id');
         }
 
-        $registerPermissionId = Permission::query()
-            ->where('codigo', 'PAGOS_REGISTRAR')
+        $financeModuleId = Permission::query()
+            ->where('codigo', 'MODULO_FINANZAS')
             ->value('id');
         foreach ($this->user->roles()->get() as $role) {
-            $role->permissions()->detach($registerPermissionId);
+            $role->permissions()->detach($financeModuleId);
         }
         $this->postJson("/api/v1/finanzas/movimientos/{$paymentId}/aplicaciones", [
             'idempotency_key' => (string) Str::uuid(),

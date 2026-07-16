@@ -110,7 +110,7 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings.*.tray_type_code' => ['required', 'string', 'max:40'],
             'weighings.*.weight_source' => [
                 'required',
-                Rule::in(['MANUAL', 'BALANZA_MINORISTA']),
+                Rule::in(['MANUAL', 'BALANZA_MINORISTA', 'BALANZA_MINORISTA_2']),
             ],
             'weighings.*.birds_per_tray' => ['required', 'integer', 'min:1', 'max:10'],
             'weighings.*.tray_count' => ['required', 'integer', 'min:0', 'max:1000'],

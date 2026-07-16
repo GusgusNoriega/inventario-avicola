@@ -6,16 +6,29 @@ import {
   RETAIL_SCALE_SERIAL_DEFAULTS
 } from "./despacho-minorista-balanza.js";
 
-const STORAGE_PREFIX = "sistema-pollos-retail-dispatch-v2-branch";
+const retailStationElement = document.querySelector("#retailStation");
+const RETAIL_STATION = String(retailStationElement?.dataset.retailStation || "1");
+const RETAIL_API_BASE = String(retailStationElement?.dataset.retailApiBase || "/despacho-minorista");
+const STORAGE_PREFIX = RETAIL_STATION === "1"
+  ? "sistema-pollos-retail-dispatch-v2-branch"
+  : `sistema-pollos-retail-dispatch-v2-station-${RETAIL_STATION}-branch`;
 const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
 const LIST_COUNT = 4;
+const STATION_2_LIST_ADJUSTMENT_CODES = [
+  "MACHO_CERRADO",
+  "MACHO_ABIERTO",
+  "HEMBRA_CERRADA",
+  "HEMBRA_ABIERTA"
+];
 const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
 const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
 const RETAIL_CHICKEN_TYPE_CODES = new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"]);
-const TYPOGRAPHY_STORAGE_KEY = "sistema-pollos-retail-typography-v1";
+const TYPOGRAPHY_STORAGE_KEY = RETAIL_STATION === "1"
+  ? "sistema-pollos-retail-typography-v1"
+  : `sistema-pollos-retail-typography-v1-station-${RETAIL_STATION}`;
 const TYPOGRAPHY_GROUPS = [
   {
     label: "Vista principal",
@@ -96,6 +109,7 @@ const elements = {
   birdTotalPreview: document.querySelector("#retailBirdTotalPreview"),
   chickenTypes: document.querySelector("#retailChickenTypes"),
   adjustments: document.querySelector("#retailAdjustments"),
+  listSelectionHint: document.querySelector("#retailListSelectionHint"),
   listsGrid: document.querySelector("#retailListsGrid"),
   assignClient: document.querySelector("#retailAssignClient"),
   removeWeighing: document.querySelector("#retailRemoveWeighing"),
@@ -299,7 +313,7 @@ function recalculateDraftItems() {
     state.catalog.chicken_types.map((type) => type.code)
   );
 
-  state.lists.forEach((list) => {
+  state.lists.forEach((list, listIndex) => {
     list.priceOverrides = Object.fromEntries(
       Object.entries(list.priceOverrides || {})
         .filter(([code]) => availableChickenTypeCodes.has(code))
@@ -309,7 +323,9 @@ function recalculateDraftItems() {
     list.items = list.items
       .filter((item) => availableChickenTypeCodes.has(item.chickenTypeCode))
       .map((item) => {
-        const adjustment = state.catalog.adjustments.find((entry) => entry.code === item.adjustmentCode);
+        const fixedAdjustment = station2AdjustmentForList(listIndex);
+        const adjustmentCode = fixedAdjustment?.code || item.adjustmentCode;
+        const adjustment = state.catalog.adjustments.find((entry) => entry.code === adjustmentCode);
         const tray = state.catalog.tray_types.find((entry) => entry.code === item.trayTypeCode);
         if (!adjustment || !tray) return item;
 
@@ -323,6 +339,7 @@ function recalculateDraftItems() {
 
         return {
           ...item,
+          adjustmentCode: adjustment.code,
           adjustmentName: adjustment.name,
           chickenSex: adjustment.sex,
           presentation: adjustment.presentation,
@@ -409,6 +426,19 @@ function selectedChickenType() {
 
 function selectedAdjustment() {
   return state.catalog.adjustments.find((adjustment) => adjustment.code === state.adjustmentCode) || null;
+}
+
+function station2AdjustmentForList(listIndex) {
+  if (RETAIL_STATION !== "2") return null;
+  const code = STATION_2_LIST_ADJUSTMENT_CODES[Number(listIndex)];
+  return state.catalog.adjustments.find((adjustment) => adjustment.code === code) || null;
+}
+
+function syncStation2AdjustmentWithActiveList() {
+  const adjustment = station2AdjustmentForList(state.activeList);
+  if (!adjustment) return;
+  state.adjustmentCode = adjustment.code;
+  state.sex = adjustment.sex || SEX_MALE;
 }
 
 function clientFor(list = activeList()) {
@@ -634,6 +664,14 @@ function ensureAdjustmentSelection() {
 }
 
 function renderAdjustments() {
+  if (RETAIL_STATION === "2") {
+    syncStation2AdjustmentWithActiveList();
+    elements.adjustments.hidden = true;
+    elements.adjustments.innerHTML = "";
+    return;
+  }
+
+  elements.adjustments.hidden = false;
   ensureAdjustmentSelection();
   const available = state.catalog.adjustments;
 
@@ -650,8 +688,13 @@ function renderLists() {
 
   elements.listsGrid.innerHTML = state.lists.map((list, listIndex) => {
     const client = clientFor(list);
+    const fixedAdjustment = station2AdjustmentForList(listIndex);
     const totals = listTotals(list);
     const operationLabel = list.operationType === OPERATION_RETURN ? "Devolución" : "Venta";
+    const headerTitle = fixedAdjustment?.name || client?.name || "Venta sin cliente";
+    const headerSubtitle = fixedAdjustment
+      ? `${client?.name || "Venta sin cliente"} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
+      : `${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${trayQuantityLabel(totals.trays)}`;
     const rows = list.items.length
       ? list.items.map((item) => {
         const selected = state.selectedItem?.listIndex === listIndex && state.selectedItem?.id === item.id;
@@ -672,7 +715,7 @@ function renderLists() {
       <article class="rd-list-card ${LIST_CLASSES[listIndex]} ${listIndex === state.activeList ? "is-active" : ""} ${list.saving ? "is-saving" : ""}" data-retail-list="${listIndex}" role="button" tabindex="0" aria-pressed="${listIndex === state.activeList}">
         <header class="rd-list-head">
           <span class="rd-list-number">${listIndex + 1}</span>
-          <span class="rd-list-client"><strong>${escapeHtml(client?.name || "Venta sin cliente")}</strong><small>${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${trayQuantityLabel(totals.trays)}</small></span>
+          <span class="rd-list-client"><strong>${escapeHtml(headerTitle)}</strong><small>${escapeHtml(headerSubtitle)}</small></span>
           <span class="rd-list-operation ${list.operationType === OPERATION_RETURN ? "is-return" : ""}">${operationLabel}</span>
         </header>
         <div class="rd-list-table-wrap">
@@ -716,13 +759,20 @@ function renderLists() {
   });
 
   document.querySelectorAll("[data-retail-add-list]").forEach((button) => {
-    const selected = Number(button.dataset.retailAddList) === state.activeList;
+    const listIndex = Number(button.dataset.retailAddList);
+    const selected = listIndex === state.activeList;
     button.classList.toggle("is-active", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+
+  const activeFixedAdjustment = station2AdjustmentForList(state.activeList);
+  if (activeFixedAdjustment && elements.listSelectionHint) {
+    elements.listSelectionHint.textContent = `Columna activa: ${activeFixedAdjustment.name}.`;
+  }
 }
 
 function renderAll() {
+  syncStation2AdjustmentWithActiveList();
   renderChickenTypes();
   renderAdjustments();
   renderWeightPreview();
@@ -735,9 +785,13 @@ function selectList(index) {
   if (activeList().saving) return;
 
   state.activeList = nextIndex;
+  syncStation2AdjustmentWithActiveList();
   state.selectedItem = null;
   renderAll();
-  setMessage(`Lista ${nextIndex + 1} activa.`);
+  const fixedAdjustment = station2AdjustmentForList(nextIndex);
+  setMessage(fixedAdjustment
+    ? `${fixedAdjustment.name} activo.`
+    : `Lista ${nextIndex + 1} activa.`);
 }
 
 function captureWeight() {
@@ -804,7 +858,9 @@ function addWeighingToList(listIndex, capturedReading) {
     grossWeight: values.grossWeight,
     tareWeight: values.tareWeight,
     netWeight: values.netWeight,
-    weightSource: capturedReading.source === "manual" ? "MANUAL" : "BALANZA_MINORISTA",
+    weightSource: capturedReading.source === "manual"
+      ? "MANUAL"
+      : (state.catalog.scale?.code || "BALANZA_MINORISTA"),
     weighedAt: capturedReading.weighedAt
   });
 
@@ -1757,7 +1813,7 @@ async function saveDispatch(delivery = null, payments = []) {
           .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
           .map(([code, value]) => [code, formatMoneyValue(value)])
       );
-    const response = await apiRequest("/despacho-minorista/tickets", {
+    const response = await apiRequest(`${RETAIL_API_BASE}/tickets`, {
       method: "POST",
       body: JSON.stringify({
         draft_id: list.draftId,
@@ -1925,7 +1981,7 @@ async function saveSettings(event) {
       : selectedConnectionMode === "serial"
         ? "SERIAL"
         : "MANUAL";
-    const response = await apiRequest("/despacho-minorista/configuracion", {
+    const response = await apiRequest(`${RETAIL_API_BASE}/configuracion`, {
       method: "PUT",
       body: JSON.stringify({
         scale: {
@@ -2061,7 +2117,7 @@ async function loadCatalog() {
   state.loading = true;
   renderLists();
   try {
-    const response = await apiRequest("/despacho-minorista/catalogo");
+    const response = await apiRequest(`${RETAIL_API_BASE}/catalogo`);
     state.catalog = normalizeCatalog(response.data || {});
     const branchId = state.catalog.branch?.id || "default";
     restoreLists(branchId);
@@ -2077,7 +2133,10 @@ async function loadCatalog() {
     }
     state.chickenType = state.catalog.chicken_types[0]?.code || null;
 
-    state.scale.setStorageKey(`${RETAIL_SCALE_STORAGE_KEY}-branch-${branchId}`, { reload: true });
+    const scaleStorageKey = RETAIL_STATION === "1"
+      ? `${RETAIL_SCALE_STORAGE_KEY}-branch-${branchId}`
+      : `${RETAIL_SCALE_STORAGE_KEY}-station-${RETAIL_STATION}-branch-${branchId}`;
+    state.scale.setStorageKey(scaleStorageKey, { reload: true });
 
     const configuration = state.catalog.scale?.configuration || {};
     try {

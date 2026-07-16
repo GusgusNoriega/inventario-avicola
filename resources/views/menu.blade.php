@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body class="menu-page">
+  @php($user = auth()->user())
   <section id="menuView" class="main-menu-view" aria-labelledby="menuTitle">
     <div class="menu-shell">
       <header class="menu-hero card">
@@ -16,26 +17,46 @@
           <p class="menu-copy">Acceso rápido a las áreas de recepción, despacho y registros del sistema.</p>
         </div>
 
-        <button
-          id="menuFullscreenButton"
-          class="menu-fullscreen-button"
-          type="button"
-          aria-label="Activar pantalla completa"
-          aria-pressed="false"
-          title="Activar pantalla completa"
-        >
-          <span class="menu-fullscreen-icon" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </span>
-          <span id="menuFullscreenLabel" class="menu-fullscreen-label">Pantalla completa</span>
-        </button>
+        <div class="menu-user-actions">
+          <div class="menu-user-summary">
+            <span>Sesión activa</span>
+            <strong>{{ $user->nombre }}</strong>
+            <small>{{ $user->roles()->pluck('nombre')->join(' · ') ?: 'Sin rol asignado' }}</small>
+          </div>
+          <a class="menu-account-link" href="{{ route('account') }}">Mi cuenta</a>
+          <form method="POST" action="{{ route('logout') }}">
+            @csrf
+            <button class="menu-logout-button" type="submit">Cerrar sesión</button>
+          </form>
+          <button
+            id="menuFullscreenButton"
+            class="menu-fullscreen-button"
+            type="button"
+            aria-label="Activar pantalla completa"
+            aria-pressed="false"
+            title="Activar pantalla completa"
+          >
+            <span class="menu-fullscreen-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <span id="menuFullscreenLabel" class="menu-fullscreen-label">Pantalla completa</span>
+          </button>
+        </div>
         <p id="menuFullscreenStatus" class="sr-only" role="status" aria-live="polite"></p>
       </header>
 
       <nav class="menu-grid" aria-label="Vistas del sistema">
+        @if ($user->moduleCodes() === [])
+        <div class="menu-empty-state card">
+          <strong>No tienes módulos asignados</strong>
+          <span>Solicita a un administrador que habilite las vistas necesarias para tu rol.</span>
+        </div>
+        @endif
+
+        @if ($user->hasModule('MODULO_DESPACHO_MAYORISTA'))
         <a class="menu-tile menu-tile-primary" href="{{ route('operacion') }}#despacho">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -52,7 +73,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_DESPACHO_MINORISTA_1'))
         <a class="menu-tile menu-tile-primary" href="{{ route('despacho-minorista') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -69,7 +92,28 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_DESPACHO_MINORISTA_2'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('despacho-minorista-2') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 5h16v5H4z"></path>
+              <path d="M6 12h5v4H6z"></path>
+              <path d="M13 12h5v4h-5z"></path>
+              <path d="M5 19h14"></path>
+              <path d="M8 16v3"></path><path d="M16 16v3"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Despacho minorista 2</strong>
+            <small>Segundo puesto independiente de despacho minorista</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+        @endif
+
+        @if ($user->hasModule('MODULO_RESUMEN_JORNADA'))
         <a class="menu-tile menu-tile-primary" href="{{ Route::has('tickets-dia') ? route('tickets-dia') : '#' }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -87,7 +131,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_GESTION_PESADAS'))
         <a class="menu-tile menu-tile-primary" href="{{ route('gestion-pesadas') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -103,7 +149,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_DIRECTORIO'))
         <a class="menu-tile menu-tile-primary" href="{{ route('directorio') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -119,7 +167,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_FLOTA'))
         <a class="menu-tile menu-tile-primary" href="{{ route('flota') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -135,7 +185,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_FINANZAS'))
         <a class="menu-tile menu-tile-primary" href="{{ route('finanzas') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -153,7 +205,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_CONTROL_JAVAS'))
         <a class="menu-tile menu-tile-primary" href="{{ route('control-javas') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -169,7 +223,9 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
 
+        @if ($user->hasModule('MODULO_JORNADA_PROVEEDORES'))
         <a class="menu-tile menu-tile-primary" href="{{ route('jornada') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -188,6 +244,25 @@
           </span>
           <span class="menu-status">Disponible</span>
         </a>
+        @endif
+
+        @if ($user->hasModule('MODULO_USUARIOS_ROLES'))
+        <a class="menu-tile menu-tile-primary menu-tile-access" href="{{ route('admin.access-control') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path>
+              <path d="M4 21a8 8 0 0 1 16 0"></path>
+              <path d="M18 9v6"></path>
+              <path d="M15 12h6"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Usuarios y roles</strong>
+            <small>Personas, contraseñas y accesos por módulo</small>
+          </span>
+          <span class="menu-status">Administrar</span>
+        </a>
+        @endif
 
       </nav>
     </div>

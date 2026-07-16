@@ -51,7 +51,8 @@ class RetailDispatchController extends Controller
         $generalPrices = $this->configuration->generalPrices($companyId, $chickenTypes);
         $retailConfiguration = $this->configuration->configuration(
             $companyId,
-            (int) $branch->id
+            (int) $branch->id,
+            $this->retailStation($request)
         );
 
         return response()->json([
@@ -165,7 +166,8 @@ class RetailDispatchController extends Controller
         $configuration = $this->configuration->update(
             $companyId,
             (int) $branch->id,
-            $request->validated()
+            $request->validated(),
+            $this->retailStation($request)
         );
 
         return response()->json([
@@ -307,5 +309,10 @@ class RetailDispatchController extends Controller
         $visible = mb_substr((string) $number, -4);
 
         return str_repeat('•', max(mb_strlen((string) $number) - 4, 0)).$visible;
+    }
+
+    private function retailStation(Request $request): int
+    {
+        return (int) $request->route('retail_station') === 2 ? 2 : 1;
     }
 }

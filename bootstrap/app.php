@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsurePasswordWasChanged;
+use App\Http\Middleware\EnsureUserHasModule;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Foundation\Application;
@@ -15,8 +17,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->statefulApi();
+
         $middleware->alias([
             'active' => EnsureUserIsActive::class,
+            'module' => EnsureUserHasModule::class,
+            'password.changed' => EnsurePasswordWasChanged::class,
             'permission' => EnsureUserHasPermission::class,
         ]);
     })

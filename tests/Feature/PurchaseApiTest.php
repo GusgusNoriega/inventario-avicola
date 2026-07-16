@@ -29,15 +29,9 @@ class PurchaseApiTest extends TestCase
             'codigo' => 'COMPRAS_TEST',
             'nombre' => 'Compras test',
         ]);
-        $this->role->permissions()->attach(Permission::query()->whereIn('codigo', [
-            'COMPRAS_VER',
-            'COMPRAS_REGISTRAR',
-            'COMPRAS_ANULAR',
-            'FINANZAS_VER',
-            'PAGOS_REGISTRAR',
-            'PAGOS_ANULAR',
-            'SALDOS_AJUSTAR',
-        ])->pluck('id'));
+        $this->role->permissions()->attach(
+            Permission::query()->where('codigo', 'MODULO_FINANZAS')->value('id')
+        );
         $this->user->roles()->attach($this->role);
         Sanctum::actingAs($this->user, ['api']);
     }
@@ -359,15 +353,15 @@ class PurchaseApiTest extends TestCase
             ->assertJsonPath('data.0.saldo', '100.00');
     }
 
-    public function test_cash_purchase_requires_payment_permission_and_purchases_are_tenant_scoped(): void
+    public function test_cash_purchase_requires_finance_module_and_purchases_are_tenant_scoped(): void
     {
         $provider = $this->provider('PROVEEDOR PERMISOS', '20100000007');
         $type = $this->chickenType();
         [, $ownAccount] = $this->financialAccount('PROPIA', null, 'CAJA PERMISOS');
         [, $providerAccount] = $this->financialAccount('EXTERNA', $provider, 'DESTINO PERMISOS');
         $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
-        $paymentPermission = Permission::query()->where('codigo', 'PAGOS_REGISTRAR')->value('id');
-        $this->role->permissions()->detach($paymentPermission);
+        $financeModule = Permission::query()->where('codigo', 'MODULO_FINANZAS')->value('id');
+        $this->role->permissions()->detach($financeModule);
 
         $this->postJson('/api/v1/compras', $this->purchasePayload(
             $provider,
@@ -381,6 +375,8 @@ class PurchaseApiTest extends TestCase
             ],
         ))->assertForbidden();
         $this->assertDatabaseCount('compras', 0);
+
+        $this->role->permissions()->attach($financeModule);
 
         $purchase = $this->postJson('/api/v1/compras', $this->purchasePayload(
             $provider,

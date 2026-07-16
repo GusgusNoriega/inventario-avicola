@@ -320,7 +320,7 @@ async function loadHistory(page = 1) {
     const response = await apiRequest(`/clientes/${clientId}/historial?${buildQuery(page)}`);
     renderClient(response.data.client);
     renderSummary(response.data.summary);
-    void loadFinance();
+    if (elements.financeSection) void loadFinance();
     renderTickets(response.data.tickets, response.meta);
     renderPriceHistory(response.data.price_history);
     renderPagination(response.meta);
@@ -339,6 +339,8 @@ async function loadHistory(page = 1) {
 }
 
 async function loadFinance() {
+  if (!elements.financeSection) return;
+
   try {
     const response = await apiRequest(`/finanzas/clientes/${clientId}/resumen`);
     renderFinance(response.data);

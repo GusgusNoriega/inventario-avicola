@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AccessModuleController;
+use App\Http\Controllers\Api\V1\AccountController;
+use App\Http\Controllers\Api\V1\AdminRoleController;
+use App\Http\Controllers\Api\V1\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
@@ -33,7 +37,12 @@ Route::prefix('v1')->group(function (): void {
     Route::post('/auth/login', [AuthController::class, 'login'])
         ->middleware('throttle:login');
 
-    Route::prefix('finanzas')->middleware(['auth:sanctum', 'active'])->group(function (): void {
+    Route::prefix('finanzas')->middleware([
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_FINANZAS',
+    ])->group(function (): void {
         Route::middleware('permission:FINANZAS_VER')->group(function (): void {
             Route::get('/entidades', [FinancialEntityController::class, 'index']);
             Route::get('/catalogo', [FinancialQueryController::class, 'catalog']);
@@ -73,7 +82,12 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:PAGOS_ANULAR');
     });
 
-    Route::prefix('compras')->middleware(['auth:sanctum', 'active'])->group(function (): void {
+    Route::prefix('compras')->middleware([
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_FINANZAS',
+    ])->group(function (): void {
         Route::middleware('permission:COMPRAS_VER')->group(function (): void {
             Route::get('/catalogo', [PurchaseController::class, 'catalog']);
             Route::get('/', [PurchaseController::class, 'index']);
@@ -88,35 +102,46 @@ Route::prefix('v1')->group(function (): void {
 
     $directoryMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:TERCEROS_GESTIONAR'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DIRECTORIO'];
+    $fleetMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_FLOTA'];
     $operationCatalogMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:DESPACHOS_VER'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA'];
+    $journeyReadMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA,MODULO_JORNADA_PROVEEDORES'];
+    $retailOneMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MINORISTA_1'];
+    $retailTwoMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MINORISTA_2'];
     $dailyTicketsMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:TICKETS_DIA_VER'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_RESUMEN_JORNADA'];
     $operationWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA'];
     $weighingManagementMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:PESADAS_GESTIONAR'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_GESTION_PESADAS'];
     $journeyWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR', 'permission:PRECIOS_GESTIONAR'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_JORNADA_PROVEEDORES'];
     $javaControlReadMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:DESPACHOS_VER'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_CONTROL_JAVAS'];
     $javaControlWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'permission:DESPACHOS_CREAR'];
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_CONTROL_JAVAS'];
     $priceMiddleware = config('directory.public_access')
         ? []
         : ['permission:PRECIOS_GESTIONAR'];
 
     Route::middleware($operationCatalogMiddleware)->group(function (): void {
         Route::get('/operacion/catalogo', [OperationCatalogController::class, 'index']);
-        Route::get('/operacion/jornada', [JourneyPlanController::class, 'show']);
 
         foreach ([
             'clientes' => TerceroRole::CLIENT,
@@ -126,16 +151,30 @@ Route::prefix('v1')->group(function (): void {
                 ->defaults('directory_role', $role);
         }
     });
+    Route::get('/operacion/jornada', [JourneyPlanController::class, 'show'])
+        ->middleware($journeyReadMiddleware);
     Route::get('/operacion/tickets-dia', [DailyDispatchTicketController::class, 'index'])
         ->middleware($dailyTicketsMiddleware);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
         ->middleware($operationWriteMiddleware);
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
-        ->middleware($operationCatalogMiddleware);
+        ->middleware($retailOneMiddleware);
     Route::put('/despacho-minorista/configuracion', [RetailDispatchController::class, 'updateConfiguration'])
-        ->middleware($operationWriteMiddleware);
+        ->middleware($retailOneMiddleware);
     Route::post('/despacho-minorista/tickets', [RetailDispatchController::class, 'store'])
-        ->middleware($operationWriteMiddleware);
+        ->middleware($retailOneMiddleware);
+    Route::prefix('despacho-minorista-2')
+        ->group(function () use ($retailTwoMiddleware): void {
+            Route::get('/catalogo', [RetailDispatchController::class, 'catalog'])
+                ->defaults('retail_station', 2)
+                ->middleware($retailTwoMiddleware);
+            Route::put('/configuracion', [RetailDispatchController::class, 'updateConfiguration'])
+                ->defaults('retail_station', 2)
+                ->middleware($retailTwoMiddleware);
+            Route::post('/tickets', [RetailDispatchController::class, 'store'])
+                ->defaults('retail_station', 2)
+                ->middleware($retailTwoMiddleware);
+        });
     Route::middleware($weighingManagementMiddleware)->group(function (): void {
         Route::get('/operacion/gestion-pesadas', [TicketWeighingManagementController::class, 'index']);
         Route::get('/operacion/tickets/{ticket}/pesadas', [TicketWeighingManagementController::class, 'show'])
@@ -158,12 +197,14 @@ Route::prefix('v1')->group(function (): void {
     Route::post('/control-javas/conteo-diario', [JavaControlController::class, 'storeDailyCount'])
         ->middleware($javaControlWriteMiddleware);
 
-    Route::middleware($directoryMiddleware)->group(function () use ($priceMiddleware): void {
+    Route::middleware($fleetMiddleware)->group(function (): void {
         Route::apiResource('camiones', TruckController::class)
             ->parameters(['camiones' => 'camion']);
         Route::apiResource('choferes', DriverController::class)
             ->parameters(['choferes' => 'chofer']);
+    });
 
+    Route::middleware($directoryMiddleware)->group(function () use ($priceMiddleware): void {
         Route::get('/clientes/{tercero}/historial', [CustomerHistoryController::class, 'show'])
             ->whereNumber('tercero');
         Route::get('/proveedores/{tercero}/historial', [ProviderHistoryController::class, 'show'])
@@ -205,6 +246,39 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('active')->group(function (): void {
             Route::get('/auth/me', [AuthController::class, 'me']);
+
+            Route::get('/account', [AccountController::class, 'show']);
+            Route::put('/account', [AccountController::class, 'update']);
+            Route::put('/account/password', [AccountController::class, 'password']);
+
+            Route::prefix('admin')->middleware([
+                'password.changed',
+                'module:MODULO_USUARIOS_ROLES',
+            ])->group(function (): void {
+                Route::get('/modules', [AccessModuleController::class, 'index']);
+
+                Route::get('/roles', [AdminRoleController::class, 'index']);
+                Route::post('/roles', [AdminRoleController::class, 'store']);
+                Route::get('/roles/{role}', [AdminRoleController::class, 'show'])
+                    ->whereNumber('role');
+                Route::put('/roles/{role}', [AdminRoleController::class, 'update'])
+                    ->whereNumber('role');
+                Route::delete('/roles/{role}', [AdminRoleController::class, 'destroy'])
+                    ->whereNumber('role');
+
+                Route::get('/users', [AdminUserController::class, 'index']);
+                Route::post('/users', [AdminUserController::class, 'store']);
+                Route::get('/users/{user}', [AdminUserController::class, 'show'])
+                    ->whereNumber('user');
+                Route::put('/users/{user}', [AdminUserController::class, 'update'])
+                    ->whereNumber('user');
+                Route::patch('/users/{user}/status', [AdminUserController::class, 'status'])
+                    ->whereNumber('user');
+                Route::post('/users/{user}/reset-password', [AdminUserController::class, 'resetPassword'])
+                    ->whereNumber('user');
+                Route::post('/users/{user}/revoke-sessions', [AdminUserController::class, 'revokeSessions'])
+                    ->whereNumber('user');
+            });
         });
     });
 });

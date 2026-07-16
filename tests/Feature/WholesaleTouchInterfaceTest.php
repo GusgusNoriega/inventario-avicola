@@ -2,12 +2,27 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use DOMDocument;
 use DOMXPath;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\InteractsWithAccessControl;
 use Tests\TestCase;
 
 class WholesaleTouchInterfaceTest extends TestCase
 {
+    use InteractsWithAccessControl;
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $user = User::factory()->create();
+        $this->makeAdministrator($user);
+        $this->actingAs($user);
+    }
+
     public function test_every_wholesale_text_and_number_field_exposes_a_touch_keyboard(): void
     {
         $html = $this->get('/operacion')

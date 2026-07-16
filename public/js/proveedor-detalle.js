@@ -299,7 +299,7 @@ async function loadProviderHistory(page = 1) {
     const response = await apiRequest(`/proveedores/${providerId}/historial?${buildQuery(page)}`);
     renderProvider(response.data.provider);
     renderSummary(response.data.summary);
-    void loadFinance();
+    if (elements.financeSection) void loadFinance();
     renderVehicles(response.data.vehicles);
     renderRecords(response.data.records, response.meta);
     renderPagination(response.meta);
@@ -315,6 +315,8 @@ async function loadProviderHistory(page = 1) {
 }
 
 async function loadFinance() {
+  if (!elements.financeSection || !elements.financeCurrency) return;
+
   const sequence = ++financeSequence;
   const params = new URLSearchParams();
   if (elements.financeCurrency.value) {
@@ -335,7 +337,7 @@ async function loadFinance() {
   }
 }
 
-elements.financeCurrency.addEventListener("change", () => void loadFinance());
+elements.financeCurrency?.addEventListener("change", () => void loadFinance());
 
 async function saveVehicle(event) {
   event.preventDefault();

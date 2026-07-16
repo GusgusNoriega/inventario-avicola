@@ -19,10 +19,12 @@
         <p id="providerMeta" class="customer-history-meta"></p>
       </div>
       <div class="directory-header-actions">
+        @if (auth()->user()->hasModule('MODULO_FINANZAS'))
         <a
           class="btn btn-primary directory-btn"
           href="{{ route('compras.create') }}?proveedor_id={{ request()->route('tercero') }}"
         >Registrar compra</a>
+        @endif
         <a class="menu-return-btn" href="{{ route('directorio') }}#proveedores">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M19 12H5"></path>
@@ -43,6 +45,7 @@
       <article class="directory-stat card directory-stat-accent"><span>Peso neto</span><strong id="providerNetWeight">0.000 kg</strong></article>
     </section>
 
+    @if (auth()->user()->hasModule('MODULO_FINANZAS'))
     <section id="providerFinanceSection" class="customer-history-section" aria-labelledby="providerFinanceTitle" hidden>
       <div class="customer-history-section-head">
         <div>
@@ -97,6 +100,7 @@
         </table>
       </div>
     </section>
+    @endif
 
     <section class="provider-vehicle-panel card" aria-labelledby="providerVehiclesTitle">
       <div class="customer-history-section-head">

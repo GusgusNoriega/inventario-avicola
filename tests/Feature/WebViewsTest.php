@@ -2,10 +2,25 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\InteractsWithAccessControl;
 use Tests\TestCase;
 
 class WebViewsTest extends TestCase
 {
+    use InteractsWithAccessControl;
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $user = User::factory()->create();
+        $this->makeAdministrator($user);
+        $this->actingAs($user);
+    }
+
     public function test_main_menu_is_the_application_home_page(): void
     {
         $this->get('/')
@@ -15,6 +30,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Despacho mayorista')
             ->assertSee(route('despacho-minorista'), false)
             ->assertSee('Despacho minorista')
+            ->assertSee(route('despacho-minorista-2'), false)
+            ->assertSee('Despacho minorista 2')
             ->assertDontSee('Registro de pesadas y balanzas')
             ->assertSee(route('tickets-dia'), false)
             ->assertSee('Resumen de la jornada')
@@ -266,9 +283,9 @@ class WebViewsTest extends TestCase
         $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
 
         $this->assertIsString($javascript);
-        $this->assertStringContainsString('/despacho-minorista/catalogo', $javascript);
-        $this->assertStringContainsString('/despacho-minorista/configuracion', $javascript);
-        $this->assertStringContainsString('/despacho-minorista/tickets', $javascript);
+        $this->assertStringContainsString('`${RETAIL_API_BASE}/catalogo`', $javascript);
+        $this->assertStringContainsString('`${RETAIL_API_BASE}/configuracion`', $javascript);
+        $this->assertStringContainsString('`${RETAIL_API_BASE}/tickets`', $javascript);
         $this->assertStringContainsString('adjustment_code', $javascript);
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
@@ -363,6 +380,40 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('--rd-font-table-cell:', $stylesheet);
         $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);
         $this->assertDoesNotMatchRegularExpression('/font-size:\s*(?:\d|\.)/', $stylesheet);
+    }
+
+    public function test_second_retail_dispatch_view_uses_an_independent_station_namespace(): void
+    {
+        $this->get('/despacho-minorista-2')
+            ->assertOk()
+            ->assertSee('Despacho minorista 2')
+            ->assertSee('data-retail-station="2"', false)
+            ->assertSee('data-retail-api-base="/despacho-minorista-2"', false)
+            ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo"  hidden', false)
+            ->assertDontSee('Seleccionar lista 1')
+            ->assertDontSee('data-retail-add-list=', false)
+            ->assertSee('Toca una columna para seleccionar la presentación.')
+            ->assertSee(asset('js/despacho-minorista.js'), false)
+            ->assertSee(asset('css/despacho-minorista.css'), false);
+
+        $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('station-${RETAIL_STATION}-branch', $javascript);
+        $this->assertStringContainsString('station-${RETAIL_STATION}`', $javascript);
+        $this->assertStringContainsString('state.catalog.scale?.code || "BALANZA_MINORISTA"', $javascript);
+        $this->assertStringContainsString('STATION_2_LIST_ADJUSTMENT_CODES', $javascript);
+        $this->assertStringContainsString('"MACHO_CERRADO"', $javascript);
+        $this->assertStringContainsString('"MACHO_ABIERTO"', $javascript);
+        $this->assertStringContainsString('"HEMBRA_CERRADA"', $javascript);
+        $this->assertStringContainsString('"HEMBRA_ABIERTA"', $javascript);
+        $this->assertStringContainsString('syncStation2AdjustmentWithActiveList()', $javascript);
+        $this->assertStringContainsString('elements.listSelectionHint.textContent = `Columna activa: ${activeFixedAdjustment.name}.`', $javascript);
+        $this->assertStringNotContainsString('fixedAdjustment.additional_grams', $javascript);
+
+        $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
+        $this->assertIsString($stylesheet);
+        $this->assertStringContainsString('[data-retail-station="2"] .rd-selection-bar', $stylesheet);
     }
 
     public function test_operation_view_is_available_without_database_queries(): void

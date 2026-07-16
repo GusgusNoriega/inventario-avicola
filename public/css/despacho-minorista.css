@@ -624,6 +624,19 @@ body.retail-dispatch-page {
   border-top: 3px solid #8e2930;
 }
 
+[data-retail-station="2"] .rd-selection-bar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-retail-station="2"] .rd-lists-stage {
+  grid-template-rows: 38px minmax(0, 1fr);
+}
+
+[data-retail-station="2"] .rd-add-buttons {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .rd-chicken-types,
 .rd-adjustment-buttons,
 .rd-add-buttons,

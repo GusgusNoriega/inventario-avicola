@@ -10,8 +10,5 @@ return [
     | en producción para exigir Sanctum y el permiso TERCEROS_GESTIONAR.
     |
     */
-    'public_access' => (bool) env(
-        'DIRECTORY_API_PUBLIC',
-        env('APP_ENV', 'production') === 'local'
-    ),
+    'public_access' => (bool) env('DIRECTORY_API_PUBLIC', false),
 ];

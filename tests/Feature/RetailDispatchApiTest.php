@@ -268,6 +268,64 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
+    public function test_second_retail_station_shares_clients_prices_and_adjustments_but_has_its_own_scale(): void
+    {
+        $this->getJson('/api/v1/despacho-minorista/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA');
+
+        $this->getJson('/api/v1/despacho-minorista-2/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.clients.0.id', $this->clientId)
+            ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.5)
+            ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA_2');
+
+        $this->putJson('/api/v1/despacho-minorista-2/configuracion', [
+            'scale' => [
+                'connection_mode' => 'BLUETOOTH',
+                'device' => 'Balanza puesto 2',
+                'configuration' => [
+                    'baudRate' => 19200,
+                    'dataBits' => 8,
+                    'stopBits' => 1,
+                    'parity' => 'none',
+                    'flowControl' => 'none',
+                    'profileId' => 'ble-station-2',
+                    'profileLabel' => 'Puesto 2',
+                ],
+            ],
+            'default_adjustment_code' => AjustePesoMinorista::MALE_CLOSED,
+            'adjustments' => [[
+                'code' => AjustePesoMinorista::MALE_CLOSED,
+                'additional_grams' => 135,
+            ]],
+        ])->assertOk()
+            ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA_2')
+            ->assertJsonPath('data.scale.device', 'Balanza puesto 2');
+
+        $this->assertDatabaseHas('balanzas', [
+            'sucursal_id' => $this->branchId,
+            'codigo' => 'BALANZA_MINORISTA',
+            'dispositivo' => null,
+        ]);
+        $this->assertDatabaseHas('balanzas', [
+            'sucursal_id' => $this->branchId,
+            'codigo' => 'BALANZA_MINORISTA_2',
+            'dispositivo' => 'Balanza puesto 2',
+        ]);
+
+        $this->getJson('/api/v1/despacho-minorista/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.scale.device', null)
+            ->assertJsonPath('data.adjustments.0.additional_grams', 135);
+
+        $payload = $this->payload();
+        $payload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA_2';
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.weighings.0.weight_source', 'BALANZA_MINORISTA_2');
+    }
+
     public function test_retail_dispatch_applies_adjustment_per_bird_and_stores_snapshots(): void
     {
         $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
