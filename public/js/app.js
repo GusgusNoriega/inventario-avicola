@@ -5,6 +5,8 @@ import { printWeightControlTicket } from "./ticket-printer.js";
 
 const CUSTOMER_DISPLAY_CHANNEL_NAME = "sistema-pollos-pantalla-cliente-v1";
 const CUSTOMER_DISPLAY_STORAGE_KEY = "sistema-pollos-pantalla-cliente-estado-v1";
+const CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY = "sistema-pollos-pantalla-cliente-productor-v1";
+const CUSTOMER_DISPLAY_PRODUCER_ID = getCustomerDisplayProducerId();
 const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
 const PERU_LOCALE = "es-PE";
 const PERU_TIME_ZONE = "America/Lima";
@@ -214,6 +216,23 @@ let liveDirectoryProviders = null;
 let operationCatalog = null;
 let dailyJourneyPlan = null;
 let directoryLoadPromise = null;
+
+function getCustomerDisplayProducerId() {
+  try {
+    const existingId = sessionStorage.getItem(CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY);
+    if (existingId) {
+      return existingId;
+    }
+
+    const generatedId = globalThis.crypto?.randomUUID?.()
+      || `despacho-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sessionStorage.setItem(CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY, generatedId);
+    return generatedId;
+  } catch {
+    return globalThis.crypto?.randomUUID?.()
+      || `despacho-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
 
 const elements = {
   backToMenuBtn: document.getElementById("backToMenuBtn"),
@@ -2382,6 +2401,9 @@ ensureDefaultOriginSelection(true);
 let customFontSizes = loadCustomFontSizes();
 let customerDisplayChannel = null;
 let lastCustomerDisplayStorageWrite = 0;
+let pendingCustomerDisplayStoragePayload = null;
+let customerDisplayStorageTimer = null;
+let customerDisplayRevision = 0;
 
 function normalizeFontSizeStep(step) {
   return FONT_SIZE_STEPS.includes(step) ? step : "normal";
@@ -2669,38 +2691,73 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function buildCustomerDisplayState(grossWeight = 0) {
+function getCurrentGrossWeight() {
+  const source = elements.weightSource.value;
+  const weight = Number(getWeightFromSource(source));
+  return Number.isFinite(weight) && weight >= 0 ? roundWeight(weight) : 0;
+}
+
+function buildCustomerDisplayState() {
   const selectedTruck = getSelectedTruck();
   const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, 0);
   const javaCount = normalizeJavaCount(elements.javaCount.value, 0);
-  const normalizedWeight = Number(grossWeight);
   const customerName = getTruckClientName(selectedTruck);
 
   return {
     type: "customer-display-state",
+    producerId: CUSTOMER_DISPLAY_PRODUCER_ID,
+    revision: ++customerDisplayRevision,
     customerName: customerName === "Sin destino asignado" ? "Sin cliente asignado" : customerName,
-    weightKg: Number.isFinite(normalizedWeight) && normalizedWeight >= 0 ? roundWeight(normalizedWeight) : 0,
+    weightKg: getCurrentGrossWeight(),
+    weightSource: elements.weightSource.value,
     cages: javaCount,
     birds: birdsPerJava > 0 ? calculateBirdTotal(birdsPerJava, javaCount) : 0,
     updatedAt: new Date().toISOString()
   };
 }
 
-function publishCustomerDisplayState(grossWeight = 0, forceStorage = false) {
-  const payload = buildCustomerDisplayState(grossWeight);
-  customerDisplayChannel?.postMessage(payload);
-
-  const now = Date.now();
-  if (!forceStorage && now - lastCustomerDisplayStorageWrite < 100) {
+function flushCustomerDisplayStorage() {
+  if (!pendingCustomerDisplayStoragePayload) {
     return;
   }
 
   try {
-    localStorage.setItem(CUSTOMER_DISPLAY_STORAGE_KEY, JSON.stringify(payload));
-    lastCustomerDisplayStorageWrite = now;
+    localStorage.setItem(
+      `${CUSTOMER_DISPLAY_STORAGE_KEY}:${CUSTOMER_DISPLAY_PRODUCER_ID}`,
+      JSON.stringify(pendingCustomerDisplayStoragePayload)
+    );
+    lastCustomerDisplayStorageWrite = Date.now();
+    pendingCustomerDisplayStoragePayload = null;
   } catch {
     // BroadcastChannel mantiene la pantalla en vivo si localStorage no está disponible.
   }
+}
+
+function persistCustomerDisplayState(payload, forceStorage = false) {
+  pendingCustomerDisplayStoragePayload = payload;
+  const remainingDelay = Math.max(100 - (Date.now() - lastCustomerDisplayStorageWrite), 0);
+
+  if (forceStorage || remainingDelay === 0) {
+    if (customerDisplayStorageTimer) {
+      window.clearTimeout(customerDisplayStorageTimer);
+      customerDisplayStorageTimer = null;
+    }
+    flushCustomerDisplayStorage();
+    return;
+  }
+
+  if (!customerDisplayStorageTimer) {
+    customerDisplayStorageTimer = window.setTimeout(() => {
+      customerDisplayStorageTimer = null;
+      flushCustomerDisplayStorage();
+    }, remainingDelay);
+  }
+}
+
+function publishCustomerDisplayState(forceStorage = false) {
+  const payload = buildCustomerDisplayState();
+  customerDisplayChannel?.postMessage(payload);
+  persistCustomerDisplayState(payload, forceStorage);
 }
 
 function initializeCustomerDisplaySync() {
@@ -2710,8 +2767,11 @@ function initializeCustomerDisplaySync() {
 
   customerDisplayChannel = new BroadcastChannel(CUSTOMER_DISPLAY_CHANNEL_NAME);
   customerDisplayChannel.addEventListener("message", (event) => {
-    if (event.data?.type === "customer-display-request") {
-      publishCustomerDisplayState(getWeightFromSource(elements.weightSource.value), true);
+    if (
+      event.data?.type === "customer-display-request"
+      && (!event.data.producerId || event.data.producerId === CUSTOMER_DISPLAY_PRODUCER_ID)
+    ) {
+      publishCustomerDisplayState(true);
     }
   });
 }
@@ -4515,13 +4575,13 @@ function renderWeightPreview() {
   if (!Number.isFinite(grossWeight) || grossWeight < 0) {
     elements.selectedWeightValue.textContent = "--";
     elements.selectedWeightBreakdown.textContent = "";
-    publishCustomerDisplayState(0);
+    publishCustomerDisplayState();
     return;
   }
 
   elements.selectedWeightValue.textContent = formatWeight(Math.max(grossWeight, 0));
   elements.selectedWeightBreakdown.textContent = "";
-  publishCustomerDisplayState(Math.max(grossWeight, 0));
+  publishCustomerDisplayState();
 }
 
 function renderClientList(truckId) {
@@ -6406,20 +6466,23 @@ function isInstalledDesktopApplication() {
 }
 
 function openCustomerDisplay(event) {
-  if (!isInstalledDesktopApplication()) {
+  event.preventDefault();
+  const displayHref = elements.openCustomerDisplayBtn?.href;
+  if (!displayHref) {
     return;
   }
 
-  event.preventDefault();
-  const displayUrl = elements.openCustomerDisplayBtn?.href;
-  if (!displayUrl) {
-    return;
-  }
+  const displayUrl = new URL(displayHref, window.location.href);
+  displayUrl.searchParams.set("source", CUSTOMER_DISPLAY_PRODUCER_ID);
+  const windowName = `pantalla-cliente-${CUSTOMER_DISPLAY_PRODUCER_ID}`;
+  const windowFeatures = isInstalledDesktopApplication()
+    ? "popup=yes,width=1280,height=800,resizable=yes,scrollbars=no"
+    : "";
 
   const displayWindow = window.open(
-    displayUrl,
-    "pantalla-cliente",
-    "popup=yes,width=1280,height=800,resizable=yes,scrollbars=no"
+    displayUrl.toString(),
+    windowName,
+    windowFeatures
   );
 
   if (displayWindow) {

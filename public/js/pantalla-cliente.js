@@ -1,5 +1,7 @@
 const CHANNEL_NAME = "sistema-pollos-pantalla-cliente-v1";
-const STORAGE_KEY = "sistema-pollos-pantalla-cliente-estado-v1";
+const STORAGE_KEY_PREFIX = "sistema-pollos-pantalla-cliente-estado-v1";
+const PRODUCER_ID = new URLSearchParams(window.location.search).get("source") || "";
+const STORAGE_KEY = PRODUCER_ID ? `${STORAGE_KEY_PREFIX}:${PRODUCER_ID}` : STORAGE_KEY_PREFIX;
 
 const elements = {
   name: document.getElementById("customerDisplayName"),
@@ -12,6 +14,8 @@ const elements = {
 
 let channel = null;
 let lastUpdateAt = 0;
+let lastPayloadTimestamp = 0;
+let lastRevision = 0;
 
 function normalizeCount(value) {
   const count = Math.trunc(Number(value));
@@ -19,7 +23,24 @@ function normalizeCount(value) {
 }
 
 function renderPayload(payload) {
-  if (!payload || payload.type !== "customer-display-state") {
+  if (
+    !payload
+    || payload.type !== "customer-display-state"
+    || (PRODUCER_ID && payload.producerId !== PRODUCER_ID)
+  ) {
+    return;
+  }
+
+  const payloadTimestamp = Date.parse(payload.updatedAt || "");
+  const payloadRevision = Number(payload.revision);
+  if (
+    (Number.isFinite(payloadRevision) && payloadRevision > 0 && payloadRevision <= lastRevision)
+    || (
+      (!Number.isFinite(payloadRevision) || payloadRevision <= 0)
+      && Number.isFinite(payloadTimestamp)
+      && payloadTimestamp < lastPayloadTimestamp
+    )
+  ) {
     return;
   }
 
@@ -30,6 +51,12 @@ function renderPayload(payload) {
   elements.birds.textContent = String(normalizeCount(payload.birds));
   elements.status.textContent = "En vivo";
   elements.status.classList.remove("is-waiting");
+  if (Number.isFinite(payloadRevision) && payloadRevision > 0) {
+    lastRevision = payloadRevision;
+  }
+  if (Number.isFinite(payloadTimestamp)) {
+    lastPayloadTimestamp = payloadTimestamp;
+  }
   lastUpdateAt = Date.now();
 }
 
@@ -42,8 +69,10 @@ function readStoredState() {
 }
 
 function requestCurrentState() {
-  channel?.postMessage({ type: "customer-display-request" });
-  readStoredState();
+  channel?.postMessage({
+    type: "customer-display-request",
+    producerId: PRODUCER_ID
+  });
 }
 
 if ("BroadcastChannel" in window) {

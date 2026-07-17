@@ -53,13 +53,38 @@ class CustomerDisplayTest extends TestCase
         $this->assertStringContainsString('(display-mode: ${mode})', $operationJavascript);
         $this->assertStringContainsString('function openCustomerDisplay(event)', $operationJavascript);
         $this->assertStringContainsString('window.open(', $operationJavascript);
-        $this->assertStringContainsString('"pantalla-cliente"', $operationJavascript);
-        $this->assertStringContainsString('publishCustomerDisplayState(Math.max(grossWeight, 0))', $operationJavascript);
+        $this->assertStringContainsString('CUSTOMER_DISPLAY_PRODUCER_ID', $operationJavascript);
+        $this->assertStringContainsString('displayUrl.searchParams.set("source", CUSTOMER_DISPLAY_PRODUCER_ID)', $operationJavascript);
+        $this->assertStringContainsString('function getCurrentGrossWeight()', $operationJavascript);
+        $this->assertStringContainsString('weightKg: getCurrentGrossWeight()', $operationJavascript);
+        $this->assertStringContainsString('weightSource: elements.weightSource.value', $operationJavascript);
+        $this->assertStringContainsString('revision: ++customerDisplayRevision', $operationJavascript);
+        $this->assertStringContainsString('publishCustomerDisplayState();', $operationJavascript);
+        $this->assertStringContainsString('pendingCustomerDisplayStoragePayload', $operationJavascript);
         $this->assertStringContainsString('customerName:', $operationJavascript);
         $this->assertStringContainsString('cages: javaCount', $operationJavascript);
         $this->assertStringContainsString('calculateBirdTotal(birdsPerJava, javaCount)', $operationJavascript);
         $this->assertStringContainsString('new BroadcastChannel(CHANNEL_NAME)', $displayJavascript);
+        $this->assertStringContainsString('payload.producerId !== PRODUCER_ID', $displayJavascript);
         $this->assertStringContainsString('window.addEventListener("storage"', $displayJavascript);
         $this->assertStringContainsString('customer-display-request', $displayJavascript);
+        $this->assertStringContainsString('payloadTimestamp < lastPayloadTimestamp', $displayJavascript);
+        $this->assertStringContainsString('payloadRevision <= lastRevision', $displayJavascript);
+
+        $requestStart = strpos($displayJavascript, 'function requestCurrentState()');
+        $requestEnd = strpos($displayJavascript, "\n}", $requestStart);
+        $this->assertNotFalse($requestStart);
+        $this->assertNotFalse($requestEnd);
+        $requestFlow = substr($displayJavascript, $requestStart, $requestEnd - $requestStart);
+        $this->assertStringContainsString('channel?.postMessage', $requestFlow);
+        $this->assertStringNotContainsString('readStoredState()', $requestFlow);
+
+        $grossWeightStart = strpos($operationJavascript, 'function getCurrentGrossWeight()');
+        $grossWeightEnd = strpos($operationJavascript, "\n}", $grossWeightStart);
+        $this->assertNotFalse($grossWeightStart);
+        $this->assertNotFalse($grossWeightEnd);
+        $grossWeightFlow = substr($operationJavascript, $grossWeightStart, $grossWeightEnd - $grossWeightStart);
+        $this->assertStringContainsString('elements.weightSource.value', $grossWeightFlow);
+        $this->assertStringContainsString('getWeightFromSource(source)', $grossWeightFlow);
     }
 }
