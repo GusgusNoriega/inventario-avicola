@@ -50,6 +50,211 @@
   --fs-keypad-number: 29px;
 }
 
+/* Instalacion de la PWA */
+html:has(body.pwa-install-page) {
+  min-height: 100%;
+  background: #050b0a;
+}
+
+.pwa-install-page {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at 12% 0, rgba(43, 199, 255, 0.16), transparent 30rem),
+    radial-gradient(circle at 92% 90%, rgba(255, 208, 42, 0.10), transparent 32rem),
+    #050b0a;
+}
+
+.pwa-install-shell {
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.pwa-install-header {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 20px;
+}
+
+.pwa-install-header h1,
+.pwa-install-card h2,
+.pwa-install-info h2 {
+  margin: 0;
+  color: #fff;
+}
+
+.pwa-install-header p:last-child,
+.pwa-install-card p,
+.pwa-install-info p,
+.pwa-install-info li {
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.pwa-install-header p:last-child {
+  margin: 7px 0 0;
+}
+
+.pwa-install-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.75fr);
+  gap: 18px;
+}
+
+.pwa-install-card,
+.pwa-install-info {
+  padding: 28px;
+  border-top: 4px solid var(--primary);
+}
+
+.pwa-install-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 22px;
+}
+
+.pwa-install-card > img {
+  border-radius: 24px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.pwa-install-card .eyebrow {
+  margin-top: 0;
+}
+
+.pwa-install-button,
+.pwa-install-status,
+.pwa-install-notice {
+  grid-column: 1 / -1;
+}
+
+.pwa-install-button {
+  min-height: 58px;
+  padding: 13px 22px;
+  border: 1px solid #68dcff;
+  border-radius: 10px;
+  color: #001117;
+  background: linear-gradient(180deg, #5bd8ff, #2bb8eb);
+  box-shadow: 0 10px 24px rgba(43, 199, 255, 0.18);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.pwa-install-button:hover:not(:disabled),
+.pwa-install-button:focus-visible:not(:disabled) {
+  background: #82e4ff;
+  outline: 3px solid rgba(91, 216, 255, 0.26);
+  outline-offset: 3px;
+}
+
+.pwa-install-button:disabled {
+  border-color: #454b4c;
+  color: #92999a;
+  background: #202526;
+  box-shadow: none;
+  cursor: wait;
+}
+
+.pwa-install-status {
+  min-height: 24px;
+  margin: -8px 0 0;
+  color: #b9edff;
+  font-weight: 700;
+}
+
+.pwa-install-status.is-error {
+  color: #ff9a9a;
+}
+
+.pwa-install-notice {
+  padding: 14px 16px;
+  border: 1px solid #705f28;
+  border-radius: 9px;
+  color: #f7e3a1;
+  background: #1b1709;
+  line-height: 1.5;
+}
+
+.pwa-install-notice.is-success {
+  border-color: #247f4c;
+  color: #b5f3cf;
+  background: #081d12;
+}
+
+.pwa-install-info {
+  border-top-color: var(--secondary);
+}
+
+.pwa-install-info > a {
+  display: inline-block;
+  margin-top: 14px;
+  color: #8ae4ff;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.pwa-install-info ol {
+  margin: 22px 0;
+  padding-left: 22px;
+}
+
+.pwa-install-info li + li {
+  margin-top: 9px;
+}
+
+.menu-tile-install {
+  border-color: #247f4c;
+  background: linear-gradient(180deg, #102b20, #080b09);
+}
+
+.menu-tile-install .menu-tile-icon {
+  border-color: #247f4c;
+  color: #55e494;
+}
+
+.menu-tile-install .menu-status {
+  border-color: #247f4c;
+  color: #b5f3cf;
+  background: #081d12;
+}
+
+@media (max-width: 760px) {
+  .pwa-install-shell {
+    width: min(100% - 20px, 680px);
+    padding-top: 16px;
+  }
+
+  .pwa-install-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pwa-install-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pwa-install-card,
+  .pwa-install-info {
+    padding: 20px;
+  }
+
+  .pwa-install-card {
+    grid-template-columns: 1fr;
+  }
+
+  .pwa-install-button,
+  .pwa-install-status,
+  .pwa-install-notice {
+    grid-column: 1;
+  }
+}
+
 /* Despacho minorista con bandejas */
 html.retail-dispatch-root,
 body.retail-dispatch-page {

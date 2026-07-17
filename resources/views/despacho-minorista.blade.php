@@ -8,6 +8,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  @include('partials.pwa')
   <title>{{ $retailTitle }} | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ filemtime(public_path('css/style.css')) }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-minorista.css') }}?v={{ filemtime(public_path('css/despacho-minorista.css')) }}">

@@ -15,6 +15,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::middleware('password.changed')->group(function (): void {
         Route::view('/', 'menu')->name('menu');
 
+        Route::view('/instalar', 'install-app')->name('install-app');
+
         Route::view('/operacion', 'operacion')
             ->middleware('module:MODULO_DESPACHO_MAYORISTA')
             ->name('operacion');

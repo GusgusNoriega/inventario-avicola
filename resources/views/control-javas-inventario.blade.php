@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  @include('partials.pwa')
   <title>Inventario de Javas y Bandejas | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>

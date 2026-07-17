@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  @include('partials.pwa')
   <meta name="color-scheme" content="dark">
   <title>Iniciar sesión | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">

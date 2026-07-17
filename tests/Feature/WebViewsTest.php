@@ -46,11 +46,31 @@ class WebViewsTest extends TestCase
             ->assertDontSee(route('compras.index'), false)
             ->assertDontSee('Compras a proveedores')
             ->assertSee(route('control-javas'), false)
+            ->assertSee(route('install-app'), false)
             ->assertSee('Control de javas y bandejas')
             ->assertSee('Mi flota y choferes')
             ->assertDontSee('Facturación')
             ->assertDontSee('Ingresos y despachos')
             ->assertDontSee('data-future-view', false);
+    }
+
+    public function test_install_application_view_exposes_the_direct_pwa_prompt(): void
+    {
+        $this->get('/instalar')
+            ->assertOk()
+            ->assertSee('id="installPwaButton"', false)
+            ->assertSee('https://sada-csa.com/', false)
+            ->assertSee(asset('js/install-app.js'), false)
+            ->assertSee(asset('manifest.webmanifest'), false)
+            ->assertSee(route('menu'), false);
+
+        $javascript = (string) file_get_contents(public_path('js/install-app.js'));
+        $registration = (string) file_get_contents(public_path('js/pwa-register.js'));
+
+        $this->assertStringContainsString('window.deferredPwaInstallPrompt', $javascript);
+        $this->assertStringContainsString('promptEvent.prompt()', $javascript);
+        $this->assertStringContainsString('beforeinstallprompt', $registration);
+        $this->assertStringContainsString('event.preventDefault()', $registration);
     }
 
     public function test_financial_views_are_available_without_database_queries(): void

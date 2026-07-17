@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  @include('partials.pwa')
   <title>Menú Principal | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
@@ -263,6 +264,21 @@
           <span class="menu-status">Administrar</span>
         </a>
         @endif
+
+        <a class="menu-tile menu-tile-primary menu-tile-install" href="{{ route('install-app') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 3v12"></path>
+              <path d="m7 10 5 5 5-5"></path>
+              <path d="M5 19h14"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Instalar aplicación</strong>
+            <small>Agregar Sistema Pollos a Windows en segundos</small>
+          </span>
+          <span class="menu-status">Instalar</span>
+        </a>
 
       </nav>
     </div>
