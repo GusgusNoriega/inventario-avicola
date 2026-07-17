@@ -217,6 +217,7 @@ let directoryLoadPromise = null;
 
 const elements = {
   backToMenuBtn: document.getElementById("backToMenuBtn"),
+  openCustomerDisplayBtn: document.getElementById("openCustomerDisplayBtn"),
   appShell: document.getElementById("appShell"),
   form: document.getElementById("cageForm"),
   addWeighingBtn: document.getElementById("addWeighingBtn"),
@@ -6395,7 +6396,41 @@ function resetDay() {
   setFormMessage("Jornada reiniciada.");
 }
 
+function isInstalledDesktopApplication() {
+  const installedDisplayMode = ["standalone", "window-controls-overlay", "tabbed"]
+    .some((mode) => window.matchMedia(`(display-mode: ${mode})`).matches);
+  const isMobileDevice = navigator.userAgentData?.mobile === true
+    || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+
+  return installedDisplayMode && !isMobileDevice;
+}
+
+function openCustomerDisplay(event) {
+  if (!isInstalledDesktopApplication()) {
+    return;
+  }
+
+  event.preventDefault();
+  const displayUrl = elements.openCustomerDisplayBtn?.href;
+  if (!displayUrl) {
+    return;
+  }
+
+  const displayWindow = window.open(
+    displayUrl,
+    "pantalla-cliente",
+    "popup=yes,width=1280,height=800,resizable=yes,scrollbars=no"
+  );
+
+  if (displayWindow) {
+    displayWindow.focus();
+  } else {
+    setFormMessage("La aplicación bloqueó la nueva ventana. Habilita las ventanas emergentes e inténtalo nuevamente.", true);
+  }
+}
+
 function bindEvents() {
+  elements.openCustomerDisplayBtn?.addEventListener("click", openCustomerDisplay);
   elements.backToMenuBtn?.addEventListener("click", () => {
     closeTextTouchKeyboard(true, false);
     closeNumericPad();

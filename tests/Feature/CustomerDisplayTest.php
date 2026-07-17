@@ -49,6 +49,11 @@ class CustomerDisplayTest extends TestCase
         $displayJavascript = (string) file_get_contents(public_path('js/pantalla-cliente.js'));
 
         $this->assertStringContainsString('new BroadcastChannel(CUSTOMER_DISPLAY_CHANNEL_NAME)', $operationJavascript);
+        $this->assertStringContainsString('function isInstalledDesktopApplication()', $operationJavascript);
+        $this->assertStringContainsString('(display-mode: ${mode})', $operationJavascript);
+        $this->assertStringContainsString('function openCustomerDisplay(event)', $operationJavascript);
+        $this->assertStringContainsString('window.open(', $operationJavascript);
+        $this->assertStringContainsString('"pantalla-cliente"', $operationJavascript);
         $this->assertStringContainsString('publishCustomerDisplayState(Math.max(grossWeight, 0))', $operationJavascript);
         $this->assertStringContainsString('customerName:', $operationJavascript);
         $this->assertStringContainsString('cages: javaCount', $operationJavascript);

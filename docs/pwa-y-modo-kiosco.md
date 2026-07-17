@@ -16,6 +16,12 @@ Sistema Pollos puede instalarse en Windows como PWA y también abrirse mediante 
 
 La PWA mejora la presentación, pero el usuario todavía puede cerrar o restaurar su ventana. Para una pantalla operativa fija use además el acceso directo kiosco.
 
+### Pantalla del cliente en un segundo monitor
+
+Desde la aplicación instalada en Windows, el botón **Pantalla cliente** abre una segunda ventana de Sistema Pollos. Muévala al monitor frontal y active **Pantalla completa**. Ambas ventanas permanecen sincronizadas en tiempo real.
+
+Si el sistema se abre en una pestaña normal de Edge o Chrome, el mismo botón abre una pestaña del navegador. Las PWA instaladas en Windows no ofrecen actualmente una barra de pestañas nativa; por eso se utiliza una segunda ventana de la misma aplicación, que además puede trasladarse de forma independiente al segundo monitor.
+
 ## Crear el acceso directo kiosco
 
 Abra PowerShell en la carpeta del proyecto y ejecute:
