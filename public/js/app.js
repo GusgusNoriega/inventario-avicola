@@ -3,6 +3,8 @@
 import { apiRequest } from "./api-client.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
 
+const CUSTOMER_DISPLAY_CHANNEL_NAME = "sistema-pollos-pantalla-cliente-v1";
+const CUSTOMER_DISPLAY_STORAGE_KEY = "sistema-pollos-pantalla-cliente-estado-v1";
 const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
 const PERU_LOCALE = "es-PE";
 const PERU_TIME_ZONE = "America/Lima";
@@ -2377,6 +2379,8 @@ let state = loadState();
 reconcileTruckClientAssignments(true);
 ensureDefaultOriginSelection(true);
 let customFontSizes = loadCustomFontSizes();
+let customerDisplayChannel = null;
+let lastCustomerDisplayStorageWrite = 0;
 
 function normalizeFontSizeStep(step) {
   return FONT_SIZE_STEPS.includes(step) ? step : "normal";
@@ -2662,6 +2666,53 @@ function openScaleSettings(scaleId) {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function buildCustomerDisplayState(grossWeight = 0) {
+  const selectedTruck = getSelectedTruck();
+  const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, 0);
+  const javaCount = normalizeJavaCount(elements.javaCount.value, 0);
+  const normalizedWeight = Number(grossWeight);
+  const customerName = getTruckClientName(selectedTruck);
+
+  return {
+    type: "customer-display-state",
+    customerName: customerName === "Sin destino asignado" ? "Sin cliente asignado" : customerName,
+    weightKg: Number.isFinite(normalizedWeight) && normalizedWeight >= 0 ? roundWeight(normalizedWeight) : 0,
+    cages: javaCount,
+    birds: birdsPerJava > 0 ? calculateBirdTotal(birdsPerJava, javaCount) : 0,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function publishCustomerDisplayState(grossWeight = 0, forceStorage = false) {
+  const payload = buildCustomerDisplayState(grossWeight);
+  customerDisplayChannel?.postMessage(payload);
+
+  const now = Date.now();
+  if (!forceStorage && now - lastCustomerDisplayStorageWrite < 100) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(CUSTOMER_DISPLAY_STORAGE_KEY, JSON.stringify(payload));
+    lastCustomerDisplayStorageWrite = now;
+  } catch {
+    // BroadcastChannel mantiene la pantalla en vivo si localStorage no está disponible.
+  }
+}
+
+function initializeCustomerDisplaySync() {
+  if (!("BroadcastChannel" in window)) {
+    return;
+  }
+
+  customerDisplayChannel = new BroadcastChannel(CUSTOMER_DISPLAY_CHANNEL_NAME);
+  customerDisplayChannel.addEventListener("message", (event) => {
+    if (event.data?.type === "customer-display-request") {
+      publishCustomerDisplayState(getWeightFromSource(elements.weightSource.value), true);
+    }
+  });
 }
 
 function reconcileTruckClientAssignments(shouldSave = false) {
@@ -4463,11 +4514,13 @@ function renderWeightPreview() {
   if (!Number.isFinite(grossWeight) || grossWeight < 0) {
     elements.selectedWeightValue.textContent = "--";
     elements.selectedWeightBreakdown.textContent = "";
+    publishCustomerDisplayState(0);
     return;
   }
 
   elements.selectedWeightValue.textContent = formatWeight(Math.max(grossWeight, 0));
   elements.selectedWeightBreakdown.textContent = "";
+  publishCustomerDisplayState(Math.max(grossWeight, 0));
 }
 
 function renderClientList(truckId) {
@@ -6751,6 +6804,7 @@ function bindEvents() {
     elements.truckSelect.value = truckId;
     renderTypeButtons();
     renderEntryProviderSelection();
+    renderWeightPreview();
     renderTruckColumns();
     renderSelectedTruckDetails();
   });
@@ -6781,6 +6835,7 @@ renderFontSizeControls();
 bindEvents();
 bindResponsiveLayout();
 initializeMobilePanelFromHash();
+initializeCustomerDisplaySync();
 renderAll();
 const hasRememberedScaleConnection = SCALE_IDS.some((scaleId) => {
   return Boolean(getScaleState(scaleId).autoConnectMode);

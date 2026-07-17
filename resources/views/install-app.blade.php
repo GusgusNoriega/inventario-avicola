@@ -45,7 +45,7 @@
         </div>
 
         <div id="waitingPwaPanel" class="pwa-install-notice" hidden>
-          Si el botón no se habilita, abre esta página en Microsoft Edge o Google Chrome y verifica que el sitio use HTTPS. También puedes elegir <strong>Instalar Sistema Pollos</strong> desde el menú del navegador.
+          Si el botón no se habilita, abre esta página en Microsoft Edge o Google Chrome, recarga una vez y verifica que el sitio use HTTPS. También puedes elegir <strong>Instalar Sistema Pollos</strong> desde el menú del navegador.
         </div>
       </article>
 

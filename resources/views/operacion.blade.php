@@ -59,6 +59,13 @@
         </div>
         <div class="hero-actions">
           <div class="hero-menu-row">
+            <a id="openCustomerDisplayBtn" class="menu-return-btn customer-display-link" href="{{ route('operacion.pantalla-cliente') }}" target="pantalla-cliente">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="3" y="4" width="18" height="13" rx="2"></rect>
+                <path d="M8 21h8M12 17v4"></path>
+              </svg>
+              <span>Pantalla cliente</span>
+            </a>
             <a id="backToMenuBtn" class="menu-return-btn" href="{{ route('menu') }}">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M4 6h7v7H4z"></path>

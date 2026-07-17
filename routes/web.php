@@ -21,6 +21,10 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             ->middleware('module:MODULO_DESPACHO_MAYORISTA')
             ->name('operacion');
 
+        Route::view('/operacion/pantalla-cliente', 'pantalla-cliente')
+            ->middleware('module:MODULO_DESPACHO_MAYORISTA')
+            ->name('operacion.pantalla-cliente');
+
         Route::view('/despacho-minorista', 'despacho-minorista')
             ->middleware('module:MODULO_DESPACHO_MINORISTA_1')
             ->name('despacho-minorista');

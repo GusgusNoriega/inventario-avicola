@@ -43,6 +43,16 @@ function refreshInstallState() {
   }
 }
 
+function showInstallError(event) {
+  if (installButton) {
+    installButton.disabled = true;
+    installButton.textContent = "Instalación no disponible";
+  }
+
+  waitingPanel?.removeAttribute("hidden");
+  setStatus(event.detail || "No fue posible preparar la instalación en este navegador.", true);
+}
+
 async function installApplication() {
   const promptEvent = window.deferredPwaInstallPrompt;
   if (!promptEvent || !installButton) {
@@ -74,6 +84,7 @@ async function installApplication() {
 installButton?.addEventListener("click", installApplication);
 window.addEventListener("pwa-install-ready", refreshInstallState);
 window.addEventListener("pwa-install-complete", refreshInstallState);
+window.addEventListener("pwa-install-error", showInstallError);
 window.matchMedia("(display-mode: standalone)").addEventListener?.("change", refreshInstallState);
 
 refreshInstallState();
