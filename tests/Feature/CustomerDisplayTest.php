@@ -38,6 +38,8 @@ class CustomerDisplayTest extends TestCase
             ->assertSee('id="customerDisplayWeight"', false)
             ->assertSee('id="customerDisplayCages"', false)
             ->assertSee('id="customerDisplayBirds"', false)
+            ->assertSee('id="customerDisplayChooseScreen"', false)
+            ->assertSee('id="customerDisplayScreenDialog"', false)
             ->assertSee(asset('js/pantalla-cliente.js'), false)
             ->assertDontSee('Precio')
             ->assertDontSee('Registrar');
@@ -70,6 +72,9 @@ class CustomerDisplayTest extends TestCase
         $this->assertStringContainsString('customer-display-request', $displayJavascript);
         $this->assertStringContainsString('payloadTimestamp < lastPayloadTimestamp', $displayJavascript);
         $this->assertStringContainsString('payloadRevision <= lastRevision', $displayJavascript);
+        $this->assertStringContainsString('window.getScreenDetails()', $displayJavascript);
+        $this->assertStringContainsString('requestFullscreen({', $displayJavascript);
+        $this->assertStringContainsString('screen', $displayJavascript);
 
         $requestStart = strpos($displayJavascript, 'function requestCurrentState()');
         $requestEnd = strpos($displayJavascript, "\n}", $requestStart);

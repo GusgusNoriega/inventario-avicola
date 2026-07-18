@@ -15,6 +15,7 @@
       </div>
       <div class="customer-display-actions">
         <span id="customerDisplayStatus" class="customer-display-status is-waiting">Esperando despacho</span>
+        <button id="customerDisplayChooseScreen" type="button">Elegir pantalla</button>
         <button id="customerDisplayFullscreen" type="button">Pantalla completa</button>
       </div>
     </header>
@@ -35,6 +36,21 @@
       </article>
     </section>
   </main>
+
+  <dialog id="customerDisplayScreenDialog" class="customer-display-screen-dialog" aria-labelledby="customerDisplayScreenTitle">
+    <div class="customer-display-screen-dialog__header">
+      <div>
+        <p class="customer-display-screen-dialog__eyebrow">Monitores disponibles</p>
+        <h2 id="customerDisplayScreenTitle">Selecciona dónde mostrar esta vista</h2>
+      </div>
+      <button id="customerDisplayScreenClose" class="customer-display-screen-dialog__close" type="button" aria-label="Cerrar">&times;</button>
+    </div>
+    <p id="customerDisplayScreenHelp" class="customer-display-screen-dialog__help">
+      Al seleccionar un monitor, esta vista se abrirá allí en pantalla completa.
+    </p>
+    <div id="customerDisplayScreenList" class="customer-display-screen-list" role="list"></div>
+    <p id="customerDisplayScreenFeedback" class="customer-display-screen-feedback" role="status" aria-live="polite"></p>
+  </dialog>
 
   <script type="module" src="{{ asset('js/pantalla-cliente.js') }}?v={{ filemtime(public_path('js/pantalla-cliente.js')) }}"></script>
 </body>
