@@ -31,14 +31,16 @@ class PwaInstallationTest extends TestCase
         $this->assertCount(3, $manifest['icons']);
     }
 
-    public function test_pwa_updates_scripts_and_styles_without_a_hard_refresh(): void
+    public function test_pwa_updates_all_static_assets_without_a_hard_refresh(): void
     {
         $serviceWorker = (string) file_get_contents(public_path('service-worker.js'));
         $registration = (string) file_get_contents(public_path('js/pwa-register.js'));
 
         $this->assertStringContainsString('sistema-pollos-static-v3', $serviceWorker);
-        $this->assertStringContainsString('["style", "script"]', $serviceWorker);
+        $this->assertStringContainsString('["style", "script", "image", "font"]', $serviceWorker);
         $this->assertStringContainsString('fetch(request, { cache: "no-cache" })', $serviceWorker);
+        $this->assertStringContainsString('.catch(() => caches.match(request))', $serviceWorker);
+        $this->assertStringNotContainsString('caches.match(request).then((cached)', $serviceWorker);
         $this->assertStringContainsString('controllerchange', $registration);
         $this->assertStringContainsString('updateViaCache: "none"', $registration);
         $this->assertStringContainsString('registration.update()', $registration);

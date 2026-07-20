@@ -34,30 +34,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const prefersFreshResponse = ["style", "script"].includes(request.destination);
-
-  if (prefersFreshResponse) {
-    event.respondWith(
-      fetch(request, { cache: "no-cache" }).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
-        }
-
-        return response;
-      }).catch(() => caches.match(request))
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+    fetch(request, { cache: "no-cache" }).then((response) => {
       if (response.ok) {
         const copy = response.clone();
         caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
       }
 
       return response;
-    }))
+    }).catch(() => caches.match(request))
   );
 });

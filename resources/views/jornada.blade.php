@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   @include('partials.pwa')
   <title>Configurar jornada | Sistema Pollos</title>
-  <link rel="stylesheet" href="{{ asset('css/style.css') }}?v={{ md5_file(public_path('css/style.css')) }}">
+  <link rel="stylesheet" href="{{ asset('css/style.css') }}">
 </head>
 <body class="journey-page">
   <main class="journey-shell">
@@ -74,6 +74,6 @@
     </section>
   </main>
 
-  <script type="module" src="{{ asset('js/jornada.js') }}?v={{ md5_file(public_path('js/jornada.js')) }}"></script>
+  <script type="module" src="{{ asset('js/jornada.js') }}"></script>
 </body>
 </html>
