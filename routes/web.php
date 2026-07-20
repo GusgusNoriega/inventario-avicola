@@ -34,6 +34,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             'retailApiBase' => '/despacho-minorista-2',
         ])->middleware('module:MODULO_DESPACHO_MINORISTA_2')
             ->name('despacho-minorista-2');
+        Route::view('/precios-jornada', 'precios-jornada')
+            ->middleware('module:MODULO_DESPACHO_MINORISTA_1,MODULO_DESPACHO_MINORISTA_2')
+            ->name('precios-jornada');
 
         Route::view('/tickets-dia', 'tickets-dia')
             ->middleware('module:MODULO_RESUMEN_JORNADA')

@@ -114,6 +114,26 @@
         </a>
         @endif
 
+        @if ($user->hasModule('MODULO_DESPACHO_MINORISTA_1') || $user->hasModule('MODULO_DESPACHO_MINORISTA_2'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('precios-jornada') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 4h14v16H5z"></path>
+              <path d="M8 8h8"></path>
+              <path d="M8 12h4"></path>
+              <path d="M8 16h8"></path>
+              <path d="M16 11v3"></path>
+              <path d="M14.5 12.5h3"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Precios de la jornada</strong>
+            <small>Precios generales para los despachos minoristas 1 y 2</small>
+          </span>
+          <span class="menu-status">Administrar</span>
+        </a>
+        @endif
+
         @if ($user->hasModule('MODULO_RESUMEN_JORNADA'))
         <a class="menu-tile menu-tile-primary" href="{{ Route::has('tickets-dia') ? route('tickets-dia') : '#' }}">
           <span class="menu-tile-icon" aria-hidden="true">
@@ -241,7 +261,7 @@
           </span>
           <span class="menu-tile-text">
             <strong>Jornada de proveedores</strong>
-            <small>Camiones habilitados y precios del día</small>
+            <small>Camiones, proveedores y almacenes habilitados</small>
           </span>
           <span class="menu-status">Disponible</span>
         </a>

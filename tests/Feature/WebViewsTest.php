@@ -755,7 +755,7 @@ class WebViewsTest extends TestCase
         $this->get('/jornada')
             ->assertOk()
             ->assertSee('Orígenes de la jornada')
-            ->assertSee('Precios globales')
+            ->assertDontSee('Precios globales')
             ->assertDontSee('precios de proveedor', false)
             ->assertSee(asset('js/jornada.js'), false);
 
@@ -764,6 +764,18 @@ class WebViewsTest extends TestCase
         $this->assertIsString($javascript);
         $this->assertStringNotContainsString('truck.prices', $javascript);
         $this->assertStringNotContainsString('Precio proveedor/kg', $javascript);
+        $this->assertStringNotContainsString('global_prices', $javascript);
+    }
+
+    public function test_journey_prices_have_an_independent_retail_view(): void
+    {
+        $this->get('/precios-jornada')
+            ->assertOk()
+            ->assertSee('Precios de la jornada')
+            ->assertSee('despacho minorista 1 y 2')
+            ->assertSee(asset('js/precios-jornada.js'), false)
+            ->assertDontSee('journeyRows', false)
+            ->assertDontSee('journeySelectAll', false);
     }
 
     public function test_weighing_management_view_is_available_without_database_queries(): void

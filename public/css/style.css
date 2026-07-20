@@ -9285,6 +9285,23 @@ body.journey-page {
   font-weight: 900;
 }
 
+.journey-price-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.journey-price-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.journey-price-actions .journey-message {
+  flex: 1;
+  margin: 0;
+}
+
 .journey-toolbar {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto auto;

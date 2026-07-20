@@ -109,7 +109,7 @@ return [
         ],
         'MODULO_JORNADA_PROVEEDORES' => [
             'name' => 'Jornada de proveedores',
-            'description' => 'Programacion de recepciones, camiones y precios del dia.',
+            'description' => 'Programacion de recepciones, camiones, proveedores y almacenes del dia.',
             'path' => '/jornada',
             'technical_permissions' => [
                 'RECEPCIONES_VER',
@@ -119,7 +119,6 @@ return [
                 'DESPACHOS_VER',
                 'DESPACHOS_CREAR',
                 'TERCEROS_GESTIONAR',
-                'PRECIOS_GESTIONAR',
             ],
             'legacy_permissions' => [
                 'RECEPCIONES_VER',

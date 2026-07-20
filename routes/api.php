@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\FinancialMovementController;
 use App\Http\Controllers\Api\V1\FinancialQueryController;
 use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
+use App\Http\Controllers\Api\V1\JourneyPriceController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
@@ -130,6 +131,9 @@ Route::prefix('v1')->group(function (): void {
     $journeyWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_JORNADA_PROVEEDORES'];
+    $journeyPriceMiddleware = config('directory.public_access')
+        ? ['throttle:api']
+        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MINORISTA_1,MODULO_DESPACHO_MINORISTA_2'];
     $javaControlReadMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_CONTROL_JAVAS'];
@@ -188,6 +192,10 @@ Route::prefix('v1')->group(function (): void {
     });
     Route::put('/operacion/jornada', [JourneyPlanController::class, 'update'])
         ->middleware($journeyWriteMiddleware);
+    Route::get('/operacion/precios-jornada', [JourneyPriceController::class, 'show'])
+        ->middleware($journeyPriceMiddleware);
+    Route::put('/operacion/precios-jornada', [JourneyPriceController::class, 'update'])
+        ->middleware($journeyPriceMiddleware);
     Route::get('/control-javas', [JavaControlController::class, 'index'])
         ->middleware($javaControlReadMiddleware);
     Route::post('/control-javas/recepciones', [JavaControlController::class, 'store'])

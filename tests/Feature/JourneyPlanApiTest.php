@@ -145,16 +145,11 @@ class JourneyPlanApiTest extends TestCase
             ->assertJsonMissingPath('data.trucks.1.prices');
     }
 
-    public function test_selected_trucks_and_global_prices_are_persisted(): void
+    public function test_selected_trucks_are_persisted_without_requiring_prices(): void
     {
         $this->putJson('/api/v1/operacion/jornada', [
             'provider_vehicle_ids' => [$this->providerVehicleIds[1]],
             'warehouse_ids' => [$this->warehouseIds[0]],
-            'global_prices' => [
-                TipoPollo::CHICKEN_LIVE => 7.75,
-                TipoPollo::CHICKEN_DRESSED => 8.75,
-                TipoPollo::CHICKEN_PROCESSED => 9.75,
-            ],
         ])
             ->assertOk()
             ->assertJsonPath('data.configured', true)
@@ -166,9 +161,7 @@ class JourneyPlanApiTest extends TestCase
             ->assertJsonPath('data.warehouses.0.selected', true)
             ->assertJsonPath('data.warehouses.1.selected', false)
             ->assertJsonMissingPath('data.trucks.1.prices')
-            ->assertJsonPath('data.global_prices.POLLO_VIVO', 7.75)
-            ->assertJsonPath('data.global_prices.POLLO_PELADO', 8.75)
-            ->assertJsonPath('data.global_prices.POLLO_BENEFICIADO', 9.75);
+            ->assertJsonMissingPath('data.global_prices');
 
         $this->assertDatabaseHas('programaciones_recepcion', [
             'sucursal_id' => $this->branchId,
@@ -182,6 +175,30 @@ class JourneyPlanApiTest extends TestCase
         $this->assertDatabaseHas('programacion_recepcion_almacenes', [
             'almacen_id' => $this->warehouseIds[0],
         ]);
+        $this->assertDatabaseMissing('listas_precios', [
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => null,
+            'operacion' => 'VENTA',
+        ]);
+        $this->assertDatabaseCount('precios_historial', 3);
+    }
+
+    public function test_journey_prices_are_managed_through_their_own_endpoint(): void
+    {
+        $prices = [
+            TipoPollo::CHICKEN_LIVE => 7.75,
+            TipoPollo::CHICKEN_DRESSED => 8.75,
+            TipoPollo::CHICKEN_PROCESSED => 9.75,
+        ];
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => $prices,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.global_prices.POLLO_VIVO', 7.75)
+            ->assertJsonPath('data.global_prices.POLLO_PELADO', 8.75)
+            ->assertJsonPath('data.global_prices.POLLO_BENEFICIADO', 9.75);
+
         $this->assertDatabaseHas('listas_precios', [
             'empresa_id' => $this->user->empresa_id,
             'tercero_id' => null,

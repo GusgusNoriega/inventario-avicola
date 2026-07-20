@@ -18,6 +18,7 @@ class ModuleAccessControlTest extends TestCase
         foreach ([
             '/',
             '/operacion',
+            '/precios-jornada',
             '/finanzas',
             '/finanzas/saldos',
             '/compras/nueva',
@@ -38,6 +39,7 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/precios-jornada',
             '/finanzas',
             '/finanzas/saldos',
             '/compras',
@@ -126,6 +128,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertSee(route('finanzas'), false)
             ->assertDontSee(route('operacion'), false)
             ->assertDontSee(route('despacho-minorista'), false)
+            ->assertDontSee(route('precios-jornada'), false)
             ->assertDontSee(route('directorio'), false)
             ->assertDontSee(route('flota'), false)
             ->assertDontSee(route('control-javas'), false)
@@ -160,6 +163,7 @@ class ModuleAccessControlTest extends TestCase
             '/operacion',
             '/despacho-minorista',
             '/despacho-minorista-2',
+            '/precios-jornada',
             '/tickets-dia',
             '/gestion-pesadas',
             '/directorio',
@@ -171,6 +175,33 @@ class ModuleAccessControlTest extends TestCase
         ] as $path) {
             $this->get($path)->assertOk();
         }
+    }
+
+    public function test_journey_prices_view_is_shared_only_by_the_two_retail_modules(): void
+    {
+        foreach ([
+            'MODULO_DESPACHO_MINORISTA_1',
+            'MODULO_DESPACHO_MINORISTA_2',
+        ] as $index => $module) {
+            $user = User::factory()->create();
+            $this->grantModules($user, [$module], "MINORISTA_{$index}", "Minorista {$index}");
+
+            $this->actingAs($user)
+                ->get('/precios-jornada')
+                ->assertOk();
+
+            $this->get('/')
+                ->assertOk()
+                ->assertSee(route('precios-jornada'), false)
+                ->assertDontSee(route('jornada'), false);
+        }
+
+        $journeyUser = User::factory()->create();
+        $this->grantModules($journeyUser, ['MODULO_JORNADA_PROVEEDORES']);
+
+        $this->actingAs($journeyUser)
+            ->get('/precios-jornada')
+            ->assertForbidden();
     }
 
     public function test_module_permission_protects_finance_api_and_grants_internal_operations(): void

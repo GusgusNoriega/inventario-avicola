@@ -8,11 +8,6 @@ const elements = {
   selectedCount: document.getElementById("journeySelectedCount"),
   totalCount: document.getElementById("journeyTotalCount"),
   status: document.getElementById("journeyStatus"),
-  globalPrices: {
-    POLLO_VIVO: document.getElementById("globalPriceLive"),
-    POLLO_PELADO: document.getElementById("globalPriceDressed"),
-    POLLO_BENEFICIADO: document.getElementById("globalPriceProcessed")
-  },
   search: document.getElementById("journeySearch"),
   selectAll: document.getElementById("journeySelectAll"),
   save: document.getElementById("journeySaveBtn"),
@@ -113,13 +108,6 @@ function renderJourney() {
   })}`;
   elements.status.textContent = String(journey.status || "SIN CONFIGURAR").replaceAll("_", " ");
   elements.totalCount.textContent = String(trucks.length + warehouses.length);
-  Object.entries(elements.globalPrices).forEach(([code, input]) => {
-    const price = journey.global_prices?.[code];
-    input.value = price === null || price === undefined
-      ? ""
-      : Number(price).toFixed(2);
-  });
-
   elements.tableHead.innerHTML = `
     <th scope="col">Elegir</th>
     <th scope="col">Origen</th>
@@ -204,21 +192,9 @@ function renderJourney() {
 }
 
 function buildPayload() {
-  const globalPrices = Object.fromEntries(
-    Object.entries(elements.globalPrices).map(([code, input]) => {
-      const value = Number(input.value);
-      if (!Number.isFinite(value) || value <= 0) {
-        throw new Error("Ingresa los tres precios globales con valores mayores que cero.");
-      }
-
-      return [code, value];
-    })
-  );
-
   return {
     provider_vehicle_ids: selectedVehicleIds(),
-    warehouse_ids: selectedWarehouseIds(),
-    global_prices: globalPrices
+    warehouse_ids: selectedWarehouseIds()
   };
 }
 
@@ -233,7 +209,7 @@ async function saveJourney() {
   }
 
   elements.save.disabled = true;
-  setMessage("Guardando selección y precios globales...");
+  setMessage("Guardando orígenes de la jornada...");
 
   try {
     const response = await apiRequest("/operacion/jornada", {

@@ -7,7 +7,6 @@ use App\Models\ProgramacionRecepcionDetalle;
 use App\Models\ProveedorVehiculo;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
-use App\Models\TipoPollo;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -16,10 +15,6 @@ use Illuminate\Validation\ValidationException;
 
 class JourneyPlanService
 {
-    public function __construct(
-        private readonly GlobalPriceService $globalPrices
-    ) {}
-
     /**
      * @return array<string, mixed>
      */
@@ -30,7 +25,6 @@ class JourneyPlanService
             ->where('sucursal_id', $branch->id)
             ->whereDate('fecha_operativa', $window['operating_date']->format('Y-m-d'))
             ->first();
-        $types = $this->priceTypes();
         $vehicles = $this->availableVehicles($companyId);
         $selectedIds = $program
             ? ProgramacionRecepcionDetalle::query()
@@ -62,12 +56,6 @@ class JourneyPlanService
             'timezone' => $branch->zona_horaria,
             'selected_count' => count($selectedIds),
             'selected_warehouse_count' => count($selectedWarehouseIds),
-            'global_prices' => $this->globalPrices->current($companyId),
-            'chicken_types' => $types->map(fn (TipoPollo $type) => [
-                'id' => $type->id,
-                'code' => $type->codigo,
-                'name' => $type->nombre,
-            ])->values(),
             'trucks' => $vehicles->map(function (ProveedorVehiculo $association) use ($selectedLookup): array {
                 return [
                     'provider_vehicle_id' => $association->id,
@@ -131,8 +119,6 @@ class JourneyPlanService
         DB::transaction(function () use (
             $actor,
             $branch,
-            $companyId,
-            $data,
             $selectedIds,
             $selectedWarehouseIds,
             $vehicles,
@@ -209,8 +195,6 @@ class JourneyPlanService
                 );
             }
 
-            $this->globalPrices->save($companyId, $actor->id, $data['global_prices']);
-
             $program->update([
                 'estado' => ProgramacionRecepcion::STATUS_PUBLISHED,
                 'publicada_por' => $actor->id,
@@ -241,22 +225,6 @@ class JourneyPlanService
             'ends_at' => $operatingDate->setTimeFromTimeString($cutoff),
             'cutoff' => $cutoff,
         ];
-    }
-
-    /**
-     * @return Collection<int, TipoPollo>
-     */
-    private function priceTypes(): Collection
-    {
-        return TipoPollo::query()
-            ->whereIn('codigo', [
-                TipoPollo::CHICKEN_LIVE,
-                TipoPollo::CHICKEN_DRESSED,
-                TipoPollo::CHICKEN_PROCESSED,
-            ])
-            ->where('estado', TipoPollo::STATUS_ACTIVE)
-            ->orderBy('id')
-            ->get();
     }
 
     /**
