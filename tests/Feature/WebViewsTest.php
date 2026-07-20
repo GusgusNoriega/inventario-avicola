@@ -757,7 +757,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Orígenes de la jornada')
             ->assertDontSee('Precios globales')
             ->assertDontSee('precios de proveedor', false)
-            ->assertSee(asset('js/jornada.js'), false);
+            ->assertSee(asset('js/jornada.js').'?v='.md5_file(public_path('js/jornada.js')), false)
+            ->assertSee(asset('css/style.css').'?v='.md5_file(public_path('css/style.css')), false);
 
         $javascript = file_get_contents(public_path('js/jornada.js'));
 

@@ -1,4 +1,4 @@
-const STATIC_CACHE = "sistema-pollos-static-v2";
+const STATIC_CACHE = "sistema-pollos-static-v3";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/icons/icon-192.png",
@@ -31,6 +31,22 @@ self.addEventListener("fetch", (event) => {
     && ["style", "script", "image", "font"].includes(request.destination);
 
   if (!isStaticAsset) {
+    return;
+  }
+
+  const prefersFreshResponse = ["style", "script"].includes(request.destination);
+
+  if (prefersFreshResponse) {
+    event.respondWith(
+      fetch(request, { cache: "no-cache" }).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+        }
+
+        return response;
+      }).catch(() => caches.match(request))
+    );
     return;
   }
 

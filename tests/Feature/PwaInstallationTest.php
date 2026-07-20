@@ -12,7 +12,7 @@ class PwaInstallationTest extends TestCase
 
         $response->assertOk()
             ->assertSee('manifest.webmanifest', false)
-            ->assertSee('js/pwa-register.js', false)
+            ->assertSee(asset('js/pwa-register.js').'?v='.md5_file(public_path('js/pwa-register.js')), false)
             ->assertSee('icons/icon-192.png', false);
     }
 
@@ -29,5 +29,18 @@ class PwaInstallationTest extends TestCase
         $this->assertSame('standalone', $manifest['display']);
         $this->assertSame('/', $manifest['scope']);
         $this->assertCount(3, $manifest['icons']);
+    }
+
+    public function test_pwa_updates_scripts_and_styles_without_a_hard_refresh(): void
+    {
+        $serviceWorker = (string) file_get_contents(public_path('service-worker.js'));
+        $registration = (string) file_get_contents(public_path('js/pwa-register.js'));
+
+        $this->assertStringContainsString('sistema-pollos-static-v3', $serviceWorker);
+        $this->assertStringContainsString('["style", "script"]', $serviceWorker);
+        $this->assertStringContainsString('fetch(request, { cache: "no-cache" })', $serviceWorker);
+        $this->assertStringContainsString('controllerchange', $registration);
+        $this->assertStringContainsString('updateViaCache: "none"', $registration);
+        $this->assertStringContainsString('registration.update()', $registration);
     }
 }
