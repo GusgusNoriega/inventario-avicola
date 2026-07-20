@@ -165,16 +165,23 @@ class ProviderHistoryApiTest extends TestCase
 
     public function test_provider_can_have_multiple_assigned_plates(): void
     {
+        $firstTruck = $this->postJson('/api/v1/camiones', ['placa' => 'ABC-123'])
+            ->assertCreated()
+            ->json('data.id');
+        $secondTruck = $this->postJson('/api/v1/camiones', ['placa' => 'XYZ-999'])
+            ->assertCreated()
+            ->json('data.id');
+
         $first = $this->postJson(
             "/api/v1/proveedores/{$this->providerId}/vehiculos",
-            ['placa' => 'abc-123']
+            ['vehiculo_id' => $firstTruck]
         )
             ->assertCreated()
             ->assertJsonPath('data.plate', 'ABC-123')
             ->json('data.id');
         $this->postJson(
             "/api/v1/proveedores/{$this->providerId}/vehiculos",
-            ['placa' => 'xyz-999']
+            ['vehiculo_id' => $secondTruck]
         )->assertCreated();
 
         $this->assertDatabaseCount('vehiculos', 2);
@@ -214,12 +221,22 @@ class ProviderHistoryApiTest extends TestCase
             ->assertJsonPath('data.is_own', true)
             ->json('data.id');
 
+        $this->getJson("/api/v1/proveedores/{$this->providerId}/vehiculos-disponibles?buscar=emp")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $truckId)
+            ->assertJsonPath('data.0.plate', 'EMP-001');
+
         $this->postJson(
             "/api/v1/proveedores/{$this->providerId}/vehiculos",
-            ['placa' => 'EMP-001']
+            ['vehiculo_id' => $truckId]
         )
             ->assertCreated()
             ->assertJsonPath('data.vehicle_id', $truckId);
+
+        $this->getJson("/api/v1/proveedores/{$this->providerId}/vehiculos-disponibles?buscar=EMP-001")
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
 
         $this->assertDatabaseCount('vehiculos', 1);
         $this->assertDatabaseHas('vehiculos', [
@@ -233,18 +250,34 @@ class ProviderHistoryApiTest extends TestCase
             ->assertJsonPath('data.0.assigned_provider.id', $this->providerId);
     }
 
-    public function test_plate_cannot_be_assigned_twice_or_to_two_active_providers(): void
+    public function test_provider_assignment_does_not_create_a_truck_from_a_typed_plate(): void
     {
         $this->postJson(
             "/api/v1/proveedores/{$this->providerId}/vehiculos",
-            ['placa' => 'ABC-123']
+            ['placa' => 'NUE-001']
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('vehiculo_id');
+
+        $this->assertDatabaseMissing('vehiculos', ['placa' => 'NUE-001']);
+    }
+
+    public function test_truck_cannot_be_assigned_twice_or_to_two_active_providers(): void
+    {
+        $truckId = $this->postJson('/api/v1/camiones', ['placa' => 'ABC-123'])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->postJson(
+            "/api/v1/proveedores/{$this->providerId}/vehiculos",
+            ['vehiculo_id' => $truckId]
         )->assertCreated();
         $this->postJson(
             "/api/v1/proveedores/{$this->providerId}/vehiculos",
-            ['placa' => 'ABC-123']
+            ['vehiculo_id' => $truckId]
         )
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('placa');
+            ->assertJsonValidationErrors('vehiculo_id');
 
         $otherProviderId = $this->postJson('/api/v1/proveedores', $this->partyPayload(
             'Proveedor Centro',
@@ -253,10 +286,10 @@ class ProviderHistoryApiTest extends TestCase
 
         $this->postJson(
             "/api/v1/proveedores/{$otherProviderId}/vehiculos",
-            ['placa' => 'ABC-123']
+            ['vehiculo_id' => $truckId]
         )
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('placa');
+            ->assertJsonValidationErrors('vehiculo_id');
     }
 
     /**

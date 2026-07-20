@@ -19,23 +19,59 @@ use Illuminate\Validation\ValidationException;
 
 class ProviderVehicleController extends Controller
 {
+    public function available(Request $request, int $tercero): JsonResponse
+    {
+        $provider = $this->provider($request, $tercero);
+        $validated = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:100'],
+        ]);
+        $search = trim((string) ($validated['buscar'] ?? ''));
+
+        $vehicles = Vehiculo::query()
+            ->where('empresa_id', $provider->empresa_id)
+            ->where('estado', Vehiculo::STATUS_ACTIVE)
+            ->whereDoesntHave('asignacionProveedorActiva')
+            ->when($search !== '', fn ($query) => $query->where(function ($searchQuery) use ($search): void {
+                $searchQuery
+                    ->where('placa', 'like', "%{$search}%")
+                    ->orWhere('marca', 'like', "%{$search}%")
+                    ->orWhere('modelo', 'like', "%{$search}%")
+                    ->orWhere('color', 'like', "%{$search}%")
+                    ->orWhere('descripcion', 'like', "%{$search}%");
+            }))
+            ->orderBy('placa')
+            ->limit(20)
+            ->get(['id', 'placa', 'marca', 'modelo', 'color', 'descripcion']);
+
+        return response()->json([
+            'data' => $vehicles->map(fn (Vehiculo $vehicle): array => [
+                'id' => (int) $vehicle->id,
+                'plate' => $vehicle->placa,
+                'brand' => $vehicle->marca,
+                'model' => $vehicle->modelo,
+                'color' => $vehicle->color,
+                'description' => $vehicle->descripcion,
+            ])->values(),
+        ]);
+    }
+
     public function store(
         StoreProviderVehicleRequest $request,
         int $tercero
     ): JsonResponse {
         $provider = $this->provider($request, $tercero);
         $association = DB::transaction(function () use ($request, $provider): ProveedorVehiculo {
-            $vehicle = Vehiculo::query()->firstOrCreate(
-                [
-                    'empresa_id' => $provider->empresa_id,
-                    'placa' => $request->validated('placa'),
-                ],
-                [
-                    'tercero_propietario_id' => null,
-                    'es_propio' => true,
-                    'estado' => Vehiculo::STATUS_ACTIVE,
-                ]
-            );
+            $vehicle = Vehiculo::query()
+                ->where('empresa_id', $provider->empresa_id)
+                ->where('estado', Vehiculo::STATUS_ACTIVE)
+                ->lockForUpdate()
+                ->find($request->integer('vehiculo_id'));
+
+            if (! $vehicle) {
+                throw ValidationException::withMessages([
+                    'vehiculo_id' => 'El camión seleccionado no existe o ya no está disponible.',
+                ]);
+            }
 
             $activeAssociation = ProveedorVehiculo::query()
                 ->where('vehiculo_id', $vehicle->id)
@@ -45,21 +81,15 @@ class ProviderVehicleController extends Controller
 
             if ($activeAssociation?->proveedor_id === $provider->id) {
                 throw ValidationException::withMessages([
-                    'placa' => 'Esta placa ya está asignada al proveedor.',
+                    'vehiculo_id' => 'Este camión ya está asignado al proveedor.',
                 ]);
             }
 
             if ($activeAssociation) {
                 throw ValidationException::withMessages([
-                    'placa' => 'Esta placa está asignada actualmente a otro proveedor.',
+                    'vehiculo_id' => 'Este camión está asignado actualmente a otro proveedor.',
                 ]);
             }
-
-            $vehicle->update([
-                'tercero_propietario_id' => null,
-                'es_propio' => true,
-                'estado' => Vehiculo::STATUS_ACTIVE,
-            ]);
             $sameDayAssociation = ProveedorVehiculo::query()
                 ->where('proveedor_id', $provider->id)
                 ->where('vehiculo_id', $vehicle->id)
@@ -87,7 +117,7 @@ class ProviderVehicleController extends Controller
         });
 
         return response()->json([
-            'message' => 'Camión de la empresa asignado correctamente al proveedor.',
+            'message' => 'Camión asignado correctamente al proveedor.',
             'data' => $this->formatAssociation($association),
         ], 201);
     }

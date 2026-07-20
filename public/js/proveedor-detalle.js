@@ -25,7 +25,8 @@ const elements = {
   directDepositList: document.getElementById("providerDirectDepositList"),
   vehicleCount: document.getElementById("providerVehicleCount"),
   vehicleForm: document.getElementById("providerVehicleForm"),
-  vehiclePlate: document.getElementById("providerVehiclePlate"),
+  vehicleSearch: document.getElementById("providerVehicleSearch"),
+  vehicleSearchResults: document.getElementById("providerVehicleSearchResults"),
   saveVehicle: document.getElementById("saveProviderVehicle"),
   vehicleMessage: document.getElementById("providerVehicleMessage"),
   vehicleList: document.getElementById("providerVehicleList"),
@@ -44,6 +45,9 @@ let currentPage = 1;
 let loading = false;
 let pendingVehicleRemoval = null;
 let financeSequence = 0;
+let vehicleSearchSequence = 0;
+let vehicleSearchTimer = null;
+let selectedVehicleId = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -92,6 +96,64 @@ function getErrorMessage(error) {
 function setMessage(element, text, isError = false) {
   element.textContent = text || "";
   element.classList.toggle("is-error", Boolean(isError));
+}
+
+function renderAvailableVehicles(vehicles) {
+  elements.vehicleSearchResults.hidden = false;
+
+  if (!vehicles.length) {
+    elements.vehicleSearchResults.innerHTML = `
+      <div class="provider-vehicle-search-empty">
+        No hay camiones disponibles que coincidan con la búsqueda.
+      </div>
+    `;
+    return;
+  }
+
+  elements.vehicleSearchResults.innerHTML = vehicles.map((vehicle) => {
+    const detail = [vehicle.brand, vehicle.model, vehicle.color]
+      .filter(Boolean)
+      .join(" · ") || vehicle.description || "Camión de Mi flota";
+
+    return `
+      <button
+        class="provider-vehicle-search-option"
+        type="button"
+        role="option"
+        data-select-vehicle="${Number(vehicle.id)}"
+        data-vehicle-plate="${escapeHtml(vehicle.plate)}"
+      >
+        <strong>${escapeHtml(vehicle.plate)}</strong>
+        <span>${escapeHtml(detail)}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+async function searchAvailableVehicles() {
+  const sequence = ++vehicleSearchSequence;
+  const query = elements.vehicleSearch.value.trim();
+  const params = new URLSearchParams();
+  if (query) params.set("buscar", query);
+
+  elements.vehicleSearchResults.hidden = false;
+  elements.vehicleSearchResults.innerHTML = '<div class="provider-vehicle-search-empty">Buscando camiones...</div>';
+
+  try {
+    const response = await apiRequest(`/proveedores/${providerId}/vehiculos-disponibles?${params}`);
+    if (sequence !== vehicleSearchSequence) return;
+    renderAvailableVehicles(response.data || []);
+  } catch (error) {
+    if (sequence !== vehicleSearchSequence) return;
+    elements.vehicleSearchResults.innerHTML = `
+      <div class="provider-vehicle-search-empty is-error">${escapeHtml(getErrorMessage(error))}</div>
+    `;
+  }
+}
+
+function clearVehicleSelection() {
+  selectedVehicleId = null;
+  elements.saveVehicle.disabled = true;
 }
 
 function normalizePlate(value) {
@@ -341,22 +403,23 @@ elements.financeCurrency?.addEventListener("change", () => void loadFinance());
 
 async function saveVehicle(event) {
   event.preventDefault();
-  const plate = normalizePlate(elements.vehiclePlate.value);
 
-  if (!plate) {
-    setMessage(elements.vehicleMessage, "Ingresa la placa del camión.", true);
+  if (!selectedVehicleId) {
+    setMessage(elements.vehicleMessage, "Busca y selecciona un camión de Mi flota.", true);
     return;
   }
 
   elements.saveVehicle.disabled = true;
-  setMessage(elements.vehicleMessage, "Creando el camión en Mi flota y asignándolo al proveedor...");
+  setMessage(elements.vehicleMessage, "Asignando el camión al proveedor...");
 
   try {
     const response = await apiRequest(`/proveedores/${providerId}/vehiculos`, {
       method: "POST",
-      body: JSON.stringify({ placa: plate })
+      body: JSON.stringify({ vehiculo_id: selectedVehicleId })
     });
     elements.vehicleForm.reset();
+    clearVehicleSelection();
+    elements.vehicleSearchResults.hidden = true;
     pendingVehicleRemoval = null;
     setMessage(elements.vehicleMessage, response.message);
     await loadProviderHistory(currentPage);
@@ -392,11 +455,22 @@ async function removeVehicle(associationId) {
   }
 }
 
-elements.vehiclePlate.addEventListener("input", () => {
-  const selectionStart = elements.vehiclePlate.selectionStart;
-  elements.vehiclePlate.value = normalizePlate(elements.vehiclePlate.value);
-  elements.vehiclePlate.setSelectionRange(selectionStart, selectionStart);
+elements.vehicleSearch.addEventListener("input", () => {
+  clearVehicleSelection();
   setMessage(elements.vehicleMessage, "");
+  clearTimeout(vehicleSearchTimer);
+  vehicleSearchTimer = setTimeout(() => void searchAvailableVehicles(), 250);
+});
+elements.vehicleSearch.addEventListener("focus", () => void searchAvailableVehicles());
+elements.vehicleSearchResults.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-select-vehicle]");
+  if (!option) return;
+
+  selectedVehicleId = Number(option.dataset.selectVehicle);
+  elements.vehicleSearch.value = option.dataset.vehiclePlate || "";
+  elements.saveVehicle.disabled = false;
+  elements.vehicleSearchResults.hidden = true;
+  setMessage(elements.vehicleMessage, `Camión ${elements.vehicleSearch.value} seleccionado.`);
 });
 elements.vehicleForm.addEventListener("submit", saveVehicle);
 elements.vehicleList.addEventListener("click", (event) => {

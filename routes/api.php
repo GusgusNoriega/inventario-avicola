@@ -217,6 +217,8 @@ Route::prefix('v1')->group(function (): void {
             ->whereNumber('tercero');
         Route::get('/proveedores/{tercero}/historial', [ProviderHistoryController::class, 'show'])
             ->whereNumber('tercero');
+        Route::get('/proveedores/{tercero}/vehiculos-disponibles', [ProviderVehicleController::class, 'available'])
+            ->whereNumber('tercero');
         Route::post('/proveedores/{tercero}/vehiculos', [ProviderVehicleController::class, 'store'])
             ->whereNumber('tercero');
         Route::delete(

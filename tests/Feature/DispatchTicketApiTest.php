@@ -116,9 +116,12 @@ class DispatchTicketApiTest extends TestCase
             '20222222222',
             [7.5, 8.5, 9.5]
         ))->assertCreated()->json('data.id');
+        $originVehicleId = $this->postJson('/api/v1/camiones', [
+            'placa' => 'ABC-123',
+        ])->assertCreated()->json('data.id');
         $vehicle = $this->postJson(
             "/api/v1/proveedores/{$this->providerId}/vehiculos",
-            ['placa' => 'ABC-123']
+            ['vehiculo_id' => $originVehicleId]
         )->assertCreated()->json('data');
         $this->providerVehicleId = $vehicle['id'];
         $this->vehicleId = $vehicle['vehicle_id'];

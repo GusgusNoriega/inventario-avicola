@@ -107,14 +107,20 @@ class JourneyPlanApiTest extends TestCase
             ],
         ])->assertCreated()->json('data.id');
 
+        $truckIds = [
+            $this->postJson('/api/v1/camiones', ['placa' => 'ABC-123'])
+                ->assertCreated()->json('data.id'),
+            $this->postJson('/api/v1/camiones', ['placa' => 'XYZ-999'])
+                ->assertCreated()->json('data.id'),
+        ];
         $this->providerVehicleIds = [
             $this->postJson(
                 "/api/v1/proveedores/{$this->providerId}/vehiculos",
-                ['placa' => 'ABC-123']
+                ['vehiculo_id' => $truckIds[0]]
             )->assertCreated()->json('data.id'),
             $this->postJson(
                 "/api/v1/proveedores/{$this->providerId}/vehiculos",
-                ['placa' => 'XYZ-999']
+                ['vehiculo_id' => $truckIds[1]]
             )->assertCreated()->json('data.id'),
         ];
     }

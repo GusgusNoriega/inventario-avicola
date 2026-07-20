@@ -111,13 +111,16 @@
         </div>
         <span id="providerVehicleCount" class="directory-record-tag">0 camiones</span>
       </div>
-      <p class="customer-history-meta">Cada placa que agregues pertenecerá a Mi flota y quedará asignada operativamente a este proveedor. Si ya existe en la flota, solo se creará la asignación.</p>
+      <p class="customer-history-meta">Busca un camión registrado en Mi flota y asígnalo operativamente a este proveedor. Los camiones asignados a otro proveedor no aparecerán como disponibles.</p>
       <form id="providerVehicleForm" class="provider-vehicle-form">
-        <label class="field">
-          Placa del camión
-          <input id="providerVehiclePlate" type="text" maxlength="20" autocomplete="off" placeholder="Ej: ABC-123" required>
-        </label>
-        <button id="saveProviderVehicle" class="btn btn-success directory-btn" type="submit">Crear y asignar camión</button>
+        <div class="provider-vehicle-search-field">
+          <label class="field">
+            Buscar camión
+            <input id="providerVehicleSearch" type="search" maxlength="100" autocomplete="off" placeholder="Placa, marca, modelo o color">
+          </label>
+          <div id="providerVehicleSearchResults" class="provider-vehicle-search-results" role="listbox" aria-label="Camiones disponibles" hidden></div>
+        </div>
+        <button id="saveProviderVehicle" class="btn btn-success directory-btn" type="submit" disabled>Asignar camión</button>
       </form>
       <p id="providerVehicleMessage" class="form-message" role="status" aria-live="polite"></p>
       <div id="providerVehicleList" class="provider-vehicle-list" aria-live="polite"></div>

@@ -17,7 +17,7 @@ class StoreProviderVehicleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'placa' => ['required', 'string', 'min:3', 'max:20', 'regex:/^[A-Z0-9-]+$/'],
+            'vehiculo_id' => ['required', 'integer', 'min:1'],
         ];
     }
 
@@ -27,16 +27,7 @@ class StoreProviderVehicleRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'placa.regex' => 'La placa solo puede contener letras, números y guiones.',
+            'vehiculo_id.required' => 'Selecciona un camión registrado en Mi flota.',
         ];
-    }
-
-    protected function prepareForValidation(): void
-    {
-        $plate = preg_replace('/\s+/', '', (string) $this->input('placa'));
-
-        $this->merge([
-            'placa' => mb_strtoupper($plate, 'UTF-8'),
-        ]);
     }
 }
