@@ -38,6 +38,12 @@ class DevelopmentDataCleanupSeederTest extends TestCase
         }
 
         $this->assertDatabaseHas('usuarios', ['id' => $records['user_id']]);
+        $this->assertDatabaseHas('empresas', ['id' => $records['company_id']]);
+        $this->assertDatabaseHas('entidades_financieras', ['id' => $records['financial_entity_id']]);
+        $this->assertDatabaseHas('cuentas_financieras', [
+            'id' => $records['financial_account_id'],
+            'entidad_financiera_id' => $records['financial_entity_id'],
+        ]);
         $this->assertDatabaseHas('terceros', ['id' => $records['client_id']]);
         $this->assertDatabaseHas('terceros', ['id' => $records['provider_id']]);
         $this->assertDatabaseHas('tercero_roles', [
@@ -629,6 +635,9 @@ class DevelopmentDataCleanupSeederTest extends TestCase
 
         return [
             'user_id' => $user->id,
+            'company_id' => $companyId,
+            'financial_entity_id' => $entityId,
+            'financial_account_id' => $accountId,
             'client_id' => $client->id,
             'provider_id' => $provider->id,
             'driver_id' => $driver->id,

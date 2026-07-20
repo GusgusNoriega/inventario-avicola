@@ -42,8 +42,6 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'jornadas_operativas',
         'precios_historial',
         'listas_precios',
-        'cuentas_financieras',
-        'entidades_financieras',
         'auditoria_eventos',
         'personal_access_tokens',
         'sessions',
@@ -83,6 +81,8 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'tipos_bandeja',
         'ajustes_peso_minorista',
         'metodos_pago',
+        'entidades_financieras',
+        'cuentas_financieras',
     ];
 
     public function run(): void
@@ -96,7 +96,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         if (app()->environment('local')
             && $this->command
             && ! $this->command->confirm(
-                'Se eliminarán compras, pagos, despachos, pesadas, jornadas, inventarios, precios, cuentas financieras, sesiones, caché y colas. ¿Deseas continuar?',
+                'Se eliminarán compras, pagos, despachos, pesadas, jornadas, inventarios, precios, sesiones, caché y colas. Se conservarán empresas, cuentas financieras y usuarios. ¿Deseas continuar?',
                 false
             )) {
             $this->command->warn('Limpieza cancelada. No se modificó ningún registro.');
@@ -122,7 +122,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
             array_sum($deletedByTable)
         ));
         $this->command?->line(
-            'Se conservaron clientes, proveedores, camiones, choferes, asignaciones y configuración técnica.'
+            'Se conservaron empresas, cuentas financieras, usuarios, clientes, proveedores, camiones, choferes, asignaciones y configuración técnica.'
         );
     }
 }
