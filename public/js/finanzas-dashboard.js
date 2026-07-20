@@ -20,6 +20,7 @@ const MOVEMENT_LABELS = {
   COBRO_CLIENTE: "Cliente → empresa",
   PAGO_DIRECTO: "Cliente → proveedor",
   PAGO_PROVEEDOR: "Empresa → proveedor",
+  SALDO_FAVOR_PROVEEDOR: "Saldo anterior con proveedor",
   COBRO_MINORISTA: "Cobro minorista",
   REEMBOLSO_CLIENTE: "Empresa → cliente",
   SALDO_INICIAL: "Saldo inicial",
@@ -30,11 +31,15 @@ const MOVEMENT_LABELS = {
   REVERSO: "Reverso"
 };
 
+const PROVIDER_CREDIT_TYPES = new Set(["PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
+const requestedProviderId = new URLSearchParams(window.location.search).get("proveedor_id") || "";
+
 const elements = {
   available: document.getElementById("financeAvailableBalance"),
   receivable: document.getElementById("financeReceivableBalance"),
   payable: document.getElementById("financePayableBalance"),
   directPaid: document.getElementById("financeDirectPaid"),
+  providerCredit: document.getElementById("financeProviderCreditBalance"),
   balanceMessage: document.getElementById("financeBalanceMessage"),
   balances: document.getElementById("financeAccountBalances"),
   filters: document.getElementById("financeTraceFilters"),
@@ -155,6 +160,7 @@ async function allPaginatedRecords(endpoint, keys) {
 }
 
 function isOutgoing(record, type = movementType(record)) {
+  if (type === "SALDO_FAVOR_PROVEEDOR") return false;
   const direction = String(firstDefined(record, ["direccion", "direction", "movimiento.direccion"], "")).toUpperCase();
   if (direction === "EGRESO") return true;
   if (direction === "INGRESO") return false;
@@ -223,11 +229,13 @@ async function loadBalances() {
     }, 0);
     const portfolio = firstDefined(response, ["cartera", "data.cartera"], {});
     const providerPayments = firstDefined(response, ["pagos_proveedores", "data.pagos_proveedores"], {});
+    const providerCredit = firstDefined(response, ["saldo_favor_proveedores", "data.saldo_favor_proveedores"], {});
 
     elements.available.textContent = formatMoney(firstDefined(penTotal || {}, ["saldo"], calculatedBalance));
     elements.receivable.textContent = formatMoney(monetaryMetric(firstDefined(portfolio, ["por_cobrar", "cxc"], 0)));
     elements.payable.textContent = formatMoney(monetaryMetric(firstDefined(portfolio, ["por_pagar", "cxp"], 0)));
     elements.directPaid.textContent = formatMoney(monetaryMetric(firstDefined(providerPayments, ["directos_clientes", "pagos_directos"], 0)));
+    elements.providerCredit.textContent = formatMoney(monetaryMetric(firstDefined(providerCredit, ["disponible", "available"], 0)));
 
     renderBalances(accounts);
     setMessage(elements.balanceMessage, accounts.length ? `Actualizado · ${accounts.length} cuenta${accounts.length === 1 ? "" : "s"}` : "");
@@ -300,13 +308,13 @@ function renderTrace(records) {
     const status = String(firstDefined(record, ["estado", "status"], "REGISTRADO"));
     const unapplied = movementUnapplied(record);
     const applicationStatus = movementApplicationStatus(record);
-    const applicationNote = type === "PAGO_PROVEEDOR"
+    const applicationNote = PROVIDER_CREDIT_TYPES.has(type)
       ? ["ANULADO", "REVERSA"].includes(applicationStatus)
         ? applicationStatus === "ANULADO" ? "Pago anulado" : "Movimiento de reversa"
         : applicationStatus === "APLICADO"
         ? "Aplicado por completo"
         : unapplied > 0
-          ? `${applicationStatus === "PARCIAL" ? "Aplicación parcial" : "Anticipo sin aplicar"} · ${formatMoney(unapplied, movementCurrency(record))}`
+          ? `${applicationStatus === "PARCIAL" ? "Aplicación parcial" : "Saldo a favor sin aplicar"} · ${formatMoney(unapplied, movementCurrency(record))}`
           : applicationStatus.replaceAll("_", " ")
       : "";
 
@@ -331,8 +339,8 @@ function renderAdvances(records) {
   if (!records.length) {
     elements.advanceList.innerHTML = `
       <article class="fin-advance-empty">
-        <strong>No hay anticipos pendientes</strong>
-        <span>Todos los pagos a proveedores están asociados a sus deudas.</span>
+        <strong>No hay saldo a favor disponible</strong>
+        <span>Los depósitos, transferencias y saldos anteriores ya están aplicados a sus deudas.</span>
       </article>`;
     return;
   }
@@ -346,8 +354,11 @@ function renderAdvances(records) {
     const currency = movementCurrency(record);
     const available = movementUnapplied(record);
     const applicationStatus = movementApplicationStatus(record);
-    const statusLabel = applicationStatus === "PARCIAL" ? "Aplicación parcial" : "Sin aplicar";
-    const actionLabel = `Aplicar ${formatMoney(available, currency)} de ${provider}, movimiento ${code}, a una deuda`;
+    const type = movementType(record);
+    const statusLabel = type === "SALDO_FAVOR_PROVEEDOR"
+      ? applicationStatus === "PARCIAL" ? "Saldo anterior parcial" : "Saldo anterior"
+      : applicationStatus === "PARCIAL" ? "Depósito aplicado parcialmente" : "Depósito sin aplicar";
+    const actionLabel = `Aplicar ${formatMoney(available, currency)} del saldo a favor de ${provider}, fuente ${code}, a una deuda`;
 
     return `
       <article class="fin-advance-item">
@@ -366,26 +377,28 @@ function renderAdvances(records) {
 }
 
 async function loadAdvances() {
-  setMessage(elements.advanceMessage, "Consultando anticipos por aplicar...");
+  setMessage(elements.advanceMessage, "Consultando saldo a favor con proveedores...");
 
   try {
+    const params = new URLSearchParams({ aplicacion_estado: "CON_SALDO", per_page: "100" });
+    if (requestedProviderId) params.set("proveedor_id", requestedProviderId);
     state.advances = await allPaginatedRecords(
-      "/finanzas/movimientos?aplicacion_estado=CON_SALDO&per_page=100",
+      `/finanzas/movimientos?${params.toString()}`,
       ["movimientos", "items", "records"]
     );
     renderAdvances(state.advances);
     setMessage(elements.advanceMessage, state.advances.length
-      ? `${state.advances.length} anticipo${state.advances.length === 1 ? "" : "s"} con saldo disponible`
-      : "");
+      ? `${state.advances.length} fuente${state.advances.length === 1 ? "" : "s"} con saldo disponible${requestedProviderId ? " para el proveedor seleccionado" : ""}`
+      : requestedProviderId ? "El proveedor seleccionado no tiene saldo a favor disponible." : "");
     markFinanceAccessReady();
   } catch (error) {
     state.advances = [];
     elements.advanceList.innerHTML = `
       <article class="fin-advance-empty">
-        <strong>No se pudieron cargar los anticipos</strong>
+        <strong>No se pudo cargar el saldo a favor</strong>
         <span>Reintenta cuando la conexión esté disponible.</span>
       </article>`;
-    setMessage(elements.advanceMessage, errorMessage(error, "No se pudieron consultar los anticipos."), "error");
+    setMessage(elements.advanceMessage, errorMessage(error, "No se pudo consultar el saldo a favor."), "error");
   }
 }
 
@@ -425,7 +438,7 @@ function advanceApplicationError() {
   }
 
   if (advanceSelectedTotal() > currentAdvanceAvailable() + .001) {
-    return "Lo seleccionado supera el saldo disponible del anticipo.";
+    return "Lo seleccionado supera el saldo a favor disponible.";
   }
 
   return "";
@@ -515,7 +528,7 @@ async function openAdvanceDialog(paymentId) {
   const requestSequence = state.advanceRequestSequence;
   if (typeof elements.advanceDialog?.showModal === "function") elements.advanceDialog.showModal();
   else elements.advanceDialog?.setAttribute("open", "");
-  setMessage(elements.advanceFormMessage, "Consultando el pago y las deudas disponibles...");
+  setMessage(elements.advanceFormMessage, "Consultando la fuente y las deudas disponibles...");
 
   try {
     const movementResponse = await apiRequest(`/finanzas/movimientos/${encodeURIComponent(paymentId)}`);
@@ -523,8 +536,8 @@ async function openAdvanceDialog(paymentId) {
     const payment = firstDefined(movementResponse, ["data"], movementResponse);
     const providerId = firstDefined(payment, ["proveedor.id", "provider.id", "proveedor_id"], null);
     const available = movementUnapplied(payment);
-    if (!providerId || movementType(payment) !== "PAGO_PROVEEDOR" || available <= 0) {
-      throw new Error("Este movimiento ya no tiene saldo disponible para aplicar.");
+    if (!providerId || !PROVIDER_CREDIT_TYPES.has(movementType(payment)) || available <= 0) {
+      throw new Error("Esta fuente ya no tiene saldo disponible para aplicar.");
     }
 
     state.advancePayment = payment;
@@ -555,7 +568,7 @@ async function openAdvanceDialog(paymentId) {
     setMessage(elements.advanceFormMessage);
   } catch (error) {
     if (requestSequence !== state.advanceRequestSequence) return;
-    setMessage(elements.advanceFormMessage, errorMessage(error, "No se pudo preparar la aplicación del anticipo."), "error");
+    setMessage(elements.advanceFormMessage, errorMessage(error, "No se pudo preparar la aplicación del saldo a favor."), "error");
     state.advanceDebts = [];
     state.advanceApplications.clear();
     elements.advanceDebtList.innerHTML = "";
@@ -573,7 +586,7 @@ function toggleAdvanceDebt(id, checked) {
     const debt = state.advanceDebts.find((item) => String(item.id) === key);
     const remaining = Math.max(0, currentAdvanceAvailable() - advanceSelectedTotal());
     if (!debt || remaining <= 0) {
-      setMessage(elements.advanceFormMessage, "El saldo del anticipo ya está completamente seleccionado.", "error");
+      setMessage(elements.advanceFormMessage, "El saldo a favor ya está completamente seleccionado.", "error");
       renderAdvanceDebts();
       return;
     }
@@ -605,7 +618,7 @@ async function applyAdvance(event) {
 
   state.savingAdvance = true;
   updateAdvanceSummary();
-  setMessage(elements.advanceFormMessage, "Aplicando el anticipo...");
+  setMessage(elements.advanceFormMessage, "Aplicando el saldo a favor...");
 
   try {
     const paymentId = firstDefined(state.advancePayment, ["id"], null);
@@ -617,12 +630,12 @@ async function applyAdvance(event) {
         observaciones: "Aplicación posterior desde Tesorería"
       })
     });
-    const message = response?.message || "El anticipo fue aplicado correctamente.";
+    const message = response?.message || "El saldo a favor fue aplicado correctamente.";
     closeAdvanceDialog(true);
     await Promise.allSettled([loadAdvances(), loadBalances(), loadTrace(), loadRecentMovements()]);
     setMessage(elements.advanceMessage, message, "success");
   } catch (error) {
-    setMessage(elements.advanceFormMessage, errorMessage(error, "No se pudo aplicar el anticipo."), "error");
+    setMessage(elements.advanceFormMessage, errorMessage(error, "No se pudo aplicar el saldo a favor."), "error");
   } finally {
     state.savingAdvance = false;
     updateAdvanceSummary();
@@ -664,12 +677,14 @@ function renderRecent(records) {
 
   elements.recentMovements.innerHTML = records.slice(0, 6).map((record) => {
     const type = movementType(record);
+    const noCashFlow = type === "SALDO_FAVOR_PROVEEDOR";
+    const outgoing = isOutgoing(record, type);
     const reference = firstDefined(record, ["referencia", "reference", "numero", "id"], "Sin referencia");
     const date = firstDefined(record, ["fecha_hora", "fecha", "created_at", "date"], null);
 
     return `
       <article class="fin-recent-item">
-        <span class="fin-recent-mark ${isOutgoing(record, type) ? "is-out" : ""}">${isOutgoing(record, type) ? "−" : "+"}</span>
+        <span class="fin-recent-mark ${noCashFlow ? "is-neutral" : outgoing ? "is-out" : ""}">${noCashFlow ? "·" : outgoing ? "−" : "+"}</span>
         <div class="fin-recent-copy">
           <strong>${escapeHtml(MOVEMENT_LABELS[type] || type.replaceAll("_", " "))}</strong>
           <small>${escapeHtml(reference)} · ${escapeHtml(formatDateTime(date))}</small>
@@ -696,6 +711,9 @@ async function loadRecentMovements() {
 
 async function loadAll() {
   await Promise.allSettled([loadCatalog(), loadBalances(), loadAdvances(), loadTrace(), loadRecentMovements()]);
+  if (requestedProviderId) {
+    document.querySelector(".fin-advances-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 elements.filters.addEventListener("submit", (event) => {

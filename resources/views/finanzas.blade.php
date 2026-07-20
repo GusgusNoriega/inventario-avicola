@@ -17,7 +17,7 @@
       'description' => 'Sigue cada sol desde el cliente hasta la cuenta receptora y el proveedor correspondiente.'
     ])
 
-    <section class="fin-summary-grid" aria-label="Resumen financiero">
+    <section class="fin-summary-grid fin-dashboard-summary-grid" aria-label="Resumen financiero">
       <article class="fin-summary-card fin-card fin-summary-balance">
         <div>
           <span>Saldo disponible propio</span>
@@ -46,6 +46,13 @@
         </div>
         <strong id="financeDirectPaid">S/ 0.00</strong>
       </article>
+      <article class="fin-summary-card fin-card fin-summary-provider-credit">
+        <div>
+          <span>Saldo a favor con proveedores</span>
+          <small>Disponible en soles para futuras compras</small>
+        </div>
+        <strong id="financeProviderCreditBalance">S/ 0.00</strong>
+      </article>
     </section>
 
     <section class="fin-accounts-panel fin-card" aria-labelledby="financeAccountsTitle">
@@ -63,13 +70,16 @@
     <section class="fin-advances-panel fin-card" aria-labelledby="financeAdvancesTitle">
       <div class="fin-section-head fin-section-head-wrap">
         <div>
-          <p class="fin-eyebrow">Pagos pendientes de asignar</p>
-          <h2 id="financeAdvancesTitle">Anticipos por aplicar</h2>
-          <p class="fin-section-copy">Depósitos realizados a proveedores que todavía no reducen una deuda específica.</p>
+          <p class="fin-eyebrow">Crédito disponible para compras</p>
+          <h2 id="financeAdvancesTitle">Saldo a favor con proveedores</h2>
+          <p class="fin-section-copy">Incluye depósitos o transferencias no aplicados y saldos anteriores cargados manualmente.</p>
         </div>
-        <a class="fin-btn fin-btn-ghost fin-btn-small" href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR">Registrar pago</a>
+        <div class="fin-section-actions">
+          <a class="fin-btn fin-btn-ghost fin-btn-small" href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR">Depositar o transferir</a>
+          <a class="fin-btn fin-btn-primary fin-btn-small" href="{{ route('finanzas.movimientos.nuevo') }}?tipo=SALDO_FAVOR_PROVEEDOR">Registrar saldo anterior</a>
+        </div>
       </div>
-      <p id="financeAdvanceMessage" class="fin-message" role="status" aria-live="polite">Consultando anticipos...</p>
+      <p id="financeAdvanceMessage" class="fin-message" role="status" aria-live="polite">Consultando saldos a favor...</p>
       <div id="financeAdvanceList" class="fin-advance-list" aria-live="polite"></div>
     </section>
 
@@ -158,13 +168,13 @@
     <form id="financeAdvanceForm" class="fin-purchase-dialog-card" novalidate>
       <header class="fin-purchase-dialog-head">
         <div>
-          <p class="fin-eyebrow">Asignación posterior</p>
-          <h2 id="financeAdvanceDialogTitle">Aplicar anticipo a una deuda</h2>
+          <p class="fin-eyebrow">Uso del saldo disponible</p>
+          <h2 id="financeAdvanceDialogTitle">Aplicar saldo a favor a una deuda</h2>
         </div>
         <button id="financeAdvanceClose" class="fin-dialog-close" type="button" aria-label="Cerrar aplicación">×</button>
       </header>
 
-      <p id="financeAdvanceDialogDescription" class="fin-advance-dialog-copy">El depósito original no se modificará. Solo se vinculará su saldo disponible con las deudas que selecciones.</p>
+      <p id="financeAdvanceDialogDescription" class="fin-advance-dialog-copy">El depósito, transferencia o saldo anterior no se modificará. Solo se vinculará su importe disponible con las deudas que selecciones.</p>
 
       <dl class="fin-advance-facts">
         <div><dt>Movimiento</dt><dd id="financeAdvanceCode">—</dd></div>
@@ -174,10 +184,10 @@
       </dl>
 
       <div class="fin-advance-summary" aria-label="Resumen de aplicación">
-        <article><span>Importe del pago</span><strong id="financeAdvanceTotal">S/ 0.00</strong></article>
+        <article><span>Importe de la fuente</span><strong id="financeAdvanceTotal">S/ 0.00</strong></article>
         <article><span>Disponible</span><strong id="financeAdvanceAvailable">S/ 0.00</strong></article>
         <article><span>Seleccionado</span><strong id="financeAdvanceSelected">S/ 0.00</strong></article>
-        <article><span>Quedará como anticipo</span><strong id="financeAdvanceRemaining">S/ 0.00</strong></article>
+        <article><span>Quedará a favor</span><strong id="financeAdvanceRemaining">S/ 0.00</strong></article>
       </div>
 
       <section class="fin-debt-panel fin-advance-debts" aria-labelledby="financeAdvanceDebtsTitle">

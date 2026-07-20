@@ -72,6 +72,7 @@
         <article class="directory-stat card"><span>Compras valorizadas</span><strong id="providerFinanceDocumented">S/ 0.00</strong></article>
         <article class="directory-stat card"><span>Depositado por clientes</span><strong id="providerFinanceDirect">S/ 0.00</strong></article>
         <article class="directory-stat card"><span>Pagado por nosotros</span><strong id="providerFinanceOwn">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Saldo a nuestro favor</span><strong id="providerFinanceCredit">S/ 0.00</strong></article>
         <article class="directory-stat card directory-stat-accent"><span>Saldo neto pendiente</span><strong id="providerFinancePending">S/ 0.00</strong></article>
         <article class="directory-stat card"><span>Costos sin precio</span><strong id="providerFinancePendingCosts">0</strong></article>
       </div>

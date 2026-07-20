@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Pago;
 use App\Support\FinancialMoney;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -75,10 +76,7 @@ class FinancialQueryService
                 ])->all(),
             'clientes' => $thirdParties('CLIENTE'),
             'proveedores' => $thirdParties('PROVEEDOR'),
-            'tipos_movimiento' => [
-                'COBRO_CLIENTE', 'PAGO_DIRECTO', 'PAGO_PROVEEDOR', 'COBRO_MINORISTA',
-                'REEMBOLSO_CLIENTE', 'SALDO_INICIAL', 'AJUSTE', 'TRANSFERENCIA_INTERNA',
-            ],
+            'tipos_movimiento' => Pago::TYPES,
         ];
     }
 
@@ -222,6 +220,7 @@ class FinancialQueryService
         })->all();
 
         $portfolio = $this->portfolioSummary($companyId, $summaryCurrency);
+        $providerCredit = $this->providerCreditSummary($companyId, $summaryCurrency);
 
         return [
             'data' => $rows,
@@ -233,7 +232,17 @@ class FinancialQueryService
             'pagos_proveedores' => [
                 'moneda' => $summaryCurrency,
                 'directos_clientes' => $this->paymentTotal($companyId, 'PAGO_DIRECTO', $summaryCurrency),
-                'realizados_por_empresa' => $this->paymentTotal($companyId, 'PAGO_PROVEEDOR', $summaryCurrency),
+                'realizados_por_empresa' => $this->paymentTotal(
+                    $companyId,
+                    Pago::TYPE_PROVIDER_PAYMENT,
+                    $summaryCurrency,
+                ),
+            ],
+            'saldo_favor_proveedores' => [
+                'moneda' => $summaryCurrency,
+                'disponible' => $providerCredit['disponible'],
+                'originado_en_pagos' => $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
+                'registrado_manualmente' => $providerCredit[Pago::TYPE_PROVIDER_CREDIT],
             ],
         ];
     }
@@ -278,7 +287,7 @@ class FinancialQueryService
             ->when($filters['estado'] ?? null, fn (Builder $query, string $status) => $query->where('pago.estado', $status))
             ->when($filters['aplicacion_estado'] ?? null, function (Builder $query, string $status): void {
                 $appliedSql = "(SELECT COALESCE(SUM(pa.importe_aplicado), 0) FROM pago_aplicaciones pa WHERE pa.pago_id = pago.id AND pa.lado = 'CXP')";
-                $query->where('pago.tipo', 'PAGO_PROVEEDOR')
+                $query->whereIn('pago.tipo', Pago::PROVIDER_CREDIT_SOURCE_TYPES)
                     ->where('pago.estado', 'REGISTRADO')
                     ->whereNull('pago.reversa_de_pago_id');
 
@@ -293,6 +302,7 @@ class FinancialQueryService
             ->when($filters['cliente_id'] ?? null, fn (Builder $query, int|string $id) => $query->where('pago.cliente_id', $id))
             ->when($filters['proveedor_id'] ?? null, fn (Builder $query, int|string $id) => $query->where('pago.proveedor_id', $id))
             ->when($filters['metodo_pago_id'] ?? null, fn (Builder $query, int|string $id) => $query->where('pago.metodo_pago_id', $id))
+            ->when($filters['moneda'] ?? null, fn (Builder $query, string $currency) => $query->where('pago.moneda', $currency))
             ->when($filters['cuenta_id'] ?? null, fn (Builder $query, int|string $id) => $query->where(
                 fn (Builder $nested) => $nested->where('pago.cuenta_origen_id', $id)->orWhere('pago.cuenta_destino_id', $id)
             ))
@@ -389,7 +399,7 @@ class FinancialQueryService
             })->all();
 
             $providerApplication = null;
-            if ($payment->tipo === 'PAGO_PROVEEDOR') {
+            if (in_array($payment->tipo, Pago::PROVIDER_CREDIT_SOURCE_TYPES, true)) {
                 $applied = collect($items)
                     ->where('lado', 'CXP')
                     ->reduce(
@@ -551,6 +561,49 @@ class FinancialQueryService
         }
 
         return ['moneda' => $currency, 'por_cobrar' => $totals['CXC'], 'por_pagar' => $totals['CXP']];
+    }
+
+    /**
+     * @return array{disponible: string, PAGO_PROVEEDOR: string, SALDO_FAVOR_PROVEEDOR: string}
+     */
+    private function providerCreditSummary(int $companyId, string $currency): array
+    {
+        $rows = DB::table('pagos as pago')
+            ->leftJoin('pago_aplicaciones as aplicacion', function ($join): void {
+                $join->on('aplicacion.pago_id', '=', 'pago.id')
+                    ->where('aplicacion.lado', 'CXP');
+            })
+            ->where('pago.empresa_id', $companyId)
+            ->whereIn('pago.tipo', Pago::PROVIDER_CREDIT_SOURCE_TYPES)
+            ->where('pago.moneda', $currency)
+            ->where('pago.estado', Pago::STATUS_REGISTERED)
+            ->whereNull('pago.reversa_de_pago_id')
+            ->groupBy('pago.id', 'pago.tipo', 'pago.importe')
+            ->get([
+                'pago.id',
+                'pago.tipo',
+                'pago.importe',
+                DB::raw('COALESCE(SUM(aplicacion.importe_aplicado), 0) as importe_aplicado'),
+            ]);
+
+        $totals = [
+            'disponible' => '0.00',
+            Pago::TYPE_PROVIDER_PAYMENT => '0.00',
+            Pago::TYPE_PROVIDER_CREDIT => '0.00',
+        ];
+        foreach ($rows as $row) {
+            $available = FinancialMoney::subtract(
+                (string) $row->importe,
+                (string) $row->importe_aplicado,
+            );
+            if (FinancialMoney::compare($available, '0.00') < 0) {
+                $available = '0.00';
+            }
+            $totals['disponible'] = FinancialMoney::add($totals['disponible'], $available);
+            $totals[$row->tipo] = FinancialMoney::add($totals[$row->tipo], $available);
+        }
+
+        return $totals;
     }
 
     private function paymentTotal(int $companyId, string $type, string $currency): string

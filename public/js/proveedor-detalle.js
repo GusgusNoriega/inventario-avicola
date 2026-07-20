@@ -18,6 +18,7 @@ const elements = {
   financeDocumented: document.getElementById("providerFinanceDocumented"),
   financeDirect: document.getElementById("providerFinanceDirect"),
   financeOwn: document.getElementById("providerFinanceOwn"),
+  financeCredit: document.getElementById("providerFinanceCredit"),
   financePending: document.getElementById("providerFinancePending"),
   financePendingCosts: document.getElementById("providerFinancePendingCosts"),
   financeHelp: document.getElementById("providerFinanceHelp"),
@@ -206,6 +207,7 @@ function renderFinance(finance) {
   elements.financeDocumented.textContent = formatCurrency(finance.documented, currency);
   elements.financeDirect.textContent = formatCurrency(finance.paid_directly_by_clients, currency);
   elements.financeOwn.textContent = formatCurrency(finance.paid_by_company, currency);
+  elements.financeCredit.textContent = formatCurrency(finance.unapplied, currency);
   elements.financePending.textContent = formatCurrency(finance.pending, currency);
   elements.financePendingCosts.textContent = formatNumber(finance.pending_costs.count);
 
@@ -216,7 +218,7 @@ function renderFinance(finance) {
     notes.push(`${formatWeight(pendingWeight)} aun no tienen precio de compra y no forman parte del total valorizado`);
   }
   if (unapplied > 0) {
-    notes.push(`${formatCurrency(unapplied, currency)} esta registrado como adelanto sin aplicar`);
+    notes.push(`${formatCurrency(unapplied, currency)} está disponible a nuestro favor para futuras compras`);
   }
   elements.financeHelp.textContent = notes.length
     ? `${notes.join(". ")}.`

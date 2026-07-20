@@ -67,8 +67,8 @@ class FinancialMovementController extends Controller
 
         return response()->json([
             'message' => $result['idempotent']
-                ? 'Esta aplicación ya había sido procesada.'
-                : 'El anticipo fue aplicado correctamente a las deudas seleccionadas.',
+                ? 'Esta aplicación de saldo a favor ya había sido procesada.'
+                : 'El saldo a favor fue aplicado correctamente a las deudas seleccionadas.',
             'data' => $this->queries->movement(
                 (int) $request->user()->empresa_id,
                 $result['pago_id'],

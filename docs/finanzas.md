@@ -50,11 +50,32 @@ ni anularse hasta anular primero esos movimientos financieros.
 | `COBRO_CLIENTE` | Cliente | Cuenta propia | CXC |
 | `PAGO_DIRECTO` | Cliente | Cuenta externa del proveedor | CXC y CXP |
 | `PAGO_PROVEEDOR` | Cuenta propia | Cuenta externa del proveedor | CXP |
+| `SALDO_FAVOR_PROVEEDOR` | Registro manual histórico | Proveedor | CXP posterior |
 | `COBRO_MINORISTA` | Comprador, identificado o anónimo | Cuenta/caja propia | CXC |
 | `REEMBOLSO_CLIENTE` | Cuenta propia | Cliente | Abono CXC por devolución |
 | `SALDO_INICIAL` | Apertura | Cuenta propia | Sin cartera |
 | `AJUSTE` | Entrada o salida autorizada | Cuenta propia | Sin cartera |
 | `TRANSFERENCIA_INTERNA` | Cuenta propia | Otra cuenta propia | Sin cartera |
+
+Un `PAGO_PROVEEDOR` puede registrarse sin aplicarlo de inmediato. En ese caso
+el dinero sale una sola vez de la cuenta propia y el importe pendiente de
+aplicar queda como saldo a nuestro favor con ese proveedor. Cuando se usa en
+una compra, solo se crea la aplicación CXP: no se vuelve a descontar caja o
+banco.
+
+`SALDO_FAVOR_PROVEEDOR` incorpora un saldo que ya existía antes de usar el
+sistema. Exige proveedor, moneda, importe y una observación que justifique el
+origen; la fecha puede indicarse y, si se omite por API, se registra la hora
+actual. No admite cuentas ni método de pago porque no representa un movimiento
+de dinero actual. Su alta requiere `SALDOS_AJUSTAR`. Los depósitos,
+transferencias y cargas manuales se mantienen separados en la trazabilidad,
+aunque todos pueden utilizarse posteriormente contra CXP del mismo proveedor y
+moneda.
+
+El saldo a favor nunca se edita como un campo del proveedor. Se deriva siempre
+de los movimientos activos elegibles menos sus aplicaciones CXP. Por eso una
+anulación restaura las deudas aplicadas y elimina el crédito sin dejar saldos
+huérfanos.
 
 Para `PAGO_DIRECTO`, el importe aplicado a CXC debe ser igual al importe
 aplicado a CXP. Así, un depósito del cliente al proveedor disminuye por el mismo
@@ -73,7 +94,7 @@ petición de alta requiere una clave UUID de idempotencia.
 - `/finanzas/saldos`: saldos por cuenta, cartera, pagos a proveedores y trazabilidad.
 - `/finanzas/entidades`: entidades propias/externas y sus cuentas.
 - `/finanzas/movimientos/nuevo`: cobros, pagos directos, pagos a proveedor,
-  minorista y reembolsos.
+  cargas manuales de saldo a favor, minorista y reembolsos.
 - `/compras`: compras al contado y a crédito, deuda pendiente y documentos.
 - `/compras/nueva`: registro transaccional de una compra a proveedor.
 
@@ -93,7 +114,8 @@ Los recursos principales son:
 
 - `GET /catalogo`, `/cartera`, `/saldos`, `/trazabilidad` y `/movimientos`.
 - CRUD por desactivación de `/entidades` y `/cuentas`.
-- `POST /movimientos` y `POST /movimientos/{id}/anular`.
+- `POST /movimientos`, `POST /movimientos/{id}/aplicaciones` y
+  `POST /movimientos/{id}/anular`.
 - `GET /clientes/{id}/resumen` y `/proveedores/{id}/resumen`.
 
 El pago inicial generado por una compra al contado no admite anulación aislada

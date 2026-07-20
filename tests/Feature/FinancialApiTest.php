@@ -519,6 +519,360 @@ class FinancialApiTest extends TestCase
         }
     }
 
+    public function test_manual_provider_credit_is_cash_neutral_strict_idempotent_and_requires_balance_permission(): void
+    {
+        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR SALDO MANUAL', '20633333331');
+        [, $ownAccount] = $this->ownAccount();
+        $payable = $this->document('COMPRA', $provider, '100.00', 'CXP-SALDO-MANUAL-VALIDACION');
+        $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_INICIAL',
+            'cuenta_destino_id' => $ownAccount,
+            'moneda' => 'PEN',
+            'importe' => '500.00',
+            'aplicaciones' => [],
+        ])->assertCreated();
+
+        $payload = [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_FAVOR_PROVEEDOR',
+            'fecha_hora' => '2026-06-30 14:15:00',
+            'proveedor_id' => $provider,
+            'moneda' => 'PEN',
+            'importe' => '150.00',
+            'referencia' => 'APERTURA-PROV-001',
+            'observaciones' => 'Saldo conciliado con el proveedor antes de iniciar el sistema.',
+        ];
+
+        $withoutNotes = $payload;
+        $withoutNotes['idempotency_key'] = (string) Str::uuid();
+        unset($withoutNotes['observaciones']);
+        $this->postJson('/api/v1/finanzas/movimientos', $withoutNotes)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('observaciones');
+
+        $invalidFields = [
+            'cuenta_origen_id' => $ownAccount,
+            'cuenta_destino_id' => $ownAccount,
+            'metodo_pago_id' => $method,
+            'aplicaciones' => [[
+                'lado' => 'CXP',
+                'comprobante_id' => $payable,
+                'importe_aplicado' => '10.00',
+            ]],
+        ];
+        foreach ($invalidFields as $field => $value) {
+            $invalid = $payload;
+            $invalid['idempotency_key'] = (string) Str::uuid();
+            $invalid[$field] = $value;
+
+            $this->postJson('/api/v1/finanzas/movimientos', $invalid)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($field);
+        }
+
+        $limitedUser = User::factory()->create(['empresa_id' => $this->user->empresa_id]);
+        $limitedRole = Role::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PAGOS_SIN_AJUSTES',
+            'nombre' => 'Pagos sin ajustes de saldo',
+        ]);
+        $limitedRole->permissions()->attach(
+            Permission::query()->where('codigo', 'PAGOS_REGISTRAR')->value('id')
+        );
+        $limitedUser->roles()->attach($limitedRole);
+
+        try {
+            app(FinancialMovementService::class)->register(
+                (int) $this->user->empresa_id,
+                $limitedUser,
+                [...$payload, 'idempotency_key' => (string) Str::uuid()],
+            );
+            $this->fail('El saldo manual debio exigir el permiso SALDOS_AJUSTAR.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+
+        $response = $this->postJson('/api/v1/finanzas/movimientos', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.tipo', 'SALDO_FAVOR_PROVEEDOR')
+            ->assertJsonPath('data.proveedor.id', $provider)
+            ->assertJsonPath('data.cuenta_origen', null)
+            ->assertJsonPath('data.cuenta_destino', null)
+            ->assertJsonPath('data.metodo_pago', null)
+            ->assertJsonPath('data.aplicacion.estado', 'SIN_APLICAR')
+            ->assertJsonPath('data.aplicacion.importe_sin_aplicar', '150.00')
+            ->assertJsonPath('meta.idempotent', false);
+        $manualCreditId = $response->json('data.id');
+
+        $this->postJson('/api/v1/finanzas/movimientos', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.id', $manualCreditId)
+            ->assertJsonPath('meta.idempotent', true);
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            ...$payload,
+            'observaciones' => 'La misma clave no puede describir otro saldo.',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $ownAccount)
+            ->assertJsonPath('data.0.saldo', '500.00')
+            ->assertJsonPath('pagos_proveedores.realizados_por_empresa', '0.00')
+            ->assertJsonPath('saldo_favor_proveedores.disponible', '150.00')
+            ->assertJsonPath('saldo_favor_proveedores.originado_en_pagos', '0.00')
+            ->assertJsonPath('saldo_favor_proveedores.registrado_manualmente', '150.00');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.manual_credit', '150.00')
+            ->assertJsonPath('data.paid_by_company', '0.00')
+            ->assertJsonPath('data.unapplied', '150.00')
+            ->assertJsonPath('data.favor_balance', '150.00');
+
+        [, $providerAccount] = $this->externalAccount($provider);
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'PAGO_PROVEEDOR',
+            'proveedor_id' => $provider,
+            'cuenta_origen_id' => $ownAccount,
+            'cuenta_destino_id' => $providerAccount,
+            'metodo_pago_id' => $method,
+            'moneda' => 'PEN',
+            'importe' => '50.00',
+            'aplicaciones' => [],
+        ])->assertCreated();
+
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.saldo', '450.00')
+            ->assertJsonPath('pagos_proveedores.realizados_por_empresa', '50.00')
+            ->assertJsonPath('saldo_favor_proveedores.disponible', '200.00')
+            ->assertJsonPath('saldo_favor_proveedores.originado_en_pagos', '50.00')
+            ->assertJsonPath('saldo_favor_proveedores.registrado_manualmente', '150.00');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.manual_credit', '150.00')
+            ->assertJsonPath('data.paid_by_company', '50.00')
+            ->assertJsonPath('data.payments', '200.00')
+            ->assertJsonPath('data.unapplied', '200.00')
+            ->assertJsonPath('data.favor_balance', '200.00');
+
+        $this->assertDatabaseCount('pagos', 3);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'pagos',
+            'entidad_id' => (string) $manualCreditId,
+            'accion' => 'REGISTRAR',
+        ]);
+    }
+
+    public function test_manual_provider_credit_can_be_applied_partially_and_fully_to_its_own_currency_and_provider(): void
+    {
+        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR APLICACION MANUAL', '20633333332');
+        $otherProvider = $this->thirdParty('PROVEEDOR', 'OTRO PROVEEDOR MANUAL', '20633333333');
+        $firstPayable = $this->document('COMPRA', $provider, '100.00', 'CXP-MANUAL-1');
+        $secondPayable = $this->document('COMPRA', $provider, '50.00', 'CXP-MANUAL-2');
+        $otherProviderPayable = $this->document('COMPRA', $otherProvider, '100.00', 'CXP-MANUAL-OTRO');
+        $usdPayable = $this->document('COMPRA', $provider, '100.00', 'CXP-MANUAL-USD');
+        DB::table('comprobantes')->where('id', $usdPayable)->update(['moneda' => 'USD']);
+
+        $manualCreditId = $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_FAVOR_PROVEEDOR',
+            'proveedor_id' => $provider,
+            'moneda' => 'PEN',
+            'importe' => '150.00',
+            'observaciones' => 'Saldo historico confirmado por el proveedor.',
+        ])->assertCreated()
+            ->assertJsonPath('data.aplicacion.importe_sin_aplicar', '150.00')
+            ->json('data.id');
+
+        $this->getJson('/api/v1/finanzas/movimientos?aplicacion_estado=CON_SALDO')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $manualCreditId);
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.payable', '150.00')
+            ->assertJsonPath('data.manual_credit', '150.00')
+            ->assertJsonPath('data.unapplied', '150.00')
+            ->assertJsonPath('data.favor_balance', '150.00')
+            ->assertJsonPath('data.pending', '0.00');
+
+        $this->postJson("/api/v1/finanzas/movimientos/{$manualCreditId}/aplicaciones", [
+            'idempotency_key' => (string) Str::uuid(),
+            'aplicaciones' => [[
+                'comprobante_id' => $firstPayable,
+                'importe_aplicado' => '60.00',
+            ]],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.aplicacion.estado', 'PARCIAL')
+            ->assertJsonPath('data.aplicacion.importe_aplicado', '60.00')
+            ->assertJsonPath('data.aplicacion.importe_sin_aplicar', '90.00');
+
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $firstPayable,
+            'saldo_pendiente' => 40,
+            'estado' => 'PARCIAL',
+        ]);
+
+        foreach ([$otherProviderPayable, $usdPayable] as $invalidPayable) {
+            $this->postJson("/api/v1/finanzas/movimientos/{$manualCreditId}/aplicaciones", [
+                'idempotency_key' => (string) Str::uuid(),
+                'aplicaciones' => [[
+                    'comprobante_id' => $invalidPayable,
+                    'importe_aplicado' => '10.00',
+                ]],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('aplicaciones.0.comprobante_id');
+        }
+
+        $this->assertDatabaseCount('pago_aplicacion_operaciones', 1);
+        $this->assertDatabaseHas('pago_aplicaciones', [
+            'pago_id' => $manualCreditId,
+            'comprobante_id' => $firstPayable,
+            'importe_aplicado' => 60,
+        ]);
+
+        $this->postJson("/api/v1/finanzas/movimientos/{$manualCreditId}/aplicaciones", [
+            'idempotency_key' => (string) Str::uuid(),
+            'aplicaciones' => [
+                ['comprobante_id' => $firstPayable, 'importe_aplicado' => '40.00'],
+                ['comprobante_id' => $secondPayable, 'importe_aplicado' => '50.00'],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.aplicacion.estado', 'APLICADO')
+            ->assertJsonPath('data.aplicacion.importe_aplicado', '150.00')
+            ->assertJsonPath('data.aplicacion.importe_sin_aplicar', '0.00');
+
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $firstPayable,
+            'saldo_pendiente' => 0,
+            'estado' => 'PAGADO',
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $secondPayable,
+            'saldo_pendiente' => 0,
+            'estado' => 'PAGADO',
+        ]);
+        $this->getJson('/api/v1/finanzas/movimientos?aplicacion_estado=CON_SALDO')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.payable', '0.00')
+            ->assertJsonPath('data.manual_credit', '150.00')
+            ->assertJsonPath('data.applied', '150.00')
+            ->assertJsonPath('data.unapplied', '0.00')
+            ->assertJsonPath('data.favor_balance', '0.00')
+            ->assertJsonPath('data.pending', '0.00')
+            ->assertJsonPath('data.paid_by_company', '0.00');
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'pagos',
+            'entidad_id' => (string) $manualCreditId,
+            'accion' => 'APLICAR_SALDO_PROVEEDOR',
+        ]);
+    }
+
+    public function test_voiding_an_applied_manual_provider_credit_restores_payables_without_touching_cash(): void
+    {
+        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR REVERSA MANUAL', '20633333334');
+        [, $ownAccount] = $this->ownAccount();
+        $payable = $this->document('COMPRA', $provider, '100.00', 'CXP-REVERSA-MANUAL');
+
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_INICIAL',
+            'cuenta_destino_id' => $ownAccount,
+            'moneda' => 'PEN',
+            'importe' => '200.00',
+            'aplicaciones' => [],
+        ])->assertCreated();
+        $manualCreditId = $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_FAVOR_PROVEEDOR',
+            'proveedor_id' => $provider,
+            'moneda' => 'PEN',
+            'importe' => '100.00',
+            'observaciones' => 'Saldo historico que debe reversarse por conciliacion.',
+        ])->assertCreated()->json('data.id');
+        $this->postJson("/api/v1/finanzas/movimientos/{$manualCreditId}/aplicaciones", [
+            'idempotency_key' => (string) Str::uuid(),
+            'aplicaciones' => [[
+                'comprobante_id' => $payable,
+                'importe_aplicado' => '40.00',
+            ]],
+        ])->assertCreated();
+
+        $voidResponse = $this->postJson("/api/v1/finanzas/movimientos/{$manualCreditId}/anular", [
+            'motivo' => 'La conciliacion inicial contenia un saldo equivocado',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.estado', 'ANULADO')
+            ->assertJsonPath('data.aplicacion.estado', 'ANULADO')
+            ->assertJsonPath('reversa.cuenta_origen', null)
+            ->assertJsonPath('reversa.cuenta_destino', null)
+            ->assertJsonPath('reversa.aplicacion.estado', 'REVERSA')
+            ->assertJsonPath('meta.idempotent', false);
+        $reverseId = $voidResponse->json('reversa.id');
+
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $payable,
+            'saldo_pendiente' => 100,
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.saldo', '200.00')
+            ->assertJsonPath('pagos_proveedores.realizados_por_empresa', '0.00')
+            ->assertJsonPath('saldo_favor_proveedores.disponible', '0.00')
+            ->assertJsonPath('saldo_favor_proveedores.originado_en_pagos', '0.00')
+            ->assertJsonPath('saldo_favor_proveedores.registrado_manualmente', '0.00');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.manual_credit', '0.00')
+            ->assertJsonPath('data.unapplied', '0.00')
+            ->assertJsonPath('data.favor_balance', '0.00')
+            ->assertJsonPath('data.paid_by_company', '0.00');
+        $this->getJson('/api/v1/finanzas/movimientos?aplicacion_estado=CON_SALDO')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->postJson("/api/v1/finanzas/movimientos/{$manualCreditId}/anular", [
+            'motivo' => 'Reintento de la misma anulacion',
+        ])
+            ->assertOk()
+            ->assertJsonPath('reversa.id', $reverseId)
+            ->assertJsonPath('meta.idempotent', true);
+
+        foreach ([$manualCreditId, $reverseId] as $closedMovementId) {
+            $this->postJson("/api/v1/finanzas/movimientos/{$closedMovementId}/aplicaciones", [
+                'idempotency_key' => (string) Str::uuid(),
+                'aplicaciones' => [[
+                    'comprobante_id' => $payable,
+                    'importe_aplicado' => '10.00',
+                ]],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('movimiento');
+        }
+
+        $this->assertDatabaseCount('pagos', 3);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'pagos',
+            'entidad_id' => (string) $manualCreditId,
+            'accion' => 'ANULAR',
+        ]);
+    }
+
     public function test_later_provider_payment_application_is_atomic_and_validates_the_debt_owner(): void
     {
         $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR APLICACIÓN', '20622222221');

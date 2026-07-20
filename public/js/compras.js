@@ -40,6 +40,7 @@ const elements = {
   detailContent: document.getElementById("purchaseDetailContent"),
   detailClose: document.getElementById("purchaseDetailClose"),
   companyPayment: document.getElementById("purchaseCompanyPayment"),
+  providerCredit: document.getElementById("purchaseProviderCredit"),
   directPayment: document.getElementById("purchaseDirectPayment"),
   voidStart: document.getElementById("purchaseVoidStart"),
   voidPanel: document.getElementById("purchaseVoidPanel"),
@@ -311,10 +312,13 @@ function renderDetail(purchase) {
 
   const provider = providerId(purchase);
   const movementBase = document.body.dataset.financeMovementUrl || "/finanzas/movimientos/nuevo";
+  const balancesBase = document.body.dataset.financeBalancesUrl || "/finanzas/saldos";
   const hasPending = pending > 0 && !["ANULADO", "PAGADO"].includes(status);
   elements.companyPayment.hidden = !hasPending;
+  elements.providerCredit.hidden = !hasPending;
   elements.directPayment.hidden = !hasPending;
   elements.companyPayment.href = `${movementBase}?tipo=PAGO_PROVEEDOR&proveedor_id=${encodeURIComponent(provider || "")}`;
+  elements.providerCredit.href = `${balancesBase}?proveedor_id=${encodeURIComponent(provider || "")}`;
   elements.directPayment.href = `${movementBase}?tipo=PAGO_DIRECTO&proveedor_id=${encodeURIComponent(provider || "")}`;
   elements.voidStart.hidden = status === "ANULADO" || condition === "LEGADO";
   elements.voidPanel.hidden = true;
@@ -328,6 +332,7 @@ async function showPurchase(id, successMessage = "") {
   elements.detailTitle.textContent = "Consultando compra...";
   elements.detailContent.innerHTML = "";
   elements.companyPayment.hidden = true;
+  elements.providerCredit.hidden = true;
   elements.directPayment.hidden = true;
   elements.voidStart.hidden = true;
   setMessage(elements.detailMessage, "Cargando detalle...");

@@ -104,7 +104,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeAdvanceList"', false)
             ->assertSee('id="financeAdvanceDialog"', false)
             ->assertSee('aria-describedby="financeAdvanceDialogDescription"', false)
-            ->assertSee('Anticipos por aplicar')
+            ->assertSee('Saldo a favor con proveedores')
+            ->assertSee('id="financeProviderCreditBalance"', false)
             ->assertSee('id="financeAuthDialog"', false)
             ->assertSee(route('finanzas'), false)
             ->assertSee(route('finanzas.saldos'), false)
@@ -135,8 +136,12 @@ class WebViewsTest extends TestCase
             ->assertSee('value="COBRO_CLIENTE"', false)
             ->assertSee('value="PAGO_DIRECTO"', false)
             ->assertSee('value="PAGO_PROVEEDOR"', false)
+            ->assertSee('value="SALDO_FAVOR_PROVEEDOR"', false)
             ->assertSee('value="COBRO_MINORISTA"', false)
             ->assertSee('value="REEMBOLSO_CLIENTE"', false)
+            ->assertSee('id="financeProviderPaymentSourcePanel"', false)
+            ->assertSee('value="SALDO_FAVOR"', false)
+            ->assertSee('id="financeProviderCreditSource"', false)
             ->assertSee('id="financeCxcList"', false)
             ->assertSee('id="financeCxpList"', false)
             ->assertSee('id="financeApplicationsInstructions"', false)
@@ -159,7 +164,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/saldos', $dashboardJavascript);
         $this->assertStringContainsString('/finanzas/trazabilidad', $dashboardJavascript);
         $this->assertStringContainsString('/finanzas/movimientos?per_page=6', $dashboardJavascript);
-        $this->assertStringContainsString('aplicacion_estado=CON_SALDO', $dashboardJavascript);
+        $this->assertStringContainsString('aplicacion_estado: "CON_SALDO"', $dashboardJavascript);
         $this->assertStringContainsString('/aplicaciones', $dashboardJavascript);
         $this->assertStringContainsString('data-advance-apply', $dashboardJavascript);
         $this->assertStringContainsString('["ANULADO", "REVERSA"]', $dashboardJavascript);
@@ -172,6 +177,13 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('include=cuentas&estado=ACTIVO&per_page=100', $movementJavascript);
         $this->assertStringNotContainsString('include=cuentas&estado=ACTIVO&per_page=200', $movementJavascript);
         $this->assertStringContainsString('/finanzas/cartera?', $movementJavascript);
+        $this->assertStringContainsString('SALDO_FAVOR_PROVEEDOR', $movementJavascript);
+        $this->assertStringContainsString('function usesProviderCredit()', $movementJavascript);
+        $this->assertStringContainsString('aplicacion_estado: "CON_SALDO"', $movementJavascript);
+        $this->assertStringContainsString('responseMeta(response)', $movementJavascript);
+        $this->assertStringContainsString('["last_page"]', $movementJavascript);
+        $this->assertStringContainsString('providerCreditSource', $movementJavascript);
+        $this->assertStringContainsString('/aplicaciones', $movementJavascript);
         $this->assertStringContainsString('importe_aplicado:', $movementJavascript);
         $this->assertStringContainsString('idempotency_key:', $movementJavascript);
         $this->assertStringContainsString('queryParameters.get("tipo")', $movementJavascript);

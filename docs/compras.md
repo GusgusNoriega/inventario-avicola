@@ -35,6 +35,12 @@ La compra y su comprobante se crean en una sola transacción. El total queda com
 saldo pendiente de la CXP y puede cancelarse posteriormente mediante pagos de
 la empresa o depósitos directos de clientes al proveedor.
 
+También puede cancelarse con saldo a nuestro favor previamente generado por un
+depósito/transferencia al proveedor o incorporado como saldo histórico manual.
+Aplicar ese saldo reduce la CXP sin generar una segunda salida de una cuenta
+propia. El proveedor y la moneda de la fuente deben coincidir con los de la
+compra.
+
 ### Compra al contado
 
 La compra, el comprobante y un movimiento `PAGO_PROVEEDOR` por el total se crean
@@ -68,6 +74,9 @@ original y resolverse como un ajuste auditado.
 | Cliente deposita a la avícola | Disminuye | Aumenta | No cambia |
 | Cliente deposita al proveedor | Disminuye | No cambia | Disminuye por el mismo importe |
 | La avícola paga al proveedor | No cambia | Disminuye | Disminuye |
+| La avícola deposita sin asignar una compra | No cambia | Disminuye | No cambia hasta aplicar; genera saldo a favor |
+| Se usa saldo a favor existente | No cambia | No cambia | Disminuye |
+| Se carga saldo histórico manual | No cambia | No cambia | No cambia hasta aplicar; genera saldo a favor |
 | Compra a crédito | No cambia | No cambia | Aumenta |
 | Compra al contado | No cambia | Disminuye | Se crea y cancela en la misma transacción |
 
@@ -109,6 +118,12 @@ El pago inicial de una compra al contado no puede anularse de forma aislada
 desde Finanzas; debe anularse la compra completa. Una compra anulada se presenta
 con saldo efectivo cero, aunque el comprobante conserve internamente su saldo
 histórico para auditoría.
+
+Un saldo a favor reutilizable no se enlaza a `compras.pago_inicial_id`, porque
+una misma fuente puede aplicarse a varias compras. La compra se registra como
+CXP y el saldo se aplica desde el flujo de pagos a proveedores. Para corregir
+una compra que ya recibió una aplicación, primero debe revertirse el movimiento
+financiero relacionado de acuerdo con la política de inmutabilidad.
 
 El número del documento queda reservado mientras la compra está activa. Al
 anularla se conserva el número en el historial, pero puede registrarse otra

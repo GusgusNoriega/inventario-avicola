@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Pago;
 use App\Models\User;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
@@ -14,17 +15,6 @@ use Throwable;
 
 class FinancialMovementService
 {
-    private const TYPES = [
-        'COBRO_CLIENTE',
-        'PAGO_DIRECTO',
-        'PAGO_PROVEEDOR',
-        'COBRO_MINORISTA',
-        'REEMBOLSO_CLIENTE',
-        'SALDO_INICIAL',
-        'AJUSTE',
-        'TRANSFERENCIA_INTERNA',
-    ];
-
     public function __construct(
         private readonly FinancialAuditService $audit,
         private readonly FinancialAccountBalanceService $balances,
@@ -70,8 +60,8 @@ class FinancialMovementService
     }
 
     /**
-     * Apply the still-unassigned balance of an existing provider payment to payables.
-     * The cash movement remains immutable; only its accounting allocation changes.
+     * Apply an available provider-credit source to payables.
+     * Any original cash movement remains immutable; only its accounting allocation changes.
      *
      * @param  array<string, mixed>  $data
      * @return array{pago_id: int, operacion_id: int, idempotent: bool}
@@ -125,9 +115,9 @@ class FinancialMovementService
                     ];
                 }
 
-                if ($payment->tipo !== 'PAGO_PROVEEDOR') {
+                if (! in_array($payment->tipo, Pago::PROVIDER_CREDIT_SOURCE_TYPES, true)) {
                     throw ValidationException::withMessages([
-                        'movimiento' => 'Solo los pagos realizados por la empresa a un proveedor admiten una aplicación posterior.',
+                        'movimiento' => 'Solo los pagos o saldos a favor registrados para un proveedor admiten una aplicación posterior.',
                     ]);
                 }
                 if ($payment->estado !== 'REGISTRADO' || $payment->reversa_de_pago_id !== null) {
@@ -161,7 +151,7 @@ class FinancialMovementService
                 );
                 if (FinancialMoney::compare($available, '0.00') <= 0) {
                     throw ValidationException::withMessages([
-                        'aplicaciones' => 'Este pago ya está aplicado por completo.',
+                        'aplicaciones' => 'Esta fuente de saldo ya está aplicada por completo.',
                     ]);
                 }
 
@@ -174,7 +164,7 @@ class FinancialMovementService
                 );
                 if (FinancialMoney::compare($requestedTotal, $available) > 0) {
                     throw ValidationException::withMessages([
-                        'aplicaciones' => "El importe seleccionado supera el saldo disponible del pago ({$available} {$payment->moneda}).",
+                        'aplicaciones' => "El importe seleccionado supera el saldo disponible de la fuente ({$available} {$payment->moneda}).",
                     ]);
                 }
 
@@ -307,7 +297,9 @@ class FinancialMovementService
                     $actor->id,
                     'pagos',
                     $paymentId,
-                    'APLICAR_ANTICIPO',
+                    $payment->tipo === Pago::TYPE_PROVIDER_CREDIT
+                        ? 'APLICAR_SALDO_PROVEEDOR'
+                        : 'APLICAR_ANTICIPO',
                     $before,
                     $after,
                     $ip,
@@ -754,12 +746,23 @@ class FinancialMovementService
                 }
                 break;
 
-            case 'PAGO_PROVEEDOR':
+            case Pago::TYPE_PROVIDER_PAYMENT:
                 $this->required($data, ['proveedor_id', 'cuenta_origen_id', 'cuenta_destino_id', 'metodo_pago_id']);
                 $this->assertEmpty($data, ['cliente_id']);
                 $this->assertOwn($origin, 'cuenta_origen_id');
                 $this->assertExternalForProvider($destination, (int) $data['proveedor_id'], 'cuenta_destino_id');
                 $this->assertOnlySides($data, ['CXP']);
+                break;
+
+            case Pago::TYPE_PROVIDER_CREDIT:
+                $this->required($data, ['proveedor_id', 'observaciones']);
+                $this->assertEmpty($data, [
+                    'cliente_id',
+                    'cuenta_origen_id',
+                    'cuenta_destino_id',
+                    'metodo_pago_id',
+                ]);
+                $this->assertNoApplications($data);
                 break;
 
             case 'COBRO_MINORISTA':
@@ -935,7 +938,7 @@ class FinancialMovementService
     private function assertActor(int $companyId, User $actor, string $type): void
     {
         abort_unless((int) $actor->empresa_id === $companyId && $actor->isActive(), 403, 'Usuario no autorizado para esta empresa.');
-        if (in_array($type, ['SALDO_INICIAL', 'AJUSTE'], true)) {
+        if (in_array($type, ['SALDO_INICIAL', 'AJUSTE', Pago::TYPE_PROVIDER_CREDIT], true)) {
             abort_unless($actor->hasPermission('SALDOS_AJUSTAR'), 403, 'Se requiere el permiso SALDOS_AJUSTAR.');
         }
     }
@@ -944,7 +947,7 @@ class FinancialMovementService
     private function normalizePayload(array $data): array
     {
         $type = strtoupper(trim((string) ($data['tipo'] ?? '')));
-        if (! in_array($type, self::TYPES, true)) {
+        if (! in_array($type, Pago::TYPES, true)) {
             throw ValidationException::withMessages(['tipo' => 'El tipo de movimiento no es valido.']);
         }
         if (empty($data['idempotency_key']) || ! Str::isUuid((string) $data['idempotency_key'])) {
@@ -1153,6 +1156,9 @@ class FinancialMovementService
     /** @param array<string, mixed> $data */
     private function direction(array $data): string
     {
+        if ($data['tipo'] === Pago::TYPE_PROVIDER_CREDIT) {
+            return Pago::DIRECTION_NO_FLOW;
+        }
         if ($data['tipo'] === 'PAGO_DIRECTO') {
             return 'DIRECTO';
         }
@@ -1182,6 +1188,7 @@ class FinancialMovementService
     {
         return match ($type) {
             'SALDO_INICIAL' => 'SALDO_INICIAL',
+            Pago::TYPE_PROVIDER_CREDIT => 'SALDO_MANUAL',
             'TRANSFERENCIA_INTERNA' => 'TRANSFERENCIA',
             default => 'AJUSTE',
         };

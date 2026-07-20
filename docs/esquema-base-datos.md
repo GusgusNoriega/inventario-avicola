@@ -355,6 +355,12 @@ no crea una CXP. Las CXP nuevas se originan al confirmar una fila de `compras`:
 - `LEGADO`: identifica una proyección de una CXP histórica cuya
   `origen_clave` era `COMPRA:TICKET:*`.
 
+Los saldos a favor con proveedores se derivan del mismo libro de `pagos`: un
+`PAGO_PROVEEDOR` puede conservar importe sin aplicar y un
+`SALDO_FAVOR_PROVEEDOR` incorpora crédito histórico sin afectar cuentas. El
+saldo disponible es la suma de esos orígenes activos menos sus aplicaciones
+CXP; no existe una columna mutable de saldo en `terceros`.
+
 La transición `LEGADO` reutiliza el mismo `comprobante_id` y copia los detalles
 existentes. No crea otra obligación o pago y no modifica el saldo pendiente,
 las aplicaciones ni el estado del comprobante histórico.

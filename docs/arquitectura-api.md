@@ -179,6 +179,11 @@ idempotencia para que un reintento idéntico no duplique la operación.
   ambas obligaciones sin afectar una cuenta propia.
 - Un `COBRO_CLIENTE` depositado a la avícola reduce la CXC y aumenta el saldo
   propio, pero no reduce la CXP.
+- Un `PAGO_PROVEEDOR` sin aplicación inmediata descuenta la cuenta propia una
+  sola vez y deja el remanente como saldo a nuestro favor con el proveedor.
+- Un `SALDO_FAVOR_PROVEEDOR` registra crédito histórico sin cuenta ni método de
+  pago; requiere `SALDOS_AJUSTAR` y después puede aplicarse a CXP del mismo
+  proveedor y moneda mediante `/finanzas/movimientos/{id}/aplicaciones`.
 
 Las CXP generadas por el modelo anterior se identifican por
 `origen_clave = COMPRA:TICKET:*` y se importan como compras `LEGADO`. La compra

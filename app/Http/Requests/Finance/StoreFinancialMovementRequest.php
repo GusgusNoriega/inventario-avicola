@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Finance;
 
+use App\Models\Pago;
 use Illuminate\Validation\Rule;
 
 class StoreFinancialMovementRequest extends FinancialFormRequest
@@ -11,27 +12,18 @@ class StoreFinancialMovementRequest extends FinancialFormRequest
     {
         return [
             'idempotency_key' => ['required', 'uuid'],
-            'tipo' => ['required', Rule::in([
-                'COBRO_CLIENTE',
-                'PAGO_DIRECTO',
-                'PAGO_PROVEEDOR',
-                'COBRO_MINORISTA',
-                'REEMBOLSO_CLIENTE',
-                'SALDO_INICIAL',
-                'AJUSTE',
-                'TRANSFERENCIA_INTERNA',
-            ])],
+            'tipo' => ['required', Rule::in(Pago::TYPES)],
             'fecha_hora' => ['nullable', 'date'],
-            'cliente_id' => ['nullable', 'integer', 'min:1'],
+            'cliente_id' => ['nullable', 'prohibited_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'integer', 'min:1'],
             'proveedor_id' => ['nullable', 'integer', 'min:1'],
-            'cuenta_origen_id' => ['nullable', 'integer', 'min:1'],
-            'cuenta_destino_id' => ['nullable', 'integer', 'min:1', 'different:cuenta_origen_id'],
-            'metodo_pago_id' => ['nullable', 'integer', 'min:1'],
+            'cuenta_origen_id' => ['nullable', 'prohibited_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'integer', 'min:1'],
+            'cuenta_destino_id' => ['nullable', 'prohibited_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'integer', 'min:1', 'different:cuenta_origen_id'],
+            'metodo_pago_id' => ['nullable', 'prohibited_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'integer', 'min:1'],
             'moneda' => ['required', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'],
             'importe' => ['required', 'regex:/^\d{1,12}(?:\.\d{2})$/', 'not_in:0.00'],
             'referencia' => ['nullable', 'string', 'max:100'],
-            'observaciones' => ['nullable', 'string', 'max:2000'],
-            'aplicaciones' => ['sometimes', 'array', 'max:100'],
+            'observaciones' => ['nullable', 'required_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'string', 'max:2000'],
+            'aplicaciones' => ['sometimes', 'prohibited_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'array', 'max:100'],
             'aplicaciones.*.lado' => ['required', Rule::in(['CXC', 'CXP'])],
             'aplicaciones.*.comprobante_id' => ['required', 'integer', 'min:1', 'distinct'],
             'aplicaciones.*.importe_aplicado' => [

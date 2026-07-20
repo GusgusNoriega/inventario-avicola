@@ -15,6 +15,7 @@ import {
   optionalString,
   optionLabel,
   responseCollection,
+  responseMeta,
   setMessage,
   toLocalDateTimeValue
 } from "./finanzas-common.js";
@@ -57,7 +58,7 @@ const MODES = {
     cxp: true,
     destinationLabel: "Cuenta receptora del proveedor",
     destinationHelp: "El pago quedará vinculado al destino externo y al proveedor beneficiario.",
-    hint: "El importe no aplicado quedará como anticipo al proveedor."
+    hint: "El importe no aplicado quedará como saldo a nuestro favor con el proveedor."
   },
   COBRO_MINORISTA: {
     badge: "Venta minorista",
@@ -85,8 +86,27 @@ const MODES = {
     destinationHelp: "",
     hint: "El importe debe aplicarse por completo a uno o mas abonos pendientes del cliente.",
     nature: "ABONO"
+  },
+  SALDO_FAVOR_PROVEEDOR: {
+    badge: "Carga manual",
+    client: false,
+    clientRequired: false,
+    provider: true,
+    origin: false,
+    destination: false,
+    method: false,
+    cxc: false,
+    cxp: false,
+    applications: false,
+    referenceRequired: true,
+    notesRequired: true,
+    destinationLabel: "Sin cuenta destino",
+    destinationHelp: "",
+    hint: "Registra un saldo anterior a favor de nuestra empresa. No mueve dinero de ninguna cuenta ni representa un depósito nuevo."
   }
 };
+
+const PROVIDER_CREDIT_TYPES = new Set(["PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
 
 const queryParameters = new URLSearchParams(window.location.search);
 const requestedType = String(queryParameters.get("tipo") || "").toUpperCase();
@@ -100,6 +120,7 @@ const queryPrefill = {
 const elements = {
   form: document.getElementById("financeMovementForm"),
   typeInputs: document.querySelectorAll('[name="financeMovementType"]'),
+  detailsTitle: document.getElementById("financeMovementDetailsTitle"),
   flowBadge: document.getElementById("financeMovementFlowBadge"),
   clientField: document.getElementById("financeMovementClientField"),
   clientLabel: document.getElementById("financeMovementClientLabel"),
@@ -113,17 +134,35 @@ const elements = {
   destinationLabel: document.getElementById("financeMovementDestinationLabel"),
   destinationHelp: document.getElementById("financeMovementDestinationHelp"),
   destination: document.getElementById("financeMovementDestination"),
+  providerPaymentSourcePanel: document.getElementById("financeProviderPaymentSourcePanel"),
+  providerPaymentSourceInputs: document.querySelectorAll('[name="financeProviderPaymentSource"]'),
+  providerCreditSourceField: document.getElementById("financeProviderCreditSourceField"),
+  providerCreditSource: document.getElementById("financeProviderCreditSource"),
+  providerCreditSourceHelp: document.getElementById("financeProviderCreditSourceHelp"),
+  dateField: document.getElementById("financeMovementDateField"),
   date: document.getElementById("financeMovementDate"),
+  methodField: document.getElementById("financeMovementMethodField"),
   method: document.getElementById("financeMovementMethod"),
+  amountLabel: document.getElementById("financeMovementAmountLabel"),
+  currencyPrefix: document.getElementById("financeMovementCurrencyPrefix"),
   amount: document.getElementById("financeMovementAmount"),
   currency: document.getElementById("financeMovementCurrency"),
+  referenceField: document.getElementById("financeMovementReferenceField"),
+  referenceLabel: document.getElementById("financeMovementReferenceLabel"),
   reference: document.getElementById("financeMovementReference"),
+  notesField: document.getElementById("financeMovementNotesField"),
+  notesLabel: document.getElementById("financeMovementNotesLabel"),
   notes: document.getElementById("financeMovementNotes"),
+  providerCreditAvailableLine: document.getElementById("financeProviderCreditAvailableLine"),
+  providerCreditAvailable: document.getElementById("financeProviderCreditAvailable"),
+  summaryTitle: document.getElementById("financeApplicationSummaryTitle"),
+  totalLabel: document.getElementById("financeMovementTotalLabel"),
   total: document.getElementById("financeMovementTotal"),
   cxcSummaryLine: document.getElementById("financeCxcSummaryLine"),
   cxcApplied: document.getElementById("financeMovementCxcApplied"),
   cxpSummaryLine: document.getElementById("financeCxpSummaryLine"),
   cxpApplied: document.getElementById("financeMovementCxpApplied"),
+  unappliedLabel: document.getElementById("financeMovementUnappliedLabel"),
   unapplied: document.getElementById("financeMovementUnapplied"),
   applicationHint: document.getElementById("financeApplicationHint"),
   message: document.getElementById("financeMovementMessage"),
@@ -150,9 +189,11 @@ const state = {
   methods: [],
   entities: [],
   accounts: [],
+  providerCredits: [],
   debts: { CXC: [], CXP: [] },
   applications: { CXC: new Map(), CXP: new Map() },
   requestSequence: { CXC: 0, CXP: 0 },
+  providerCreditRequestSequence: 0,
   idempotencyKey: createIdempotencyKey(),
   saving: false
 };
@@ -163,6 +204,46 @@ function currentModeKey() {
 
 function currentMode() {
   return MODES[currentModeKey()];
+}
+
+function providerPaymentSource() {
+  return document.querySelector('[name="financeProviderPaymentSource"]:checked')?.value || "CUENTA";
+}
+
+function usesProviderCredit() {
+  return currentModeKey() === "PAGO_PROVEEDOR" && providerPaymentSource() === "SALDO_FAVOR";
+}
+
+function currencyInputPrefix(currency = elements.currency.value) {
+  return ({ PEN: "S/", USD: "US$", EUR: "€" })[String(currency).toUpperCase()] || String(currency);
+}
+
+function movementType(record) {
+  return String(firstDefined(record, ["tipo", "type", "movimiento.tipo"], "")).toUpperCase();
+}
+
+function movementCurrency(record) {
+  return String(firstDefined(record, ["moneda", "currency", "movimiento.moneda"], "PEN")).toUpperCase();
+}
+
+function movementApplication(record) {
+  return firstDefined(record, ["aplicacion", "application", "resumen_aplicacion"], null);
+}
+
+function movementUnapplied(record) {
+  return numericValue(firstDefined(movementApplication(record) || {}, [
+    "importe_sin_aplicar",
+    "unapplied",
+    "available"
+  ], firstDefined(record, ["saldo_favor", "saldo_disponible"], 0)));
+}
+
+function selectedProviderCredit() {
+  return state.providerCredits.find((record) => String(firstDefined(record, ["id", "movimiento.id"], "")) === String(elements.providerCreditSource.value)) || null;
+}
+
+function selectedProviderCreditAvailable() {
+  return movementUnapplied(selectedProviderCredit() || {});
 }
 
 function normalizeEntity(entity) {
@@ -204,6 +285,7 @@ function selectedMethodCode() {
 
 function populateAccounts() {
   const mode = currentMode();
+  const useCredit = usesProviderCredit();
   const providerId = elements.provider.value;
   const cashOnly = selectedMethodCode() === "EFECTIVO";
   const currency = elements.currency.value;
@@ -234,56 +316,187 @@ function populateAccounts() {
     label: accountName
   });
 
-  const destinationAccounts = mode.destination === "EXTERNA" ? externalAccounts : ownAccounts;
+  const effectiveDestination = useCredit ? false : mode.destination;
+  const destinationAccounts = effectiveDestination === "EXTERNA" ? externalAccounts : ownAccounts;
   fillSelect(elements.destination, destinationAccounts, {
     placeholder: destinationAccounts.length
-      ? mode.destination === "EXTERNA" ? "Selecciona una cuenta del proveedor" : "Selecciona una cuenta propia"
-      : mode.destination === "EXTERNA" ? "No hay cuentas externas para este proveedor" : "No hay cuentas propias activas",
+      ? effectiveDestination === "EXTERNA" ? "Selecciona una cuenta del proveedor" : "Selecciona una cuenta propia"
+      : effectiveDestination === "EXTERNA" ? "No hay cuentas externas para este proveedor" : "No hay cuentas propias activas",
     selected: currentDestination,
     label: accountName
   });
-  elements.origin.disabled = mode.origin && !ownAccounts.length;
-  elements.destination.disabled = !destinationAccounts.length;
+  elements.origin.disabled = !mode.origin || useCredit || !ownAccounts.length;
+  elements.destination.disabled = !effectiveDestination || !destinationAccounts.length;
 }
 
 function updateMethodConstraints() {
+  const mode = currentMode();
+  const useCredit = usesProviderCredit();
   const method = selectedMethod();
-  const requiresReference = Boolean(firstDefined(method || {}, ["requiere_referencia", "requires_reference"], false));
+  const requiresReference = Boolean(mode.referenceRequired)
+    || (!useCredit && mode.method !== false && Boolean(firstDefined(method || {}, ["requiere_referencia", "requires_reference"], false)));
   elements.reference.required = requiresReference;
+  elements.notes.required = Boolean(mode.notesRequired);
+  elements.referenceLabel.innerHTML = requiresReference
+    ? `${currentModeKey() === "SALDO_FAVOR_PROVEEDOR" ? "Referencia del saldo anterior" : "Número de operación / referencia"} <b>*</b>`
+    : "Número de operación / referencia";
+  elements.notesLabel.innerHTML = mode.notesRequired ? "Observaciones <b>*</b>" : "Observaciones";
   elements.reference.placeholder = requiresReference
-    ? "Referencia obligatoria para este método"
+    ? currentModeKey() === "SALDO_FAVOR_PROVEEDOR"
+      ? "Ej: SALDO ANTERIOR JULIO 2026"
+      : "Referencia obligatoria para este método"
     : "Ej: OP-384729";
+  elements.notes.placeholder = currentModeKey() === "SALDO_FAVOR_PROVEEDOR"
+    ? "Explica el origen del saldo que ya se tenía con el proveedor"
+    : useCredit
+      ? "Detalle de la aplicación del saldo a favor"
+      : "Detalle adicional del pago";
   populateAccounts();
+}
+
+function providerCreditLabel(record) {
+  const code = firstDefined(record, ["codigo", "code"], `Movimiento ${firstDefined(record, ["id"], "")}`);
+  const reference = firstDefined(record, ["referencia", "reference"], "Sin referencia");
+  const available = movementUnapplied(record);
+  return `${code} · ${reference} · disponible ${formatMoney(available, movementCurrency(record))}`;
+}
+
+function renderProviderCreditSources(selected = "") {
+  elements.providerCreditSourceHelp.classList.remove("is-error");
+  fillSelect(elements.providerCreditSource, state.providerCredits, {
+    placeholder: state.providerCredits.length ? "Selecciona una fuente de saldo" : "No hay saldo a favor disponible",
+    selected,
+    label: providerCreditLabel,
+    value: (record) => firstDefined(record, ["id", "movimiento.id"], "")
+  });
+  elements.providerCreditSource.disabled = !state.providerCredits.length || !usesProviderCredit();
+
+  const total = state.providerCredits.reduce((sum, record) => sum + movementUnapplied(record), 0);
+  elements.providerCreditSourceHelp.textContent = state.providerCredits.length
+    ? `${state.providerCredits.length} fuente${state.providerCredits.length === 1 ? "" : "s"} · saldo total ${formatMoney(total, elements.currency.value)}. Usa una fuente por operación.`
+    : elements.provider.value
+      ? "Este proveedor no tiene saldo a favor disponible en la moneda seleccionada."
+      : "Selecciona un proveedor para consultar su saldo a favor.";
+  updateSummary();
+}
+
+async function loadProviderCredits() {
+  const providerId = elements.provider.value;
+  const currency = elements.currency.value;
+  const enabled = currentModeKey() === "PAGO_PROVEEDOR";
+  const selected = elements.providerCreditSource.value;
+  const sequence = ++state.providerCreditRequestSequence;
+
+  if (!enabled || !providerId) {
+    state.providerCredits = [];
+    renderProviderCreditSources();
+    return;
+  }
+
+  elements.providerCreditSource.disabled = true;
+  elements.providerCreditSourceHelp.textContent = "Consultando saldo a favor...";
+  const params = new URLSearchParams({
+    proveedor_id: providerId,
+    moneda: currency,
+    aplicacion_estado: "CON_SALDO",
+    per_page: "100"
+  });
+
+  try {
+    const records = [];
+    let page = 1;
+    let lastPage = 1;
+
+    do {
+      params.set("page", String(page));
+      const response = await apiRequest(`/finanzas/movimientos?${params.toString()}`);
+      if (sequence !== state.providerCreditRequestSequence) return;
+      records.push(...responseCollection(response, ["movimientos", "items", "records"]));
+      lastPage = Math.max(1, numericValue(firstDefined(responseMeta(response), ["last_page"], 1), 1));
+      page += 1;
+    } while (page <= lastPage);
+
+    state.providerCredits = records
+      .filter((record) => PROVIDER_CREDIT_TYPES.has(movementType(record)))
+      .filter((record) => movementCurrency(record) === currency)
+      .filter((record) => movementUnapplied(record) > 0);
+    renderProviderCreditSources(selected);
+    markFinanceAccessReady();
+  } catch (error) {
+    if (sequence !== state.providerCreditRequestSequence) return;
+    state.providerCredits = [];
+    renderProviderCreditSources();
+    elements.providerCreditSourceHelp.textContent = errorMessage(error, "No se pudo consultar el saldo a favor.");
+    elements.providerCreditSourceHelp.classList.add("is-error");
+  }
 }
 
 function updateMode() {
   const mode = currentMode();
+  const modeKey = currentModeKey();
+  const useCredit = usesProviderCredit();
+  const hasOrigin = Boolean(mode.origin) && !useCredit;
+  const hasDestination = Boolean(mode.destination) && !useCredit;
+  const hasMethod = mode.method !== false && !useCredit;
+  const hasApplications = mode.applications !== false;
   elements.flowBadge.textContent = mode.badge;
+  elements.detailsTitle.textContent = modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Datos del saldo anterior" : "Datos del movimiento";
+  elements.summaryTitle.textContent = useCredit
+    ? "Uso del saldo a favor"
+    : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Saldo que se registrará" : "Distribución del importe";
   elements.clientField.hidden = !mode.client;
   elements.client.required = mode.clientRequired;
-  elements.clientLabel.innerHTML = currentModeKey() === "REEMBOLSO_CLIENTE"
+  elements.clientLabel.innerHTML = modeKey === "REEMBOLSO_CLIENTE"
     ? "Cliente que recibe <b>*</b>"
     : mode.clientRequired ? "Cliente que paga <b>*</b>" : "Cliente asignado (opcional)";
-  elements.clientHelp.textContent = currentModeKey() === "COBRO_MINORISTA"
+  elements.clientHelp.textContent = modeKey === "COBRO_MINORISTA"
     ? "Déjalo vacío cuando la venta minorista no tenga cliente asignado."
     : "Se mostrarán sus documentos pendientes.";
   elements.providerField.hidden = !mode.provider;
   elements.provider.required = mode.provider;
-  elements.originField.hidden = !mode.origin;
-  elements.origin.required = mode.origin;
-  elements.destinationField.hidden = !mode.destination;
-  elements.destination.required = Boolean(mode.destination);
+  elements.providerPaymentSourcePanel.hidden = modeKey !== "PAGO_PROVEEDOR";
+  elements.providerCreditSourceField.hidden = !useCredit;
+  elements.providerCreditSource.required = useCredit;
+  elements.originField.hidden = !hasOrigin;
+  elements.origin.required = hasOrigin;
+  elements.destinationField.hidden = !hasDestination;
+  elements.destination.required = hasDestination;
   elements.destinationLabel.innerHTML = `${mode.destinationLabel} <b>*</b>`;
   elements.destinationHelp.textContent = mode.destinationHelp;
+  elements.dateField.hidden = useCredit;
+  elements.date.required = !useCredit;
+  elements.methodField.hidden = !hasMethod;
+  elements.method.required = hasMethod;
+  elements.referenceField.hidden = useCredit;
   elements.cxcPanel.hidden = !mode.cxc;
-  elements.cxcTitle.textContent = currentModeKey() === "REEMBOLSO_CLIENTE"
+  elements.cxcTitle.textContent = modeKey === "REEMBOLSO_CLIENTE"
     ? "Abonos por devolver al cliente"
     : "Deudas del cliente";
   elements.cxpPanel.hidden = !mode.cxp;
   elements.cxcSummaryLine.hidden = !mode.cxc;
   elements.cxpSummaryLine.hidden = !mode.cxp;
+  elements.applicationsPanel.hidden = !hasApplications;
   elements.applicationColumns.classList.toggle("is-single", !(mode.cxc && mode.cxp));
-  elements.applicationHint.textContent = mode.hint;
+  elements.applicationHint.textContent = useCredit
+    ? "Esta operación solo distribuye un saldo ya existente; no genera una nueva salida de dinero."
+    : mode.hint;
+  elements.providerCreditAvailableLine.hidden = !useCredit;
+  if (useCredit && selectedProviderCreditAvailable() > 0) {
+    elements.amount.max = selectedProviderCreditAvailable().toFixed(2);
+  } else {
+    elements.amount.removeAttribute("max");
+  }
+  elements.amountLabel.innerHTML = useCredit ? "Importe a usar <b>*</b>" : "Importe <b>*</b>";
+  elements.totalLabel.textContent = useCredit
+    ? "Importe indicado"
+    : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Saldo anterior" : "Importe del movimiento";
+  elements.unappliedLabel.textContent = useCredit
+    ? "Quedará a favor"
+    : PROVIDER_CREDIT_TYPES.has(modeKey) ? "Quedará a nuestro favor" : "Sin aplicar";
+  elements.save.textContent = useCredit
+    ? "Aplicar saldo a favor"
+    : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Registrar saldo anterior" : "Registrar movimiento";
+  elements.currencyPrefix.textContent = currencyInputPrefix();
 
   if (!mode.client) {
     elements.client.value = "";
@@ -293,12 +506,17 @@ function updateMode() {
     elements.provider.value = "";
     clearApplications("CXP");
   }
+  if (!hasApplications) {
+    clearApplications("CXC");
+    clearApplications("CXP");
+  }
 
-  populateAccounts();
+  updateMethodConstraints();
   renderDebt("CXC");
   renderDebt("CXP");
   updateSummary();
   void loadVisiblePortfolio();
+  void loadProviderCredits();
 }
 
 function normalizeDebt(rawDebt, side) {
@@ -387,28 +605,35 @@ function renderDebt(side) {
           <strong>${escapeHtml(debt.number)}${debt.ticket ? ` · Ticket ${escapeHtml(debt.ticket)}` : ""}</strong>
           <small>${escapeHtml(formatDateTime(debt.date))} · ${escapeHtml(debt.status)} · saldo ${escapeHtml(formatMoney(debt.pending, elements.currency.value))}</small>
         </span>
-        <span class="fin-debt-amount">S/<input type="number" min="0.01" max="${debt.pending}" step="0.01" inputmode="decimal" data-debt-amount="${side}" data-debt-id="${escapeHtml(debt.id)}" value="${applied ? applied.toFixed(2) : ""}" ${checked ? "" : "disabled"} aria-label="Importe aplicado a ${escapeHtml(debt.number)}"></span>
+        <span class="fin-debt-amount">${escapeHtml(currencyInputPrefix())}<input type="number" min="0.01" max="${debt.pending}" step="0.01" inputmode="decimal" data-debt-amount="${side}" data-debt-id="${escapeHtml(debt.id)}" value="${applied ? applied.toFixed(2) : ""}" ${checked ? "" : "disabled"} aria-label="Importe aplicado a ${escapeHtml(debt.number)}"></span>
       </label>`;
   }).join("");
 }
 
 function updateSummary() {
   const mode = currentMode();
+  const useCredit = usesProviderCredit();
   const amount = movementAmount();
   const cxc = appliedTotal("CXC");
   const cxp = appliedTotal("CXP");
   const consumed = Math.max(mode.cxc ? cxc : 0, mode.cxp ? cxp : 0);
-  const unapplied = Math.max(0, amount - consumed);
+  const creditAvailable = selectedProviderCreditAvailable();
+  const unapplied = useCredit
+    ? Math.max(0, creditAvailable - cxp)
+    : Math.max(0, amount - consumed);
   const currency = elements.currency.value;
 
+  elements.providerCreditAvailable.textContent = formatMoney(creditAvailable, currency);
   elements.total.textContent = formatMoney(amount, currency);
   elements.cxcApplied.textContent = formatMoney(cxc, currency);
   elements.cxpApplied.textContent = formatMoney(cxp, currency);
   elements.unapplied.textContent = formatMoney(unapplied, currency);
-  elements.unapplied.classList.toggle("is-error", consumed > amount);
+  elements.unapplied.classList.toggle("is-error", consumed > amount || (useCredit && amount > creditAvailable));
   elements.applicationsPanel.classList.toggle("is-amount-required", amount <= 0);
   elements.applicationsInstructions.textContent = amount > 0
-    ? "Marca las ventas o compras que cancela este movimiento. Los abonos parciales son válidos."
+    ? useCredit
+      ? "Marca las compras que deseas cancelar con esta fuente. El total aplicado debe coincidir con el importe a usar."
+      : "Marca las ventas o compras que cancela este movimiento. Los abonos parciales son válidos."
     : "Primero ingresa un importe mayor a cero para poder seleccionar las deudas. Luego podrás registrar abonos parciales.";
 }
 
@@ -594,13 +819,19 @@ function movementPayload() {
     elements.date.focus();
     throw new Error("Indica la fecha y hora del movimiento.");
   }
-  if (!elements.method.value) {
+  if (mode.method !== false && !elements.method.value) {
     elements.method.focus();
     throw new Error("Selecciona el método de pago.");
   }
   if (elements.reference.required && !elements.reference.value.trim()) {
     elements.reference.focus();
-    throw new Error("Ingresa el número de operación o referencia requerido por el método de pago.");
+    throw new Error(modeKey === "SALDO_FAVOR_PROVEEDOR"
+      ? "Ingresa una referencia para identificar el saldo anterior."
+      : "Ingresa el número de operación o referencia requerido por el método de pago.");
+  }
+  if (mode.notesRequired && !elements.notes.value.trim()) {
+    elements.notes.focus();
+    throw new Error("Explica en observaciones el origen del saldo anterior.");
   }
   if (amount <= 0) {
     elements.amount.focus();
@@ -617,20 +848,68 @@ function movementPayload() {
     throw new Error("El reembolso debe aplicarse completamente a uno o mas abonos del cliente.");
   }
 
-  return {
+  const payload = {
     idempotency_key: state.idempotencyKey,
     tipo: modeKey,
     fecha_hora: elements.date.value,
-    cliente_id: mode.client && elements.client.value ? idValue(elements.client.value) : null,
     proveedor_id: mode.provider ? idValue(elements.provider.value) : null,
-    cuenta_origen_id: mode.origin ? idValue(elements.origin.value) : null,
-    cuenta_destino_id: mode.destination ? idValue(elements.destination.value) : null,
-    metodo_pago_id: idValue(elements.method.value),
     moneda: elements.currency.value,
     importe: amount.toFixed(2),
     referencia: optionalString(elements.reference.value),
-    observaciones: optionalString(elements.notes.value),
+    observaciones: optionalString(elements.notes.value)
+  };
+
+  if (modeKey === "SALDO_FAVOR_PROVEEDOR") return payload;
+
+  return {
+    ...payload,
+    cliente_id: mode.client && elements.client.value ? idValue(elements.client.value) : null,
+    cuenta_origen_id: mode.origin ? idValue(elements.origin.value) : null,
+    cuenta_destino_id: mode.destination ? idValue(elements.destination.value) : null,
+    metodo_pago_id: idValue(elements.method.value),
     aplicaciones: applicationsPayload()
+  };
+}
+
+function providerCreditApplicationPayload() {
+  const providerId = elements.provider.value;
+  const source = selectedProviderCredit();
+  const amount = movementAmount();
+  const applied = appliedTotal("CXP");
+  const available = selectedProviderCreditAvailable();
+
+  if (!providerId) {
+    elements.provider.focus();
+    throw new Error("Selecciona el proveedor cuyo saldo deseas usar.");
+  }
+  if (!source) {
+    elements.providerCreditSource.focus();
+    throw new Error("Selecciona una fuente de saldo a favor disponible.");
+  }
+  if (amount <= 0) {
+    elements.amount.focus();
+    throw new Error("Ingresa el importe de saldo que deseas usar.");
+  }
+  if (amount > available + .001) {
+    elements.amount.focus();
+    throw new Error("El importe supera el saldo disponible de la fuente seleccionada.");
+  }
+  validateApplications("CXP");
+  if (applied <= 0) throw new Error("Selecciona al menos una compra pendiente para usar el saldo a favor.");
+  if (Math.abs(applied - amount) > .001) {
+    throw new Error("El importe aplicado a compras debe coincidir con el importe de saldo que deseas usar.");
+  }
+
+  return {
+    paymentId: firstDefined(source, ["id", "movimiento.id"], null),
+    body: {
+      idempotency_key: state.idempotencyKey,
+      aplicaciones: [...state.applications.CXP.entries()].map(([documentId, applicationAmount]) => ({
+        comprobante_id: idValue(documentId),
+        importe_aplicado: numericValue(applicationAmount).toFixed(2)
+      })),
+      observaciones: optionalString(elements.notes.value) || "Aplicación de saldo a favor desde Pago a proveedores"
+    }
   };
 }
 
@@ -638,6 +917,7 @@ function resetMovement({ keepMessage = false } = {}) {
   elements.form.reset();
   elements.date.value = toLocalDateTimeValue();
   state.debts = { CXC: [], CXP: [] };
+  state.providerCredits = [];
   state.applications.CXC.clear();
   state.applications.CXP.clear();
   state.idempotencyKey = createIdempotencyKey();
@@ -653,15 +933,21 @@ async function saveMovement(event) {
   setMessage(elements.message);
 
   try {
-    const payload = movementPayload();
+    const creditApplication = usesProviderCredit() ? providerCreditApplicationPayload() : null;
+    const payload = creditApplication ? null : movementPayload();
     state.saving = true;
     elements.save.disabled = true;
     elements.reset.disabled = true;
-    elements.save.textContent = "Registrando...";
+    elements.save.textContent = creditApplication
+      ? "Aplicando saldo..."
+      : currentModeKey() === "SALDO_FAVOR_PROVEEDOR" ? "Registrando saldo..." : "Registrando...";
 
-    const response = await apiRequest("/finanzas/movimientos", {
+    const endpoint = creditApplication
+      ? `/finanzas/movimientos/${encodeURIComponent(creditApplication.paymentId)}/aplicaciones`
+      : "/finanzas/movimientos";
+    const response = await apiRequest(endpoint, {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(creditApplication?.body || payload)
     });
     const movementNumber = firstDefined(response, ["data.numero", "data.id", "numero", "id"], null);
     resetMovement({ keepMessage: true });
@@ -672,11 +958,16 @@ async function saveMovement(event) {
     state.saving = false;
     elements.save.disabled = false;
     elements.reset.disabled = false;
-    elements.save.textContent = "Registrar movimiento";
+    updateMode();
   }
 }
 
 elements.typeInputs.forEach((input) => input.addEventListener("change", updateMode));
+elements.providerPaymentSourceInputs.forEach((input) => input.addEventListener("change", () => {
+  clearApplications("CXP");
+  setMessage(elements.message);
+  updateMode();
+}));
 elements.client.addEventListener("change", () => {
   clearApplications("CXC");
   void loadPortfolio("CXC");
@@ -685,6 +976,16 @@ elements.provider.addEventListener("change", () => {
   clearApplications("CXP");
   populateAccounts();
   void loadPortfolio("CXP");
+  void loadProviderCredits();
+});
+elements.providerCreditSource.addEventListener("change", () => {
+  clearApplications("CXP");
+  const available = selectedProviderCreditAvailable();
+  elements.amount.max = available > 0 ? available.toFixed(2) : "";
+  if (movementAmount() > available) elements.amount.value = available > 0 ? available.toFixed(2) : "";
+  renderDebt("CXP");
+  setMessage(elements.message);
+  updateSummary();
 });
 elements.amount.addEventListener("input", () => {
   reconcileApplicationsWithAmount("CXC");
@@ -699,7 +1000,9 @@ elements.currency.addEventListener("change", () => {
   clearApplications("CXC");
   clearApplications("CXP");
   populateAccounts();
+  elements.currencyPrefix.textContent = currencyInputPrefix();
   void loadVisiblePortfolio();
+  void loadProviderCredits();
 });
 elements.refresh.addEventListener("click", loadVisiblePortfolio);
 elements.form.addEventListener("submit", saveMovement);

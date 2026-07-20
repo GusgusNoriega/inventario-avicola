@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Finance;
 
+use App\Models\Pago;
 use Illuminate\Validation\Rule;
 
 class ListFinancialMovementsRequest extends FinancialFormRequest
@@ -11,10 +12,7 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
     {
         return [
             'buscar' => ['nullable', 'string', 'max:100'],
-            'tipo' => ['nullable', Rule::in([
-                'COBRO_CLIENTE', 'PAGO_DIRECTO', 'PAGO_PROVEEDOR', 'COBRO_MINORISTA',
-                'REEMBOLSO_CLIENTE', 'SALDO_INICIAL', 'AJUSTE', 'TRANSFERENCIA_INTERNA',
-            ])],
+            'tipo' => ['nullable', Rule::in(Pago::TYPES)],
             'estado' => ['nullable', Rule::in(['REGISTRADO', 'ANULADO'])],
             'aplicacion_estado' => ['nullable', Rule::in([
                 'SIN_APLICAR', 'PARCIAL', 'APLICADO', 'CON_SALDO',
@@ -23,6 +21,7 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
             'proveedor_id' => ['nullable', 'integer', 'min:1'],
             'cuenta_id' => ['nullable', 'integer', 'min:1'],
             'metodo_pago_id' => ['nullable', 'integer', 'min:1'],
+            'moneda' => ['nullable', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -40,6 +39,9 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
                 : null,
             'aplicacion_estado' => $this->filled('aplicacion_estado')
                 ? strtoupper(trim((string) $this->input('aplicacion_estado')))
+                : null,
+            'moneda' => $this->filled('moneda')
+                ? strtoupper(trim((string) $this->input('moneda')))
                 : null,
         ]);
     }

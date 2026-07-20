@@ -42,6 +42,8 @@ class Pago extends Model
 
     public const TYPE_PROVIDER_PAYMENT = 'PAGO_PROVEEDOR';
 
+    public const TYPE_PROVIDER_CREDIT = 'SALDO_FAVOR_PROVEEDOR';
+
     public const TYPE_RETAIL_COLLECTION = 'COBRO_MINORISTA';
 
     public const TYPE_CUSTOMER_REFUND = 'REEMBOLSO_CLIENTE';
@@ -52,9 +54,32 @@ class Pago extends Model
 
     public const TYPE_INTERNAL_TRANSFER = 'TRANSFERENCIA_INTERNA';
 
+    public const TYPES = [
+        self::TYPE_CUSTOMER_COLLECTION,
+        self::TYPE_DIRECT_PAYMENT,
+        self::TYPE_PROVIDER_PAYMENT,
+        self::TYPE_PROVIDER_CREDIT,
+        self::TYPE_RETAIL_COLLECTION,
+        self::TYPE_CUSTOMER_REFUND,
+        self::TYPE_OPENING_BALANCE,
+        self::TYPE_ADJUSTMENT,
+        self::TYPE_INTERNAL_TRANSFER,
+    ];
+
+    /**
+     * Movimientos cuyo importe no aplicado representa saldo a favor de la
+     * empresa con un proveedor y puede asignarse posteriormente a una CXP.
+     */
+    public const PROVIDER_CREDIT_SOURCE_TYPES = [
+        self::TYPE_PROVIDER_PAYMENT,
+        self::TYPE_PROVIDER_CREDIT,
+    ];
+
     public const DIRECTION_INCOME = 'INGRESO';
 
     public const DIRECTION_EXPENSE = 'EGRESO';
+
+    public const DIRECTION_NO_FLOW = 'SIN_FLUJO';
 
     public const STATUS_REGISTERED = 'REGISTRADO';
 

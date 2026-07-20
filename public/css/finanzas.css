@@ -397,6 +397,10 @@ body.fin-page {
   margin-top: 11px;
 }
 
+.fin-dashboard-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .fin-summary-grid-compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -455,6 +459,11 @@ body.fin-page {
 
 .fin-summary-balance > strong { color: #75efad; }
 .fin-summary-direct > strong { color: #f8d865; }
+.fin-summary-provider-credit {
+  border-color: rgba(50, 202, 255, .34);
+  background: linear-gradient(145deg, rgba(14, 54, 70, .7), rgba(7, 18, 28, .98));
+}
+.fin-summary-provider-credit > strong { color: #78ddff; }
 .fin-summary-legacy { border-color: rgba(166, 143, 255, .35); background: linear-gradient(145deg, rgba(42, 31, 78, .62), rgba(13, 15, 30, .98)); }
 .fin-summary-legacy > strong { color: #c5b8ff; }
 .fin-summary-payable > strong { color: #ff9c9c; }
@@ -483,6 +492,14 @@ body.fin-page {
 
 .fin-section-head h2 {
   font-size: 20px;
+}
+
+.fin-section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
 }
 
 .fin-account-balance-grid {
@@ -755,6 +772,7 @@ body.fin-page {
 }
 
 .fin-recent-mark.is-out { color: var(--fin-yellow); border-color: rgba(242, 194, 48, .3); background: rgba(242, 194, 48, .08); }
+.fin-recent-mark.is-neutral { color: var(--fin-blue); border-color: rgba(50, 202, 255, .3); background: rgba(50, 202, 255, .08); }
 .fin-recent-copy { min-width: 0; }
 .fin-recent-copy strong,
 .fin-recent-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -992,6 +1010,21 @@ body.fin-page {
 
 .fin-movement-context-grid { margin-top: 17px; }
 .fin-divider { height: 1px; margin: 18px 0; background: var(--fin-border); }
+
+.fin-provider-payment-source {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 15px;
+  border: 1px solid rgba(50, 202, 255, .25);
+  border-radius: 11px;
+  background: rgba(10, 28, 39, .48);
+}
+
+.fin-provider-payment-source[hidden] { display: none; }
+.fin-provider-payment-source h3 { margin-top: 3px; color: #fff; font-size: 15px; }
+.fin-provider-payment-source .fin-field { margin-top: 2px; }
+.fin-provider-payment-source .fin-field small.is-error { color: var(--fin-red); }
 
 .fin-money-input {
   display: flex;
@@ -1417,6 +1450,8 @@ body.fin-page {
   .fin-form-panel,
   .fin-list-panel { padding: 15px; }
   .fin-section-head-wrap { align-items: stretch; flex-direction: column; }
+  .fin-section-actions { width: 100%; justify-content: stretch; }
+  .fin-section-actions .fin-btn { flex: 1; }
   .fin-account-balance-grid,
   .fin-advance-facts,
   .fin-advance-summary,

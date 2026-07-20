@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Pago;
 use App\Support\FinancialMoney;
 use Illuminate\Support\Facades\DB;
 
@@ -57,12 +58,26 @@ class FinancialCounterpartySummaryService
             $companyId,
             'proveedor_id',
             $providerId,
-            ['PAGO_DIRECTO', 'PAGO_PROVEEDOR'],
+            [Pago::TYPE_DIRECT_PAYMENT, ...Pago::PROVIDER_CREDIT_SOURCE_TYPES],
+            'CXP',
+            $currency,
+        );
+        $manualCredit = $this->paymentTotals(
+            $companyId,
+            'proveedor_id',
+            $providerId,
+            [Pago::TYPE_PROVIDER_CREDIT],
             'CXP',
             $currency,
         );
         $portfolio = FinancialMoney::subtract($documents['cargo_pendiente'], $documents['abono_pendiente']);
         $unapplied = $this->positiveDifference($payments['pagado'], $payments['aplicado']);
+        $manualAvailable = $this->positiveDifference(
+            $manualCredit['pagado'],
+            $manualCredit['aplicado'],
+        );
+        $payable = $this->positiveDifference($portfolio, '0.00');
+        $netPending = $this->positiveDifference($portfolio, $unapplied);
         $pendingCosts = DB::table('costos_compra_pesadas')
             ->where('proveedor_id', $providerId)
             ->where('estado', 'PENDIENTE')
@@ -78,21 +93,30 @@ class FinancialCounterpartySummaryService
             'payments' => $payments['pagado'],
             'applied' => $payments['aplicado'],
             'unapplied' => $unapplied,
-            'pending' => FinancialMoney::subtract($portfolio, $unapplied),
+            'balance_in_favor' => $unapplied,
+            'favor_balance' => $unapplied,
+            'payable' => $payable,
+            'pending' => $netPending,
             'paid_directly_by_clients' => $this->sumPayments(
                 $companyId,
                 'proveedor_id',
                 $providerId,
-                ['PAGO_DIRECTO'],
+                [Pago::TYPE_DIRECT_PAYMENT],
                 $currency,
             ),
             'paid_by_company' => $this->sumPayments(
                 $companyId,
                 'proveedor_id',
                 $providerId,
-                ['PAGO_PROVEEDOR'],
+                [Pago::TYPE_PROVIDER_PAYMENT],
                 $currency,
             ),
+            'manual_credit' => $manualCredit['pagado'],
+            'manual_credit_detail' => [
+                'registered' => $manualCredit['pagado'],
+                'applied' => $manualCredit['aplicado'],
+                'available' => $manualAvailable,
+            ],
             'document_count' => $documents['cantidad'],
             'payment_count' => $payments['cantidad'],
             'pending_costs' => [
