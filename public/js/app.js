@@ -466,8 +466,11 @@ let scaleLastPersistedAt = { 1: 0, 2: 0 };
 let scalePersistTimers = { 1: null, 2: null };
 let capturedScaleReadings = { 1: null, 2: null };
 let scaleRestorePromise = null;
+let scaleRestorePromiseGeneration = null;
 let scaleRestoreTimer = null;
 let scaleRestoreAttempt = 0;
+let scaleLifecycleGeneration = 0;
+let scalePageActive = true;
 const pendingTicketRegistrations = new Set();
 let keypadContext = {
   targetInput: null,
@@ -688,21 +691,28 @@ function normalizeSerialPortInfo(info) {
   const usbProductId = info.usbProductId === null || info.usbProductId === undefined
     ? null
     : Number(info.usbProductId);
-  const matchIndex = Number(info.matchIndex);
-  const portIndex = Number(info.portIndex);
+  const hasMatchIndex = Object.prototype.hasOwnProperty.call(info, "matchIndex")
+    && info.matchIndex !== null
+    && info.matchIndex !== "";
+  const hasPortIndex = Object.prototype.hasOwnProperty.call(info, "portIndex")
+    && info.portIndex !== null
+    && info.portIndex !== "";
+  const matchIndex = hasMatchIndex ? Number(info.matchIndex) : null;
+  const portIndex = hasPortIndex ? Number(info.portIndex) : null;
   const bluetoothServiceClassId = String(info.bluetoothServiceClassId || "").trim();
   const normalized = {
     usbVendorId: Number.isInteger(usbVendorId) && usbVendorId >= 0 ? usbVendorId : null,
     usbProductId: Number.isInteger(usbProductId) && usbProductId >= 0 ? usbProductId : null,
     bluetoothServiceClassId: bluetoothServiceClassId || null,
-    matchIndex: Number.isInteger(matchIndex) && matchIndex >= 0 ? matchIndex : 0,
-    portIndex: Number.isInteger(portIndex) && portIndex >= 0 ? portIndex : 0
+    matchIndex: Number.isInteger(matchIndex) && matchIndex >= 0 ? matchIndex : null,
+    portIndex: Number.isInteger(portIndex) && portIndex >= 0 ? portIndex : null
   };
 
   return normalized.usbVendorId !== null
     || normalized.usbProductId !== null
     || normalized.bluetoothServiceClassId
-    || Number.isInteger(portIndex)
+    || normalized.matchIndex !== null
+    || normalized.portIndex !== null
     ? normalized
     : null;
 }
@@ -743,6 +753,44 @@ function normalizeScaleState(scale, id, options = {}) {
     serialOptions: normalizeScaleSerialOptions(scale?.serialOptions),
     bleDeviceId: String(scale?.bleDeviceId || "")
   };
+}
+
+function snapshotScaleConnectionPreferences(scales = {}) {
+  return Object.fromEntries(SCALE_IDS.map((scaleId) => {
+    const scale = normalizeScaleState(scales?.[scaleId], scaleId, { invalidateReading: true });
+    return [scaleId, {
+      autoConnectMode: scale.autoConnectMode,
+      connectionMode: scale.connectionMode,
+      deviceName: scale.deviceName,
+      serialPortInfo: scale.serialPortInfo,
+      serialOptions: scale.serialOptions,
+      bleDeviceId: scale.bleDeviceId
+    }];
+  }));
+}
+
+function applyScaleConnectionPreferences(targetState, preferences = {}) {
+  if (!targetState || typeof targetState !== "object") {
+    return targetState;
+  }
+
+  targetState.scales = targetState.scales && typeof targetState.scales === "object"
+    ? targetState.scales
+    : {};
+  SCALE_IDS.forEach((scaleId) => {
+    const current = normalizeScaleState(targetState.scales[scaleId], scaleId, { invalidateReading: true });
+    const preference = normalizeScaleState(preferences?.[scaleId], scaleId, { invalidateReading: true });
+    targetState.scales[scaleId] = {
+      ...current,
+      autoConnectMode: preference.autoConnectMode,
+      connectionMode: preference.connectionMode,
+      deviceName: preference.deviceName,
+      serialPortInfo: preference.serialPortInfo,
+      serialOptions: preference.serialOptions,
+      bleDeviceId: preference.bleDeviceId
+    };
+  });
+  return targetState;
 }
 
 function normalizeType(type) {
@@ -2563,6 +2611,10 @@ function activateBranchStorage(catalog) {
       }
     }
 
+    // Una sesión puede cambiar de empresa/sucursal sin recargar la pestaña.
+    // Se liberan los objetos físicos de la sucursal anterior, pero sus
+    // preferencias ya guardadas se conservan en su clave local independiente.
+    releaseScaleConnectionsForNavigation();
     activeStorageKey = nextStorageKey;
     state = nextState;
     capturedScaleReadings = { 1: null, 2: null };
@@ -3279,13 +3331,51 @@ function serialPortIdentifiersMatch(portInfo, savedInfo) {
     && comparableIdentifiers.every((key) => current[key] === saved[key]);
 }
 
-async function rememberSerialScalePort(scaleId, port, expectedConnection = null) {
+function serialPortPreferencesMatch(firstInfo, secondInfo) {
+  const first = normalizeSerialPortInfo(firstInfo);
+  const second = normalizeSerialPortInfo(secondInfo);
+  if (!first || !second) {
+    return false;
+  }
+
+  const identifiers = ["usbVendorId", "usbProductId", "bluetoothServiceClassId"];
+  const firstHasIdentifiers = identifiers.some((key) => first[key] !== null);
+  const secondHasIdentifiers = identifiers.some((key) => second[key] !== null);
+  if (firstHasIdentifiers !== secondHasIdentifiers) {
+    return false;
+  }
+  if (!firstHasIdentifiers) {
+    return first.portIndex === second.portIndex;
+  }
+  return identifiers.every((key) => first[key] === second[key])
+    && first.matchIndex === second.matchIndex;
+}
+
+function otherScaleRemembersSerialPreference(scaleId, serialPortInfo) {
+  return SCALE_IDS.some((candidateId) => {
+    if (candidateId === scaleId) {
+      return false;
+    }
+    const candidateScale = getScaleState(candidateId);
+    return candidateScale.autoConnectMode === "serial"
+      && serialPortPreferencesMatch(candidateScale.serialPortInfo, serialPortInfo);
+  });
+}
+
+async function rememberSerialScalePort(
+  scaleId,
+  port,
+  expectedConnection = null,
+  options = {}
+) {
   let authorizedPorts = [];
 
-  try {
-    authorizedPorts = await navigator.serial.getPorts();
-  } catch {
-    authorizedPorts = [];
+  if (typeof navigator.serial?.getPorts === "function") {
+    try {
+      authorizedPorts = await navigator.serial.getPorts();
+    } catch {
+      authorizedPorts = [];
+    }
   }
 
   if (expectedConnection && !isCurrentScaleConnection(scaleId, expectedConnection)) {
@@ -3296,24 +3386,31 @@ async function rememberSerialScalePort(scaleId, port, expectedConnection = null)
     usbVendorId: null,
     usbProductId: null,
     bluetoothServiceClassId: null,
-    matchIndex: 0,
-    portIndex: 0
+    matchIndex: null,
+    portIndex: null
   };
   const matchingPorts = authorizedPorts.filter((candidate) => {
     const candidateInfo = getSerialPortInfo(candidate);
     return serialPortIdentifiersMatch(candidateInfo, portInfo);
   });
-  const matchIndex = Math.max(matchingPorts.findIndex((candidate) => candidate === port), 0);
-  const portIndex = Math.max(authorizedPorts.findIndex((candidate) => candidate === port), 0);
+  const rememberedMatchIndex = matchingPorts.findIndex((candidate) => candidate === port);
+  const rememberedPortIndex = authorizedPorts.findIndex((candidate) => candidate === port);
+  const matchIndex = rememberedMatchIndex >= 0 ? rememberedMatchIndex : null;
+  const portIndex = rememberedPortIndex >= 0 ? rememberedPortIndex : null;
 
-  const scale = getScaleState(scaleId);
-  scale.autoConnectMode = "serial";
-  scale.connectionMode = "serial";
-  scale.serialPortInfo = {
+  const rememberedPortInfo = {
     ...portInfo,
     matchIndex,
     portIndex
   };
+  if (options.rejectDuplicate && otherScaleRemembersSerialPreference(scaleId, rememberedPortInfo)) {
+    throw new Error("Ese puerto serial ya está guardado para la otra balanza. Elige un puerto físico diferente.");
+  }
+
+  const scale = getScaleState(scaleId);
+  scale.autoConnectMode = "serial";
+  scale.connectionMode = "serial";
+  scale.serialPortInfo = rememberedPortInfo;
   scale.bleDeviceId = "";
   scale.deviceName = getSerialPortDeviceName(port);
   saveState();
@@ -3352,6 +3449,14 @@ function getScaleFeatureWarning() {
   }
 
   return "";
+}
+
+function canRestoreSerialScaleConnections() {
+  return typeof navigator.serial?.getPorts === "function";
+}
+
+function canRestoreBleScaleConnections() {
+  return typeof navigator.bluetooth?.getDevices === "function";
 }
 
 function formatScaleTime(timestamp) {
@@ -3395,8 +3500,10 @@ function renderScaleConnectionPanels() {
         ? `Reconexión automática ${rememberedMode} pendiente`
         : "Sin conexión Bluetooth"
     );
-    if (!featureWarning && scale.autoConnectMode === "ble" && !navigator.bluetooth?.getDevices) {
+    if (!featureWarning && scale.autoConnectMode === "ble" && !canRestoreBleScaleConnections()) {
       statusText = "BLE recordada; este navegador requiere usar Conectar BLE";
+    } else if (!featureWarning && scale.autoConnectMode === "serial" && !canRestoreSerialScaleConnections()) {
+      statusText = "Puerto serial recordado; este navegador requiere usar Conectar Serial";
     }
     const isConnecting = connection?.status === "connecting";
     const isConnected = connection?.status === "connected";
@@ -4218,6 +4325,45 @@ function releaseUnexpectedScaleConnection(connection) {
   }
 }
 
+function isScaleLifecycleCurrent(generation = scaleLifecycleGeneration) {
+  return scalePageActive && generation === scaleLifecycleGeneration;
+}
+
+function resumeScaleConnectionsAfterNavigation() {
+  scaleLifecycleGeneration += 1;
+  scalePageActive = true;
+}
+
+function releaseScaleConnectionsForNavigation(options = {}) {
+  scaleLifecycleGeneration += 1;
+  if (options.deactivate) {
+    scalePageActive = false;
+  }
+  if (scaleRestoreTimer) {
+    window.clearTimeout(scaleRestoreTimer);
+    scaleRestoreTimer = null;
+  }
+  scaleRestoreAttempt = 0;
+
+  SCALE_IDS.forEach((scaleId) => {
+    const connection = scaleConnections[scaleId];
+    nextScaleConnectionGeneration(scaleId);
+    if (connection) {
+      connection.abort = true;
+      clearScaleConnectionTimers(connection);
+      // gatt.disconnect() ocurre de forma síncrona dentro de este helper. Para
+      // Serial se cancela el reader y se encadena close() sin bloquear pagehide.
+      releaseUnexpectedScaleConnection(connection);
+      if (scaleConnections[scaleId] === connection) {
+        scaleConnections[scaleId] = null;
+      }
+    }
+    // La preferencia (BLE ID / descriptor Serial) permanece; solo se invalida
+    // la lectura para que BFCache nunca rehabilite un peso de la vista anterior.
+    invalidateScaleReading(scaleId, "disconnected", { persistImmediately: true });
+  });
+}
+
 function handleScaleDisconnected(scaleId, message = "Balanza desconectada.", expectedConnection = null) {
   const connection = expectedConnection || scaleConnections[scaleId];
   if (!connection || connection.abort || !isCurrentScaleConnection(scaleId, connection)) {
@@ -4371,7 +4517,13 @@ async function disconnectScale(scaleId, showMessage = true, forgetPreference = f
   }
 }
 
-async function connectBleScale(scaleId, rememberedDevice = null) {
+async function connectBleScale(scaleId, rememberedDevice = null, options = {}) {
+  const lifecycleGeneration = Number.isInteger(options.lifecycleGeneration)
+    ? options.lifecycleGeneration
+    : scaleLifecycleGeneration;
+  if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+    return false;
+  }
   if (!window.isSecureContext) {
     setFormMessage("Para conectar por Bluetooth abre la web en localhost o HTTPS.", true);
     renderScaleConnectionPanels();
@@ -4385,6 +4537,9 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
   }
 
   await disconnectScale(scaleId, false);
+  if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+    return false;
+  }
   const automatic = Boolean(rememberedDevice);
   const generation = nextScaleConnectionGeneration(scaleId);
   const connection = {
@@ -4445,6 +4600,10 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
       throw new Error("No se encontro una caracteristica BLE compatible. Agrega el UUID de la balanza cuando tengas la marca/modelo.");
     }
 
+    // La selección ya quedó validada contra un perfil de balanza. Se guarda
+    // antes de iniciar notificaciones/lecturas para que un fallo transitorio
+    // posterior no borre la posibilidad de reconectar al volver a la vista.
+    rememberBleScaleDevice(scaleId, device);
     connection.server = server;
     connection.characteristic = found.characteristic;
     connection.canRead = found.canRead;
@@ -4505,7 +4664,6 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
       startBleReadPolling(scaleId);
     }
 
-    rememberBleScaleDevice(scaleId, device);
     scaleRestoreAttempt = 0;
     renderScaleConnectionPanels();
     setFormMessage(
@@ -4518,6 +4676,9 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
     const message = getConnectionErrorMessage(error, `No se pudo conectar la balanza ${scaleId} por BLE.`);
     if (isCurrentScaleConnection(scaleId, connection)) {
       await disconnectScale(scaleId, false);
+      if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+        return false;
+      }
       const errorGeneration = nextScaleConnectionGeneration(scaleId);
       scaleConnections[scaleId] = {
         generation: errorGeneration,
@@ -4528,7 +4689,18 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
       renderScaleConnectionPanels();
       if (!automatic) {
         setFormMessage(message, error?.name !== "NotFoundError");
-      } else {
+      }
+      const rememberedScale = getScaleState(scaleId);
+      if (
+        isScaleLifecycleCurrent(lifecycleGeneration)
+        && (
+          automatic
+          || (
+            rememberedScale.autoConnectMode === "ble"
+            && Boolean(rememberedScale.bleDeviceId)
+          )
+        )
+      ) {
         scheduleScaleConnectionRestore();
       }
     }
@@ -4592,7 +4764,13 @@ async function readSerialScale(scaleId, connection) {
   }
 }
 
-async function connectSerialScale(scaleId, rememberedPort = null) {
+async function connectSerialScale(scaleId, rememberedPort = null, options = {}) {
+  const lifecycleGeneration = Number.isInteger(options.lifecycleGeneration)
+    ? options.lifecycleGeneration
+    : scaleLifecycleGeneration;
+  if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+    return false;
+  }
   if (!window.isSecureContext) {
     setFormMessage("Para conectar por puerto serial Bluetooth abre la web en localhost o HTTPS.", true);
     renderScaleConnectionPanels();
@@ -4606,6 +4784,9 @@ async function connectSerialScale(scaleId, rememberedPort = null) {
   }
 
   await disconnectScale(scaleId, false);
+  if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+    return false;
+  }
   const automatic = Boolean(rememberedPort);
   const generation = nextScaleConnectionGeneration(scaleId);
   const serialOptions = normalizeScaleSerialOptions(getScaleState(scaleId).serialOptions);
@@ -4648,7 +4829,9 @@ async function connectSerialScale(scaleId, rememberedPort = null) {
     }
     connection.status = "connected";
     connection.statusMessage = "Conectada Serial BT - esperando trama completa";
-    const remembered = await rememberSerialScalePort(scaleId, port, connection);
+    const remembered = await rememberSerialScalePort(scaleId, port, connection, {
+      rejectDuplicate: !automatic
+    });
     if (!remembered || !isCurrentScaleConnection(scaleId, connection)) {
       try {
         await port.close();
@@ -4670,6 +4853,9 @@ async function connectSerialScale(scaleId, rememberedPort = null) {
     const message = getConnectionErrorMessage(error, `No se pudo abrir el puerto serial de balanza ${scaleId}.`);
     if (isCurrentScaleConnection(scaleId, connection)) {
       await disconnectScale(scaleId, false);
+      if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+        return false;
+      }
       const errorGeneration = nextScaleConnectionGeneration(scaleId);
       scaleConnections[scaleId] = {
         generation: errorGeneration,
@@ -4680,7 +4866,7 @@ async function connectSerialScale(scaleId, rememberedPort = null) {
       renderScaleConnectionPanels();
       if (!automatic) {
         setFormMessage(message, error?.name !== "NotFoundError");
-      } else {
+      } else if (isScaleLifecycleCurrent(lifecycleGeneration)) {
         scheduleScaleConnectionRestore();
       }
     }
@@ -4688,61 +4874,74 @@ async function connectSerialScale(scaleId, rememberedPort = null) {
   }
 }
 
-function findRememberedSerialPort(scaleId, ports, claimedPorts) {
-  const savedInfo = getScaleState(scaleId).serialPortInfo;
-  if (!savedInfo) {
-    return null;
-  }
-
-  const hasIdentifiers = savedInfo.usbVendorId !== null
-    || savedInfo.usbProductId !== null
-    || Boolean(savedInfo.bluetoothServiceClassId);
-
-  if (hasIdentifiers) {
-    const matchingPorts = ports.filter((port) => {
-      return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
-    });
-    return matchingPorts.length === 1 && !claimedPorts.has(matchingPorts[0])
-      ? matchingPorts[0]
-      : null;
-  }
-
-  // Sin identificadores físicos, un único puerto autorizado es la única
-  // restauración inequívoca. Con dos adaptadores iguales se exige selección.
-  return ports.length === 1 && !claimedPorts.has(ports[0]) ? ports[0] : null;
+function hasSerialPortIdentifiers(info) {
+  const normalized = normalizeSerialPortInfo(info);
+  return Boolean(
+    normalized
+    && (
+      normalized.usbVendorId !== null
+      || normalized.usbProductId !== null
+      || normalized.bluetoothServiceClassId
+    )
+  );
 }
 
-function isRememberedSerialPortAmbiguous(scaleId, ports) {
-  const savedInfo = getScaleState(scaleId).serialPortInfo;
-  if (!savedInfo) {
-    return false;
+function resolveRememberedSerialPort(savedInfo, ports = [], claimedPorts = new Set()) {
+  const normalizedSavedInfo = normalizeSerialPortInfo(savedInfo);
+  if (!normalizedSavedInfo) {
+    return { port: null, reason: "missing-preference" };
   }
 
-  const hasIdentifiers = savedInfo.usbVendorId !== null
-    || savedInfo.usbProductId !== null
-    || Boolean(savedInfo.bluetoothServiceClassId);
-  if (!hasIdentifiers) {
-    return ports.length > 1;
-  }
-
-  return ports.filter((port) => {
-    return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
-  }).length > 1;
-}
-
-function isRememberedSerialPortClaimed(scaleId, ports, claimedPorts) {
-  const savedInfo = getScaleState(scaleId).serialPortInfo;
-  if (!savedInfo) {
-    return false;
-  }
-
-  const hasIdentifiers = savedInfo.usbVendorId !== null
-    || savedInfo.usbProductId !== null
-    || Boolean(savedInfo.bluetoothServiceClassId);
+  const authorizedPorts = Array.from(ports || []);
+  const hasIdentifiers = hasSerialPortIdentifiers(normalizedSavedInfo);
   const candidates = hasIdentifiers
-    ? ports.filter((port) => serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo))
-    : ports;
-  return candidates.length === 1 && claimedPorts.has(candidates[0]);
+    ? authorizedPorts.filter((port) => {
+        return serialPortIdentifiersMatch(getSerialPortInfo(port), normalizedSavedInfo);
+      })
+    : authorizedPorts;
+  if (!candidates.length) {
+    return { port: null, reason: "unavailable" };
+  }
+
+  // Web Serial no expone un identificador físico serializable. Para dos
+  // adaptadores RFCOMM con el mismo Service Class ID se conserva el ordinal
+  // dentro de los puertos coincidentes; para puertos sin IDs se usa el ordinal
+  // global. claimedPorts garantiza que un objeto físico no termine en ambos
+  // puestos durante la misma restauración.
+  const savedIndex = hasIdentifiers
+    ? normalizedSavedInfo.matchIndex
+    : normalizedSavedInfo.portIndex;
+  if (!Number.isInteger(savedIndex) || savedIndex < 0) {
+    return candidates.length === 1
+      ? { port: candidates[0], reason: null }
+      : { port: null, reason: "ambiguous" };
+  }
+
+  const preferredPort = candidates[savedIndex] || null;
+  if (!preferredPort) {
+    return { port: null, reason: "unavailable" };
+  }
+  if (preferredPort && !claimedPorts.has(preferredPort)) {
+    return { port: preferredPort, reason: null };
+  }
+  return { port: null, reason: "claimed" };
+}
+
+function resolveRememberedBleDevice(deviceId, devices = [], claimedDeviceIds = new Set()) {
+  const normalizedDeviceId = String(deviceId || "");
+  if (!normalizedDeviceId) {
+    return { device: null, reason: "missing-preference" };
+  }
+  if (claimedDeviceIds.has(normalizedDeviceId)) {
+    return { device: null, reason: "claimed" };
+  }
+
+  const device = Array.from(devices || []).find((candidate) => {
+    return String(candidate?.id || "") === normalizedDeviceId;
+  });
+  return device
+    ? { device, reason: null }
+    : { device: null, reason: "unavailable" };
 }
 
 function showScaleRestoreError(scaleId, message) {
@@ -4776,13 +4975,20 @@ function isScaleConnectionActive(connection) {
 }
 
 async function restoreScaleConnections() {
-  if (scaleRestorePromise) {
+  const lifecycleGeneration = scaleLifecycleGeneration;
+  if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+    return false;
+  }
+  if (
+    scaleRestorePromise
+    && scaleRestorePromiseGeneration === lifecycleGeneration
+  ) {
     return scaleRestorePromise;
   }
 
-  scaleRestorePromise = (async () => {
+  const restorePromise = (async () => {
     if (!window.isSecureContext) {
-      return;
+      return false;
     }
 
     const claimedSerialPorts = new Set(
@@ -4793,54 +4999,77 @@ async function restoreScaleConnections() {
         .filter(Boolean)
     );
 
-    if (navigator.serial?.getPorts) {
+    if (canRestoreSerialScaleConnections()) {
       let ports = [];
       try {
         ports = await navigator.serial.getPorts();
       } catch {
         ports = [];
       }
+      if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+        return false;
+      }
 
       for (const scaleId of SCALE_IDS) {
+        if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+          return false;
+        }
         const connection = scaleConnections[scaleId];
         if (connection?.status === "connecting" || isScaleConnectionActive(connection)) {
           continue;
         }
 
-        if (getScaleState(scaleId).autoConnectMode !== "serial") {
+        const scale = getScaleState(scaleId);
+        if (scale.autoConnectMode !== "serial") {
           continue;
         }
 
-        const port = findRememberedSerialPort(scaleId, ports, claimedSerialPorts);
+        const portResolution = resolveRememberedSerialPort(
+          scale.serialPortInfo,
+          ports,
+          claimedSerialPorts
+        );
+        const port = portResolution.port;
         if (!port) {
-          if (isRememberedSerialPortAmbiguous(scaleId, ports)) {
+          if (portResolution.reason === "ambiguous") {
             showScaleRestoreError(
               scaleId,
-              `Balanza ${scaleId}: hay puertos idénticos; usa Conectar Serial para elegir el puerto físico.`
+              `Balanza ${scaleId}: no se pudo distinguir el puerto recordado; usa Conectar Serial una vez.`
             );
-          } else if (isRememberedSerialPortClaimed(scaleId, ports, claimedSerialPorts)) {
+          } else if (portResolution.reason === "claimed") {
             showScaleRestoreError(
               scaleId,
               `Balanza ${scaleId}: el puerto recordado ya está asignado a la otra balanza.`
+            );
+          } else if (portResolution.reason === "unavailable") {
+            showScaleRestoreError(
+              scaleId,
+              `Balanza ${scaleId}: el puerto serial recordado no está disponible; enciende o empareja la balanza.`
             );
           }
           continue;
         }
 
         claimedSerialPorts.add(port);
-        const connected = await connectSerialScale(scaleId, port);
+        const connected = await connectSerialScale(scaleId, port, { lifecycleGeneration });
+        if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+          return false;
+        }
         if (!connected) {
           claimedSerialPorts.delete(port);
         }
       }
     }
 
-    if (navigator.bluetooth?.getDevices) {
+    if (canRestoreBleScaleConnections()) {
       let devices = [];
       try {
         devices = await navigator.bluetooth.getDevices();
       } catch {
         devices = [];
+      }
+      if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+        return false;
       }
 
       const claimedBleDeviceIds = new Set(
@@ -4852,6 +5081,9 @@ async function restoreScaleConnections() {
       );
 
       for (const scaleId of SCALE_IDS) {
+        if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+          return false;
+        }
         const connection = scaleConnections[scaleId];
         if (connection?.status === "connecting" || isScaleConnectionActive(connection)) {
           continue;
@@ -4862,7 +5094,12 @@ async function restoreScaleConnections() {
           continue;
         }
 
-        if (claimedBleDeviceIds.has(scale.bleDeviceId)) {
+        const deviceResolution = resolveRememberedBleDevice(
+          scale.bleDeviceId,
+          devices,
+          claimedBleDeviceIds
+        );
+        if (deviceResolution.reason === "claimed") {
           showScaleRestoreError(
             scaleId,
             `Balanza ${scaleId}: el dispositivo BLE ya está asignado a la otra balanza.`
@@ -4870,27 +5107,46 @@ async function restoreScaleConnections() {
           continue;
         }
 
-        const device = devices.find((candidate) => candidate.id === scale.bleDeviceId);
+        const device = deviceResolution.device;
         if (device) {
           claimedBleDeviceIds.add(scale.bleDeviceId);
-          const connected = await connectBleScale(scaleId, device);
+          const connected = await connectBleScale(scaleId, device, { lifecycleGeneration });
+          if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+            return false;
+          }
           if (!connected) {
             claimedBleDeviceIds.delete(scale.bleDeviceId);
           }
+        } else if (deviceResolution.reason === "unavailable") {
+          showScaleRestoreError(
+            scaleId,
+            `Balanza ${scaleId}: el dispositivo BLE recordado no está disponible; enciende la balanza.`
+          );
         }
       }
     }
 
-    renderScaleConnectionPanels();
-  })().finally(() => {
-    scaleRestorePromise = null;
-  });
+    if (isScaleLifecycleCurrent(lifecycleGeneration)) {
+      renderScaleConnectionPanels();
+      return true;
+    }
+    return false;
+  })();
+  scaleRestorePromise = restorePromise;
+  scaleRestorePromiseGeneration = lifecycleGeneration;
+  const clearRestorePromise = () => {
+    if (scaleRestorePromise === restorePromise) {
+      scaleRestorePromise = null;
+      scaleRestorePromiseGeneration = null;
+    }
+  };
+  void restorePromise.then(clearRestorePromise, clearRestorePromise);
 
-  return scaleRestorePromise;
+  return restorePromise;
 }
 
 function hasPendingRememberedScaleConnections() {
-  if (!window.isSecureContext) {
+  if (!window.isSecureContext || !scalePageActive) {
     return false;
   }
 
@@ -4901,12 +5157,15 @@ function hasPendingRememberedScaleConnections() {
       return false;
     }
     return scale.autoConnectMode === "serial"
-      ? Boolean(navigator.serial?.getPorts)
-      : Boolean(navigator.bluetooth?.getDevices);
+      ? canRestoreSerialScaleConnections()
+      : canRestoreBleScaleConnections();
   });
 }
 
 function scheduleScaleConnectionRestore(options = {}) {
+  if (!scalePageActive) {
+    return;
+  }
   if (options.reset) {
     scaleRestoreAttempt = 0;
   }
@@ -4920,12 +5179,19 @@ function scheduleScaleConnectionRestore(options = {}) {
         SCALE_AUTO_RECONNECT_DELAY_MS * (2 ** scaleRestoreAttempt),
         SCALE_AUTO_RECONNECT_MAX_DELAY_MS
       );
+  const lifecycleGeneration = scaleLifecycleGeneration;
   scaleRestoreTimer = window.setTimeout(async () => {
     scaleRestoreTimer = null;
+    if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+      return;
+    }
     try {
       await restoreScaleConnections();
     } catch (error) {
       console.warn("No se pudieron restaurar las balanzas mayoristas.", error);
+    }
+    if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
+      return;
     }
     if (hasPendingRememberedScaleConnections()) {
       scaleRestoreAttempt += 1;
@@ -7481,16 +7747,21 @@ function handleCageRowActivation(row) {
   openCageModal(truckId, cageId);
 }
 
-function resetDay() {
+async function resetDay() {
   const confirmed = window.confirm("Se borrarán todos los tickets de despacho y registros guardados. ¿Continuar?");
   if (!confirmed) {
     return;
   }
 
-  SCALE_IDS.forEach((scaleId) => {
-    disconnectScale(scaleId, false, true);
+  const scaleConnectionPreferences = snapshotScaleConnectionPreferences(state.scales);
+  const hasRememberedScaleConnection = SCALE_IDS.some((scaleId) => {
+    return Boolean(scaleConnectionPreferences[scaleId]?.autoConnectMode);
   });
+  await Promise.all(
+    SCALE_IDS.map((scaleId) => disconnectScale(scaleId, false, false))
+  );
   state = createDefaultState();
+  applyScaleConnectionPreferences(state, scaleConnectionPreferences);
   scaleReadingSequences = { 1: 0, 2: 0 };
   lastRegisteredScaleReadingIds = { 1: null, 2: null };
   elements.truckPlate.value = "";
@@ -7506,7 +7777,14 @@ function resetDay() {
   closeConfigMenu();
   closeAllScaleSettings();
   closeFontSidebar();
-  setFormMessage("Jornada reiniciada.");
+  setFormMessage(
+    hasRememberedScaleConnection
+      ? "Jornada reiniciada. Restaurando las balanzas recordadas..."
+      : "Jornada reiniciada."
+  );
+  if (hasRememberedScaleConnection) {
+    scheduleScaleConnectionRestore({ reset: true, immediate: true });
+  }
 }
 
 function isInstalledDesktopApplication() {
@@ -7565,7 +7843,11 @@ function bindEvents() {
 
     refreshClientsFromDirectory();
   });
+  window.addEventListener("pagehide", () => {
+    releaseScaleConnectionsForNavigation({ deactivate: true });
+  });
   window.addEventListener("pageshow", () => {
+    resumeScaleConnectionsAfterNavigation();
     void loadCurrentDirectoryData().finally(() => {
       renderAll();
       scheduleScaleConnectionRestore({ immediate: true });

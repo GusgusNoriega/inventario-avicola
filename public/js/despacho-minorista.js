@@ -1,9 +1,9 @@
 import { apiRequest } from "./api-client.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
 import {
+  buildRetailScaleStorageKey,
   RetailScaleController,
   migrateLegacyRetailScaleStorage,
-  RETAIL_SCALE_STORAGE_KEY,
   RETAIL_SCALE_SERIAL_DEFAULTS
 } from "./despacho-minorista-balanza.js";
 
@@ -2099,6 +2099,7 @@ async function saveSettings(event) {
 }
 
 async function connectBle() {
+  scaleRestoreSuppressed = false;
   setSettingsMessage("Selecciona la balanza Bluetooth en el navegador...");
   const connected = await state.scale.connectBle();
   setSettingsMessage(connected ? "Balanza BLE conectada." : state.scale.getState().statusMessage, !connected);
@@ -2113,12 +2114,14 @@ async function connectSerial() {
     return;
   }
 
+  scaleRestoreSuppressed = false;
   setSettingsMessage("Selecciona el puerto serial de la balanza...");
   const connected = await state.scale.connectSerial({ serialOptions });
   setSettingsMessage(connected ? "Balanza serial conectada." : state.scale.getState().statusMessage, !connected);
 }
 
 async function disconnectScale() {
+  scaleRestoreSuppressed = true;
   await state.scale.disconnect({ forget: false });
   setSettingsMessage("Balanza desconectada. La autorización quedó recordada.");
 }
@@ -2212,9 +2215,7 @@ async function loadCatalog() {
     }
     state.chickenType = state.catalog.chicken_types[0]?.code || null;
 
-    const scaleStorageKey = RETAIL_STATION === "1"
-      ? `${RETAIL_SCALE_STORAGE_KEY}-branch-${branchId}`
-      : `${RETAIL_SCALE_STORAGE_KEY}-station-${RETAIL_STATION}-branch-${branchId}`;
+    const scaleStorageKey = buildRetailScaleStorageKey(RETAIL_STATION, branchId);
     if (RETAIL_STATION === "1") {
       migrateLegacyRetailScaleStorage({
         station: RETAIL_STATION,
@@ -2226,12 +2227,13 @@ async function loadCatalog() {
       reload: true,
       persistCurrent: false
     });
+    scaleRestoreReady = true;
 
     fillSettingsForm();
     state.loading = false;
     renderAll();
     setMessage("Estación minorista lista. Selecciona una lista y captura el peso para agregarlo directamente.");
-    void state.scale.restore().catch(() => undefined);
+    void restoreRememberedScale("carga inicial");
   } catch (error) {
     state.loading = false;
     renderAll();
@@ -2525,18 +2527,79 @@ document.addEventListener("keydown", (event) => {
 });
 
 let clockIntervalId = null;
+let scaleRestoreReady = false;
+let scaleRestorePromise = null;
+let scaleRestoreSuppressed = false;
 let teardownStarted = false;
+
+function restoreRememberedScale(reason = "reactivación") {
+  if (!scaleRestoreReady
+    || scaleRestoreSuppressed
+    || teardownStarted
+    || document.visibilityState === "hidden") {
+    return Promise.resolve(false);
+  }
+
+  const currentState = state.scale?.getState?.() || {};
+  if (!currentState.autoConnectMode) {
+    return Promise.resolve(false);
+  }
+  if (scaleRestorePromise) {
+    return scaleRestorePromise;
+  }
+
+  const restorePromise = state.scale.restoreAuthorizedConnection()
+    .catch((error) => {
+      if (!teardownStarted) {
+        setMessage(`No se pudo restaurar la balanza durante ${reason}: ${error.message}`, true);
+      }
+      return false;
+    });
+  const trackedRestorePromise = restorePromise.finally(() => {
+    if (scaleRestorePromise === trackedRestorePromise) {
+      scaleRestorePromise = null;
+    }
+  });
+  scaleRestorePromise = trackedRestorePromise;
+  return trackedRestorePromise;
+}
+
+function handleRetailPageShow(event) {
+  // El controlador se destruye siempre al salir para liberar GATT/Serial. Si
+  // el navegador conservó el documento en BFCache, se recarga una vez para
+  // crear un controlador limpio y restaurar la preferencia de esta vista.
+  if (event?.persisted && teardownStarted) {
+    globalThis.location.reload();
+    return;
+  }
+  void restoreRememberedScale("el regreso a la vista");
+}
+
+function handleRetailWindowFocus() {
+  void restoreRememberedScale("la reactivación de la ventana");
+}
+
+function handleRetailVisibilityChange() {
+  if (document.visibilityState === "hidden") {
+    persistLists();
+    return;
+  }
+  void restoreRememberedScale("la reactivación de la pestaña");
+}
+
 function teardownRetailStation(event) {
-  if (event?.type === "pagehide" && event.persisted) return;
+  persistLists();
   if (teardownStarted) return;
   teardownStarted = true;
-  persistLists();
+  scaleRestoreReady = false;
   if (clockIntervalId) globalThis.clearInterval(clockIntervalId);
   void state.scale.destroy();
 }
 
 globalThis.addEventListener("pagehide", teardownRetailStation);
-globalThis.addEventListener("beforeunload", teardownRetailStation);
+globalThis.addEventListener("pageshow", handleRetailPageShow);
+globalThis.addEventListener("focus", handleRetailWindowFocus);
+document.addEventListener("visibilitychange", handleRetailVisibilityChange);
 
 initializeTypography();
 updateClock();

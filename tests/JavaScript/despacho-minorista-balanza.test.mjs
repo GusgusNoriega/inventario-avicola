@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
+  buildRetailScaleStorageKey,
   RetailScaleController,
   migrateLegacyRetailScaleStorage,
   parseIndustrialScaleText,
@@ -9,6 +11,11 @@ import {
   RETAIL_SCALE_LEGACY_MIGRATION_MARKER_KEY,
   RETAIL_SCALE_STORAGE_KEY
 } from "../../public/js/despacho-minorista-balanza.js";
+
+const retailViewSource = readFileSync(
+  new URL("../../public/js/despacho-minorista.js", import.meta.url),
+  "utf8"
+);
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -36,6 +43,64 @@ function controllerWithReadings() {
     }
   });
   return { controller, readings };
+}
+
+function createMockBleDevice(options = {}) {
+  const listeners = new Map();
+  const characteristic = {
+    properties: { notify: true, indicate: false, read: false },
+    addEventListener(type, listener) {
+      listeners.set(`characteristic:${type}`, listener);
+    },
+    removeEventListener(type, listener) {
+      if (listeners.get(`characteristic:${type}`) === listener) {
+        listeners.delete(`characteristic:${type}`);
+      }
+    },
+    async startNotifications() {
+      return characteristic;
+    }
+  };
+  const service = {
+    async getCharacteristic() {
+      return characteristic;
+    }
+  };
+  const server = {
+    async getPrimaryService(uuid) {
+      if (uuid !== "0000181d-0000-1000-8000-00805f9b34fb") {
+        throw new Error("Servicio no disponible");
+      }
+      return service;
+    }
+  };
+  const metrics = { connectCalls: 0, disconnectCalls: 0 };
+  const gatt = {
+    connected: false,
+    async connect() {
+      metrics.connectCalls += 1;
+      gatt.connected = true;
+      return server;
+    },
+    disconnect() {
+      metrics.disconnectCalls += 1;
+      gatt.connected = false;
+    }
+  };
+  const device = {
+    id: options.id || "ble-retail-1",
+    name: options.name || "Balanza BLE minorista",
+    gatt,
+    addEventListener(type, listener) {
+      listeners.set(`device:${type}`, listener);
+    },
+    removeEventListener(type, listener) {
+      if (listeners.get(`device:${type}`) === listener) {
+        listeners.delete(`device:${type}`);
+      }
+    }
+  };
+  return { device, metrics };
 }
 
 function attachSerialConnection(controller) {
@@ -328,6 +393,78 @@ test("restauración serial no elige silenciosamente entre adaptadores USB idént
   assert.equal(controller._findRememberedSerialPort([portA]), portA);
 });
 
+test("restauración serial usa los dos índices recordados para adaptadores idénticos nuevos", () => {
+  const serviceId = "00001101-0000-1000-8000-00805f9b34fb";
+  const persisted = JSON.stringify({
+    version: 2,
+    autoConnectMode: "serial",
+    serialPortInfo: {
+      bluetoothServiceClassId: serviceId,
+      matchIndex: 1,
+      portIndex: 2
+    },
+    serialOptions: { baudRate: 9600, dataBits: 8, stopBits: 1, parity: "none", flowControl: "none" }
+  });
+  const controller = new RetailScaleController({
+    navigator: {},
+    storage: memoryStorage({ "scale-test": persisted }),
+    storageKey: "scale-test",
+    secureContext: true
+  });
+  const unrelatedPort = { getInfo: () => ({ usbVendorId: 999, usbProductId: 1 }) };
+  const portA = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const portB = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+
+  assert.equal(
+    controller._findRememberedSerialPort([unrelatedPort, portA, portB]),
+    portB
+  );
+
+  controller._state.serialPortInfo.portIndex = 1;
+  assert.equal(
+    controller._findRememberedSerialPort([unrelatedPort, portA, portB]),
+    null
+  );
+
+  controller._state.serialPortInfo = {
+    bluetoothServiceClassId: serviceId,
+    matchIndex: 1,
+    portIndex: 1
+  };
+  assert.equal(
+    controller._findRememberedSerialPort([portA]),
+    null
+  );
+});
+
+test("al seleccionar Serial se recuerdan sus índices global y entre dispositivos iguales", async () => {
+  const serviceId = "00001101-0000-1000-8000-00805f9b34fb";
+  const unrelatedPort = { getInfo: () => ({ usbVendorId: 999, usbProductId: 1 }) };
+  const portA = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const portB = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const controller = new RetailScaleController({
+    navigator: {
+      serial: {
+        async getPorts() {
+          return [unrelatedPort, portA, portB];
+        },
+        addEventListener() {}
+      }
+    },
+    storage: memoryStorage(),
+    secureContext: true
+  });
+
+  await controller._rememberSerialPort(portB);
+  assert.deepEqual(controller.getState().serialPortInfo, {
+    usbVendorId: null,
+    usbProductId: null,
+    bluetoothServiceClassId: serviceId,
+    matchIndex: 1,
+    portIndex: 2
+  });
+});
+
 test("restauración BLE exige el id exacto y no cae en nombre o dispositivo único", async () => {
   const persisted = JSON.stringify({
     version: 2,
@@ -352,6 +489,115 @@ test("restauración BLE exige el id exacto y no cae en nombre o dispositivo úni
   assert.equal(controller.getState().status, "offline");
   assert.match(controller.getState().statusMessage, /exactamente/i);
   assert.equal(controller._autoReconnectEnabled, false);
+});
+
+test("BLE recordada se restaura por id sin abrir selector y las llamadas simultáneas se agrupan", async () => {
+  const storageKey = "scale-ble-restore";
+  const storage = memoryStorage({
+    [storageKey]: JSON.stringify({
+      version: 2,
+      autoConnectMode: "ble",
+      bleDeviceId: "saved-device",
+      deviceName: "Balanza guardada"
+    })
+  });
+  const { device, metrics } = createMockBleDevice({ id: "saved-device" });
+  let getDevicesCalls = 0;
+  let requestDeviceCalls = 0;
+  let releaseDevices;
+  const devicesReady = new Promise((resolve) => {
+    releaseDevices = resolve;
+  });
+  const controller = new RetailScaleController({
+    navigator: {
+      bluetooth: {
+        async getDevices() {
+          getDevicesCalls += 1;
+          await devicesReady;
+          return [device];
+        },
+        async requestDevice() {
+          requestDeviceCalls += 1;
+          return device;
+        }
+      }
+    },
+    storage,
+    storageKey,
+    secureContext: true
+  });
+
+  const firstRestore = controller.restoreAuthorizedConnection();
+  const secondRestore = controller.restoreAuthorizedConnection();
+  assert.equal(firstRestore, secondRestore);
+  releaseDevices();
+  assert.equal(await firstRestore, true);
+  assert.equal(getDevicesCalls, 1);
+  assert.equal(requestDeviceCalls, 0);
+  assert.equal(metrics.connectCalls, 1);
+
+  assert.equal(await controller.restoreAuthorizedConnection(), true);
+  assert.equal(getDevicesCalls, 1);
+  assert.equal(metrics.connectCalls, 1);
+  await controller.destroy();
+});
+
+test("sin getDevices la restauración BLE no abre selector ni deja reintento infinito", async () => {
+  const storageKey = "scale-ble-no-get-devices";
+  let requestDeviceCalls = 0;
+  const controller = new RetailScaleController({
+    navigator: {
+      bluetooth: {
+        async requestDevice() {
+          requestDeviceCalls += 1;
+          throw new Error("No debe solicitar un dispositivo sin gesto");
+        }
+      }
+    },
+    storage: memoryStorage({
+      [storageKey]: JSON.stringify({
+        version: 2,
+        autoConnectMode: "ble",
+        bleDeviceId: "saved-device"
+      })
+    }),
+    storageKey,
+    secureContext: true
+  });
+
+  assert.equal(await controller.restoreAuthorizedConnection(), false);
+  assert.equal(requestDeviceCalls, 0);
+  assert.equal(controller._reconnectTimer, null);
+  assert.equal(controller._autoReconnectEnabled, false);
+  assert.match(controller.getState().statusMessage, /pulsa Conectar BLE/i);
+  await controller.destroy();
+});
+
+test("destroy desconecta GATT inmediatamente y conserva la preferencia", async () => {
+  const storageKey = "scale-ble-destroy";
+  const storage = memoryStorage();
+  const { device, metrics } = createMockBleDevice({ id: "destroy-device" });
+  const controller = new RetailScaleController({
+    navigator: {
+      bluetooth: {
+        async requestDevice() {
+          return device;
+        }
+      }
+    },
+    storage,
+    storageKey,
+    secureContext: true
+  });
+
+  assert.equal(await controller.connectBle(), true);
+  const destroyPromise = controller.destroy();
+  assert.equal(device.gatt.connected, false);
+  assert.equal(metrics.disconnectCalls, 1);
+  const persisted = JSON.parse(storage.getItem(storageKey));
+  assert.equal(persisted.autoConnectMode, "ble");
+  assert.equal(persisted.bleDeviceId, "destroy-device");
+  await destroyPromise;
 });
 
 test("configuración legacy se migra una sola vez y exclusivamente a Minorista 1", () => {
@@ -401,4 +647,55 @@ test("cambiar a la clave por sucursal no crea una legacy vacía", () => {
   controller.setStorageKey(targetKey, { reload: true, persistCurrent: false });
   assert.equal(storage.getItem(RETAIL_SCALE_STORAGE_KEY), null);
   assert.equal(controller.getState().storageKey, targetKey);
+});
+
+test("Minorista 1 y Minorista 2 usan recuerdos separados en cada sucursal", () => {
+  const stationOneBranchTen = buildRetailScaleStorageKey("1", 10);
+  const stationTwoBranchTen = buildRetailScaleStorageKey("2", 10);
+  const stationOneBranchTwenty = buildRetailScaleStorageKey("1", 20);
+
+  assert.equal(stationOneBranchTen, `${RETAIL_SCALE_STORAGE_KEY}-branch-10`);
+  assert.equal(stationTwoBranchTen, `${RETAIL_SCALE_STORAGE_KEY}-station-2-branch-10`);
+  assert.equal(stationOneBranchTwenty, `${RETAIL_SCALE_STORAGE_KEY}-branch-20`);
+  assert.equal(new Set([
+    stationOneBranchTen,
+    stationTwoBranchTen,
+    stationOneBranchTwenty
+  ]).size, 3);
+
+  const storage = memoryStorage({
+    [stationOneBranchTen]: JSON.stringify({
+      autoConnectMode: "ble",
+      bleDeviceId: "minorista-1"
+    }),
+    [stationTwoBranchTen]: JSON.stringify({
+      autoConnectMode: "ble",
+      bleDeviceId: "minorista-2"
+    })
+  });
+  const stationOneController = new RetailScaleController({
+    navigator: {},
+    storage,
+    storageKey: stationOneBranchTen
+  });
+  const stationTwoController = new RetailScaleController({
+    navigator: {},
+    storage,
+    storageKey: stationTwoBranchTen
+  });
+  assert.equal(stationOneController.getState().bleDeviceId, "minorista-1");
+  assert.equal(stationTwoController.getState().bleDeviceId, "minorista-2");
+});
+
+test("pagehide minorista libera hardware también con BFCache y al volver crea un controlador limpio", () => {
+  const lifecycleStart = retailViewSource.indexOf("function handleRetailPageShow");
+  const lifecycleEnd = retailViewSource.indexOf("initializeTypography();", lifecycleStart);
+  assert.notEqual(lifecycleStart, -1);
+  assert.notEqual(lifecycleEnd, -1);
+  const lifecycleSource = retailViewSource.slice(lifecycleStart, lifecycleEnd);
+
+  assert.match(lifecycleSource, /event\?\.persisted && teardownStarted/);
+  assert.match(lifecycleSource, /globalThis\.location\.reload\(\)/);
+  assert.match(lifecycleSource, /void state\.scale\.destroy\(\)/);
+  assert.doesNotMatch(lifecycleSource, /event\?\.type === "pagehide" && event\.persisted\) return/);
 });

@@ -48,6 +48,309 @@ function loadParsingHelpers() {
 
 const parsing = loadParsingHelpers();
 
+function loadReconnectHelpers() {
+  const normalizeBlock = sourceBetween(
+    "function normalizeSerialPortInfo",
+    "function normalizeScaleState"
+  );
+  const identifierBlock = sourceBetween(
+    "function serialPortIdentifiersMatch",
+    "function otherScaleRemembersSerialPreference"
+  );
+  const resolutionBlock = sourceBetween(
+    "function hasSerialPortIdentifiers",
+    "function showScaleRestoreError"
+  );
+
+  return new Function(`
+    ${normalizeBlock}
+    const getSerialPortInfo = (port) => normalizeSerialPortInfo(port?.getInfo?.() || {});
+    ${identifierBlock}
+    ${resolutionBlock}
+    return {
+      normalizeSerialPortInfo,
+      serialPortPreferencesMatch,
+      resolveRememberedSerialPort,
+      resolveRememberedBleDevice
+    };
+  `)();
+}
+
+function loadConnectionPreferenceHelpers() {
+  const preferenceBlock = sourceBetween(
+    "function normalizeScaleSerialOptions",
+    "function normalizeType"
+  );
+
+  return new Function(`
+    const SCALE_IDS = [1, 2];
+    const SCALE_SERIAL_DEFAULTS = {
+      baudRate: 9600,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      flowControl: "none"
+    };
+    const SCALE_SERIAL_DATA_BITS = new Set([7, 8]);
+    const SCALE_SERIAL_STOP_BITS = new Set([1, 2]);
+    const SCALE_SERIAL_PARITIES = new Set(["none", "even", "odd"]);
+    const SCALE_SERIAL_FLOW_CONTROLS = new Set(["none", "hardware"]);
+    const MAX_SCALE_RAW_LENGTH = 160;
+    const roundWeight = (value) => Math.round(value * 100) / 100;
+    ${preferenceBlock}
+    return { snapshotScaleConnectionPreferences, applyScaleConnectionPreferences };
+  `)();
+}
+
+const reconnect = loadReconnectHelpers();
+
+test("reconexión Serial distingue dos RFCOMM con el mismo Service Class ID", () => {
+  const serviceId = "00001101-0000-1000-8000-00805f9b34fb";
+  const firstPort = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const secondPort = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const ports = [firstPort, secondPort];
+  const firstSaved = {
+    bluetoothServiceClassId: serviceId,
+    matchIndex: 0,
+    portIndex: 0
+  };
+  const secondSaved = {
+    bluetoothServiceClassId: serviceId,
+    matchIndex: 1,
+    portIndex: 1
+  };
+
+  const first = reconnect.resolveRememberedSerialPort(firstSaved, ports, new Set());
+  const second = reconnect.resolveRememberedSerialPort(secondSaved, ports, new Set([first.port]));
+
+  assert.equal(first.port, firstPort);
+  assert.equal(second.port, secondPort);
+  assert.notEqual(first.port, second.port);
+  assert.equal(first.reason, null);
+  assert.equal(second.reason, null);
+});
+
+test("reconexión Serial no reasigna una preferencia duplicada a otro puerto físico", () => {
+  const serviceId = "00001101-0000-1000-8000-00805f9b34fb";
+  const firstPort = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const secondPort = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const legacySaved = {
+    bluetoothServiceClassId: serviceId,
+    matchIndex: 0,
+    portIndex: 0
+  };
+
+  const first = reconnect.resolveRememberedSerialPort(
+    legacySaved,
+    [firstPort, secondPort],
+    new Set()
+  );
+  const second = reconnect.resolveRememberedSerialPort(
+    legacySaved,
+    [firstPort, secondPort],
+    new Set([first.port])
+  );
+
+  assert.equal(first.port, firstPort);
+  assert.equal(second.port, null);
+  assert.equal(second.reason, "claimed");
+});
+
+test("reconexión Serial no sustituye un ordinal recordado que ya no existe", () => {
+  const serviceId = "00001101-0000-1000-8000-00805f9b34fb";
+  const remainingPort = { getInfo: () => ({ bluetoothServiceClassId: serviceId }) };
+  const savedSecondPort = {
+    bluetoothServiceClassId: serviceId,
+    matchIndex: 1,
+    portIndex: 1
+  };
+
+  const resolution = reconnect.resolveRememberedSerialPort(
+    savedSecondPort,
+    [remainingPort],
+    new Set()
+  );
+
+  assert.equal(resolution.port, null);
+  assert.equal(resolution.reason, "unavailable");
+});
+
+test("reconexión Serial usa portIndex sin identificadores y detecta asignación ocupada", () => {
+  const firstPort = { getInfo: () => ({}) };
+  const secondPort = { getInfo: () => ({}) };
+  const saved = { matchIndex: 0, portIndex: 1 };
+
+  assert.equal(
+    reconnect.resolveRememberedSerialPort(saved, [firstPort, secondPort], new Set()).port,
+    secondPort
+  );
+  assert.equal(
+    reconnect.resolveRememberedSerialPort(saved, [firstPort, secondPort], new Set([secondPort])).reason,
+    "claimed"
+  );
+});
+
+test("preferencias Serial solo consideran igual el mismo ordinal físico", () => {
+  const base = {
+    bluetoothServiceClassId: "00001101-0000-1000-8000-00805f9b34fb",
+    matchIndex: 0,
+    portIndex: 0
+  };
+  assert.equal(reconnect.serialPortPreferencesMatch(base, { ...base }), true);
+  assert.equal(
+    reconnect.serialPortPreferencesMatch(base, { ...base, matchIndex: 1, portIndex: 1 }),
+    false
+  );
+});
+
+test("reconexión BLE exige el ID exacto y no comparte dispositivo entre puestos", () => {
+  const devices = [
+    { id: "ble-a", name: "Balanza A" },
+    { id: "ble-b", name: "Balanza B" }
+  ];
+
+  assert.equal(
+    reconnect.resolveRememberedBleDevice("ble-b", devices, new Set()).device,
+    devices[1]
+  );
+  assert.equal(
+    reconnect.resolveRememberedBleDevice("ble-b", devices, new Set(["ble-b"])).reason,
+    "claimed"
+  );
+  assert.equal(
+    reconnect.resolveRememberedBleDevice("ble-c", devices, new Set()).reason,
+    "unavailable"
+  );
+});
+
+test("reiniciar jornada conserva configuración de ambas balanzas y elimina lecturas", () => {
+  const helpers = loadConnectionPreferenceHelpers();
+  const originalScales = {
+    1: {
+      id: 1,
+      autoConnectMode: "ble",
+      connectionMode: "ble",
+      deviceName: "BLE A",
+      bleDeviceId: "ble-a",
+      currentWeight: 12.5,
+      readingValid: true,
+      readingStable: true
+    },
+    2: {
+      id: 2,
+      autoConnectMode: "serial",
+      connectionMode: "serial",
+      deviceName: "Serial B",
+      serialPortInfo: {
+        bluetoothServiceClassId: "00001101-0000-1000-8000-00805f9b34fb",
+        matchIndex: 1,
+        portIndex: 1
+      },
+      serialOptions: { baudRate: 19200 },
+      currentWeight: 20,
+      readingValid: true,
+      readingStable: true
+    }
+  };
+  const preferences = helpers.snapshotScaleConnectionPreferences(originalScales);
+  const resetState = { scales: {} };
+  helpers.applyScaleConnectionPreferences(resetState, preferences);
+
+  assert.equal(resetState.scales[1].bleDeviceId, "ble-a");
+  assert.equal(resetState.scales[1].currentWeight, null);
+  assert.equal(resetState.scales[1].readingValid, false);
+  assert.equal(resetState.scales[2].serialPortInfo.matchIndex, 1);
+  assert.equal(resetState.scales[2].serialOptions.baudRate, 19200);
+  assert.equal(resetState.scales[2].currentWeight, null);
+
+  const resetFlow = sourceBetween("async function resetDay", "function isInstalledDesktopApplication");
+  assert.match(resetFlow, /snapshotScaleConnectionPreferences\(state\.scales\)/);
+  assert.match(resetFlow, /disconnectScale\(scaleId, false, false\)/);
+  assert.match(resetFlow, /applyScaleConnectionPreferences\(state, scaleConnectionPreferences\)/);
+  assert.doesNotMatch(resetFlow, /disconnectScale\(scaleId, false, true\)/);
+});
+
+test("restauración automática nunca abre selectores fuera de un clic", () => {
+  const restoreFlow = sourceBetween(
+    "async function restoreScaleConnections",
+    "function hasPendingRememberedScaleConnections"
+  );
+  assert.match(restoreFlow, /navigator\.serial\.getPorts\(\)/);
+  assert.match(restoreFlow, /navigator\.bluetooth\.getDevices\(\)/);
+  assert.doesNotMatch(restoreFlow, /requestPort\s*\(/);
+  assert.doesNotMatch(restoreFlow, /requestDevice\s*\(/);
+
+  const capabilityBlock = sourceBetween(
+    "function canRestoreSerialScaleConnections",
+    "function formatScaleTime"
+  );
+  const capability = new Function("navigator", `
+    ${capabilityBlock}
+    return { canRestoreSerialScaleConnections, canRestoreBleScaleConnections };
+  `);
+  assert.equal(capability({ serial: {}, bluetooth: {} }).canRestoreSerialScaleConnections(), false);
+  assert.equal(capability({ serial: {}, bluetooth: {} }).canRestoreBleScaleConnections(), false);
+  assert.equal(
+    capability({ serial: { getPorts() {} }, bluetooth: { getDevices() {} } })
+      .canRestoreSerialScaleConnections(),
+    true
+  );
+});
+
+test("pagehide libera hardware sin olvidar la preferencia y BLE se guarda antes de leer", () => {
+  const releaseFlow = sourceBetween(
+    "function releaseScaleConnectionsForNavigation",
+    "function handleScaleDisconnected"
+  );
+  assert.match(releaseFlow, /releaseUnexpectedScaleConnection\(connection\)/);
+  assert.match(releaseFlow, /invalidateScaleReading\(scaleId, "disconnected"/);
+  assert.doesNotMatch(releaseFlow, /clearScaleConnectionPreference/);
+  assert.match(source, /releaseScaleConnectionsForNavigation\(\{ deactivate: true \}\)/);
+  assert.match(source, /resumeScaleConnectionsAfterNavigation\(\)/);
+
+  const bleFlow = sourceBetween("async function connectBleScale", "function handleSerialScaleChunk");
+  assert.ok(
+    bleFlow.indexOf("rememberBleScaleDevice(scaleId, device)")
+      < bleFlow.indexOf("startNotifications()")
+  );
+});
+
+test("una restauración mayorista vieja no puede continuar después de pagehide", () => {
+  const restoreFlow = sourceBetween(
+    "async function restoreScaleConnections",
+    "function hasPendingRememberedScaleConnections"
+  );
+  const scheduleFlow = sourceBetween(
+    "function scheduleScaleConnectionRestore",
+    "function getScaleWeight"
+  );
+
+  assert.match(restoreFlow, /const lifecycleGeneration = scaleLifecycleGeneration/);
+  assert.match(restoreFlow, /isScaleLifecycleCurrent\(lifecycleGeneration\)/);
+  assert.match(restoreFlow, /connectSerialScale\(scaleId, port, \{ lifecycleGeneration \}\)/);
+  assert.match(restoreFlow, /connectBleScale\(scaleId, device, \{ lifecycleGeneration \}\)/);
+  assert.match(scheduleFlow, /const lifecycleGeneration = scaleLifecycleGeneration/);
+  assert.match(scheduleFlow, /isScaleLifecycleCurrent\(lifecycleGeneration\)/);
+});
+
+test("configuración local mayorista queda separada por empresa y sucursal", () => {
+  const branchBlock = sourceBetween("function branchStorageKey", "function activateBranchStorage");
+  const branchStorageKey = new Function(`
+    const STORAGE_KEY_PREFIX = "sistema-pollos-state-v2";
+    ${branchBlock}
+    return branchStorageKey;
+  `)();
+
+  assert.notEqual(
+    branchStorageKey({ id: 10 }, { id: 1 }),
+    branchStorageKey({ id: 10 }, { id: 2 })
+  );
+  assert.notEqual(
+    branchStorageKey({ id: 10 }, { id: 1 }),
+    branchStorageKey({ id: 11 }, { id: 1 })
+  );
+});
+
 test("parser mayorista separa GROSS/NET de TARE antes y después del valor", () => {
   const parse = parsing.parseIndustrialScaleText;
 

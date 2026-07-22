@@ -16,6 +16,19 @@ export const RETAIL_SCALE_SERIAL_DEFAULTS = Object.freeze({
   flowControl: "none"
 });
 
+/**
+ * Cada puesto minorista conserva su balanza de forma independiente por
+ * sucursal. La función vive aquí para que todas las vistas construyan la
+ * clave exactamente igual y nunca hereden el dispositivo de otro puesto.
+ */
+export function buildRetailScaleStorageKey(station, branchId) {
+  const normalizedStation = String(station || "1").trim() || "1";
+  const normalizedBranchId = String(branchId ?? "default").trim() || "default";
+  return normalizedStation === "1"
+    ? `${RETAIL_SCALE_STORAGE_KEY}-branch-${normalizedBranchId}`
+    : `${RETAIL_SCALE_STORAGE_KEY}-station-${normalizedStation}-branch-${normalizedBranchId}`;
+}
+
 const freezeBleProfile = (profile) => Object.freeze({
   ...profile,
   characteristics: Object.freeze([...profile.characteristics])
@@ -486,21 +499,28 @@ function normalizeSerialPortInfo(info) {
     ? null
     : Number(info.usbProductId);
   const bluetoothServiceClassId = String(info.bluetoothServiceClassId || "").trim();
-  const matchIndex = Number(info.matchIndex);
-  const portIndex = Number(info.portIndex);
+  const hasMatchIndex = Object.prototype.hasOwnProperty.call(info, "matchIndex")
+    && info.matchIndex !== null
+    && info.matchIndex !== "";
+  const hasPortIndex = Object.prototype.hasOwnProperty.call(info, "portIndex")
+    && info.portIndex !== null
+    && info.portIndex !== "";
+  const matchIndex = hasMatchIndex ? Number(info.matchIndex) : null;
+  const portIndex = hasPortIndex ? Number(info.portIndex) : null;
 
   const normalized = {
     usbVendorId: Number.isInteger(usbVendorId) && usbVendorId >= 0 ? usbVendorId : null,
     usbProductId: Number.isInteger(usbProductId) && usbProductId >= 0 ? usbProductId : null,
     bluetoothServiceClassId: bluetoothServiceClassId || null,
-    matchIndex: Number.isInteger(matchIndex) && matchIndex >= 0 ? matchIndex : 0,
-    portIndex: Number.isInteger(portIndex) && portIndex >= 0 ? portIndex : 0
+    matchIndex: Number.isInteger(matchIndex) && matchIndex >= 0 ? matchIndex : null,
+    portIndex: Number.isInteger(portIndex) && portIndex >= 0 ? portIndex : null
   };
 
   return normalized.usbVendorId !== null
     || normalized.usbProductId !== null
     || normalized.bluetoothServiceClassId
-    || Number.isInteger(portIndex)
+    || normalized.matchIndex !== null
+    || normalized.portIndex !== null
     ? normalized
     : null;
 }
@@ -629,6 +649,8 @@ export class RetailScaleController {
     this._reconnectTimer = null;
     this._reconnectAttempt = 0;
     this._autoReconnectEnabled = false;
+    this._restorePromise = null;
+    this._destroyPromise = null;
     this._destroyed = false;
 
     const persisted = this._loadPersistedState();
@@ -881,33 +903,69 @@ export class RetailScaleController {
   }
 
   restoreAuthorizedConnection() {
+    this._assertActive();
     this._autoReconnectEnabled = true;
-    return this._enqueue(async () => {
+    this._cancelReconnect();
+
+    if (this._hasActiveTransport()) {
+      return Promise.resolve(true);
+    }
+
+    // load, pageshow, visibilitychange y focus pueden llegar casi juntos. Una
+    // sola restauración compartida evita abrir/cerrar el mismo transporte en
+    // cadena y, sobre todo, evita que aparezca más de un intento simultáneo.
+    if (this._restorePromise) {
+      return this._restorePromise;
+    }
+
+    const restorePromise = this._enqueue(async () => {
+      if (this._hasActiveTransport()) return true;
       const connected = await this._restoreAuthorizedConnection();
       if (!connected) this._scheduleReconnect();
       return connected;
     });
+    const trackedRestorePromise = restorePromise.finally(() => {
+      if (this._restorePromise === trackedRestorePromise) {
+        this._restorePromise = null;
+      }
+    });
+    this._restorePromise = trackedRestorePromise;
+    return trackedRestorePromise;
   }
 
   restore() {
     return this.restoreAuthorizedConnection();
   }
 
-  async destroy() {
+  destroy() {
+    if (this._destroyPromise) {
+      return this._destroyPromise;
+    }
     if (this._destroyed) {
-      return;
+      return Promise.resolve();
     }
 
-    await this._enqueue(async () => {
-      this._autoReconnectEnabled = false;
-      this._cancelReconnect();
-      await this._disconnectTransport({ forget: false, updateStatus: false });
-      this._persist(true);
-      this._destroyed = true;
-      this._navigator?.serial?.removeEventListener?.("connect", this._serialConnectHandler);
-      this._navigator?.serial?.removeEventListener?.("disconnect", this._serialDisconnectHandler);
-      this._callbacks = { onReading: null, onStatus: null, onRaw: null };
+    // pagehide no espera promesas. Se marca y se desconecta el GATT de forma
+    // síncrona antes de cualquier await; el resto de la limpieza continúa en
+    // segundo plano. La preferencia persistida no se elimina.
+    this._destroyed = true;
+    this._autoReconnectEnabled = false;
+    this._cancelReconnect();
+    const connection = this._connection;
+    this._connection = null;
+    this._connectionGeneration += 1;
+    this._abortConnectionImmediately(connection);
+    this._persist(true);
+    this._navigator?.serial?.removeEventListener?.("connect", this._serialConnectHandler);
+    this._navigator?.serial?.removeEventListener?.("disconnect", this._serialDisconnectHandler);
+    this._callbacks = { onReading: null, onStatus: null, onRaw: null };
+
+    const pendingOperations = this._operationQueue.catch(() => undefined);
+    this._destroyPromise = pendingOperations.then(async () => {
+      await this._releaseConnection(connection);
     });
+    this._operationQueue = this._destroyPromise.catch(() => undefined);
+    return this._destroyPromise;
   }
 
   _assertActive() {
@@ -927,6 +985,28 @@ export class RetailScaleController {
       && !connection.abort
       && this._connection === connection
       && connection.generation === this._connectionGeneration;
+  }
+
+  _hasActiveTransport() {
+    const connection = this._connection;
+    if (!this._isCurrentConnection(connection)
+      || this._state.status !== "connected"
+      || this._state.connectionMode !== connection.mode) {
+      return false;
+    }
+
+    if (connection.mode === "ble") {
+      return connection.device?.gatt?.connected !== false;
+    }
+
+    if (connection.mode === "serial"
+      && connection.port
+      && "readable" in connection.port
+      && connection.port.readable === null) {
+      return false;
+    }
+
+    return true;
   }
 
   _cancelReconnect() {
@@ -1274,6 +1354,7 @@ export class RetailScaleController {
         acceptAllDevices: true,
         optionalServices: RETAIL_SCALE_BLE_SERVICE_UUIDS
       });
+      this._assertActive();
       const deviceName = device?.name || "BLE sin nombre";
       if (!device?.gatt) {
         throw new Error("El dispositivo seleccionado no expone una conexión GATT.");
@@ -1362,6 +1443,7 @@ export class RetailScaleController {
       return true;
     } catch (error) {
       await this._disconnectTransport({ forget: false, updateStatus: false });
+      if (this._destroyed) return false;
       const message = getConnectionErrorMessage(error, "No se pudo conectar la balanza por BLE.");
       this._setStatus("error", message, {
         connectionMode: null,
@@ -1471,7 +1553,16 @@ export class RetailScaleController {
     let connection = null;
     try {
       const port = options.port || await serial.requestPort();
+      this._assertActive();
       await port.open(serialOptions);
+      if (this._destroyed) {
+        try {
+          await port.close();
+        } catch {
+          // La página ya está saliendo y el navegador puede haberlo cerrado.
+        }
+        return false;
+      }
       connection = {
         mode: "serial",
         generation: ++this._connectionGeneration,
@@ -1508,6 +1599,7 @@ export class RetailScaleController {
       return true;
     } catch (error) {
       await this._disconnectTransport({ forget: false, updateStatus: false });
+      if (this._destroyed) return false;
       const message = getConnectionErrorMessage(error, "No se pudo abrir el puerto serial de la balanza.");
       this._setStatus("error", message, {
         connectionMode: null,
@@ -1530,17 +1622,19 @@ export class RetailScaleController {
       usbVendorId: null,
       usbProductId: null,
       bluetoothServiceClassId: null,
-      matchIndex: 0,
-      portIndex: 0
+      matchIndex: null,
+      portIndex: null
     };
     const matchingPorts = authorizedPorts.filter((candidate) => {
       return serialPortIdentifiersMatch(getSerialPortInfo(candidate), portInfo);
     });
+    const rememberedMatchIndex = matchingPorts.findIndex((candidate) => candidate === port);
+    const rememberedPortIndex = authorizedPorts.findIndex((candidate) => candidate === port);
 
     this._state.serialPortInfo = normalizeSerialPortInfo({
       ...portInfo,
-      matchIndex: Math.max(matchingPorts.findIndex((candidate) => candidate === port), 0),
-      portIndex: Math.max(authorizedPorts.findIndex((candidate) => candidate === port), 0)
+      matchIndex: rememberedMatchIndex >= 0 ? rememberedMatchIndex : null,
+      portIndex: rememberedPortIndex >= 0 ? rememberedPortIndex : null
     });
   }
 
@@ -1672,6 +1766,9 @@ export class RetailScaleController {
 
   async _restoreAuthorizedConnection() {
     this._assertActive();
+    if (this._hasActiveTransport()) {
+      return true;
+    }
     if (!this._state.autoConnectMode) {
       this._setStatus("offline", "No hay una conexión de balanza guardada.", {
         connectionMode: null,
@@ -1681,6 +1778,7 @@ export class RetailScaleController {
     }
 
     if (!this._secureContext) {
+      this._autoReconnectEnabled = false;
       this._setStatus("error", "La conexión guardada requiere localhost o HTTPS.", {
         connectionMode: null,
         lastError: "Contexto no seguro"
@@ -1691,6 +1789,7 @@ export class RetailScaleController {
     if (this._state.autoConnectMode === "serial") {
       const serial = this._navigator?.serial;
       if (!serial?.getPorts) {
+        this._autoReconnectEnabled = false;
         this._setStatus("offline", "El navegador no permite restaurar el puerto serial guardado.", {
           connectionMode: null,
           lastError: null
@@ -1728,7 +1827,8 @@ export class RetailScaleController {
 
     const bluetooth = this._navigator?.bluetooth;
     if (!bluetooth?.getDevices) {
-      this._setStatus("offline", "Para reconectar BLE pulsa Conectar; este navegador no expone dispositivos autorizados.", {
+      this._autoReconnectEnabled = false;
+      this._setStatus("offline", "La reconexión BLE automática no está disponible en este navegador. Pulsa Conectar BLE.", {
         connectionMode: null,
         lastError: null
       });
@@ -1772,10 +1872,34 @@ export class RetailScaleController {
       const matches = ports.filter((port) => {
         return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
       });
-      return matches.length === 1 ? matches[0] : null;
+      if (matches.length === 1) {
+        // Un ordinal mayor que cero demuestra que al guardar había más de un
+        // adaptador idéntico. Si ahora solo queda uno, no se puede asegurar que
+        // sea el mismo dispositivo físico.
+        return Number.isInteger(savedInfo.matchIndex) && savedInfo.matchIndex > 0
+          ? null
+          : matches[0];
+      }
+
+      // Web Serial no entrega un id físico para diferenciar dos adaptadores
+      // USB/RFCOMM con la misma información. Para conexiones nuevas guardamos
+      // tanto su posición entre los iguales como su posición global. Solo se
+      // restaura si ambas rutas siguen apuntando al mismo puerto. Los recuerdos
+      // antiguos que no tienen estos índices permanecen ambiguos y requieren
+      // una nueva selección manual.
+      const hasRememberedIndexes = Number.isInteger(savedInfo.matchIndex)
+        && savedInfo.matchIndex >= 0
+        && Number.isInteger(savedInfo.portIndex)
+        && savedInfo.portIndex >= 0;
+      if (!hasRememberedIndexes || matches.length === 0) return null;
+
+      const matchCandidate = matches[savedInfo.matchIndex] || null;
+      const portCandidate = ports[savedInfo.portIndex] || null;
+      return matchCandidate && matchCandidate === portCandidate ? matchCandidate : null;
     }
 
-    return null;
+    // Sin ningún identificador solo un puerto autorizado es inequívoco.
+    return ports.length === 1 ? ports[0] : null;
   }
 
   _serialRestoreRequiresManualSelection(ports) {
@@ -1785,11 +1909,19 @@ export class RetailScaleController {
     const hasIdentifiers = savedInfo.usbVendorId !== null
       || savedInfo.usbProductId !== null
       || Boolean(savedInfo.bluetoothServiceClassId);
-    if (!hasIdentifiers) return true;
+    if (!hasIdentifiers) return ports.length > 1;
 
     const matches = ports.filter((port) => {
       return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
     });
+    if (Number.isInteger(savedInfo.matchIndex)
+      && savedInfo.matchIndex > 0
+      && matches.length > 0
+      && matches.length <= savedInfo.matchIndex) {
+      return true;
+    }
+    // Cero coincidencias normalmente significa que la balanza está apagada o
+    // desconectada: se conserva el reintento y el evento serial "connect".
     return matches.length > 1;
   }
 
@@ -1823,48 +1955,57 @@ export class RetailScaleController {
     }
   }
 
+  _abortConnectionImmediately(connection) {
+    if (!connection) return;
+
+    connection.abort = true;
+    connection.buffer = "";
+    connection.discardUntilDelimiter = false;
+    this._stopConnectionTimers(connection);
+
+    if (connection.characteristic && connection.valueHandler) {
+      try {
+        connection.characteristic.removeEventListener?.("characteristicvaluechanged", connection.valueHandler);
+      } catch {
+        // El navegador puede haber descartado ya la característica.
+      }
+    }
+
+    if (connection.device && connection.disconnectHandler) {
+      try {
+        connection.device.removeEventListener?.("gattserverdisconnected", connection.disconnectHandler);
+      } catch {
+        // El navegador puede haber descartado ya el dispositivo.
+      }
+    }
+
+    // Es deliberadamente síncrono: pagehide no espera stopNotifications().
+    if (connection.device?.gatt?.connected) {
+      try {
+        connection.device.gatt.disconnect();
+      } catch {
+        // Desconexión BLE de mejor esfuerzo.
+      }
+    }
+    connection.notifyActive = false;
+
+    if (connection.reader && !connection.readerCancelPromise) {
+      try {
+        connection.readerCancelPromise = Promise.resolve(connection.reader.cancel())
+          .catch(() => undefined);
+      } catch {
+        connection.readerCancelPromise = Promise.resolve();
+      }
+    }
+  }
+
   async _releaseConnection(connection) {
     if (connection) {
-      connection.abort = true;
-      connection.buffer = "";
-      connection.discardUntilDelimiter = false;
-      this._stopConnectionTimers(connection);
-
-      if (connection.characteristic && connection.valueHandler) {
-        try {
-          connection.characteristic.removeEventListener?.("characteristicvaluechanged", connection.valueHandler);
-        } catch {
-          // El dispositivo puede haberse desconectado antes de retirar el listener.
-        }
-      }
-
-      if (connection.characteristic && connection.notifyActive) {
-        try {
-          await connection.characteristic.stopNotifications();
-        } catch {
-          // Desconexión BLE de mejor esfuerzo.
-        }
-      }
-
-      if (connection.device && connection.disconnectHandler) {
-        try {
-          connection.device.removeEventListener?.("gattserverdisconnected", connection.disconnectHandler);
-        } catch {
-          // El navegador puede haber descartado el dispositivo.
-        }
-      }
-
-      if (connection.device?.gatt?.connected) {
-        try {
-          connection.device.gatt.disconnect();
-        } catch {
-          // Desconexión BLE de mejor esfuerzo.
-        }
-      }
+      this._abortConnectionImmediately(connection);
 
       if (connection.reader) {
         try {
-          await connection.reader.cancel();
+          await (connection.readerCancelPromise || connection.reader.cancel());
         } catch {
           // El reader puede haberse cerrado solo.
         }
