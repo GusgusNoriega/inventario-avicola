@@ -80,7 +80,7 @@
   @elseif($type === 'ventas-clientes')
     <table class="summary">
       <tr>
-        <td><span>Clientes / productos</span><strong>{{ $data['rows']->count() }}</strong></td>
+        <td><span>Registros de venta</span><strong>{{ $data['rows']->count() }}</strong></td>
         <td><span>Aves netas</span><strong>{{ number_format($data['totals']['birds']) }}</strong></td>
         <td><span>Peso neto</span><strong>{{ number_format($data['totals']['net_weight'], 3) }} kg</strong></td>
         <td><span>Venta total</span><strong>S/ {{ number_format($data['totals']['amount'], 2) }}</strong></td>
@@ -88,14 +88,14 @@
     </table>
     <table class="report">
       <thead><tr>
-        <th style="width: 21%">Cliente</th><th style="width: 8%">Canal</th><th style="width: 11%">Producto</th>
+        <th style="width: 16%">Cliente</th><th style="width: 11%">Fecha y hora</th><th style="width: 7%">Canal</th><th style="width: 9%">Producto</th>
         <th>Javas / bandejas</th><th>Aves</th><th>Peso bruto</th><th>Tara</th><th>Devolucion kg</th>
         <th>Peso neto</th><th>Precio prom.</th><th>Total S/</th>
       </tr></thead>
       <tbody>
         @forelse($data['rows'] as $row)
           <tr>
-            <td>{{ $row['customer'] }}</td><td class="center">{{ $row['channel'] }}</td><td>{{ $row['product'] }}</td>
+            <td>{{ $row['customer'] }}</td><td class="center">{{ \Carbon\CarbonImmutable::parse($row['date_time'])->format('d/m/Y H:i') }}</td><td class="center">{{ $row['channel'] }}</td><td>{{ $row['product'] }}</td>
             <td class="num">{{ number_format($row['containers']) }}</td><td class="num">{{ number_format($row['birds']) }}</td>
             <td class="num">{{ number_format($row['gross_weight'], 3) }}</td><td class="num">{{ number_format($row['tare'], 3) }}</td>
             <td class="num credit">{{ number_format($row['returns'], 3) }}</td><td class="num">{{ number_format($row['net_weight'], 3) }}</td>
@@ -103,10 +103,10 @@
             <td class="num balance">{{ number_format($row['amount'], 2) }}</td>
           </tr>
         @empty
-          <tr><td colspan="11" class="empty">No hay ventas cerradas en el periodo seleccionado.</td></tr>
+          <tr><td colspan="12" class="empty">No hay ventas cerradas en el periodo seleccionado.</td></tr>
         @endforelse
       </tbody>
-      <tfoot><tr><td colspan="3">TOTAL</td><td class="num">{{ number_format($data['totals']['containers']) }}</td><td class="num">{{ number_format($data['totals']['birds']) }}</td><td class="num">{{ number_format($data['totals']['gross_weight'], 3) }}</td><td class="num">{{ number_format($data['totals']['tare'], 3) }}</td><td class="num">{{ number_format($data['totals']['returns'], 3) }}</td><td class="num">{{ number_format($data['totals']['net_weight'], 3) }}</td><td></td><td class="num">{{ number_format($data['totals']['amount'], 2) }}</td></tr></tfoot>
+      <tfoot><tr><td colspan="4">TOTAL</td><td class="num">{{ number_format($data['totals']['containers']) }}</td><td class="num">{{ number_format($data['totals']['birds']) }}</td><td class="num">{{ number_format($data['totals']['gross_weight'], 3) }}</td><td class="num">{{ number_format($data['totals']['tare'], 3) }}</td><td class="num">{{ number_format($data['totals']['returns'], 3) }}</td><td class="num">{{ number_format($data['totals']['net_weight'], 3) }}</td><td></td><td class="num">{{ number_format($data['totals']['amount'], 2) }}</td></tr></tfoot>
     </table>
   @elseif($type === 'pagos')
     <table class="summary">

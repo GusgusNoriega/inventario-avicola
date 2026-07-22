@@ -165,14 +165,17 @@ class ReportDataService
             $prices = $ticket->precios->keyBy('tipo_pollo_id');
 
             foreach ($ticket->pesadas->where('estado', Pesada::STATUS_ACTIVE)->groupBy('tipo_pollo_id') as $typeId => $weighings) {
+                $recordedAt = $ticket->cerrado_at
+                    ?: $weighings->sortByDesc('pesada_at')->first()?->pesada_at
+                    ?: $ticket->created_at;
                 $price = (float) ($prices->get((int) $typeId)?->precio_kg ?? 0);
                 $net = (float) $weighings->sum('peso_neto_kg') * $sign;
                 $key = implode(':', [
-                    $ticket->cliente_destino_id ?: 0,
+                    $ticket->id,
                     $typeId,
-                    $ticket->canal,
                 ]);
                 $existing = $rows->get($key, [
+                    'date_time' => $recordedAt?->format('Y-m-d H:i:s') ?? $ticket->jornada?->fecha_operativa?->startOfDay()->format('Y-m-d H:i:s'),
                     'customer' => $ticket->clienteDestino?->nombre_razon_social ?? 'VENTA MINORISTA SIN CLIENTE',
                     'channel' => $ticket->canal,
                     'product' => $weighings->first()?->tipoPollo?->nombre ?? 'Pollo',
@@ -197,7 +200,7 @@ class ReportDataService
             }
         }
 
-        $rows = $rows->sortBy(fn (array $row): string => $row['customer'].'-'.$row['product'])->values();
+        $rows = $rows->sortBy(fn (array $row): string => $row['date_time'].'-'.$row['customer'].'-'.$row['product'])->values();
 
         return [
             'rows' => $rows,

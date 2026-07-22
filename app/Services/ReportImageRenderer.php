@@ -197,7 +197,7 @@ class ReportImageRenderer
     {
         return match ($type) {
             'ventas-clientes' => [
-                ['Clientes / productos', (string) $data['rows']->count()],
+                ['Registros de venta', (string) $data['rows']->count()],
                 ['Aves netas', number_format($data['totals']['birds'])],
                 ['Peso neto', number_format($data['totals']['net_weight'], 3).' kg'],
                 ['Venta total', 'S/ '.number_format($data['totals']['amount'], 2)],
@@ -251,15 +251,16 @@ class ReportImageRenderer
 
         if ($type === 'ventas-clientes') {
             $columns = [
-                ['label' => 'Cliente', 'width' => .21], ['label' => 'Canal', 'width' => .08],
-                ['label' => 'Producto', 'width' => .11], ['label' => 'Javas / band.', 'width' => .09, 'align' => 'right'],
-                ['label' => 'Aves', 'width' => .07, 'align' => 'right'], ['label' => 'P. bruto', 'width' => .09, 'align' => 'right'],
-                ['label' => 'Tara', 'width' => .07, 'align' => 'right'], ['label' => 'Devolucion', 'width' => .08, 'align' => 'right'],
-                ['label' => 'P. neto', 'width' => .08, 'align' => 'right'], ['label' => 'Precio', 'width' => .06, 'align' => 'right'],
-                ['label' => 'Total S/', 'width' => .06, 'align' => 'right'],
+                ['label' => 'Cliente', 'width' => .16], ['label' => 'Fecha y hora', 'width' => .11],
+                ['label' => 'Canal', 'width' => .07], ['label' => 'Producto', 'width' => .09],
+                ['label' => 'Javas / band.', 'width' => .08, 'align' => 'right'], ['label' => 'Aves', 'width' => .06, 'align' => 'right'],
+                ['label' => 'P. bruto', 'width' => .08, 'align' => 'right'], ['label' => 'Tara', 'width' => .06, 'align' => 'right'],
+                ['label' => 'Devolucion', 'width' => .07, 'align' => 'right'], ['label' => 'P. neto', 'width' => .07, 'align' => 'right'],
+                ['label' => 'Precio', 'width' => .06, 'align' => 'right'], ['label' => 'Total S/', 'width' => .09, 'align' => 'right'],
             ];
             $rows = $data['rows']->map(fn (array $row): array => [
-                $row['customer'], $row['channel'], $row['product'], number_format($row['containers']), number_format($row['birds']),
+                $row['customer'], CarbonImmutable::parse($row['date_time'])->format('d/m/Y H:i'), $row['channel'], $row['product'],
+                number_format($row['containers']), number_format($row['birds']),
                 number_format($row['gross_weight'], 3), number_format($row['tare'], 3), number_format($row['returns'], 3),
                 number_format($row['net_weight'], 3), $row['net_weight'] != 0 ? number_format($row['amount'] / $row['net_weight'], 2) : '-',
                 number_format($row['amount'], 2),
