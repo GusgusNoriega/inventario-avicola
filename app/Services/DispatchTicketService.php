@@ -24,7 +24,8 @@ class DispatchTicketService
 {
     public function __construct(
         private readonly JavaControlService $javaControl,
-        private readonly FinancialObligationService $financialObligations
+        private readonly FinancialObligationService $financialObligations,
+        private readonly ScaleReadingService $scaleReadings
     ) {}
 
     /**
@@ -41,19 +42,34 @@ class DispatchTicketService
             $operationType = $this->operationType($data['operation_type'] ?? null);
             $existing = TicketDespacho::query()
                 ->where('referencia_externa', $data['draft_id'])
-                ->whereHas(
-                    'jornada',
-                    fn ($query) => $query->whereIn(
-                        'sucursal_id',
-                        DB::table('sucursales')
-                            ->where('empresa_id', $companyId)
-                            ->select('id')
-                    )
-                )
                 ->lockForUpdate()
                 ->first();
 
             if ($existing) {
+                $existing->loadMissing('jornada');
+                $belongsToCompany = DB::table('sucursales')
+                    ->where('id', $existing->jornada?->sucursal_id)
+                    ->where('empresa_id', $companyId)
+                    ->exists();
+
+                if (! $belongsToCompany) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este identificador ya se encuentra registrado.',
+                    ]);
+                }
+
+                if ((int) $existing->jornada?->sucursal_id !== (int) $branch->id) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este identificador ya pertenece a otra sucursal.',
+                    ]);
+                }
+
+                if ($existing->canal !== TicketDespacho::CHANNEL_WHOLESALE) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este identificador ya pertenece a un ticket de otro canal.',
+                    ]);
+                }
+
                 return [
                     'ticket' => $this->loadTicket($existing),
                     'already_registered' => true,
@@ -95,7 +111,7 @@ class DispatchTicketService
                 'jornada_id' => $journey->id,
                 'codigo' => $this->nextTicketCode($journey, $operatingDate, $operationType),
                 'referencia_externa' => $data['draft_id'],
-                'canal' => 'MAYORISTA',
+                'canal' => TicketDespacho::CHANNEL_WHOLESALE,
                 'tipo_operacion' => $operationType,
                 'cliente_destino_id' => $destination['client_id'],
                 'almacen_destino_id' => $destination['warehouse_id'],
@@ -155,6 +171,14 @@ class DispatchTicketService
                     ]);
                 }
 
+                $scaleReading = $this->scaleReadings->record(
+                    (int) $branch->id,
+                    $actor,
+                    $weighing,
+                    $weighedAt->get($index),
+                    "weighings.{$index}"
+                );
+
                 Pesada::query()->create([
                     'ticket_id' => $ticket->id,
                     'numero' => $index + 1,
@@ -162,6 +186,7 @@ class DispatchTicketService
                     'condicion_pollo' => $this->weighingCondition($operationType, $weighing),
                     'sexo' => $weighing['chicken_sex'],
                     'tipo_java_id' => $cageType->id,
+                    'lectura_balanza_id' => $scaleReading?->id,
                     'proveedor_origen_id' => $origin['provider_id'],
                     'almacen_origen_id' => $origin['warehouse_id'],
                     'vehiculo_id' => $origin['vehicle_id'],

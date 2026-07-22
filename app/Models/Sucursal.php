@@ -17,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Sucursal extends Model
 {
+    protected $table = 'sucursales';
+
     /**
      * @return BelongsTo<Empresa, $this>
      */

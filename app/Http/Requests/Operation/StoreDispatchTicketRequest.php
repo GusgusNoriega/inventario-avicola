@@ -57,7 +57,7 @@ class StoreDispatchTicketRequest extends FormRequest
             'weighings' => ['required', 'array', 'min:1', 'max:500'],
             'weighings.*' => [
                 'required',
-                'array:local_id,chicken_type_code,chicken_condition,chicken_sex,cage_type_code,origin,weight_source,birds_per_cage,cage_count,read_weight_kg,gross_weight_kg,weighed_at',
+                'array:local_id,chicken_type_code,chicken_condition,chicken_sex,cage_type_code,origin,weight_source,scale_reading,birds_per_cage,cage_count,read_weight_kg,gross_weight_kg,weighed_at',
             ],
             'weighings.*.local_id' => ['required', 'integer', 'min:1', 'distinct'],
             'weighings.*.chicken_type_code' => [
@@ -100,6 +100,14 @@ class StoreDispatchTicketRequest extends FormRequest
                 'required',
                 Rule::in(['MANUAL', 'BALANZA_1', 'BALANZA_2']),
             ],
+            'weighings.*.scale_reading' => ['sometimes', 'nullable', 'array:raw_frame,connection_mode,device_name,captured_at'],
+            'weighings.*.scale_reading.raw_frame' => ['nullable', 'string', 'max:500'],
+            'weighings.*.scale_reading.connection_mode' => [
+                'nullable',
+                Rule::in(['SERIAL', 'BLE', 'BLUETOOTH']),
+            ],
+            'weighings.*.scale_reading.device_name' => ['nullable', 'string', 'max:180'],
+            'weighings.*.scale_reading.captured_at' => ['nullable', 'date'],
             'weighings.*.birds_per_cage' => ['required', 'integer', 'min:1', 'max:1000'],
             'weighings.*.cage_count' => ['required', 'integer', 'min:0', 'max:10000'],
             'weighings.*.read_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
@@ -157,7 +165,7 @@ class StoreDispatchTicketRequest extends FormRequest
                     'UTF-8'
                 );
 
-                return [
+                $normalized = [
                     ...$weighing,
                     'chicken_type_code' => $operationType === TicketDespacho::OPERATION_RETURN
                         ? ($condition === Pesada::CHICKEN_CONDITION_DEAD
@@ -185,6 +193,12 @@ class StoreDispatchTicketRequest extends FormRequest
                         ),
                     ],
                 ];
+
+                if (array_key_exists('scale_reading', $weighing)) {
+                    $normalized['scale_reading'] = $this->normalizeScaleReading($weighing['scale_reading']);
+                }
+
+                return $normalized;
             })
             ->all();
 
@@ -203,6 +217,23 @@ class StoreDispatchTicketRequest extends FormRequest
             ],
             'weighings' => $weighings,
         ]);
+    }
+
+    private function normalizeScaleReading(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        return [
+            ...$value,
+            'connection_mode' => filled($value['connection_mode'] ?? null)
+                ? mb_strtoupper(trim((string) $value['connection_mode']), 'UTF-8')
+                : null,
+            'device_name' => filled($value['device_name'] ?? null)
+                ? trim((string) $value['device_name'])
+                : null,
+        ];
     }
 
     public function withValidator(Validator $validator): void

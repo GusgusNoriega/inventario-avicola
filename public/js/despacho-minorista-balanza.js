@@ -6,6 +6,7 @@
  */
 
 export const RETAIL_SCALE_STORAGE_KEY = "sistema-pollos-retail-scale-v1";
+export const RETAIL_SCALE_LEGACY_MIGRATION_MARKER_KEY = `${RETAIL_SCALE_STORAGE_KEY}-legacy-migrated-to`;
 
 export const RETAIL_SCALE_SERIAL_DEFAULTS = Object.freeze({
   baudRate: 9600,
@@ -72,12 +73,64 @@ const MAX_RAW_LENGTH = 240;
 const MAX_SERIAL_BUFFER_LENGTH = 2048;
 const BLE_READ_INTERVAL_MS = 750;
 const PERSIST_INTERVAL_MS = 1000;
-const SERIAL_FRAME_IDLE_MS = 140;
+const READING_FRESHNESS_MS = 15000;
+const READING_WATCHDOG_INTERVAL_MS = 500;
+const STABLE_CONFIRMATION_COUNT = 2;
+const ZERO_CONFIRMATION_COUNT = 2;
+const ZERO_CONFIRMATION_MIN_MS = 250;
+const WEIGHT_STABILITY_TOLERANCE_KG = 0.005;
+const RECONNECT_BACKOFF_MS = Object.freeze([750, 1500, 3000, 5000, 10000]);
 const SERIAL_DATA_BITS = new Set([7, 8]);
 const SERIAL_STOP_BITS = new Set([1, 2]);
 const SERIAL_PARITIES = new Set(["none", "even", "odd"]);
 const SERIAL_FLOW_CONTROLS = new Set(["none", "hardware"]);
 const CONNECTION_STATUSES = new Set(["offline", "connecting", "connected", "error"]);
+
+/**
+ * Traslada una sola vez la configuración histórica de Minorista 1 a su clave
+ * por sucursal. El marcador impide que la misma balanza se herede luego en
+ * otra sucursal del mismo navegador. Minorista 2 nunca participa.
+ */
+export function migrateLegacyRetailScaleStorage(options = {}) {
+  if (String(options.station || "") !== "1") return false;
+
+  const storage = options.storage || null;
+  const legacyKey = String(options.legacyKey || RETAIL_SCALE_STORAGE_KEY);
+  const targetKey = String(options.targetKey || "").trim();
+  const markerKey = String(
+    options.markerKey || RETAIL_SCALE_LEGACY_MIGRATION_MARKER_KEY
+  );
+  if (!storage?.getItem || !storage?.setItem || !targetKey || targetKey === legacyKey) {
+    return false;
+  }
+
+  let copiedTarget = false;
+  try {
+    if (storage.getItem(markerKey) !== null) return false;
+
+    const legacyValue = storage.getItem(legacyKey);
+    if (legacyValue === null) return false;
+
+    if (storage.getItem(targetKey) !== null) {
+      storage.setItem(markerKey, targetKey);
+      return false;
+    }
+
+    storage.setItem(targetKey, legacyValue);
+    copiedTarget = true;
+    storage.setItem(markerKey, targetKey);
+    return true;
+  } catch {
+    if (copiedTarget) {
+      try {
+        storage.removeItem?.(targetKey);
+      } catch {
+        // Si el almacenamiento está bloqueado no hay una recuperación adicional segura.
+      }
+    }
+    return false;
+  }
+}
 
 function roundWeight(value) {
   return Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
@@ -113,14 +166,66 @@ function convertWeightToKg(value, unit) {
  * Extrae la lectura con mayor probabilidad de ser un peso desde una trama.
  * Admite coma o punto decimal y unidades kg, lb o g. Sin unidad se asume kg.
  */
-export function parseIndustrialScaleText(rawText) {
+function scaleTextRejection(text) {
+  if (/\b(?:ERR(?:OR)?|FAULT|FALLO|OL|OVERLOAD|UNDERLOAD)\b/i.test(text)) {
+    return "error";
+  }
+
+  if (/^\s*S\s+(?:I|\+|-)(?:\s|,|$)/i.test(text)) {
+    return "error";
+  }
+
+  if (/\b(?:US|UNSTABLE|INESTABLE|MOTION|MOVING|DYNAMIC|DINAMICO)\b/i.test(text)
+    || /^\s*S\s+(?:D|U)(?:\s|,|$)/i.test(text)) {
+    return "unstable";
+  }
+
+  return null;
+}
+
+function candidateRole(text, start, end) {
+  const contextStart = Math.max(0, start - 28);
+  const contextEnd = Math.min(text.length, end + 20);
+  const context = text.slice(contextStart, contextEnd).toUpperCase();
+  const roles = [
+    { role: "net", pattern: /\b(?:NET|NETO|NW)\b/g },
+    { role: "gross", pattern: /\b(?:GROSS|BRUTO|GS|GW)\b/g },
+    { role: "tare", pattern: /\b(?:TARE|TARA|TW)\b/g }
+  ];
+  const candidates = [];
+
+  roles.forEach(({ role, pattern }) => {
+    let label = pattern.exec(context);
+    while (label) {
+      const labelStart = contextStart + label.index;
+      const labelEnd = labelStart + label[0].length;
+      const distance = labelEnd <= start
+        ? start - labelEnd
+        : labelStart >= end
+          ? labelStart - end + 4
+          : 0;
+      candidates.push({ role, distance });
+      label = pattern.exec(context);
+    }
+  });
+
+  return candidates.sort((left, right) => left.distance - right.distance)[0]?.role || "weight";
+}
+
+function analyzeIndustrialScaleText(rawText) {
   const text = String(rawText ?? "").replace(/\0/g, " ").trim();
   if (!text) {
-    return null;
+    return { reading: null, rejectionReason: "unknown", stableHint: null };
+  }
+
+  const rejectionReason = scaleTextRejection(text);
+  if (rejectionReason) {
+    return { reading: null, rejectionReason, stableHint: false };
   }
 
   const matches = [];
-  const pattern = /([+-]?\s*\d+(?:[.,]\d+)?)\s*(kg|kgs|kilogramo|kilogramos|lb|lbs|libra|libras|g|gr|gramo|gramos)?/gi;
+  let hasNegativePrimaryWeight = false;
+  const pattern = /([+-]?\s*\d+(?:[.,]\d+)?)(?:\s*(kilogramos|kilogramo|kgs|kg|libras|libra|lbs|lb|gramos|gramo|gr|g)\b)?/gi;
   let match = pattern.exec(text);
 
   while (match) {
@@ -133,8 +238,22 @@ export function parseIndustrialScaleText(rawText) {
       const hasDecimal = /[.,]/.test(match[1]);
       const hasSign = /^[+-]/.test(match[1].trim());
       const weightKg = convertWeightToKg(numericValue, unit);
-      const score = (hasUnit ? 10 : 0)
-        + (hasDecimal ? 4 : 0)
+      const role = candidateRole(text, match.index, pattern.lastIndex);
+      if (numericValue < 0) {
+        if (role !== "tare") hasNegativePrimaryWeight = true;
+        match = pattern.exec(text);
+        continue;
+      }
+      const roleScore = role === "net"
+        ? 200
+        : role === "gross"
+          ? 100
+          : role === "tare"
+            ? -200
+            : 0;
+      const score = roleScore
+        + (hasUnit ? 20 : 0)
+        + (hasDecimal ? 5 : 0)
         + (hasSign ? 2 : 0)
         + match.index / 100000;
 
@@ -143,6 +262,7 @@ export function parseIndustrialScaleText(rawText) {
         unit,
         sourceValue: numericValue,
         rawValue: match[0].trim(),
+        role,
         score
       });
     }
@@ -150,17 +270,42 @@ export function parseIndustrialScaleText(rawText) {
     match = pattern.exec(text);
   }
 
+  if (hasNegativePrimaryWeight) {
+    return { reading: null, rejectionReason: "negative", stableHint: false };
+  }
+
   if (!matches.length) {
-    return null;
+    const hasNegativeNumber = /-\s*\d+(?:[.,]\d+)?/.test(text);
+    return {
+      reading: null,
+      rejectionReason: hasNegativeNumber ? "negative" : "unknown",
+      stableHint: null
+    };
   }
 
   const bestMatch = matches.sort((left, right) => right.score - left.score)[0];
+  if (bestMatch.role === "tare") {
+    return { reading: null, rejectionReason: "tare", stableHint: null };
+  }
+
   return {
-    weightKg: roundWeight(bestMatch.weightKg),
-    unit: bestMatch.unit,
-    sourceValue: bestMatch.sourceValue,
-    rawValue: bestMatch.rawValue
+    reading: {
+      weightKg: roundWeight(bestMatch.weightKg),
+      unit: bestMatch.unit,
+      sourceValue: bestMatch.sourceValue,
+      rawValue: bestMatch.rawValue,
+      role: bestMatch.role
+    },
+    rejectionReason: null,
+    stableHint: (
+      /\b(?:ST|STABLE|ESTABLE)\b/i.test(text)
+      || /^\s*S\s+S(?:\s|,|$)/i.test(text)
+    ) ? true : null
   };
+}
+
+export function parseIndustrialScaleText(rawText) {
+  return analyzeIndustrialScaleText(rawText).reading;
 }
 
 function toBytes(value) {
@@ -211,6 +356,9 @@ function parseSigWeightMeasurement(value) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const flags = view.getUint8(0);
   const rawWeight = view.getUint16(1, true);
+  if (rawWeight === 0xffff) {
+    return null;
+  }
   const usesImperialUnits = Boolean(flags & 0x01);
   const weightKg = usesImperialUnits
     ? rawWeight * 0.01 * KG_PER_LB
@@ -227,41 +375,54 @@ function parseSigWeightMeasurement(value) {
  */
 export function parseRetailScalePayload(payload, parser = "text") {
   if (typeof payload === "string") {
-    const reading = parseIndustrialScaleText(payload);
+    const analyzed = analyzeIndustrialScaleText(payload);
     return {
       rawText: payload,
-      weightKg: reading?.weightKg ?? null,
-      rawValue: reading?.rawValue ?? null
+      weightKg: analyzed.reading?.weightKg ?? null,
+      rawValue: analyzed.reading?.rawValue ?? null,
+      role: analyzed.reading?.role ?? null,
+      rejectionReason: analyzed.rejectionReason,
+      stableHint: analyzed.stableHint
     };
   }
 
   const bytes = toBytes(payload);
   const decodedText = decodeBytes(bytes);
-  const textReading = parseIndustrialScaleText(decodedText);
-
-  if (textReading) {
-    return {
-      rawText: decodedText,
-      weightKg: textReading.weightKg,
-      rawValue: textReading.rawValue
-    };
-  }
 
   if (parser === "sig-weight") {
     const binaryReading = parseSigWeightMeasurement(bytes);
     if (binaryReading) {
       return {
-        rawText: decodedText || bytesToHex(bytes),
+        rawText: bytesToHex(bytes),
         weightKg: binaryReading.weightKg,
-        rawValue: binaryReading.rawValue
+        rawValue: binaryReading.rawValue,
+        role: "weight",
+        rejectionReason: null,
+        stableHint: true
       };
     }
+  }
+
+  const analyzed = analyzeIndustrialScaleText(decodedText);
+
+  if (analyzed.reading) {
+    return {
+      rawText: decodedText,
+      weightKg: analyzed.reading.weightKg,
+      rawValue: analyzed.reading.rawValue,
+      role: analyzed.reading.role,
+      rejectionReason: null,
+      stableHint: analyzed.stableHint
+    };
   }
 
   return {
     rawText: decodedText || bytesToHex(bytes),
     weightKg: null,
-    rawValue: null
+    rawValue: null,
+    role: null,
+    rejectionReason: analyzed.rejectionReason,
+    stableHint: analyzed.stableHint
   };
 }
 
@@ -366,7 +527,6 @@ function serialPortIdentifiersMatch(portInfo, savedInfo) {
 
 function normalizePersistedState(value) {
   const source = value && typeof value === "object" ? value : {};
-  const currentWeightKg = roundWeight(Number(source.currentWeightKg));
   const autoConnectMode = ["ble", "serial"].includes(source.autoConnectMode)
     ? source.autoConnectMode
     : null;
@@ -379,13 +539,6 @@ function normalizePersistedState(value) {
   }
 
   return {
-    currentWeightKg: Number.isFinite(currentWeightKg) && currentWeightKg >= 0 ? currentWeightKg : 0,
-    updatedAt: source.updatedAt || null,
-    readingSource: ["manual", "ble", "serial"].includes(source.readingSource)
-      ? source.readingSource
-      : null,
-    lastRaw: sanitizeRawText(source.lastRaw),
-    lastRawAt: source.lastRawAt || null,
     autoConnectMode,
     deviceName: String(source.deviceName || ""),
     bleDeviceId: String(source.bleDeviceId || ""),
@@ -466,9 +619,16 @@ export class RetailScaleController {
       onRaw: typeof options.onRaw === "function" ? options.onRaw : null
     };
     this._connection = null;
+    this._connectionGeneration = 0;
     this._operationQueue = Promise.resolve();
     this._persistTimer = null;
     this._lastPersistedAt = 0;
+    this._pendingReading = null;
+    this._nextStableReadingStartsNewIdentity = false;
+    this._readingSequence = 0;
+    this._reconnectTimer = null;
+    this._reconnectAttempt = 0;
+    this._autoReconnectEnabled = false;
     this._destroyed = false;
 
     const persisted = this._loadPersistedState();
@@ -478,7 +638,7 @@ export class RetailScaleController {
     }
 
     this._state = {
-      version: 1,
+      version: 2,
       status: "offline",
       statusMessage: persisted.autoConnectMode
         ? "Conexión recordada; pendiente de restaurar."
@@ -492,12 +652,36 @@ export class RetailScaleController {
       profileLabel: persisted.profileLabel,
       serialPortInfo: persisted.serialPortInfo,
       serialOptions,
-      currentWeightKg: persisted.currentWeightKg,
-      updatedAt: persisted.updatedAt,
-      readingSource: persisted.readingSource,
-      lastRaw: persisted.lastRaw,
-      lastRawAt: persisted.lastRawAt
+      currentWeightKg: null,
+      updatedAt: null,
+      readingAt: null,
+      readingSource: null,
+      readingStatus: "unknown",
+      inputStatus: "unknown",
+      readingId: null,
+      isStable: false,
+      readingRaw: "",
+      lastRaw: "",
+      lastRawAt: null,
+      lastRawValue: null
     };
+
+    this._serialConnectHandler = () => {
+      if (this._autoReconnectEnabled && !this._connection && this._state.autoConnectMode === "serial") {
+        this._cancelReconnect();
+        this._scheduleReconnect(0);
+      }
+    };
+    this._serialDisconnectHandler = (event) => {
+      const connection = this._connection;
+      const disconnectedPort = event?.port
+        || (typeof event?.target?.getInfo === "function" ? event.target : null);
+      if (connection?.mode === "serial" && disconnectedPort === connection.port) {
+        this._handleUnexpectedDisconnect(connection, "El puerto serial de la balanza se desconectó.");
+      }
+    };
+    this._navigator?.serial?.addEventListener?.("connect", this._serialConnectHandler);
+    this._navigator?.serial?.addEventListener?.("disconnect", this._serialDisconnectHandler);
   }
 
   get state() {
@@ -506,10 +690,24 @@ export class RetailScaleController {
 
   getState() {
     const capabilities = this.getCapabilities();
+    const readingAtMs = Date.parse(this._state.readingAt || "");
+    const isPhysicalReading = ["ble", "serial"].includes(this._state.readingSource);
+    const hasFreshTimestamp = Number.isFinite(readingAtMs)
+      && Date.now() - readingAtMs <= READING_FRESHNESS_MS;
+    const transportMatchesReading = !isPhysicalReading
+      || (this._state.status === "connected" && this._state.connectionMode === this._state.readingSource);
+    const isFresh = this._state.isStable
+      && Number.isFinite(this._state.currentWeightKg)
+      && this._state.inputStatus === "stable"
+      && (this._state.readingSource === "manual" || hasFreshTimestamp)
+      && transportMatchesReading;
     return {
       ...this._state,
       isConnected: this._state.status === "connected",
       isConnecting: this._state.status === "connecting",
+      isFresh,
+      isCaptureReady: isFresh && this._state.currentWeightKg > 0,
+      freshnessMs: READING_FRESHNESS_MS,
       serialOptions: { ...this._state.serialOptions },
       serialPortInfo: this._state.serialPortInfo ? { ...this._state.serialPortInfo } : null,
       storageKey: this._storageKey,
@@ -538,7 +736,15 @@ export class RetailScaleController {
       throw new Error("Desconecta la balanza antes de cambiar la sucursal de almacenamiento.");
     }
 
-    this._persist(true);
+    if (options.persistCurrent !== false) {
+      this._persist(true);
+    } else {
+      if (this._persistTimer) {
+        globalThis.clearTimeout(this._persistTimer);
+        this._persistTimer = null;
+      }
+      this._lastPersistedAt = 0;
+    }
     this._storageKey = nextKey;
 
     if (options.reload !== false) {
@@ -557,12 +763,21 @@ export class RetailScaleController {
         profileLabel: persisted.profileLabel,
         serialPortInfo: persisted.serialPortInfo,
         serialOptions: persisted.serialOptions,
-        currentWeightKg: persisted.currentWeightKg,
-        updatedAt: persisted.updatedAt,
-        readingSource: persisted.readingSource,
-        lastRaw: persisted.lastRaw,
-        lastRawAt: persisted.lastRawAt
+        currentWeightKg: null,
+        updatedAt: null,
+        readingAt: null,
+        readingSource: null,
+        readingStatus: "unknown",
+        inputStatus: "unknown",
+        readingId: null,
+        isStable: false,
+        readingRaw: "",
+        lastRaw: "",
+        lastRawAt: null,
+        lastRawValue: null
       });
+      this._pendingReading = null;
+      this._nextStableReadingStartsNewIdentity = false;
       this.emitCurrentState();
     }
 
@@ -583,9 +798,7 @@ export class RetailScaleController {
 
   emitCurrentState() {
     this._emitStatus();
-    if (this._state.updatedAt) {
-      this._emitReading();
-    }
+    this._emitReading();
     if (this._state.lastRaw) {
       this._emitRaw();
     }
@@ -594,7 +807,14 @@ export class RetailScaleController {
 
   configureSerial(options = {}) {
     this._assertActive();
-    this._state.serialOptions = normalizeRetailSerialOptions(options, this._state.serialOptions);
+    const normalized = normalizeRetailSerialOptions(options, this._state.serialOptions);
+    const changed = Object.keys(RETAIL_SCALE_SERIAL_DEFAULTS)
+      .some((key) => normalized[key] !== this._state.serialOptions[key]);
+    if (changed && this._connection?.mode === "serial") {
+      throw new Error("Desconecta la balanza serial antes de cambiar sus parámetros de comunicación.");
+    }
+
+    this._state.serialOptions = normalized;
     this._persist(true);
     this._emitStatus();
     return { ...this._state.serialOptions };
@@ -603,50 +823,47 @@ export class RetailScaleController {
   setManualReading(value, options = {}) {
     this._assertActive();
     const weightKg = manualWeightToKg(value);
-    if (!Number.isFinite(weightKg)) {
-      throw new RangeError("La lectura manual debe ser un peso válido mayor o igual que cero.");
+    if (!Number.isFinite(weightKg) || weightKg <= 0) {
+      throw new RangeError("La lectura manual debe ser un peso válido mayor que cero.");
     }
 
     const rawText = options.rawText || `MANUAL ${weightKg.toFixed(3)} kg`;
     this._setRaw(rawText, "manual");
-    this._setReading(weightKg, {
+    this._commitStableReading(weightKg, {
       source: "manual",
       rawValue: String(value),
-      persistImmediately: true
+      rawFrame: rawText,
+      forceNewReading: true
     });
     return this.state;
   }
 
   clearReading() {
     this._assertActive();
-    this._state.currentWeightKg = 0;
-    this._state.updatedAt = new Date().toISOString();
-    this._state.readingSource = null;
-    this._persist(true);
-    this._emitReading();
+    this._invalidateReading("unknown", { clearStable: true });
     return this.state;
   }
 
   connectBle(options = {}) {
+    this._autoReconnectEnabled = true;
+    this._cancelReconnect();
     return this._enqueue(() => this._connectBle(options));
   }
 
   connectSerial(options = {}) {
+    this._autoReconnectEnabled = true;
+    this._cancelReconnect();
     return this._enqueue(() => this._connectSerial(options));
   }
 
   disconnect(options = {}) {
     return this._enqueue(async () => {
       this._assertActive();
+      this._autoReconnectEnabled = false;
+      this._cancelReconnect();
       const forget = Boolean(options.forget);
-      const clearReading = Boolean(options.clearReading);
       await this._disconnectTransport({ forget, updateStatus: false });
-
-      if (clearReading) {
-        this._state.currentWeightKg = 0;
-        this._state.updatedAt = null;
-        this._state.readingSource = null;
-      }
+      this._invalidateReading("unknown", { clearStable: true });
 
       this._setStatus("offline", forget
         ? "Balanza desconectada y preferencia eliminada."
@@ -664,7 +881,12 @@ export class RetailScaleController {
   }
 
   restoreAuthorizedConnection() {
-    return this._enqueue(() => this._restoreAuthorizedConnection());
+    this._autoReconnectEnabled = true;
+    return this._enqueue(async () => {
+      const connected = await this._restoreAuthorizedConnection();
+      if (!connected) this._scheduleReconnect();
+      return connected;
+    });
   }
 
   restore() {
@@ -677,9 +899,13 @@ export class RetailScaleController {
     }
 
     await this._enqueue(async () => {
+      this._autoReconnectEnabled = false;
+      this._cancelReconnect();
       await this._disconnectTransport({ forget: false, updateStatus: false });
       this._persist(true);
       this._destroyed = true;
+      this._navigator?.serial?.removeEventListener?.("connect", this._serialConnectHandler);
+      this._navigator?.serial?.removeEventListener?.("disconnect", this._serialDisconnectHandler);
       this._callbacks = { onReading: null, onStatus: null, onRaw: null };
     });
   }
@@ -694,6 +920,70 @@ export class RetailScaleController {
     const run = this._operationQueue.then(operation, operation);
     this._operationQueue = run.catch(() => undefined);
     return run;
+  }
+
+  _isCurrentConnection(connection) {
+    return Boolean(connection)
+      && !connection.abort
+      && this._connection === connection
+      && connection.generation === this._connectionGeneration;
+  }
+
+  _cancelReconnect() {
+    if (this._reconnectTimer) {
+      globalThis.clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+  }
+
+  _scheduleReconnect(delayOverride = null) {
+    if (this._destroyed
+      || !this._autoReconnectEnabled
+      || !this._state.autoConnectMode
+      || this._connection
+      || this._reconnectTimer) {
+      return;
+    }
+
+    const delay = Number.isFinite(delayOverride)
+      ? Math.max(Number(delayOverride), 0)
+      : RECONNECT_BACKOFF_MS[Math.min(this._reconnectAttempt, RECONNECT_BACKOFF_MS.length - 1)];
+    this._reconnectAttempt += 1;
+    this._reconnectTimer = globalThis.setTimeout(() => {
+      this._reconnectTimer = null;
+      void this._enqueue(async () => {
+        if (this._destroyed || !this._autoReconnectEnabled || this._connection) return false;
+        const connected = await this._restoreAuthorizedConnection();
+        if (!connected) this._scheduleReconnect();
+        return connected;
+      });
+    }, delay);
+  }
+
+  _markConnectionReady(connection) {
+    if (!this._isCurrentConnection(connection)) return;
+    this._cancelReconnect();
+    this._reconnectAttempt = 0;
+    this._startReadingWatchdog(connection);
+  }
+
+  _startReadingWatchdog(connection) {
+    if (!this._isCurrentConnection(connection)) return;
+    if (connection.watchdogTimer) globalThis.clearInterval(connection.watchdogTimer);
+
+    connection.watchdogTimer = globalThis.setInterval(() => {
+      if (!this._isCurrentConnection(connection)) return;
+      if (this._state.readingSource === "manual") return;
+      const readingAt = Date.parse(this._state.readingAt || "");
+      const readingBelongsToConnection = this._state.readingSource === connection.mode;
+      const waitingForFirstReading = !readingBelongsToConnection || !Number.isFinite(readingAt);
+      const expired = waitingForFirstReading
+        ? Date.now() - connection.connectedAt > READING_FRESHNESS_MS
+        : Date.now() - readingAt > READING_FRESHNESS_MS;
+      if (expired && (this._state.currentWeightKg !== null || this._state.readingStatus !== "stale")) {
+        this._invalidateReading("stale", { clearStable: true });
+      }
+    }, READING_WATCHDOG_INTERVAL_MS);
   }
 
   _loadPersistedState() {
@@ -728,12 +1018,7 @@ export class RetailScaleController {
     }
 
     const persisted = {
-      version: 1,
-      currentWeightKg: this._state.currentWeightKg,
-      updatedAt: this._state.updatedAt,
-      readingSource: this._state.readingSource,
-      lastRaw: this._state.lastRaw,
-      lastRawAt: this._state.lastRawAt,
+      version: 2,
       autoConnectMode: this._state.autoConnectMode,
       deviceName: this._state.deviceName,
       bleDeviceId: this._state.bleDeviceId,
@@ -794,7 +1079,14 @@ export class RetailScaleController {
       weightKg: state.currentWeightKg,
       source: state.readingSource,
       updatedAt: state.updatedAt,
-      rawValue,
+      readingAt: state.readingAt,
+      readingId: state.readingId,
+      readingStatus: state.readingStatus,
+      inputStatus: state.inputStatus,
+      isStable: state.isStable,
+      isFresh: state.isFresh,
+      isCaptureReady: state.isCaptureReady,
+      rawValue: rawValue ?? state.lastRawValue,
       state
     });
   }
@@ -817,36 +1109,133 @@ export class RetailScaleController {
 
     this._state.lastRaw = sanitized;
     this._state.lastRawAt = new Date().toISOString();
-    this._persist();
     this._emitRaw(source);
   }
 
-  _setReading(weightKg, options = {}) {
+  _invalidateReading(status = "unknown", options = {}) {
+    const clearStable = Boolean(options.clearStable);
+    this._pendingReading = null;
+    this._state.inputStatus = status;
+
+    if (!clearStable && status === "unstable" && this._state.readingId) {
+      this._nextStableReadingStartsNewIdentity = true;
+    }
+
+    if (clearStable) {
+      this._nextStableReadingStartsNewIdentity = false;
+      this._state.currentWeightKg = null;
+      this._state.updatedAt = null;
+      this._state.readingAt = null;
+      this._state.readingSource = null;
+      this._state.readingStatus = status;
+      this._state.readingId = null;
+      this._state.isStable = false;
+      this._state.readingRaw = "";
+      this._state.lastRawValue = null;
+    }
+
+    this._emitReading();
+  }
+
+  _commitStableReading(weightKg, options = {}) {
     const normalizedWeight = roundWeight(Number(weightKg));
     if (!Number.isFinite(normalizedWeight) || normalizedWeight < 0) {
       return false;
     }
 
+    const source = options.source || null;
+    const sameReading = !options.forceNewReading
+      && !this._nextStableReadingStartsNewIdentity
+      && this._state.readingId
+      && this._state.readingSource === source
+      && Number.isFinite(this._state.currentWeightKg)
+      && Math.abs(this._state.currentWeightKg - normalizedWeight) <= WEIGHT_STABILITY_TOLERANCE_KG;
+    const now = new Date().toISOString();
+
     this._state.currentWeightKg = normalizedWeight;
-    this._state.updatedAt = new Date().toISOString();
-    this._state.readingSource = options.source || null;
+    this._state.updatedAt = now;
+    this._state.readingAt = now;
+    this._state.readingSource = source;
+    this._state.readingStatus = "stable";
+    this._state.inputStatus = "stable";
+    this._state.isStable = true;
+    this._state.readingRaw = sanitizeRawText(options.rawFrame || this._state.lastRaw);
+    this._state.readingId = sameReading
+      ? this._state.readingId
+      : `${source || "reading"}-${Date.now()}-${++this._readingSequence}`;
+    this._state.lastRawValue = options.rawValue ?? null;
     this._state.lastError = null;
-    this._persist(Boolean(options.persistImmediately));
+    this._pendingReading = null;
+    this._nextStableReadingStartsNewIdentity = false;
     this._emitReading(options.rawValue ?? null);
     return true;
   }
 
-  _handlePayload(payload, options = {}) {
-    const parsed = parseRetailScalePayload(payload, options.parser || "text");
-    this._setRaw(parsed.rawText, options.source);
-
-    if (!Number.isFinite(parsed.weightKg)) {
+  _acceptReadingCandidate(weightKg, options = {}) {
+    const normalizedWeight = roundWeight(Number(weightKg));
+    if (!Number.isFinite(normalizedWeight) || normalizedWeight < 0) {
+      this._invalidateReading("invalid", { clearStable: false });
       return false;
     }
 
-    return this._setReading(Math.max(parsed.weightKg, 0), {
+    const now = Date.now();
+    const source = options.source || null;
+    const pendingMatches = this._pendingReading
+      && this._pendingReading.source === source
+      && Math.abs(this._pendingReading.weightKg - normalizedWeight) <= WEIGHT_STABILITY_TOLERANCE_KG;
+
+    if (pendingMatches) {
+      this._pendingReading.count += 1;
+      this._pendingReading.lastAt = now;
+    } else {
+      this._pendingReading = {
+        weightKg: normalizedWeight,
+        source,
+        count: 1,
+        firstAt: now,
+        lastAt: now
+      };
+    }
+
+    const isZero = normalizedWeight === 0;
+    const zeroConfirmed = isZero
+      && this._pendingReading.count >= ZERO_CONFIRMATION_COUNT
+      && now - this._pendingReading.firstAt >= ZERO_CONFIRMATION_MIN_MS;
+    const nonZeroConfirmed = !isZero
+      && (options.stableHint === true || this._pendingReading.count >= STABLE_CONFIRMATION_COUNT);
+
+    if (!zeroConfirmed && !nonZeroConfirmed) {
+      this._state.inputStatus = "unstable";
+      this._emitReading(options.rawValue ?? null);
+      return false;
+    }
+
+    return this._commitStableReading(normalizedWeight, options);
+  }
+
+  _handlePayload(payload, options = {}) {
+    if (options.connection && !this._isCurrentConnection(options.connection)) {
+      return false;
+    }
+
+    const parsed = parseRetailScalePayload(payload, options.parser || "text");
+    this._setRaw(parsed.rawText, options.source);
+
+    if (options.connection && !this._isCurrentConnection(options.connection)) {
+      return false;
+    }
+
+    if (parsed.rejectionReason || !Number.isFinite(parsed.weightKg) || parsed.weightKg < 0) {
+      const status = parsed.rejectionReason === "unstable" ? "unstable" : "invalid";
+      this._invalidateReading(status, { clearStable: false });
+      return false;
+    }
+
+    return this._acceptReadingCandidate(parsed.weightKg, {
       source: options.source,
-      rawValue: parsed.rawValue
+      rawValue: parsed.rawValue,
+      rawFrame: parsed.rawText,
+      stableHint: parsed.stableHint
     });
   }
 
@@ -870,6 +1259,7 @@ export class RetailScaleController {
     }
 
     await this._disconnectTransport({ forget: false, updateStatus: false });
+    this._invalidateReading("unknown", { clearStable: true });
     const restoring = Boolean(options.restoring);
     this._setStatus("connecting", restoring
       ? "Restaurando conexión BLE..."
@@ -891,12 +1281,18 @@ export class RetailScaleController {
 
       connection = {
         mode: "ble",
+        generation: ++this._connectionGeneration,
         device,
         deviceName,
         abort: false,
+        connectedAt: Date.now(),
         pollingTimer: null,
+        watchdogTimer: null,
         isPolling: false,
-        notifyActive: false
+        notifyActive: false,
+        decoder: new TextDecoder("utf-8"),
+        buffer: "",
+        discardUntilDelimiter: false
       };
       this._connection = connection;
       connection.disconnectHandler = () => {
@@ -916,6 +1312,7 @@ export class RetailScaleController {
       }
 
       const found = await this._findBleCharacteristic(server);
+      if (!this._isCurrentConnection(connection)) return false;
       if (!found) {
         throw new Error("No se encontró una característica BLE compatible con la balanza.");
       }
@@ -927,21 +1324,20 @@ export class RetailScaleController {
       connection.profileId = found.profile.id;
       connection.profileLabel = found.profile.label;
       connection.valueHandler = (event) => {
-        this._handlePayload(event.target.value, {
-          parser: found.profile.parser,
-          source: "ble"
-        });
+        this._handleBleValue(connection, event.target.value, found.profile.parser);
       };
 
       if (found.canNotify) {
         found.characteristic.addEventListener?.("characteristicvaluechanged", connection.valueHandler);
         await found.characteristic.startNotifications();
+        if (!this._isCurrentConnection(connection)) return false;
         connection.notifyActive = true;
       }
 
       if (found.canRead) {
         const value = await found.characteristic.readValue();
-        this._handlePayload(value, { parser: found.profile.parser, source: "ble" });
+        if (!this._isCurrentConnection(connection)) return false;
+        this._handleBleValue(connection, value, found.profile.parser);
       }
 
       if (!found.canNotify && found.canRead) {
@@ -962,6 +1358,7 @@ export class RetailScaleController {
         profileLabel: found.profile.label,
         lastError: null
       });
+      this._markConnectionReady(connection);
       return true;
     } catch (error) {
       await this._disconnectTransport({ forget: false, updateStatus: false });
@@ -970,6 +1367,7 @@ export class RetailScaleController {
         connectionMode: null,
         lastError: message
       });
+      if (restoring) this._scheduleReconnect();
       return false;
     }
   }
@@ -1013,7 +1411,8 @@ export class RetailScaleController {
       connection.isPolling = true;
       try {
         const value = await connection.characteristic.readValue();
-        this._handlePayload(value, { parser: connection.parser, source: "ble" });
+        if (!this._isCurrentConnection(connection)) return;
+        this._handleBleValue(connection, value, connection.parser);
       } catch (error) {
         this._handleUnexpectedDisconnect(
           connection,
@@ -1059,6 +1458,7 @@ export class RetailScaleController {
     }
 
     await this._disconnectTransport({ forget: false, updateStatus: false });
+    this._invalidateReading("unknown", { clearStable: true });
     const restoring = Boolean(options.restoring);
     this._state.serialOptions = serialOptions;
     this._setStatus("connecting", restoring
@@ -1074,14 +1474,17 @@ export class RetailScaleController {
       await port.open(serialOptions);
       connection = {
         mode: "serial",
+        generation: ++this._connectionGeneration,
         port,
         deviceName: "Puerto serial de balanza",
         abort: false,
+        connectedAt: Date.now(),
         reader: null,
         readPromise: null,
         decoder: new TextDecoder("utf-8"),
         buffer: "",
-        flushTimer: null
+        discardUntilDelimiter: false,
+        watchdogTimer: null
       };
       this._connection = connection;
       await this._rememberSerialPort(port);
@@ -1101,6 +1504,7 @@ export class RetailScaleController {
       });
 
       connection.readPromise = this._readSerial(connection);
+      this._markConnectionReady(connection);
       return true;
     } catch (error) {
       await this._disconnectTransport({ forget: false, updateStatus: false });
@@ -1109,6 +1513,7 @@ export class RetailScaleController {
         connectionMode: null,
         lastError: message
       });
+      if (restoring) this._scheduleReconnect();
       return false;
     }
   }
@@ -1140,6 +1545,30 @@ export class RetailScaleController {
   }
 
   _handleSerialChunk(connection, value) {
+    this._handleTextChunk(connection, value, {
+      source: "serial"
+    });
+  }
+
+  _handleBleValue(connection, value, parser = "text") {
+    if (!this._isCurrentConnection(connection)) return false;
+
+    if (parser === "sig-weight") {
+      return this._handlePayload(value, {
+        parser,
+        source: "ble",
+        connection
+      });
+    }
+
+    this._handleTextChunk(connection, value, {
+      source: "ble"
+    });
+    return true;
+  }
+
+  _handleTextChunk(connection, value, options = {}) {
+    if (!this._isCurrentConnection(connection)) return;
     const bytes = toBytes(value);
     let text = "";
     try {
@@ -1149,41 +1578,54 @@ export class RetailScaleController {
     }
 
     if (!text) {
-      this._handlePayload(bytes, { parser: "text", source: "serial" });
       return;
     }
 
-    if (connection.flushTimer) {
-      globalThis.clearTimeout(connection.flushTimer);
-      connection.flushTimer = null;
+    let remaining = text;
+    const nextDelimiter = (source) => source.match(/\r\n|\r|\n/);
+    const reportOversizedFrame = (frame) => {
+      const discarded = String(frame || "").slice(-MAX_RAW_LENGTH);
+      this._setRaw(
+        `[Trama ${options.source || "text"} sin cierre descartada] ${discarded}`,
+        options.source
+      );
+      this._invalidateReading("invalid", { clearStable: false });
+    };
+
+    if (connection.discardUntilDelimiter) {
+      const delimiter = nextDelimiter(remaining);
+      if (!delimiter) return;
+      connection.discardUntilDelimiter = false;
+      remaining = remaining.slice(delimiter.index + delimiter[0].length);
     }
 
-    connection.buffer = `${connection.buffer}${text}`.slice(-MAX_SERIAL_BUFFER_LENGTH);
-    const frames = connection.buffer.split(/\r\n|\r|\n/);
-
-    if (frames.length > 1) {
-      connection.buffer = frames.pop() || "";
-      frames.forEach((frame) => {
-        if (frame.trim()) {
-          this._handlePayload(frame, { parser: "text", source: "serial" });
+    while (remaining && this._isCurrentConnection(connection)) {
+      const delimiter = nextDelimiter(remaining);
+      if (!delimiter) {
+        connection.buffer = `${connection.buffer}${remaining}`;
+        if (connection.buffer.length > MAX_SERIAL_BUFFER_LENGTH) {
+          reportOversizedFrame(connection.buffer);
+          connection.buffer = "";
+          connection.discardUntilDelimiter = true;
         }
-      });
-      this._scheduleSerialBufferFlush(connection);
-      return;
+        return;
+      }
+
+      const frame = `${connection.buffer}${remaining.slice(0, delimiter.index)}`;
+      connection.buffer = "";
+      remaining = remaining.slice(delimiter.index + delimiter[0].length);
+
+      if (frame.length > MAX_SERIAL_BUFFER_LENGTH) {
+        reportOversizedFrame(frame);
+      } else if (frame.trim()) {
+        this._handlePayload(frame, {
+          parser: "text",
+          source: options.source,
+          connection
+        });
+      }
     }
 
-    this._scheduleSerialBufferFlush(connection);
-  }
-
-  _scheduleSerialBufferFlush(connection) {
-    if (!connection.buffer.trim()) return;
-    const pendingFrame = connection.buffer;
-    connection.flushTimer = globalThis.setTimeout(() => {
-      connection.flushTimer = null;
-      if (connection.abort || this._connection !== connection || connection.buffer !== pendingFrame) return;
-      connection.buffer = "";
-      this._handlePayload(pendingFrame, { parser: "text", source: "serial" });
-    }, SERIAL_FRAME_IDLE_MS);
   }
 
   async _readSerial(connection) {
@@ -1198,7 +1640,7 @@ export class RetailScaleController {
             if (done) {
               break;
             }
-            if (value) {
+            if (value && this._isCurrentConnection(connection)) {
               this._handleSerialChunk(connection, value);
             }
           }
@@ -1267,7 +1709,10 @@ export class RetailScaleController {
 
       const port = this._findRememberedSerialPort(ports);
       if (!port) {
-        this._setStatus("offline", "El puerto serial guardado no está autorizado en este navegador.", {
+        if (this._serialRestoreRequiresManualSelection(ports)) {
+          this._autoReconnectEnabled = false;
+        }
+        this._setStatus("offline", "No se pudo identificar de forma inequívoca el puerto guardado. Selecciónalo manualmente.", {
           connectionMode: null,
           lastError: null
         });
@@ -1299,14 +1744,13 @@ export class RetailScaleController {
       return false;
     }
 
-    const device = devices.find((candidate) => {
-      return this._state.bleDeviceId && String(candidate.id || "") === this._state.bleDeviceId;
-    }) || devices.find((candidate) => {
-      return this._state.deviceName && candidate.name === this._state.deviceName;
-    }) || (devices.length === 1 ? devices[0] : null);
+    const device = this._state.bleDeviceId
+      ? devices.find((candidate) => String(candidate.id || "") === this._state.bleDeviceId) || null
+      : null;
 
     if (!device) {
-      this._setStatus("offline", "La balanza BLE guardada no está autorizada en este navegador.", {
+      this._autoReconnectEnabled = false;
+      this._setStatus("offline", "No se pudo identificar exactamente la balanza BLE guardada. Selecciónala manualmente.", {
         connectionMode: null,
         lastError: null
       });
@@ -1318,9 +1762,7 @@ export class RetailScaleController {
 
   _findRememberedSerialPort(ports) {
     const savedInfo = this._state.serialPortInfo;
-    if (!savedInfo) {
-      return ports.length === 1 ? ports[0] : null;
-    }
+    if (!savedInfo) return null;
 
     const hasIdentifiers = savedInfo.usbVendorId !== null
       || savedInfo.usbProductId !== null
@@ -1330,28 +1772,44 @@ export class RetailScaleController {
       const matches = ports.filter((port) => {
         return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
       });
-      if (matches[savedInfo.matchIndex]) {
-        return matches[savedInfo.matchIndex];
-      }
-      if (matches.length === 1) {
-        return matches[0];
-      }
+      return matches.length === 1 ? matches[0] : null;
     }
 
-    return ports[savedInfo.portIndex] || (ports.length === 1 ? ports[0] : null);
+    return null;
+  }
+
+  _serialRestoreRequiresManualSelection(ports) {
+    const savedInfo = this._state.serialPortInfo;
+    if (!savedInfo) return true;
+
+    const hasIdentifiers = savedInfo.usbVendorId !== null
+      || savedInfo.usbProductId !== null
+      || Boolean(savedInfo.bluetoothServiceClassId);
+    if (!hasIdentifiers) return true;
+
+    const matches = ports.filter((port) => {
+      return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
+    });
+    return matches.length > 1;
   }
 
   _handleUnexpectedDisconnect(connection, message) {
-    if (!connection || connection.abort || this._connection !== connection) {
+    if (!this._isCurrentConnection(connection)) {
       return;
     }
 
+    this._connection = null;
+    this._connectionGeneration += 1;
     connection.abort = true;
     this._stopConnectionTimers(connection);
+    this._invalidateReading("stale", { clearStable: true });
     this._setStatus("error", message, {
       connectionMode: null,
       lastError: message
     });
+    void Promise.resolve()
+      .then(() => this._releaseConnection(connection))
+      .finally(() => this._scheduleReconnect());
   }
 
   _stopConnectionTimers(connection) {
@@ -1359,18 +1817,17 @@ export class RetailScaleController {
       globalThis.clearInterval(connection.pollingTimer);
       connection.pollingTimer = null;
     }
-    if (connection?.flushTimer) {
-      globalThis.clearTimeout(connection.flushTimer);
-      connection.flushTimer = null;
+    if (connection?.watchdogTimer) {
+      globalThis.clearInterval(connection.watchdogTimer);
+      connection.watchdogTimer = null;
     }
   }
 
-  async _disconnectTransport(options = {}) {
-    const connection = this._connection;
-    this._connection = null;
-
+  async _releaseConnection(connection) {
     if (connection) {
       connection.abort = true;
+      connection.buffer = "";
+      connection.discardUntilDelimiter = false;
       this._stopConnectionTimers(connection);
 
       if (connection.characteristic && connection.valueHandler) {
@@ -1429,6 +1886,13 @@ export class RetailScaleController {
         }
       }
     }
+  }
+
+  async _disconnectTransport(options = {}) {
+    const connection = this._connection;
+    this._connection = null;
+    this._connectionGeneration += 1;
+    await this._releaseConnection(connection);
 
     this._state.connectionMode = null;
 

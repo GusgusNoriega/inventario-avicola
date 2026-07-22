@@ -11,11 +11,11 @@
   <section class="scale-strip-mobile card" aria-label="Pesos de balanzas">
     <article class="scale-strip-item">
       <span>Balanza 1</span>
-      <strong id="display-scale-mini-1">0.00 <small>kg</small></strong>
+      <strong id="display-scale-mini-1">---</strong>
     </article>
     <article class="scale-strip-item">
       <span>Balanza 2</span>
-      <strong id="display-scale-mini-2">0.00 <small>kg</small></strong>
+      <strong id="display-scale-mini-2">---</strong>
     </article>
   </section>
 
@@ -87,8 +87,8 @@
               <span aria-hidden="true">&#9881;</span>
             </button>
           </div>
-          <p class="scale-display" id="display-scale-1">0.00 <span>kg</span></p>
-          <button id="capture-scale-1" class="btn btn-secondary" type="button">Usar balanza 1</button>
+          <p class="scale-display" id="display-scale-1">---</p>
+          <button id="capture-scale-1" class="btn btn-secondary" type="button" disabled>Usar balanza 1</button>
         </article>
 
         <article class="scale-card card" data-scale-card="2">
@@ -98,8 +98,8 @@
               <span aria-hidden="true">&#9881;</span>
             </button>
           </div>
-          <p class="scale-display" id="display-scale-2">0.00 <span>kg</span></p>
-          <button id="capture-scale-2" class="btn btn-secondary" type="button">Usar balanza 2</button>
+          <p class="scale-display" id="display-scale-2">---</p>
+          <button id="capture-scale-2" class="btn btn-secondary" type="button" disabled>Usar balanza 2</button>
         </article>
       </section>
 
@@ -181,7 +181,7 @@
 
             <div class="weight-preview weight-preview-gross">
               <span>Peso bruto a registrar</span>
-              <strong id="selectedWeightValue">0.00 kg</strong>
+              <strong id="selectedWeightValue">---</strong>
               <small id="selectedWeightBreakdown" hidden></small>
             </div>
 
@@ -255,6 +255,33 @@
           </div>
         </section>
 
+        <section class="scale-settings-panel" aria-labelledby="scaleSerialTitle1">
+          <h3 id="scaleSerialTitle1">Parámetros seriales de esta balanza</h3>
+          <div class="form-grid">
+            <label class="field" for="serial-baud-scale-1">
+              Baudios
+              <input id="serial-baud-scale-1" type="number" min="300" max="921600" step="1" value="9600" readonly inputmode="none" data-keypad-label="Baudios balanza 1" data-keypad-decimal="false">
+            </label>
+            <label class="field" for="serial-data-bits-scale-1">
+              Bits de datos
+              <select id="serial-data-bits-scale-1" data-touch-label="Bits de datos balanza 1"><option value="8">8</option><option value="7">7</option></select>
+            </label>
+            <label class="field" for="serial-stop-bits-scale-1">
+              Bits de parada
+              <select id="serial-stop-bits-scale-1" data-touch-label="Bits de parada balanza 1"><option value="1">1</option><option value="2">2</option></select>
+            </label>
+            <label class="field" for="serial-parity-scale-1">
+              Paridad
+              <select id="serial-parity-scale-1" data-touch-label="Paridad balanza 1"><option value="none">Ninguna</option><option value="even">Par</option><option value="odd">Impar</option></select>
+            </label>
+            <label class="field" for="serial-flow-scale-1">
+              Control de flujo
+              <select id="serial-flow-scale-1" data-touch-label="Control de flujo balanza 1"><option value="none">Ninguno</option><option value="hardware">Hardware</option></select>
+            </label>
+          </div>
+          <button id="save-serial-scale-1" class="btn btn-ghost" type="button">Guardar parámetros seriales</button>
+        </section>
+
         <section class="scale-settings-panel" aria-labelledby="scaleManualTitle1">
           <h3 id="scaleManualTitle1">Agregar valor manual</h3>
           <div class="field">
@@ -290,6 +317,33 @@
             </div>
             <small id="scale-raw-2" class="scale-raw">Trama: --</small>
           </div>
+        </section>
+
+        <section class="scale-settings-panel" aria-labelledby="scaleSerialTitle2">
+          <h3 id="scaleSerialTitle2">Parámetros seriales de esta balanza</h3>
+          <div class="form-grid">
+            <label class="field" for="serial-baud-scale-2">
+              Baudios
+              <input id="serial-baud-scale-2" type="number" min="300" max="921600" step="1" value="9600" readonly inputmode="none" data-keypad-label="Baudios balanza 2" data-keypad-decimal="false">
+            </label>
+            <label class="field" for="serial-data-bits-scale-2">
+              Bits de datos
+              <select id="serial-data-bits-scale-2" data-touch-label="Bits de datos balanza 2"><option value="8">8</option><option value="7">7</option></select>
+            </label>
+            <label class="field" for="serial-stop-bits-scale-2">
+              Bits de parada
+              <select id="serial-stop-bits-scale-2" data-touch-label="Bits de parada balanza 2"><option value="1">1</option><option value="2">2</option></select>
+            </label>
+            <label class="field" for="serial-parity-scale-2">
+              Paridad
+              <select id="serial-parity-scale-2" data-touch-label="Paridad balanza 2"><option value="none">Ninguna</option><option value="even">Par</option><option value="odd">Impar</option></select>
+            </label>
+            <label class="field" for="serial-flow-scale-2">
+              Control de flujo
+              <select id="serial-flow-scale-2" data-touch-label="Control de flujo balanza 2"><option value="none">Ninguno</option><option value="hardware">Hardware</option></select>
+            </label>
+          </div>
+          <button id="save-serial-scale-2" class="btn btn-ghost" type="button">Guardar parámetros seriales</button>
         </section>
 
         <section class="scale-settings-panel" aria-labelledby="scaleManualTitle2">

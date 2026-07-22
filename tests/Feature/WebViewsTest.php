@@ -88,13 +88,15 @@ class WebViewsTest extends TestCase
             ->assertSee('Empresas y cuentas')
             ->assertSee(route('finanzas.movimientos.nuevo'), false)
             ->assertSee('Registrar cobro o pago')
+            ->assertSee(route('finanzas.reportes'), false)
+            ->assertSee('Reportes PDF')
             ->assertSee(route('menu'), false)
             ->assertSee(asset('css/finanzas.css'), false)
             ->assertDontSee('id="financeAvailableBalance"', false)
             ->assertDontSee('id="financeAuthDialog"', false)
             ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
 
-        $this->assertSame(4, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+        $this->assertSame(5, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
 
         $this->get('/finanzas/saldos')
             ->assertOk()

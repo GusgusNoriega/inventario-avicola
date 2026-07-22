@@ -101,6 +101,14 @@ class Pesada extends Model
     }
 
     /**
+     * @return BelongsTo<LecturaBalanza, $this>
+     */
+    public function lecturaBalanza(): BelongsTo
+    {
+        return $this->belongsTo(LecturaBalanza::class, 'lectura_balanza_id');
+    }
+
+    /**
      * @return BelongsTo<Tercero, $this>
      */
     public function proveedorOrigen(): BelongsTo

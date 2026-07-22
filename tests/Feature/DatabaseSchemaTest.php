@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(83, $migrationFiles);
+        $this->assertCount(84, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -35,6 +35,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_07_15_000001_set_standard_tray_weight.php' => 0,
                 '2026_07_12_000002_add_trays_to_java_movements.php' => 3,
                 '2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php' => 2,
+                '2026_07_22_000001_add_station_to_retail_weight_adjustments.php' => 2,
                 default => 1,
             };
 
@@ -128,7 +129,7 @@ class DatabaseSchemaTest extends TestCase
             'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_en_local', 'cantidad_esperada', 'diferencia', 'cantidad_en_empresa_bandejas', 'cantidad_en_local_bandejas', 'cantidad_esperada_bandejas', 'cantidad_clientes_externos', 'cantidad_clientes_externos_bandejas', 'cantidad_clientes_internos', 'cantidad_clientes_internos_bandejas', 'cantidad_total_inventario', 'cantidad_total_inventario_bandejas', 'diferencia_bandejas', 'contado_at', 'contado_por'],
             'conteos_diarios_javas_camiones' => ['conteo_diario_java_id', 'vehiculo_id', 'placa_snapshot', 'cantidad_javas', 'cantidad_bandejas'],
             'tipos_bandeja' => ['codigo', 'nombre', 'peso_kg', 'capacidad_aves', 'estado'],
-            'ajustes_peso_minorista' => ['empresa_id', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
+            'ajustes_peso_minorista' => ['empresa_id', 'estacion', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
@@ -434,6 +435,56 @@ class DatabaseSchemaTest extends TestCase
             'presentacion_pollo',
             'ajuste_peso_gramos',
         ]));
+    }
+
+    public function test_retail_adjustment_station_migration_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $user = User::factory()->create();
+        $migration = require database_path(
+            'migrations/2026_07_22_000001_add_station_to_retail_weight_adjustments.php'
+        );
+        $base = [
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'MACHO_CERRADO',
+            'nombre' => 'Macho cerrado',
+            'sexo' => 'MACHO',
+            'presentacion' => 'CERRADO',
+            'predeterminado' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        DB::table('ajustes_peso_minorista')->insert([
+            [...$base, 'estacion' => 1, 'gramos_adicionales' => 175],
+            [...$base, 'estacion' => 2, 'gramos_adicionales' => 325],
+        ]);
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn('ajustes_peso_minorista', 'estacion'));
+        $this->assertDatabaseCount('ajustes_peso_minorista', 1);
+        $this->assertDatabaseHas('ajustes_peso_minorista', [
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'MACHO_CERRADO',
+            'gramos_adicionales' => 175,
+        ]);
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn('ajustes_peso_minorista', 'estacion'));
+        $this->assertDatabaseHas('ajustes_peso_minorista', [
+            'empresa_id' => $user->empresa_id,
+            'estacion' => 1,
+            'codigo' => 'MACHO_CERRADO',
+            'gramos_adicionales' => 175,
+        ]);
+        $this->assertDatabaseHas('ajustes_peso_minorista', [
+            'empresa_id' => $user->empresa_id,
+            'estacion' => 2,
+            'codigo' => 'MACHO_CERRADO',
+            'gramos_adicionales' => 175,
+        ]);
     }
 
     public function test_vehicle_ownership_migration_normalizes_legacy_data_and_default(): void

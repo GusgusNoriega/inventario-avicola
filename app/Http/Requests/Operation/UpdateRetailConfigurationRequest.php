@@ -17,15 +17,23 @@ class UpdateRetailConfigurationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'scale' => ['required', 'array:connection_mode,device,configuration'],
-            'scale.connection_mode' => ['required', Rule::in(['SERIAL', 'BLE', 'BLUETOOTH', 'MANUAL'])],
+            'scale' => [
+                'sometimes',
+                'array:connection_mode,device,configuration',
+                'required_array_keys:connection_mode,configuration',
+            ],
+            'scale.connection_mode' => ['required_with:scale', Rule::in(['SERIAL', 'BLE', 'BLUETOOTH', 'MANUAL'])],
             'scale.device' => ['nullable', 'string', 'max:180'],
-            'scale.configuration' => ['required', 'array:baudRate,dataBits,stopBits,parity,flowControl,profileId,profileLabel'],
-            'scale.configuration.baudRate' => ['required', 'integer', 'between:300,921600'],
-            'scale.configuration.dataBits' => ['required', 'integer', Rule::in([7, 8])],
-            'scale.configuration.stopBits' => ['required', 'integer', Rule::in([1, 2])],
-            'scale.configuration.parity' => ['required', Rule::in(['none', 'even', 'odd'])],
-            'scale.configuration.flowControl' => ['required', Rule::in(['none', 'hardware'])],
+            'scale.configuration' => [
+                'required_with:scale',
+                'array:baudRate,dataBits,stopBits,parity,flowControl,profileId,profileLabel',
+                'required_array_keys:baudRate,dataBits,stopBits,parity,flowControl',
+            ],
+            'scale.configuration.baudRate' => ['required_with:scale.configuration', 'integer', 'between:300,921600'],
+            'scale.configuration.dataBits' => ['required_with:scale.configuration', 'integer', Rule::in([7, 8])],
+            'scale.configuration.stopBits' => ['required_with:scale.configuration', 'integer', Rule::in([1, 2])],
+            'scale.configuration.parity' => ['required_with:scale.configuration', Rule::in(['none', 'even', 'odd'])],
+            'scale.configuration.flowControl' => ['required_with:scale.configuration', Rule::in(['none', 'hardware'])],
             'scale.configuration.profileId' => ['nullable', 'string', 'max:100'],
             'scale.configuration.profileLabel' => ['nullable', 'string', 'max:180'],
             'default_adjustment_code' => ['required', Rule::in(AjustePesoMinorista::codes())],
@@ -65,13 +73,18 @@ class UpdateRetailConfigurationRequest extends FormRequest
             ];
         })->all();
 
-        $this->merge([
-            'scale' => $scale,
+        $normalized = [
             'default_adjustment_code' => mb_strtoupper(
                 trim((string) $this->input('default_adjustment_code', '')),
                 'UTF-8'
             ),
             'adjustments' => $adjustments,
-        ]);
+        ];
+
+        if ($this->exists('scale')) {
+            $normalized['scale'] = $scale;
+        }
+
+        $this->merge($normalized);
     }
 }

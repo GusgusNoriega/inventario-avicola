@@ -109,6 +109,22 @@
           </span>
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
+
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.reportes') }}">
+          <span class="fin-module-icon is-balances" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h9l4 4v14H6z"></path>
+              <path d="M15 3v5h4"></path>
+              <path d="M9 12h7"></path>
+              <path d="M9 16h7"></path>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Reportes PDF</strong>
+            <small>Genera ventas por cliente, estados de cuenta, pagos y movimientos por responsable.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
       </nav>
     </section>
   </main>

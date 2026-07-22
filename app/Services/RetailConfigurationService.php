@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AjustePesoMinorista;
+use App\Models\Balanza;
 use App\Models\ListaPrecio;
 use App\Models\Tercero;
 use App\Models\TipoPollo;
@@ -12,9 +13,9 @@ use Illuminate\Validation\ValidationException;
 
 class RetailConfigurationService
 {
-    public const SCALE_CODE = 'BALANZA_MINORISTA';
+    public const SCALE_CODE = Balanza::CODE_RETAIL_1;
 
-    public const SCALE_CODE_2 = 'BALANZA_MINORISTA_2';
+    public const SCALE_CODE_2 = Balanza::CODE_RETAIL_2;
 
     /** @return array{baudRate: int, dataBits: int, stopBits: int, parity: string, flowControl: string} */
     public static function defaultSerialConfiguration(): array
@@ -44,6 +45,7 @@ class RetailConfigurationService
         $now = now();
         $rows = collect(self::adjustmentDefinitions())->map(fn (array $definition): array => [
             'empresa_id' => $companyId,
+            'estacion' => $station,
             'codigo' => $definition['code'],
             'nombre' => $definition['name'],
             'sexo' => $definition['sex'],
@@ -57,12 +59,13 @@ class RetailConfigurationService
 
         AjustePesoMinorista::query()->upsert(
             $rows,
-            ['empresa_id', 'codigo'],
+            ['empresa_id', 'estacion', 'codigo'],
             ['nombre', 'sexo', 'presentacion', 'updated_at']
         );
 
         $hasDefault = AjustePesoMinorista::query()
             ->where('empresa_id', $companyId)
+            ->where('estacion', $station)
             ->where('estado', AjustePesoMinorista::STATUS_ACTIVE)
             ->where('predeterminado', true)
             ->exists();
@@ -70,6 +73,7 @@ class RetailConfigurationService
         if (! $hasDefault) {
             AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->where('codigo', AjustePesoMinorista::MALE_CLOSED)
                 ->update([
                     'predeterminado' => true,
@@ -126,6 +130,7 @@ class RetailConfigurationService
             ],
             'adjustments' => AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->where('estado', AjustePesoMinorista::STATUS_ACTIVE)
                 ->orderBy('id')
                 ->get()
@@ -150,9 +155,10 @@ class RetailConfigurationService
         $this->ensureDefaults($companyId, $branchId, $station);
         $scaleCode = $this->scaleCode($station);
 
-        DB::transaction(function () use ($companyId, $branchId, $data, $scaleCode): void {
+        DB::transaction(function () use ($companyId, $branchId, $data, $scaleCode, $station): void {
             $adjustments = AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->whereIn('codigo', collect($data['adjustments'])->pluck('code'))
                 ->lockForUpdate()
                 ->get()
@@ -172,9 +178,11 @@ class RetailConfigurationService
 
             AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->update(['predeterminado' => false]);
             $updated = AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->where('estado', AjustePesoMinorista::STATUS_ACTIVE)
                 ->where('codigo', $data['default_adjustment_code'])
                 ->update(['predeterminado' => true]);
@@ -185,16 +193,18 @@ class RetailConfigurationService
                 ]);
             }
 
-            DB::table('balanzas')
-                ->where('sucursal_id', $branchId)
-                ->where('codigo', $scaleCode)
-                ->update([
-                    'modo_conexion' => $data['scale']['connection_mode'],
-                    'dispositivo' => $data['scale']['device'],
-                    'configuracion' => json_encode($data['scale']['configuration'], JSON_THROW_ON_ERROR),
-                    'estado' => 'ACTIVO',
-                    'updated_at' => now(),
-                ]);
+            if (isset($data['scale'])) {
+                DB::table('balanzas')
+                    ->where('sucursal_id', $branchId)
+                    ->where('codigo', $scaleCode)
+                    ->update([
+                        'modo_conexion' => $data['scale']['connection_mode'],
+                        'dispositivo' => $data['scale']['device'],
+                        'configuracion' => json_encode($data['scale']['configuration'], JSON_THROW_ON_ERROR),
+                        'estado' => Balanza::STATUS_ACTIVE,
+                        'updated_at' => now(),
+                    ]);
+            }
         }, 3);
 
         return $this->configuration($companyId, $branchId, $station);

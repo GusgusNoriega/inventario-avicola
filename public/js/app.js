@@ -3,6 +3,11 @@
 import { apiRequest } from "./api-client.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
 
+const LEGACY_STORAGE_KEY = STORAGE_KEY;
+const STORAGE_KEY_PREFIX = "sistema-pollos-state-v2";
+const STORAGE_MIGRATION_KEY = "sistema-pollos-state-v2-migrated-branch";
+let activeStorageKey = LEGACY_STORAGE_KEY;
+
 const CUSTOMER_DISPLAY_CHANNEL_NAME = "sistema-pollos-pantalla-cliente-v1";
 const CUSTOMER_DISPLAY_STORAGE_KEY = "sistema-pollos-pantalla-cliente-estado-v1";
 const CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY = "sistema-pollos-pantalla-cliente-productor-v1";
@@ -162,6 +167,15 @@ const SCALE_IDS = [1, 2];
 const MAX_SCALE_RAW_LENGTH = 160;
 const SCALE_PERSIST_INTERVAL_MS = 1000;
 const SCALE_AUTO_RECONNECT_DELAY_MS = 1200;
+const SCALE_AUTO_RECONNECT_MAX_DELAY_MS = 30000;
+const SCALE_MAX_SERIAL_BUFFER_LENGTH = 2048;
+const SCALE_READING_MAX_AGE_MS = 15000;
+const SCALE_CAPTURE_MAX_AGE_MS = 60000;
+const SCALE_STABILITY_TOLERANCE_KG = 0.02;
+const SCALE_STABLE_READING_COUNT = 2;
+const SCALE_STABILITY_WINDOW_MS = 1500;
+const SCALE_ZERO_CONFIRMATION_COUNT = 3;
+const SCALE_ZERO_CONFIRMATION_MS = 300;
 const KG_PER_LB = 0.45359237;
 const SCALE_SERIAL_DEFAULTS = {
   baudRate: 9600,
@@ -170,6 +184,10 @@ const SCALE_SERIAL_DEFAULTS = {
   parity: "none",
   flowControl: "none"
 };
+const SCALE_SERIAL_DATA_BITS = new Set([7, 8]);
+const SCALE_SERIAL_STOP_BITS = new Set([1, 2]);
+const SCALE_SERIAL_PARITIES = new Set(["none", "even", "odd"]);
+const SCALE_SERIAL_FLOW_CONTROLS = new Set(["none", "hardware"]);
 const SCALE_BLE_PROFILES = [
   {
     id: "sig-weight-scale",
@@ -404,6 +422,30 @@ const elements = {
   scaleRawDisplays: {
     1: document.getElementById("scale-raw-1"),
     2: document.getElementById("scale-raw-2")
+  },
+  scaleSerialBaudInputs: {
+    1: document.getElementById("serial-baud-scale-1"),
+    2: document.getElementById("serial-baud-scale-2")
+  },
+  scaleSerialDataBitsSelects: {
+    1: document.getElementById("serial-data-bits-scale-1"),
+    2: document.getElementById("serial-data-bits-scale-2")
+  },
+  scaleSerialStopBitsSelects: {
+    1: document.getElementById("serial-stop-bits-scale-1"),
+    2: document.getElementById("serial-stop-bits-scale-2")
+  },
+  scaleSerialParitySelects: {
+    1: document.getElementById("serial-parity-scale-1"),
+    2: document.getElementById("serial-parity-scale-2")
+  },
+  scaleSerialFlowControlSelects: {
+    1: document.getElementById("serial-flow-scale-1"),
+    2: document.getElementById("serial-flow-scale-2")
+  },
+  scaleSerialSaveButtons: {
+    1: document.getElementById("save-serial-scale-1"),
+    2: document.getElementById("save-serial-scale-2")
   }
 };
 
@@ -416,11 +458,16 @@ let editSelectedOrigin = null;
 let editingChickenSex = DEFAULT_CHICKEN_SEX;
 let scaleTextDecoder = new TextDecoder("utf-8");
 let scaleConnections = { 1: null, 2: null };
+let scaleConnectionGenerations = { 1: 0, 2: 0 };
+let scaleReadingSequences = { 1: 0, 2: 0 };
+let lastRegisteredScaleReadingIds = { 1: null, 2: null };
 let scaleRenderFrames = { 1: null, 2: null };
 let scaleLastPersistedAt = { 1: 0, 2: 0 };
-let capturedScaleWeights = { 1: null, 2: null };
+let scalePersistTimers = { 1: null, 2: null };
+let capturedScaleReadings = { 1: null, 2: null };
 let scaleRestorePromise = null;
 let scaleRestoreTimer = null;
+let scaleRestoreAttempt = 0;
 const pendingTicketRegistrations = new Set();
 let keypadContext = {
   targetInput: null,
@@ -586,16 +633,46 @@ function ensureTruckSlots(trucks, count = MAX_TRUCKS) {
   return normalizedTrucks;
 }
 
+function normalizeScaleSerialOptions(options = {}, fallback = SCALE_SERIAL_DEFAULTS) {
+  const source = options && typeof options === "object" ? options : {};
+  const base = fallback && typeof fallback === "object" ? fallback : SCALE_SERIAL_DEFAULTS;
+  const baudRate = Number(source.baudRate ?? base.baudRate);
+  const dataBits = Number(source.dataBits ?? base.dataBits);
+  const stopBits = Number(source.stopBits ?? base.stopBits);
+  const parity = String(source.parity ?? base.parity).toLowerCase();
+  const flowControl = String(source.flowControl ?? base.flowControl).toLowerCase();
+
+  return {
+    baudRate: Number.isInteger(baudRate) && baudRate >= 300 && baudRate <= 921600
+      ? baudRate
+      : SCALE_SERIAL_DEFAULTS.baudRate,
+    dataBits: SCALE_SERIAL_DATA_BITS.has(dataBits) ? dataBits : SCALE_SERIAL_DEFAULTS.dataBits,
+    stopBits: SCALE_SERIAL_STOP_BITS.has(stopBits) ? stopBits : SCALE_SERIAL_DEFAULTS.stopBits,
+    parity: SCALE_SERIAL_PARITIES.has(parity) ? parity : SCALE_SERIAL_DEFAULTS.parity,
+    flowControl: SCALE_SERIAL_FLOW_CONTROLS.has(flowControl) ? flowControl : SCALE_SERIAL_DEFAULTS.flowControl
+  };
+}
+
 function createDefaultScaleState(id) {
   return {
     id,
-    currentWeight: 0,
+    currentWeight: null,
     lastRaw: "",
+    lastRawAt: null,
     updatedAt: null,
+    readingValid: false,
+    readingStable: false,
+    readingStatus: "unknown",
+    readingRaw: "",
+    readingMode: null,
+    readingDeviceName: "",
+    readingGeneration: 0,
+    readingId: null,
     connectionMode: null,
     deviceName: "",
     autoConnectMode: null,
     serialPortInfo: null,
+    serialOptions: { ...SCALE_SERIAL_DEFAULTS },
     bleDeviceId: ""
   };
 }
@@ -630,22 +707,40 @@ function normalizeSerialPortInfo(info) {
     : null;
 }
 
-function normalizeScaleState(scale, id) {
+function normalizeScaleState(scale, id, options = {}) {
   const fallback = createDefaultScaleState(id);
-  const currentWeight = roundWeight(Number(scale?.currentWeight));
+  const rawCurrentWeight = scale?.currentWeight;
+  const currentWeight = rawCurrentWeight === null || rawCurrentWeight === undefined || rawCurrentWeight === ""
+    ? null
+    : roundWeight(Number(rawCurrentWeight));
   const autoConnectMode = ["ble", "serial"].includes(scale?.autoConnectMode)
     ? scale.autoConnectMode
     : null;
+  const invalidateReading = Boolean(options.invalidateReading);
+  const hasCurrentWeight = Number.isFinite(currentWeight) && currentWeight >= 0;
+  const readingValid = !invalidateReading && hasCurrentWeight && Boolean(scale?.readingValid);
 
   return {
     ...fallback,
-    currentWeight: Number.isFinite(currentWeight) ? currentWeight : 0,
+    currentWeight: hasCurrentWeight ? currentWeight : null,
     lastRaw: String(scale?.lastRaw || "").slice(-MAX_SCALE_RAW_LENGTH),
+    lastRawAt: scale?.lastRawAt || null,
     updatedAt: scale?.updatedAt || null,
+    readingValid,
+    readingStable: readingValid && Boolean(scale?.readingStable),
+    readingStatus: invalidateReading && hasCurrentWeight
+      ? "stale"
+      : String(scale?.readingStatus || (readingValid ? "stable" : "unknown")),
+    readingRaw: String(scale?.readingRaw || "").slice(-MAX_SCALE_RAW_LENGTH),
+    readingMode: scale?.readingMode || null,
+    readingDeviceName: String(scale?.readingDeviceName || ""),
+    readingGeneration: Math.max(0, Math.trunc(Number(scale?.readingGeneration) || 0)),
+    readingId: readingValid ? (String(scale?.readingId || "") || null) : null,
     connectionMode: scale?.connectionMode || null,
     deviceName: scale?.deviceName || "",
     autoConnectMode,
     serialPortInfo: normalizeSerialPortInfo(scale?.serialPortInfo),
+    serialOptions: normalizeScaleSerialOptions(scale?.serialOptions),
     bleDeviceId: String(scale?.bleDeviceId || "")
   };
 }
@@ -1235,6 +1330,39 @@ function normalizeWeightSource(source) {
   return numeric === "2" ? "2" : "1";
 }
 
+function normalizeScaleReadingSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return null;
+  }
+
+  const weightKg = roundWeight(Number(snapshot.weightKg ?? snapshot.weight_kg));
+  const scaleId = Number(snapshot.scaleId ?? snapshot.scale_id);
+  const capturedAt = String(snapshot.capturedAt ?? snapshot.captured_at ?? "").trim();
+  if (
+    !Number.isFinite(weightKg)
+    || weightKg <= 0
+    || !SCALE_IDS.includes(scaleId)
+    || !Number.isFinite(Date.parse(capturedAt))
+  ) {
+    return null;
+  }
+  const rawReadingAt = String(snapshot.readingAt ?? snapshot.reading_at ?? capturedAt).trim();
+  const readingAt = Number.isFinite(Date.parse(rawReadingAt)) ? rawReadingAt : capturedAt;
+
+  return {
+    scaleId,
+    scaleCode: String(snapshot.scaleCode ?? snapshot.scale_code ?? `BALANZA_${scaleId}`),
+    readingId: String(snapshot.readingId ?? snapshot.reading_id ?? "").trim() || null,
+    weightKg,
+    rawFrame: String(snapshot.rawFrame ?? snapshot.raw_frame ?? "").slice(-MAX_SCALE_RAW_LENGTH),
+    connectionMode: String(snapshot.connectionMode ?? snapshot.connection_mode ?? "").toLowerCase() || null,
+    deviceName: String(snapshot.deviceName ?? snapshot.device_name ?? "").slice(0, 180),
+    readingAt,
+    capturedAt,
+    generation: Math.max(0, Math.trunc(Number(snapshot.generation) || 0))
+  };
+}
+
 function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS.DISPATCH) {
   const ticketOperation = normalizeTicketOperation(
     cage?.operationType || cage?.tipoOperacion || cage?.tipo_operacion || operationType
@@ -1396,6 +1524,9 @@ function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS
     lecturaBalanzaComoNeto: Boolean(cage?.lecturaBalanzaComoNeto),
     origenPeso: source,
     balanza: source === "manual" ? null : Number(source),
+    scaleReading: source === "manual"
+      ? null
+      : normalizeScaleReadingSnapshot(cage?.scaleReading || cage?.scale_reading),
     ...originRecord,
     placaCamion: truckPlate,
     proveedorVehiculoId: cage?.proveedorVehiculoId || cage?.proveedor_vehiculo_id || null,
@@ -2289,11 +2420,11 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
   };
 }
 
-function loadState() {
+function loadState(storageKey = activeStorageKey) {
   const fallback = createDefaultState();
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) {
       return fallback;
     }
@@ -2385,13 +2516,65 @@ function loadState() {
       selectedReturnCondition: normalizeReturnCondition(parsed.selectedReturnCondition),
       entryDefaults,
       scales: {
-        1: normalizeScaleState(parsed?.scales?.[1], 1),
-        2: normalizeScaleState(parsed?.scales?.[2], 2)
+        1: normalizeScaleState(parsed?.scales?.[1], 1, { invalidateReading: true }),
+        2: normalizeScaleState(parsed?.scales?.[2], 2, { invalidateReading: true })
       },
       trucks
     };
   } catch {
     return fallback;
+  }
+}
+
+function branchStorageKey(branch, company = null) {
+  const branchId = String(branch?.id || branch?.code || "default")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+  const companyId = String(
+    company?.id
+      || branch?.company_id
+      || branch?.companyId
+      || "default"
+  )
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+  return `${STORAGE_KEY_PREFIX}-company-${companyId || "default"}-branch-${branchId || "default"}`;
+}
+
+function activateBranchStorage(catalog) {
+  const branch = catalog?.branch || catalog;
+  const nextStorageKey = branchStorageKey(branch, catalog?.company);
+  if (nextStorageKey === activeStorageKey) {
+    return false;
+  }
+
+  try {
+    const scopedStateExists = Boolean(localStorage.getItem(nextStorageKey));
+    let nextState;
+
+    if (scopedStateExists) {
+      nextState = loadState(nextStorageKey);
+    } else {
+      const migratedBranch = localStorage.getItem(STORAGE_MIGRATION_KEY);
+      const canMigrateLegacyState = activeStorageKey === LEGACY_STORAGE_KEY && !migratedBranch;
+      nextState = canMigrateLegacyState ? state : createDefaultState();
+      if (canMigrateLegacyState) {
+        localStorage.setItem(STORAGE_MIGRATION_KEY, nextStorageKey);
+      }
+    }
+
+    activeStorageKey = nextStorageKey;
+    state = nextState;
+    capturedScaleReadings = { 1: null, 2: null };
+    scaleReadingSequences = { 1: 0, 2: 0 };
+    lastRegisteredScaleReadingIds = { 1: null, 2: null };
+    reconcileTruckClientAssignments(false);
+    ensureDefaultOriginSelection(false);
+    saveState();
+    return true;
+  } catch (error) {
+    console.warn("No se pudo aislar el estado mayorista por sucursal.", error);
+    return false;
   }
 }
 
@@ -2684,17 +2867,67 @@ function openScaleSettings(scaleId) {
   closeTouchSelect();
   closeAllScaleSettings();
   renderScaleConnectionPanels();
+  renderScaleSerialOptions(scaleId);
   setScaleSettingsOpen(scaleId, true);
 }
 
+function renderScaleSerialOptions(scaleId) {
+  const options = getScaleState(scaleId).serialOptions;
+  if (elements.scaleSerialBaudInputs[scaleId]) {
+    elements.scaleSerialBaudInputs[scaleId].value = String(options.baudRate);
+  }
+  if (elements.scaleSerialDataBitsSelects[scaleId]) {
+    elements.scaleSerialDataBitsSelects[scaleId].value = String(options.dataBits);
+  }
+  if (elements.scaleSerialStopBitsSelects[scaleId]) {
+    elements.scaleSerialStopBitsSelects[scaleId].value = String(options.stopBits);
+  }
+  if (elements.scaleSerialParitySelects[scaleId]) {
+    elements.scaleSerialParitySelects[scaleId].value = options.parity;
+  }
+  if (elements.scaleSerialFlowControlSelects[scaleId]) {
+    elements.scaleSerialFlowControlSelects[scaleId].value = options.flowControl;
+  }
+}
+
+function saveScaleSerialOptions(scaleId) {
+  const baudRate = Number(elements.scaleSerialBaudInputs[scaleId]?.value);
+  if (!Number.isInteger(baudRate) || baudRate < 300 || baudRate > 921600) {
+    setFormMessage(`Los baudios de la Balanza ${scaleId} deben estar entre 300 y 921600.`, true);
+    return;
+  }
+
+  const scale = getScaleState(scaleId);
+  scale.serialOptions = normalizeScaleSerialOptions({
+    baudRate,
+    dataBits: elements.scaleSerialDataBitsSelects[scaleId]?.value,
+    stopBits: elements.scaleSerialStopBitsSelects[scaleId]?.value,
+    parity: elements.scaleSerialParitySelects[scaleId]?.value,
+    flowControl: elements.scaleSerialFlowControlSelects[scaleId]?.value
+  });
+  saveState();
+  renderScaleSerialOptions(scaleId);
+
+  const reconnectNotice = isScaleConnectionActive(scaleConnections[scaleId])
+    ? " Desconecta y vuelve a conectar para aplicarlos."
+    : "";
+  setFormMessage(`Parámetros seriales de Balanza ${scaleId} guardados.${reconnectNotice}`);
+}
+
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(activeStorageKey, JSON.stringify(state));
+    return true;
+  } catch (error) {
+    console.warn("No se pudo guardar el estado local mayorista.", error);
+    return false;
+  }
 }
 
 function getCurrentGrossWeight() {
   const source = elements.weightSource.value;
-  const weight = Number(getWeightFromSource(source));
-  return Number.isFinite(weight) && weight >= 0 ? roundWeight(weight) : 0;
+  const weight = getWeightFromSource(source);
+  return Number.isFinite(weight) && weight >= 0 ? roundWeight(weight) : null;
 }
 
 function buildCustomerDisplayState() {
@@ -2883,6 +3116,7 @@ async function loadDirectoryRecords(type) {
 }
 
 function applyOperationCatalog(catalog) {
+  activateBranchStorage(catalog);
   operationCatalog = catalog || null;
   const warehouses = Array.isArray(catalog?.warehouses) ? catalog.warehouses : [];
 
@@ -3019,6 +3253,19 @@ function getSerialPortInfo(port) {
   }
 }
 
+function getSerialPortDeviceName(port) {
+  const info = getSerialPortInfo(port);
+  if (info?.bluetoothServiceClassId) {
+    return `Serial Bluetooth ${info.bluetoothServiceClassId}`.slice(0, 180);
+  }
+  if (Number.isInteger(info?.usbVendorId) && Number.isInteger(info?.usbProductId)) {
+    const vendor = info.usbVendorId.toString(16).toUpperCase().padStart(4, "0");
+    const product = info.usbProductId.toString(16).toUpperCase().padStart(4, "0");
+    return `Puerto serial USB VID ${vendor} PID ${product}`;
+  }
+  return "Puerto serial autorizado";
+}
+
 function serialPortIdentifiersMatch(portInfo, savedInfo) {
   const current = normalizeSerialPortInfo(portInfo);
   const saved = normalizeSerialPortInfo(savedInfo);
@@ -3032,14 +3279,17 @@ function serialPortIdentifiersMatch(portInfo, savedInfo) {
     && comparableIdentifiers.every((key) => current[key] === saved[key]);
 }
 
-async function rememberSerialScalePort(scaleId, port) {
-  const scale = getScaleState(scaleId);
+async function rememberSerialScalePort(scaleId, port, expectedConnection = null) {
   let authorizedPorts = [];
 
   try {
     authorizedPorts = await navigator.serial.getPorts();
   } catch {
     authorizedPorts = [];
+  }
+
+  if (expectedConnection && !isCurrentScaleConnection(scaleId, expectedConnection)) {
+    return false;
   }
 
   const portInfo = getSerialPortInfo(port) || {
@@ -3056,6 +3306,7 @@ async function rememberSerialScalePort(scaleId, port) {
   const matchIndex = Math.max(matchingPorts.findIndex((candidate) => candidate === port), 0);
   const portIndex = Math.max(authorizedPorts.findIndex((candidate) => candidate === port), 0);
 
+  const scale = getScaleState(scaleId);
   scale.autoConnectMode = "serial";
   scale.connectionMode = "serial";
   scale.serialPortInfo = {
@@ -3064,8 +3315,9 @@ async function rememberSerialScalePort(scaleId, port) {
     portIndex
   };
   scale.bleDeviceId = "";
-  scale.deviceName = "Puerto serial Bluetooth";
+  scale.deviceName = getSerialPortDeviceName(port);
   saveState();
+  return true;
 }
 
 function rememberBleScaleDevice(scaleId, device) {
@@ -3200,7 +3452,9 @@ function scheduleScaleRender(scaleId) {
     scaleRenderFrames[scaleId] = null;
     renderScaleDisplays();
     renderWeightPreview();
-    renderJson();
+    if (!elements.jsonModal?.hidden) {
+      renderJson();
+    }
     renderScaleConnectionPanels();
   });
 }
@@ -3208,9 +3462,20 @@ function scheduleScaleRender(scaleId) {
 function persistScaleReading(scaleId, force = false) {
   const now = Date.now();
   if (!force && now - scaleLastPersistedAt[scaleId] < SCALE_PERSIST_INTERVAL_MS) {
+    if (!scalePersistTimers[scaleId]) {
+      const delay = SCALE_PERSIST_INTERVAL_MS - (now - scaleLastPersistedAt[scaleId]);
+      scalePersistTimers[scaleId] = window.setTimeout(() => {
+        scalePersistTimers[scaleId] = null;
+        persistScaleReading(scaleId, true);
+      }, Math.max(delay, 0));
+    }
     return;
   }
 
+  if (scalePersistTimers[scaleId]) {
+    window.clearTimeout(scalePersistTimers[scaleId]);
+    scalePersistTimers[scaleId] = null;
+  }
   scaleLastPersistedAt[scaleId] = now;
   saveState();
 }
@@ -3287,14 +3552,65 @@ function convertWeightToKg(value, unit) {
   return value;
 }
 
-function parseIndustrialScaleText(rawText) {
+function getIndustrialScaleCandidateRole(text, start, end) {
+  const contextStart = Math.max(0, start - 28);
+  const contextEnd = Math.min(text.length, end + 20);
+  const context = text.slice(contextStart, contextEnd).toUpperCase();
+  const roles = [
+    { role: "net", pattern: /\b(?:NET|NETO|NT|NW)\b/g },
+    { role: "gross", pattern: /\b(?:GROSS|BRUTO|GS|GW)\b/g },
+    { role: "tare", pattern: /\b(?:TARE|TARA|TAR|TR|T|PT|TW)\b/g },
+    { role: "weight", pattern: /\b(?:WEIGHT|PESO)\b/g }
+  ];
+  const labels = [];
+  const firstNumberIndex = text.search(/\d/);
+  const firstLabelIndex = text.search(/\b(?:NET|NETO|NT|NW|GROSS|BRUTO|GS|GW|TARE|TARA|TAR|TR|T|PT|TW|WEIGHT|PESO)\b/i);
+  const labelsFollowValues = firstNumberIndex >= 0
+    && firstLabelIndex >= 0
+    && firstNumberIndex < firstLabelIndex;
+
+  roles.forEach(({ role, pattern }) => {
+    let label = pattern.exec(context);
+    while (label) {
+      const labelStart = contextStart + label.index;
+      const labelEnd = labelStart + label[0].length;
+      if ((labelsFollowValues && labelStart < end) || (!labelsFollowValues && labelEnd > start)) {
+        label = pattern.exec(context);
+        continue;
+      }
+      const distance = labelEnd <= start
+        ? start - labelEnd
+        : (labelStart >= end ? labelStart - end : 0);
+      labels.push({ role, distance });
+      label = pattern.exec(context);
+    }
+  });
+
+  return labels.sort((left, right) => left.distance - right.distance)[0]?.role || "unlabeled";
+}
+
+export function parseIndustrialScaleText(rawText) {
   const text = String(rawText ?? "").replace(/\0/g, " ").trim();
   if (!text) {
     return null;
   }
 
+  const normalizedText = text.toUpperCase();
+  if (
+    /\b(?:ERR(?:OR)?|FAULT|FALLO|OVER(?:LOAD)?|UNDER(?:LOAD)?|OL)\b/.test(normalizedText)
+    || /^\s*S\s+(?:I|\+|-)(?:\s|,|$)/.test(normalizedText)
+  ) {
+    return { weightKg: null, rawValue: null, status: "error", stable: false };
+  }
+  if (
+    /\b(?:US|UNSTABLE|MOTION|MOVING|INESTABLE|DYNAMIC|DINAMICO)\b/.test(normalizedText)
+    || /\bS\s*(?:D|U)\b/.test(normalizedText)
+  ) {
+    return { weightKg: null, rawValue: null, status: "unstable", stable: false };
+  }
+
   const matches = [];
-  const weightPattern = /([+-]?\s*\d+(?:[.,]\d+)?)\s*(kg|kgs|kilogramo|kilogramos|lb|lbs|libra|libras|g|gr|gramo|gramos)?/gi;
+  const weightPattern = /([+-]?\s*\d+(?:[.,]\d+)?)(?:\s*(kilogramos|kilogramo|gramos|gramo|libras|libra|kgs|lbs|kg|lb|gr|g)\b)?/gi;
   let match = weightPattern.exec(text);
 
   while (match) {
@@ -3302,17 +3618,33 @@ function parseIndustrialScaleText(rawText) {
     const value = Number(numericText);
 
     if (Number.isFinite(value)) {
+      const candidateRole = getIndustrialScaleCandidateRole(
+        text,
+        match.index,
+        match.index + match[0].length
+      );
+      const isTareCandidate = candidateRole === "tare";
       const unit = parseWeightUnit(match[2]);
       const hasUnit = Boolean(match[2]);
       const hasDecimal = /[.,]/.test(match[1]);
       const hasSign = /^[+-]/.test(match[1].trim());
       const weightKg = convertWeightToKg(value, unit);
-      const score = (hasUnit ? 10 : 0) + (hasDecimal ? 4 : 0) + (hasSign ? 2 : 0) + match.index / 100000;
+      const roleScore = candidateRole === "gross"
+        ? 16
+        : (["net", "weight"].includes(candidateRole) ? 12 : 0);
+      const score = (hasUnit ? 20 : 0)
+        + (hasDecimal ? 8 : 0)
+        + (hasSign ? 4 : 0)
+        + roleScore
+        - (isTareCandidate ? 100 : 0)
+        + match.index / 100000;
 
       matches.push({
         weightKg,
         score,
-        rawValue: match[0].trim()
+        rawValue: match[0].trim(),
+        isTareCandidate,
+        role: candidateRole
       });
     }
 
@@ -3323,14 +3655,26 @@ function parseIndustrialScaleText(rawText) {
     return null;
   }
 
-  const bestMatch = matches.sort((a, b) => b.score - a.score)[0];
+  const commercialMatches = matches.filter((candidate) => !candidate.isTareCandidate);
+  if (!commercialMatches.length) {
+    return { weightKg: null, rawValue: null, status: "tare-only", stable: false };
+  }
+
+  const bestMatch = commercialMatches.sort((a, b) => b.score - a.score)[0];
+  if (bestMatch.weightKg < 0) {
+    return { weightKg: null, rawValue: null, status: "negative", stable: false };
+  }
+
   return {
     weightKg: roundWeight(bestMatch.weightKg),
-    rawValue: bestMatch.rawValue
+    rawValue: bestMatch.rawValue,
+    status: "weight",
+    stable: /\b(?:ST|STABLE|ESTABLE)\b/.test(normalizedText)
+      || /\bS\s*S\b/.test(normalizedText)
   };
 }
 
-function parseSigWeightMeasurement(value) {
+export function parseSigWeightMeasurement(value) {
   const bytes = dataViewToBytes(value);
   if (bytes.length < 3) {
     return null;
@@ -3339,6 +3683,9 @@ function parseSigWeightMeasurement(value) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const flags = view.getUint8(0);
   const rawWeight = view.getUint16(1, true);
+  if (rawWeight === 0xffff) {
+    return null;
+  }
   const usesImperialUnits = Boolean(flags & 0x01);
   const weightKg = usesImperialUnits
     ? rawWeight * 0.01 * KG_PER_LB
@@ -3346,63 +3693,314 @@ function parseSigWeightMeasurement(value) {
 
   return {
     weightKg: roundWeight(weightKg),
-    rawValue: `BLE Weight Measurement ${rawWeight}`
+    rawValue: `BLE Weight Measurement ${rawWeight}`,
+    status: "weight",
+    stable: true
   };
 }
 
-function parseScalePayload(payload, parser = "text") {
+export function parseScalePayload(payload, parser = "text") {
   if (typeof payload === "string") {
     const textReading = parseIndustrialScaleText(payload);
     return {
       rawText: payload,
-      weightKg: textReading?.weightKg,
-      rawValue: textReading?.rawValue
+      weightKg: textReading?.weightKg ?? null,
+      rawValue: textReading?.rawValue ?? null,
+      status: textReading?.status || "no-weight",
+      stable: Boolean(textReading?.stable)
     };
   }
 
   const bytes = dataViewToBytes(payload);
   const decodedText = decodeScaleBytes(bytes);
+
+  if (parser === "sig-weight") {
+    const binaryReading = parseSigWeightMeasurement(bytes);
+    if (binaryReading) {
+      return {
+        rawText: bytesToHex(bytes),
+        weightKg: binaryReading.weightKg,
+        rawValue: binaryReading.rawValue,
+        status: binaryReading.status,
+        stable: binaryReading.stable
+      };
+    }
+    return {
+      rawText: bytesToHex(bytes),
+      weightKg: null,
+      rawValue: null,
+      status: "no-weight",
+      stable: false
+    };
+  }
+
   const decodedReading = parseIndustrialScaleText(decodedText);
 
   if (decodedReading) {
     return {
       rawText: decodedText,
       weightKg: decodedReading.weightKg,
-      rawValue: decodedReading.rawValue
+      rawValue: decodedReading.rawValue,
+      status: decodedReading.status,
+      stable: decodedReading.stable
     };
-  }
-
-  if (parser === "sig-weight") {
-    const binaryReading = parseSigWeightMeasurement(bytes);
-    if (binaryReading) {
-      return {
-        rawText: decodedText || bytesToHex(bytes),
-        weightKg: binaryReading.weightKg,
-        rawValue: binaryReading.rawValue
-      };
-    }
   }
 
   return {
     rawText: decodedText || bytesToHex(bytes),
     weightKg: null,
-    rawValue: null
+    rawValue: null,
+    status: "no-weight",
+    stable: false
   };
 }
 
+export function splitScaleTextFrames(buffer, chunkText) {
+  const combined = `${buffer || ""}${chunkText || ""}`;
+  let safeText = combined;
+  let overflowed = false;
+
+  if (combined.length > SCALE_MAX_SERIAL_BUFFER_LENGTH) {
+    overflowed = true;
+    const delimiter = combined.match(/\r\n|\r|\n/);
+    if (!delimiter) {
+      return {
+        completeFrames: [],
+        pendingFrame: "",
+        overflowed: true,
+        discardUntilDelimiter: true
+      };
+    }
+    safeText = combined.slice(delimiter.index + delimiter[0].length);
+  }
+
+  const frames = safeText.split(/\r\n|\r|\n/);
+  const pendingFrame = frames.at(-1) || "";
+  return {
+    completeFrames: frames
+      .slice(0, -1)
+      .filter((frame) => frame.trim() && frame.length <= SCALE_MAX_SERIAL_BUFFER_LENGTH),
+    pendingFrame: pendingFrame.length <= SCALE_MAX_SERIAL_BUFFER_LENGTH ? pendingFrame : "",
+    overflowed,
+    discardUntilDelimiter: pendingFrame.length > SCALE_MAX_SERIAL_BUFFER_LENGTH
+  };
+}
+
+function isCurrentScaleConnection(scaleId, connection) {
+  return Boolean(
+    connection
+    && scaleConnections[scaleId] === connection
+    && connection.generation === scaleConnectionGenerations[scaleId]
+    && !connection.abort
+  );
+}
+
+function nextScaleConnectionGeneration(scaleId) {
+  scaleConnectionGenerations[scaleId] = (scaleConnectionGenerations[scaleId] || 0) + 1;
+  return scaleConnectionGenerations[scaleId];
+}
+
+export function canReuseScaleReadingId(previousReading, nextReading, forceNewReading = false) {
+  const previousWeight = Number(previousReading?.weightKg);
+  const nextWeight = Number(nextReading?.weightKg);
+  return !forceNewReading
+    && previousReading?.valid === true
+    && Boolean(previousReading?.readingId)
+    && previousReading?.mode === nextReading?.mode
+    && previousReading?.generation === nextReading?.generation
+    && Number.isFinite(previousWeight)
+    && Number.isFinite(nextWeight)
+    && Math.abs(previousWeight - nextWeight) <= SCALE_STABILITY_TOLERANCE_KG;
+}
+
+export function shouldStartNewScaleReadingIdentity(previousReading, nextReading) {
+  if (!previousReading?.readingId || previousReading?.valid !== true) {
+    return false;
+  }
+
+  return nextReading?.status === "unstable";
+}
+
+export function canReleaseConsumedScaleReadingId(
+  consumedReadingId,
+  removedScaleReading,
+  remainingScaleReadings = []
+) {
+  const removedReadingId = String(removedScaleReading?.readingId || "");
+  if (!removedReadingId || String(consumedReadingId || "") !== removedReadingId) {
+    return false;
+  }
+
+  return !remainingScaleReadings.some(
+    (reading) => String(reading?.readingId || "") === removedReadingId
+  );
+}
+
+function nextScaleReadingId(scaleId, connection) {
+  scaleReadingSequences[scaleId] = (scaleReadingSequences[scaleId] || 0) + 1;
+  return `${connection?.mode || "scale"}-${scaleId}-${connection?.generation || 0}-${Date.now()}-${scaleReadingSequences[scaleId]}`;
+}
+
+function invalidateScaleReading(scaleId, status = "unknown", options = {}) {
+  const scale = getScaleState(scaleId);
+  scale.currentWeight = null;
+  scale.readingValid = false;
+  scale.readingStable = false;
+  scale.readingStatus = status;
+  scale.readingId = null;
+  if (options.clearTimestamp) {
+    scale.updatedAt = null;
+  }
+  clearCapturedScaleReading(scaleId);
+  persistScaleReading(scaleId, Boolean(options.persistImmediately));
+  scheduleScaleRender(scaleId);
+}
+
+function markScaleReadingPending(scaleId, status) {
+  const scale = getScaleState(scaleId);
+  scale.readingStatus = status;
+  persistScaleReading(scaleId);
+  scheduleScaleRender(scaleId);
+}
+
+function scheduleScaleReadingExpiry(scaleId, connection, readingTimestamp) {
+  if (!connection) {
+    return;
+  }
+  if (connection.freshnessTimer) {
+    window.clearTimeout(connection.freshnessTimer);
+  }
+  connection.freshnessTimer = window.setTimeout(() => {
+    const scale = getScaleState(scaleId);
+    if (!isCurrentScaleConnection(scaleId, connection) || scale.updatedAt !== readingTimestamp) {
+      return;
+    }
+    invalidateScaleReading(scaleId, "stale", { persistImmediately: true });
+    connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - lectura vencida`;
+    renderScaleConnectionPanels();
+  }, SCALE_READING_MAX_AGE_MS + 50);
+}
+
+function acceptScaleReading(scaleId, connection, reading, rawText, options) {
+  const scale = getScaleState(scaleId);
+  const readingMode = options.mode || connection?.mode || scale.connectionMode;
+  const readingGeneration = connection?.generation || 0;
+  const reuseReadingId = canReuseScaleReadingId(
+    {
+      readingId: scale.readingId,
+      valid: scale.readingValid,
+      weightKg: scale.currentWeight,
+      mode: scale.readingMode,
+      generation: scale.readingGeneration
+    },
+    {
+      weightKg: reading.weightKg,
+      mode: readingMode,
+      generation: readingGeneration
+    },
+    Boolean(connection?.forceNewReading)
+  );
+  const timestamp = new Date().toISOString();
+  scale.currentWeight = roundWeight(reading.weightKg);
+  scale.updatedAt = timestamp;
+  scale.readingValid = true;
+  scale.readingStable = true;
+  scale.readingStatus = "stable";
+  scale.readingRaw = rawText;
+  scale.readingMode = readingMode;
+  scale.readingDeviceName = options.deviceName || connection?.deviceName || scale.deviceName;
+  scale.readingGeneration = readingGeneration;
+  scale.readingId = reuseReadingId ? scale.readingId : nextScaleReadingId(scaleId, connection);
+  scale.connectionMode = scale.readingMode;
+  scale.deviceName = scale.readingDeviceName;
+  if (connection) {
+    connection.forceNewReading = false;
+  }
+  scheduleScaleReadingExpiry(scaleId, connection, timestamp);
+}
+
+export function evaluateScaleStability(previousTracker, reading, now = Date.now()) {
+  const tracker = previousTracker || {
+    candidateWeight: null,
+    count: 0,
+    firstSeenAt: 0,
+    lastSeenAt: 0
+  };
+  const sameCandidate = Number.isFinite(tracker.candidateWeight)
+    && Math.abs(tracker.candidateWeight - reading.weightKg) <= SCALE_STABILITY_TOLERANCE_KG
+    && now - tracker.lastSeenAt <= SCALE_STABILITY_WINDOW_MS;
+
+  const nextTracker = sameCandidate
+    ? { ...tracker, count: tracker.count + 1, lastSeenAt: now }
+    : {
+        candidateWeight: reading.weightKg,
+        count: 1,
+        firstSeenAt: now,
+        lastSeenAt: now
+      };
+
+  const zeroCandidate = reading.weightKg === 0;
+  const requiredCount = zeroCandidate
+    ? SCALE_ZERO_CONFIRMATION_COUNT
+    : (reading.stable ? 1 : SCALE_STABLE_READING_COUNT);
+  const waitedLongEnough = !zeroCandidate || now - nextTracker.firstSeenAt >= SCALE_ZERO_CONFIRMATION_MS;
+  const accepted = nextTracker.count >= requiredCount && waitedLongEnough;
+
+  return {
+    tracker: nextTracker,
+    accepted,
+    status: accepted ? "stable" : (zeroCandidate ? "confirming-zero" : "stabilizing")
+  };
+}
+
+function applyScaleStabilityFilter(scaleId, connection, reading, rawText, options) {
+  const result = evaluateScaleStability(connection.stability, reading);
+  connection.stability = result.tracker;
+
+  if (!result.accepted) {
+    markScaleReadingPending(scaleId, result.status);
+    return false;
+  }
+
+  acceptScaleReading(scaleId, connection, reading, rawText, options);
+  return true;
+}
+
 function handleScalePayload(scaleId, payload, options = {}) {
+  const connection = options.connection || scaleConnections[scaleId];
+  if (options.connection && !isCurrentScaleConnection(scaleId, options.connection)) {
+    return false;
+  }
   const reading = parseScalePayload(payload, options.parser || "text");
   const scale = getScaleState(scaleId);
-  const connection = scaleConnections[scaleId];
   const rawText = sanitizeScaleRawText(reading.rawText);
+
+  if (connection && shouldStartNewScaleReadingIdentity(
+    {
+      readingId: scale.readingId,
+      valid: scale.readingValid,
+      weightKg: scale.currentWeight
+    },
+    reading
+  )) {
+    connection.forceNewReading = true;
+  }
 
   if (rawText) {
     scale.lastRaw = rawText;
+    scale.lastRawAt = new Date().toISOString();
   }
 
   if (!Number.isFinite(reading.weightKg)) {
+    if (connection) {
+      connection.stability = null;
+    }
+    markScaleReadingPending(scaleId, reading.status || "no-weight");
     if (connection?.status === "connected") {
-      connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - datos sin peso legible`;
+      const statusLabel = reading.status === "unstable"
+        ? "lectura inestable"
+        : (reading.status === "error" ? "trama de error" : "datos sin peso comercial");
+      connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - ${statusLabel}`;
     }
 
     persistScaleReading(scaleId);
@@ -3410,19 +4008,25 @@ function handleScalePayload(scaleId, payload, options = {}) {
     return false;
   }
 
-  scale.currentWeight = roundWeight(Math.max(reading.weightKg, 0));
-  scale.updatedAt = new Date().toISOString();
-  scale.connectionMode = options.mode || connection?.mode || scale.connectionMode;
-  scale.deviceName = options.deviceName || connection?.deviceName || scale.deviceName;
+  if (reading.weightKg < 0) {
+    markScaleReadingPending(scaleId, "negative");
+    return false;
+  }
+
+  const accepted = connection
+    ? applyScaleStabilityFilter(scaleId, connection, reading, rawText, options)
+    : false;
 
   if (connection?.status === "connected") {
     const profileLabel = options.profileLabel || connection.profileLabel || getScaleModeLabel(connection.mode);
-    connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - ${profileLabel}`;
+    connection.statusMessage = accepted
+      ? `Conectada ${getScaleModeLabel(connection.mode)} - ${profileLabel} - peso estable`
+      : `Conectada ${getScaleModeLabel(connection.mode)} - estabilizando lectura`;
   }
 
   persistScaleReading(scaleId);
   scheduleScaleRender(scaleId);
-  return true;
+  return accepted;
 }
 
 function getConnectionErrorMessage(error, fallback) {
@@ -3479,22 +4083,161 @@ function clearScaleConnectionTimers(connection) {
     window.clearInterval(connection.pollingTimer);
     connection.pollingTimer = null;
   }
+  if (connection?.freshnessTimer) {
+    window.clearTimeout(connection.freshnessTimer);
+    connection.freshnessTimer = null;
+  }
 }
 
-function handleScaleDisconnected(scaleId, message = "Balanza desconectada.") {
-  const connection = scaleConnections[scaleId];
-  if (!connection || connection.abort) {
+function otherScaleUsingSerialPort(scaleId, port) {
+  return SCALE_IDS.some((candidateId) => {
+    if (candidateId === scaleId) {
+      return false;
+    }
+    const candidate = scaleConnections[candidateId];
+    return candidate?.port === port && !candidate.abort;
+  });
+}
+
+function otherScaleUsingBleDevice(scaleId, device, options = {}) {
+  const deviceId = String(device?.id || "");
+  if (!deviceId) {
+    return false;
+  }
+  return SCALE_IDS.some((candidateId) => {
+    if (candidateId === scaleId) {
+      return false;
+    }
+    const candidate = scaleConnections[candidateId];
+    const activeDeviceId = String(candidate?.device?.id || "");
+    const rememberedDeviceId = String(getScaleState(candidateId).bleDeviceId || "");
+    if (!candidate?.abort && activeDeviceId === deviceId) {
+      return true;
+    }
+    if (rememberedDeviceId !== deviceId) {
+      return false;
+    }
+    return options.automatic ? candidateId < scaleId : true;
+  });
+}
+
+function processScaleTextFrame(scaleId, connection, frame, options = {}) {
+  const normalizedFrame = String(frame || "").trim();
+  if (!normalizedFrame || !isCurrentScaleConnection(scaleId, connection)) {
+    return false;
+  }
+  return handleScalePayload(scaleId, normalizedFrame, {
+    ...options,
+    parser: "text",
+    connection
+  });
+}
+
+function handleFramedScaleTextChunk(scaleId, connection, value, options = {}) {
+  if (!isCurrentScaleConnection(scaleId, connection)) {
     return;
   }
 
+  let chunkText = "";
+  if (typeof value === "string") {
+    chunkText = value;
+  } else {
+    try {
+      chunkText = connection.decoder.decode(dataViewToBytes(value), { stream: true });
+    } catch {
+      chunkText = "";
+    }
+  }
+  if (!chunkText) {
+    return;
+  }
+
+  if (connection.discardUntilDelimiter) {
+    const delimiter = chunkText.match(/\r\n|\r|\n/);
+    if (!delimiter) {
+      return;
+    }
+    chunkText = chunkText.slice(delimiter.index + delimiter[0].length);
+    connection.discardUntilDelimiter = false;
+    connection.buffer = "";
+    if (!chunkText) {
+      return;
+    }
+  }
+
+  const framed = splitScaleTextFrames(connection.buffer, chunkText);
+  connection.buffer = framed.pendingFrame;
+  connection.discardUntilDelimiter = framed.discardUntilDelimiter;
+  if (framed.overflowed) {
+    const scale = getScaleState(scaleId);
+    const overflowTail = sanitizeScaleRawText(chunkText).slice(-(MAX_SCALE_RAW_LENGTH - 20));
+    scale.lastRaw = `[trama excedida] ${overflowTail}`;
+    scale.lastRawAt = new Date().toISOString();
+    connection.stability = null;
+    connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - trama inválida descartada`;
+    markScaleReadingPending(scaleId, "invalid");
+  }
+  framed.completeFrames.forEach((frame) => processScaleTextFrame(scaleId, connection, frame, options));
+}
+
+function releaseUnexpectedScaleConnection(connection) {
+  if (connection.characteristic && connection.valueHandler) {
+    try {
+      connection.characteristic.removeEventListener("characteristicvaluechanged", connection.valueHandler);
+    } catch {
+      // El objeto BLE puede haber quedado inutilizable al perder señal.
+    }
+  }
+  if (connection.device && connection.disconnectHandler) {
+    try {
+      connection.device.removeEventListener("gattserverdisconnected", connection.disconnectHandler);
+    } catch {
+      // El listener ya puede haber sido retirado por el navegador.
+    }
+  }
+  if (connection.device?.gatt?.connected) {
+    try {
+      connection.device.gatt.disconnect();
+    } catch {
+      // Desconexión de mejor esfuerzo.
+    }
+  }
+
+  if (connection.reader) {
+    try {
+      void Promise.resolve(connection.reader.cancel()).catch(() => {});
+    } catch {
+      // El reader ya puede haber sido liberado por el navegador.
+    }
+  }
+  if (connection.port) {
+    void Promise.resolve(connection.readPromise)
+      .catch(() => {})
+      .then(() => connection.port.close())
+      .catch(() => {});
+  }
+}
+
+function handleScaleDisconnected(scaleId, message = "Balanza desconectada.", expectedConnection = null) {
+  const connection = expectedConnection || scaleConnections[scaleId];
+  if (!connection || connection.abort || !isCurrentScaleConnection(scaleId, connection)) {
+    return;
+  }
+
+  connection.abort = true;
   clearScaleConnectionTimers(connection);
+  releaseUnexpectedScaleConnection(connection);
+  const generation = nextScaleConnectionGeneration(scaleId);
   scaleConnections[scaleId] = {
+    generation,
     status: "error",
-    statusMessage: message
+    statusMessage: message,
+    abort: false
   };
+  invalidateScaleReading(scaleId, "disconnected", { persistImmediately: true });
   renderScaleConnectionPanels();
   setFormMessage(message, true);
-  scheduleScaleConnectionRestore();
+  scheduleScaleConnectionRestore({ reset: true });
 }
 
 function startBleReadPolling(scaleId) {
@@ -3512,14 +4255,27 @@ function startBleReadPolling(scaleId) {
     currentConnection.isPolling = true;
     try {
       const value = await currentConnection.characteristic.readValue();
-      handleScalePayload(scaleId, value, {
-        parser: currentConnection.parser,
-        mode: "ble",
-        deviceName: currentConnection.deviceName,
-        profileLabel: currentConnection.profileLabel
-      });
+      if (currentConnection.parser === "sig-weight") {
+        handleScalePayload(scaleId, value, {
+          parser: "sig-weight",
+          mode: "ble",
+          deviceName: currentConnection.deviceName,
+          profileLabel: currentConnection.profileLabel,
+          connection: currentConnection
+        });
+      } else {
+        handleFramedScaleTextChunk(scaleId, currentConnection, value, {
+          mode: "ble",
+          deviceName: currentConnection.deviceName,
+          profileLabel: currentConnection.profileLabel
+        });
+      }
     } catch (error) {
-      handleScaleDisconnected(scaleId, getConnectionErrorMessage(error, `No se pudo leer la balanza ${scaleId}.`));
+      handleScaleDisconnected(
+        scaleId,
+        getConnectionErrorMessage(error, `No se pudo leer la balanza ${scaleId}.`),
+        currentConnection
+      );
     } finally {
       currentConnection.isPolling = false;
     }
@@ -3527,16 +4283,18 @@ function startBleReadPolling(scaleId) {
 }
 
 async function disconnectScale(scaleId, showMessage = true, forgetPreference = false) {
-  if (forgetPreference) {
-    clearScaleConnectionPreference(scaleId);
-  }
-
   const connection = scaleConnections[scaleId];
   if (!connection) {
+    nextScaleConnectionGeneration(scaleId);
+    invalidateScaleReading(scaleId, "disconnected", { persistImmediately: true });
+    if (forgetPreference) {
+      clearScaleConnectionPreference(scaleId);
+    }
     renderScaleConnectionPanels();
     return;
   }
 
+  nextScaleConnectionGeneration(scaleId);
   connection.abort = true;
   connection.status = "connecting";
   connection.statusMessage = "Desconectando...";
@@ -3583,6 +4341,14 @@ async function disconnectScale(scaleId, showMessage = true, forgetPreference = f
     }
   }
 
+  if (connection.readPromise) {
+    try {
+      await connection.readPromise;
+    } catch {
+      // El bucle de lectura ya informa los errores inesperados.
+    }
+  }
+
   if (connection.port) {
     try {
       await connection.port.close();
@@ -3591,7 +4357,13 @@ async function disconnectScale(scaleId, showMessage = true, forgetPreference = f
     }
   }
 
-  scaleConnections[scaleId] = null;
+  if (scaleConnections[scaleId] === connection) {
+    scaleConnections[scaleId] = null;
+  }
+  invalidateScaleReading(scaleId, "disconnected", { persistImmediately: true });
+  if (forgetPreference) {
+    clearScaleConnectionPreference(scaleId);
+  }
   renderScaleConnectionPanels();
 
   if (showMessage) {
@@ -3614,39 +4386,61 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
 
   await disconnectScale(scaleId, false);
   const automatic = Boolean(rememberedDevice);
-  scaleConnections[scaleId] = {
+  const generation = nextScaleConnectionGeneration(scaleId);
+  const connection = {
+    generation,
     mode: "ble",
     status: "connecting",
     statusMessage: automatic
       ? `Reconectando Balanza ${scaleId} por BLE...`
-      : `Selecciona el dispositivo BLE para Balanza ${scaleId}...`
+      : `Selecciona el dispositivo BLE para Balanza ${scaleId}...`,
+    decoder: new TextDecoder("utf-8"),
+    buffer: "",
+    stability: null,
+    abort: false
   };
+  scaleConnections[scaleId] = connection;
   renderScaleConnectionPanels();
 
   try {
     const device = rememberedDevice || await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: SCALE_BLE_SERVICE_UUIDS
-      });
-    const deviceName = device.name || "BLE sin nombre";
-    const connection = scaleConnections[scaleId];
+      acceptAllDevices: true,
+      optionalServices: SCALE_BLE_SERVICE_UUIDS
+    });
+    if (!isCurrentScaleConnection(scaleId, connection)) {
+      return false;
+    }
+    if (otherScaleUsingBleDevice(scaleId, device, { automatic })) {
+      throw new Error(`Ese dispositivo BLE ya está asignado a la otra balanza. Desconéctalo o elimina su preferencia antes de continuar.`);
+    }
 
+    const deviceName = device.name || "BLE sin nombre";
     connection.device = device;
     connection.deviceName = deviceName;
     connection.statusMessage = `Conectando a ${deviceName}...`;
     connection.disconnectHandler = () => {
-      const currentConnection = scaleConnections[scaleId];
-      if (currentConnection !== connection || currentConnection.abort) {
+      if (!isCurrentScaleConnection(scaleId, connection)) {
         return;
       }
-
-      handleScaleDisconnected(scaleId, `Balanza ${scaleId} BLE desconectada.`);
+      handleScaleDisconnected(scaleId, `Balanza ${scaleId} BLE desconectada.`, connection);
     };
     device.addEventListener("gattserverdisconnected", connection.disconnectHandler);
     renderScaleConnectionPanels();
 
     const server = await device.gatt.connect();
+    if (!isCurrentScaleConnection(scaleId, connection)) {
+      if (device.gatt.connected) {
+        device.gatt.disconnect();
+      }
+      return false;
+    }
     const found = await findBleScaleCharacteristic(server);
+    if (!isCurrentScaleConnection(scaleId, connection)) {
+      if (device.gatt.connected) {
+        device.gatt.disconnect();
+      }
+      return false;
+    }
     if (!found) {
       throw new Error("No se encontro una caracteristica BLE compatible. Agrega el UUID de la balanza cuando tengas la marca/modelo.");
     }
@@ -3659,8 +4453,17 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
     connection.status = "connected";
     connection.statusMessage = `Conectada BLE - ${found.profile.label}`;
     connection.valueHandler = (event) => {
-      handleScalePayload(scaleId, event.target.value, {
-        parser: found.profile.parser,
+      if (found.profile.parser === "sig-weight") {
+        handleScalePayload(scaleId, event.target.value, {
+          parser: "sig-weight",
+          mode: "ble",
+          deviceName,
+          profileLabel: found.profile.label,
+          connection
+        });
+        return;
+      }
+      handleFramedScaleTextChunk(scaleId, connection, event.target.value, {
         mode: "ble",
         deviceName,
         profileLabel: found.profile.label
@@ -3670,17 +4473,32 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
     if (found.canNotify) {
       found.characteristic.addEventListener("characteristicvaluechanged", connection.valueHandler);
       await found.characteristic.startNotifications();
+      if (!isCurrentScaleConnection(scaleId, connection)) {
+        return false;
+      }
       connection.notifyActive = true;
     }
 
     if (found.canRead) {
       const value = await found.characteristic.readValue();
-      handleScalePayload(scaleId, value, {
-        parser: found.profile.parser,
-        mode: "ble",
-        deviceName,
-        profileLabel: found.profile.label
-      });
+      if (!isCurrentScaleConnection(scaleId, connection)) {
+        return false;
+      }
+      if (found.profile.parser === "sig-weight") {
+        handleScalePayload(scaleId, value, {
+          parser: "sig-weight",
+          mode: "ble",
+          deviceName,
+          profileLabel: found.profile.label,
+          connection
+        });
+      } else {
+        handleFramedScaleTextChunk(scaleId, connection, value, {
+          mode: "ble",
+          deviceName,
+          profileLabel: found.profile.label
+        });
+      }
     }
 
     if (!found.canNotify && found.canRead) {
@@ -3688,6 +4506,7 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
     }
 
     rememberBleScaleDevice(scaleId, device);
+    scaleRestoreAttempt = 0;
     renderScaleConnectionPanels();
     setFormMessage(
       automatic
@@ -3696,103 +4515,80 @@ async function connectBleScale(scaleId, rememberedDevice = null) {
     );
     return true;
   } catch (error) {
-    await disconnectScale(scaleId, false);
     const message = getConnectionErrorMessage(error, `No se pudo conectar la balanza ${scaleId} por BLE.`);
-    scaleConnections[scaleId] = {
-      status: "error",
-      statusMessage: message
-    };
-    renderScaleConnectionPanels();
-    if (!automatic) {
-      setFormMessage(message, error?.name !== "NotFoundError");
+    if (isCurrentScaleConnection(scaleId, connection)) {
+      await disconnectScale(scaleId, false);
+      const errorGeneration = nextScaleConnectionGeneration(scaleId);
+      scaleConnections[scaleId] = {
+        generation: errorGeneration,
+        status: "error",
+        statusMessage: message,
+        abort: false
+      };
+      renderScaleConnectionPanels();
+      if (!automatic) {
+        setFormMessage(message, error?.name !== "NotFoundError");
+      } else {
+        scheduleScaleConnectionRestore();
+      }
     }
     return false;
   }
 }
 
-function handleSerialScaleChunk(scaleId, bytes) {
-  const connection = scaleConnections[scaleId];
-  if (!connection) {
-    return;
-  }
-
-  const chunkText = decodeScaleBytes(bytes);
-  if (!chunkText) {
-    handleScalePayload(scaleId, bytes, {
-      parser: "text",
-      mode: "serial",
-      deviceName: connection.deviceName,
-      profileLabel: "Puerto serial"
-    });
-    return;
-  }
-
-  connection.buffer = `${connection.buffer || ""}${chunkText}`.slice(-512);
-  const parts = connection.buffer.split(/\r?\n/);
-  connection.buffer = parts.pop() || "";
-
-  let parsed = false;
-  parts.forEach((line) => {
-    if (!line.trim()) {
-      return;
-    }
-
-    parsed = handleScalePayload(scaleId, line, {
-      parser: "text",
-      mode: "serial",
-      deviceName: connection.deviceName,
-      profileLabel: "Puerto serial"
-    }) || parsed;
+function handleSerialScaleChunk(scaleId, connection, bytes) {
+  handleFramedScaleTextChunk(scaleId, connection, bytes, {
+    mode: "serial",
+    deviceName: connection.deviceName,
+    profileLabel: "Puerto serial"
   });
-
-  if (!parsed && connection.buffer.trim()) {
-    handleScalePayload(scaleId, connection.buffer, {
-      parser: "text",
-      mode: "serial",
-      deviceName: connection.deviceName,
-      profileLabel: "Puerto serial"
-    });
-  }
 }
 
-async function readSerialScale(scaleId) {
-  const connection = scaleConnections[scaleId];
-  if (!connection?.port) {
+async function readSerialScale(scaleId, connection) {
+  if (!connection?.port || !isCurrentScaleConnection(scaleId, connection)) {
     return;
   }
 
   try {
-    while (!connection.abort && connection.port.readable) {
+    while (isCurrentScaleConnection(scaleId, connection) && connection.port.readable) {
       const reader = connection.port.readable.getReader();
       connection.reader = reader;
 
       try {
-        while (!connection.abort) {
+        while (isCurrentScaleConnection(scaleId, connection)) {
           const { value, done } = await reader.read();
           if (done) {
             break;
           }
 
           if (value) {
-            handleSerialScaleChunk(scaleId, value);
+            handleSerialScaleChunk(scaleId, connection, value);
           }
         }
       } finally {
-        reader.releaseLock();
+        try {
+          reader.releaseLock();
+        } catch {
+          // El puerto puede retirar el lock mientras se desconecta físicamente.
+        }
         if (scaleConnections[scaleId] === connection) {
           connection.reader = null;
         }
       }
     }
   } catch (error) {
-    if (!connection.abort) {
-      handleScaleDisconnected(scaleId, getConnectionErrorMessage(error, `Lectura serial interrumpida en balanza ${scaleId}.`));
+    if (isCurrentScaleConnection(scaleId, connection)) {
+      handleScaleDisconnected(
+        scaleId,
+        getConnectionErrorMessage(error, `Lectura serial interrumpida en balanza ${scaleId}.`),
+        connection
+      );
     }
     return;
   }
 
-  if (!connection.abort && scaleConnections[scaleId] === connection) {
-    handleScaleDisconnected(scaleId, `Puerto serial de balanza ${scaleId} desconectado.`);
+  if (isCurrentScaleConnection(scaleId, connection)) {
+    handleScaleDisconnected(scaleId, `Puerto serial de balanza ${scaleId} desconectado.`, connection);
   }
 }
 
@@ -3811,47 +4607,82 @@ async function connectSerialScale(scaleId, rememberedPort = null) {
 
   await disconnectScale(scaleId, false);
   const automatic = Boolean(rememberedPort);
-  scaleConnections[scaleId] = {
+  const generation = nextScaleConnectionGeneration(scaleId);
+  const serialOptions = normalizeScaleSerialOptions(getScaleState(scaleId).serialOptions);
+  const connection = {
+    generation,
     mode: "serial",
     status: "connecting",
     statusMessage: automatic
       ? `Reconectando puerto serial de Balanza ${scaleId}...`
-      : `Selecciona el puerto Bluetooth serial de Balanza ${scaleId}...`
+      : `Selecciona el puerto Bluetooth serial de Balanza ${scaleId}...`,
+    deviceName: "Puerto serial Bluetooth",
+    profileLabel: "Puerto serial",
+    decoder: new TextDecoder("utf-8"),
+    buffer: "",
+    stability: null,
+    abort: false
   };
+  scaleConnections[scaleId] = connection;
   renderScaleConnectionPanels();
 
   try {
     const port = rememberedPort || await navigator.serial.requestPort();
-    await port.open(SCALE_SERIAL_DEFAULTS);
-    scaleConnections[scaleId] = {
-      mode: "serial",
-      status: "connected",
-      statusMessage: "Conectada Serial BT - esperando datos",
-      port,
-      deviceName: "Puerto serial Bluetooth",
-      profileLabel: "Puerto serial",
-      buffer: "",
-      abort: false
-    };
-    await rememberSerialScalePort(scaleId, port);
+    if (!isCurrentScaleConnection(scaleId, connection)) {
+      return false;
+    }
+    if (otherScaleUsingSerialPort(scaleId, port)) {
+      throw new Error("Ese puerto serial ya está asignado a la otra balanza. Selecciona un puerto físico diferente.");
+    }
+
+    connection.port = port;
+    connection.deviceName = getSerialPortDeviceName(port);
+    await port.open(serialOptions);
+    if (!isCurrentScaleConnection(scaleId, connection)) {
+      try {
+        await port.close();
+      } catch {
+        // La conexión dejó de ser vigente mientras el navegador abría el puerto.
+      }
+      return false;
+    }
+    connection.status = "connected";
+    connection.statusMessage = "Conectada Serial BT - esperando trama completa";
+    const remembered = await rememberSerialScalePort(scaleId, port, connection);
+    if (!remembered || !isCurrentScaleConnection(scaleId, connection)) {
+      try {
+        await port.close();
+      } catch {
+        // La conexión fue reemplazada mientras se guardaba la preferencia.
+      }
+      return false;
+    }
+    scaleRestoreAttempt = 0;
     renderScaleConnectionPanels();
-    void readSerialScale(scaleId);
+    connection.readPromise = readSerialScale(scaleId, connection);
     setFormMessage(
       automatic
         ? `Balanza ${scaleId} reconectada automáticamente por puerto serial.`
-        : `Balanza ${scaleId} conectada por puerto serial Bluetooth a ${SCALE_SERIAL_DEFAULTS.baudRate} baudios.`
+        : `Balanza ${scaleId} conectada por puerto serial Bluetooth a ${serialOptions.baudRate} baudios.`
     );
     return true;
   } catch (error) {
-    await disconnectScale(scaleId, false);
     const message = getConnectionErrorMessage(error, `No se pudo abrir el puerto serial de balanza ${scaleId}.`);
-    scaleConnections[scaleId] = {
-      status: "error",
-      statusMessage: message
-    };
-    renderScaleConnectionPanels();
-    if (!automatic) {
-      setFormMessage(message, error?.name !== "NotFoundError");
+    if (isCurrentScaleConnection(scaleId, connection)) {
+      await disconnectScale(scaleId, false);
+      const errorGeneration = nextScaleConnectionGeneration(scaleId);
+      scaleConnections[scaleId] = {
+        generation: errorGeneration,
+        status: "error",
+        statusMessage: message,
+        abort: false
+      };
+      renderScaleConnectionPanels();
+      if (!automatic) {
+        setFormMessage(message, error?.name !== "NotFoundError");
+      } else {
+        scheduleScaleConnectionRestore();
+      }
     }
     return false;
   }
@@ -3871,20 +4702,61 @@ function findRememberedSerialPort(scaleId, ports, claimedPorts) {
     const matchingPorts = ports.filter((port) => {
       return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
     });
-    const preferredPort = matchingPorts[savedInfo.matchIndex];
-
-    if (preferredPort && !claimedPorts.has(preferredPort)) {
-      return preferredPort;
-    }
-
-    const availableMatch = matchingPorts.find((port) => !claimedPorts.has(port));
-    if (availableMatch) {
-      return availableMatch;
-    }
+    return matchingPorts.length === 1 && !claimedPorts.has(matchingPorts[0])
+      ? matchingPorts[0]
+      : null;
   }
 
-  const indexedPort = ports[savedInfo.portIndex];
-  return indexedPort && !claimedPorts.has(indexedPort) ? indexedPort : null;
+  // Sin identificadores físicos, un único puerto autorizado es la única
+  // restauración inequívoca. Con dos adaptadores iguales se exige selección.
+  return ports.length === 1 && !claimedPorts.has(ports[0]) ? ports[0] : null;
+}
+
+function isRememberedSerialPortAmbiguous(scaleId, ports) {
+  const savedInfo = getScaleState(scaleId).serialPortInfo;
+  if (!savedInfo) {
+    return false;
+  }
+
+  const hasIdentifiers = savedInfo.usbVendorId !== null
+    || savedInfo.usbProductId !== null
+    || Boolean(savedInfo.bluetoothServiceClassId);
+  if (!hasIdentifiers) {
+    return ports.length > 1;
+  }
+
+  return ports.filter((port) => {
+    return serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo);
+  }).length > 1;
+}
+
+function isRememberedSerialPortClaimed(scaleId, ports, claimedPorts) {
+  const savedInfo = getScaleState(scaleId).serialPortInfo;
+  if (!savedInfo) {
+    return false;
+  }
+
+  const hasIdentifiers = savedInfo.usbVendorId !== null
+    || savedInfo.usbProductId !== null
+    || Boolean(savedInfo.bluetoothServiceClassId);
+  const candidates = hasIdentifiers
+    ? ports.filter((port) => serialPortIdentifiersMatch(getSerialPortInfo(port), savedInfo))
+    : ports;
+  return candidates.length === 1 && claimedPorts.has(candidates[0]);
+}
+
+function showScaleRestoreError(scaleId, message) {
+  const current = scaleConnections[scaleId];
+  if (current?.status === "connecting" || isScaleConnectionActive(current)) {
+    return;
+  }
+  const generation = nextScaleConnectionGeneration(scaleId);
+  scaleConnections[scaleId] = {
+    generation,
+    status: "error",
+    statusMessage: message,
+    abort: false
+  };
 }
 
 function isScaleConnectionActive(connection) {
@@ -3941,11 +4813,25 @@ async function restoreScaleConnections() {
 
         const port = findRememberedSerialPort(scaleId, ports, claimedSerialPorts);
         if (!port) {
+          if (isRememberedSerialPortAmbiguous(scaleId, ports)) {
+            showScaleRestoreError(
+              scaleId,
+              `Balanza ${scaleId}: hay puertos idénticos; usa Conectar Serial para elegir el puerto físico.`
+            );
+          } else if (isRememberedSerialPortClaimed(scaleId, ports, claimedSerialPorts)) {
+            showScaleRestoreError(
+              scaleId,
+              `Balanza ${scaleId}: el puerto recordado ya está asignado a la otra balanza.`
+            );
+          }
           continue;
         }
 
         claimedSerialPorts.add(port);
-        await connectSerialScale(scaleId, port);
+        const connected = await connectSerialScale(scaleId, port);
+        if (!connected) {
+          claimedSerialPorts.delete(port);
+        }
       }
     }
 
@@ -3956,6 +4842,14 @@ async function restoreScaleConnections() {
       } catch {
         devices = [];
       }
+
+      const claimedBleDeviceIds = new Set(
+        SCALE_IDS
+          .map((scaleId) => scaleConnections[scaleId])
+          .filter((connection) => isScaleConnectionActive(connection) && connection.mode === "ble")
+          .map((connection) => String(connection.device?.id || ""))
+          .filter(Boolean)
+      );
 
       for (const scaleId of SCALE_IDS) {
         const connection = scaleConnections[scaleId];
@@ -3968,9 +4862,21 @@ async function restoreScaleConnections() {
           continue;
         }
 
+        if (claimedBleDeviceIds.has(scale.bleDeviceId)) {
+          showScaleRestoreError(
+            scaleId,
+            `Balanza ${scaleId}: el dispositivo BLE ya está asignado a la otra balanza.`
+          );
+          continue;
+        }
+
         const device = devices.find((candidate) => candidate.id === scale.bleDeviceId);
         if (device) {
-          await connectBleScale(scaleId, device);
+          claimedBleDeviceIds.add(scale.bleDeviceId);
+          const connected = await connectBleScale(scaleId, device);
+          if (!connected) {
+            claimedBleDeviceIds.delete(scale.bleDeviceId);
+          }
         }
       }
     }
@@ -3983,105 +4889,161 @@ async function restoreScaleConnections() {
   return scaleRestorePromise;
 }
 
-function scheduleScaleConnectionRestore() {
+function hasPendingRememberedScaleConnections() {
+  if (!window.isSecureContext) {
+    return false;
+  }
+
+  return SCALE_IDS.some((scaleId) => {
+    const scale = getScaleState(scaleId);
+    const connection = scaleConnections[scaleId];
+    if (!scale.autoConnectMode || connection?.status === "connecting" || isScaleConnectionActive(connection)) {
+      return false;
+    }
+    return scale.autoConnectMode === "serial"
+      ? Boolean(navigator.serial?.getPorts)
+      : Boolean(navigator.bluetooth?.getDevices);
+  });
+}
+
+function scheduleScaleConnectionRestore(options = {}) {
+  if (options.reset) {
+    scaleRestoreAttempt = 0;
+  }
   if (scaleRestoreTimer) {
     window.clearTimeout(scaleRestoreTimer);
   }
 
-  scaleRestoreTimer = window.setTimeout(() => {
+  const delay = options.immediate
+    ? 0
+    : Math.min(
+        SCALE_AUTO_RECONNECT_DELAY_MS * (2 ** scaleRestoreAttempt),
+        SCALE_AUTO_RECONNECT_MAX_DELAY_MS
+      );
+  scaleRestoreTimer = window.setTimeout(async () => {
     scaleRestoreTimer = null;
-    void restoreScaleConnections();
-  }, SCALE_AUTO_RECONNECT_DELAY_MS);
+    try {
+      await restoreScaleConnections();
+    } catch (error) {
+      console.warn("No se pudieron restaurar las balanzas mayoristas.", error);
+    }
+    if (hasPendingRememberedScaleConnections()) {
+      scaleRestoreAttempt += 1;
+      scheduleScaleConnectionRestore();
+    } else {
+      scaleRestoreAttempt = 0;
+    }
+  }, delay);
 }
 
 function getScaleWeight(scaleId) {
-  return getScaleState(scaleId).currentWeight || 0;
-}
-
-function parseVisibleWeight(value) {
-  const text = String(value ?? "").trim();
-  if (!text) {
-    return 0;
-  }
-
-  const directValue = Number(text.replace(",", "."));
-  if (Number.isFinite(directValue) && directValue > 0) {
-    return roundWeight(directValue);
-  }
-
-  const parsed = parseIndustrialScaleText(text);
-  return Number.isFinite(parsed?.weightKg) && parsed.weightKg > 0
-    ? roundWeight(parsed.weightKg)
-    : 0;
-}
-
-function getVisibleScaleWeight(scaleId) {
-  const candidates = [
-    elements.scaleInputs[scaleId]?.value,
-    elements.scaleDisplays[scaleId]?.textContent,
-    elements.miniScaleDisplays[scaleId]?.textContent
-  ];
-
-  for (const candidate of candidates) {
-    const weight = parseVisibleWeight(candidate);
-    if (weight > 0) {
-      return weight;
-    }
-  }
-
-  return 0;
-}
-
-function getCapturedScaleWeight(scaleId) {
-  const weight = roundWeight(Number(capturedScaleWeights[scaleId]));
-  return Number.isFinite(weight) && weight > 0 ? weight : 0;
-}
-
-function setCapturedScaleWeight(scaleId, weight) {
-  const normalizedWeight = roundWeight(Number(weight));
-  capturedScaleWeights[scaleId] = Number.isFinite(normalizedWeight) && normalizedWeight > 0
-    ? normalizedWeight
+  const scale = getScaleState(scaleId);
+  const weight = Number(scale.currentWeight);
+  return scale.readingValid && scale.readingStable && Number.isFinite(weight) && weight >= 0
+    ? roundWeight(weight)
     : null;
 }
 
-function clearCapturedScaleWeight(scaleId) {
-  if (capturedScaleWeights[scaleId] !== undefined) {
-    capturedScaleWeights[scaleId] = null;
+function scaleTimestampAge(timestamp, now = Date.now()) {
+  const timestampMs = Date.parse(String(timestamp || ""));
+  return Number.isFinite(timestampMs) ? Math.max(0, now - timestampMs) : Number.POSITIVE_INFINITY;
+}
+
+function getScaleReadingEligibility(scaleId) {
+  const connection = scaleConnections[scaleId];
+  const scale = getScaleState(scaleId);
+  const weight = getScaleWeight(scaleId);
+
+  if (!isCurrentScaleConnection(scaleId, connection) || !isScaleConnectionActive(connection)) {
+    return { ok: false, reason: `Balanza ${scaleId} sin conexión física activa.` };
+  }
+  if (!scale.readingValid || !scale.readingStable || !Number.isFinite(weight)) {
+    return { ok: false, reason: `Balanza ${scaleId} todavía no tiene una lectura estable válida.` };
+  }
+  if (scale.readingStatus !== "stable") {
+    return { ok: false, reason: `Balanza ${scaleId}: la entrada actual no está estable; espera una nueva lectura válida.` };
+  }
+  if (!scale.readingId) {
+    return { ok: false, reason: `Balanza ${scaleId}: la lectura actual no tiene una identidad válida.` };
+  }
+  if (scale.readingId === lastRegisteredScaleReadingIds[scaleId]) {
+    return { ok: false, reason: `El peso actual de Balanza ${scaleId} ya fue registrado; espera una nueva pesada.` };
+  }
+  if (scale.readingMode !== connection.mode || scale.readingGeneration !== connection.generation) {
+    return { ok: false, reason: `La lectura de Balanza ${scaleId} no pertenece a la conexión física actual.` };
+  }
+  if (scaleTimestampAge(scale.updatedAt) > SCALE_READING_MAX_AGE_MS) {
+    return { ok: false, reason: `La lectura de Balanza ${scaleId} venció; espera una trama nueva.` };
+  }
+  if (weight <= 0) {
+    return { ok: false, reason: `La lectura confirmada de Balanza ${scaleId} está en cero.` };
+  }
+
+  return { ok: true, connection, scale, weight };
+}
+
+function createScaleReadingSnapshot(scaleId) {
+  const eligible = getScaleReadingEligibility(scaleId);
+  if (!eligible.ok) {
+    return null;
+  }
+
+  return normalizeScaleReadingSnapshot({
+    scaleId,
+    scaleCode: `BALANZA_${scaleId}`,
+    readingId: eligible.scale.readingId,
+    weightKg: eligible.weight,
+    rawFrame: eligible.scale.readingRaw || eligible.scale.lastRaw,
+    connectionMode: eligible.connection.mode,
+    deviceName: eligible.connection.deviceName || eligible.scale.readingDeviceName,
+    readingAt: eligible.scale.updatedAt,
+    capturedAt: eligible.scale.updatedAt,
+    generation: eligible.connection.generation
+  });
+}
+
+function setCapturedScaleReading(scaleId, snapshot) {
+  capturedScaleReadings[scaleId] = normalizeScaleReadingSnapshot(snapshot);
+}
+
+function clearCapturedScaleReading(scaleId) {
+  if (capturedScaleReadings[scaleId] !== undefined) {
+    capturedScaleReadings[scaleId] = null;
   }
 }
 
-function syncVisibleScaleWeight(scaleId) {
-  const currentWeight = getScaleWeight(scaleId);
-  if (currentWeight > 0) {
-    return currentWeight;
+function getCapturedScaleReading(scaleId) {
+  const snapshot = normalizeScaleReadingSnapshot(capturedScaleReadings[scaleId]);
+  if (!snapshot?.readingId) {
+    return null;
   }
 
-  const visibleWeight = getVisibleScaleWeight(scaleId);
-  if (visibleWeight <= 0) {
-    return currentWeight;
+  const connection = scaleConnections[scaleId];
+  const validConnection = isCurrentScaleConnection(scaleId, connection)
+    && isScaleConnectionActive(connection)
+    && connection.generation === snapshot.generation
+    && connection.mode === snapshot.connectionMode;
+  if (!validConnection || scaleTimestampAge(snapshot.capturedAt) > SCALE_CAPTURE_MAX_AGE_MS) {
+    clearCapturedScaleReading(scaleId);
+    return null;
   }
 
-  const scale = getScaleState(scaleId);
-  state.scales[scaleId] = {
-    ...scale,
-    currentWeight: visibleWeight,
-    lastRaw: scale.lastRaw || `visible:${visibleWeight.toFixed(2)}kg`,
-    updatedAt: scale.updatedAt || new Date().toISOString()
-  };
+  return snapshot;
+}
 
-  saveState();
-  renderScaleDisplays();
-
-  return visibleWeight;
+function getCapturedScaleWeight(scaleId) {
+  return getCapturedScaleReading(scaleId)?.weightKg ?? null;
 }
 
 function getWeightFromSource(source) {
   if (source === "manual") {
-    return Number(elements.manualWeight.value);
+    const rawValue = String(elements.manualWeight.value ?? "").trim();
+    const weight = Number(rawValue.replace(",", "."));
+    return rawValue && Number.isFinite(weight) && weight >= 0 ? roundWeight(weight) : null;
   }
 
   const scaleId = Number(source);
-  return getCapturedScaleWeight(scaleId) || syncVisibleScaleWeight(scaleId);
+  return getCapturedScaleWeight(scaleId);
 }
 
 function formatWeightBreakdownDetail(breakdown, totalBirds) {
@@ -4448,15 +5410,21 @@ function updateTruckPlateField(origin, select, field, help, options = {}) {
 function renderScaleDisplays() {
   SCALE_IDS.forEach((scaleId) => {
     const weight = getScaleWeight(scaleId);
-    const value = weight.toFixed(2);
+    const hasWeight = Number.isFinite(weight);
+    const value = hasWeight ? weight.toFixed(2) : "---";
     if (elements.scaleDisplays[scaleId]) {
-      elements.scaleDisplays[scaleId].innerHTML = `${value} <span>kg</span>`;
+      elements.scaleDisplays[scaleId].innerHTML = hasWeight ? `${value} <span>kg</span>` : value;
     }
     if (elements.miniScaleDisplays[scaleId]) {
-      elements.miniScaleDisplays[scaleId].innerHTML = `${value} <small>kg</small>`;
+      elements.miniScaleDisplays[scaleId].innerHTML = hasWeight ? `${value} <small>kg</small>` : value;
     }
     if (elements.scaleInputs[scaleId]) {
-      elements.scaleInputs[scaleId].value = weight ? value : "";
+      elements.scaleInputs[scaleId].value = hasWeight ? value : "";
+    }
+    if (elements.scaleCaptureButtons[scaleId]) {
+      const eligibility = getScaleReadingEligibility(scaleId);
+      elements.scaleCaptureButtons[scaleId].disabled = !eligibility.ok;
+      elements.scaleCaptureButtons[scaleId].title = eligibility.ok ? "" : eligibility.reason;
     }
   });
 }
@@ -4573,7 +5541,7 @@ function renderWeightPreview() {
   elements.crateType.value = crateMeta.id;
 
   if (!Number.isFinite(grossWeight) || grossWeight < 0) {
-    elements.selectedWeightValue.textContent = "--";
+    elements.selectedWeightValue.textContent = "---";
     elements.selectedWeightBreakdown.textContent = "";
     publishCustomerDisplayState();
     return;
@@ -5118,6 +6086,9 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
           || cage.origenId
           || cage.proveedorOrigen?.id
       );
+      const scaleReading = cage.origenPeso === "manual"
+        ? null
+        : normalizeScaleReadingSnapshot(cage.scaleReading);
 
       if (!isReturn && warehouseOrigin && (!Number.isInteger(warehouseId) || warehouseId <= 0)) {
         throw new Error(`El almacén de origen del registro #${cage.id} no está vinculado con la base de datos.`);
@@ -5149,6 +6120,15 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
         gross_weight_kg: roundWeight(Number(cage.pesoBrutoKg ?? cage.pesoKg)),
         weighed_at: cage.timestamp
       };
+
+      if (scaleReading) {
+        payload.scale_reading = {
+          raw_frame: scaleReading.rawFrame || null,
+          connection_mode: String(scaleReading.connectionMode || "").toUpperCase() || null,
+          device_name: scaleReading.deviceName || null,
+          captured_at: scaleReading.capturedAt
+        };
+      }
 
       if (!isReturn) {
         payload.origin = warehouseOrigin
@@ -5635,10 +6615,20 @@ function updateScale(scaleId) {
     ...getScaleState(scaleId),
     currentWeight: roundWeight(weight),
     lastRaw: `manual:${roundWeight(weight).toFixed(2)}kg`,
+    lastRawAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    readingValid: true,
+    readingStable: true,
+    readingStatus: "manual",
+    readingRaw: `manual:${roundWeight(weight).toFixed(2)}kg`,
+    readingMode: "manual",
+    readingDeviceName: "",
+    readingGeneration: 0,
+    readingId: null,
     connectionMode: "manual",
     deviceName: ""
   };
+  clearCapturedScaleReading(scaleId);
   saveState();
   renderAll();
   closeScaleSettings(scaleId);
@@ -5680,15 +6670,24 @@ function updateEntryDefaults(showMessage = false) {
 }
 
 function captureScale(scaleId) {
-  const weight = syncVisibleScaleWeight(scaleId);
-  setCapturedScaleWeight(scaleId, weight);
+  const eligibility = getScaleReadingEligibility(scaleId);
+  if (!eligibility.ok) {
+    clearCapturedScaleReading(scaleId);
+    renderWeightPreview();
+    setFormMessage(eligibility.reason, true);
+    return;
+  }
+
+  const snapshot = createScaleReadingSnapshot(scaleId);
+  if (!snapshot) {
+    setFormMessage(`No se pudo capturar una lectura válida de Balanza ${scaleId}.`, true);
+    return;
+  }
+
+  setCapturedScaleReading(scaleId, snapshot);
   elements.weightSource.value = String(scaleId);
   renderWeightPreview();
-  setFormMessage(
-    weight > 0
-      ? `Peso de balanza ${scaleId} seleccionado: ${formatWeight(weight)}.`
-      : `Peso de balanza ${scaleId} seleccionado para el próximo registro.`
-  );
+  setFormMessage(`Peso de balanza ${scaleId} capturado: ${formatWeight(snapshot.weightKg)}.`);
 }
 
 function addCage(event) {
@@ -5710,7 +6709,8 @@ function addCage(event) {
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
-  const rawWeight = getWeightFromSource(source);
+  const scaleReading = source === "manual" ? null : getCapturedScaleReading(Number(source));
+  const rawWeight = source === "manual" ? getWeightFromSource(source) : scaleReading?.weightKg;
   const grossWeight = roundWeight(rawWeight);
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
   const truck = state.trucks.find((item) => item.id === truckId);
@@ -5761,6 +6761,14 @@ function addCage(event) {
     return;
   }
 
+  if (source !== "manual" && !scaleReading) {
+    setFormMessage(
+      `La captura de Balanza ${Number(source)} venció o perdió su conexión. Captura nuevamente el peso estable.`,
+      true
+    );
+    return;
+  }
+
   if (!Number.isFinite(grossWeight) || grossWeight <= 0) {
     setFormMessage("Ingresa o selecciona un peso bruto válido mayor a 0 kg.", true);
     return;
@@ -5805,6 +6813,7 @@ function addCage(event) {
     lecturaBalanzaComoNeto: false,
     origenPeso: source,
     balanza: source === "manual" ? null : Number(source),
+    scaleReading,
     ...buildOriginRecord(origin),
     placaCamion: isReturn ? "" : truckPlate,
     proveedorVehiculoId: isReturn ? null : (providerVehicle?.id || null),
@@ -5812,6 +6821,9 @@ function addCage(event) {
   };
 
   truck.cages.push(record);
+  if (scaleReading?.readingId) {
+    lastRegisteredScaleReadingIds[scaleReading.scaleId] = scaleReading.readingId;
+  }
 
   state.entryDefaults = isReturn
     ? {
@@ -5834,7 +6846,7 @@ function addCage(event) {
   if (source === "manual") {
     elements.manualWeight.value = "";
   } else {
-    clearCapturedScaleWeight(Number(source));
+    clearCapturedScaleReading(Number(source));
   }
 
   saveState();
@@ -6233,6 +7245,7 @@ function saveCageChanges(event) {
   const grossWeight = roundWeight(Number(elements.editWeight.value));
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
   const source = elements.editWeightSource.value;
+  const existingScaleReading = normalizeScaleReadingSnapshot(cage.scaleReading);
   const originId = isReturn ? null : (String(editSelectedOrigin?.id || "").trim() || null);
   const originName = isReturn ? "Devolución cliente" : String(editSelectedOrigin?.name || "").trim();
   const warehouseOrigin = !isReturn && isWarehouseOrigin(editSelectedOrigin);
@@ -6280,6 +7293,21 @@ function saveCageChanges(event) {
     return;
   }
 
+  if (
+    source !== "manual"
+    && (
+      !existingScaleReading
+      || existingScaleReading.scaleId !== Number(source)
+      || Math.abs(existingScaleReading.weightKg - grossWeight) > 0.001
+    )
+  ) {
+    setItemFormMessage(
+      "Un peso físico editado necesita una captura auditable de esa balanza. Conserva el peso original o elimina el registro y vuelve a capturarlo.",
+      true
+    );
+    return;
+  }
+
   if (breakdown.netWeightKg <= 0) {
     setItemFormMessage(formatWeightMismatchMessage(breakdown), true, buildWeightMismatchErrorOptions(breakdown));
     return;
@@ -6319,6 +7347,7 @@ function saveCageChanges(event) {
   cage.lecturaBalanzaComoNeto = false;
   cage.origenPeso = source;
   cage.balanza = source === "manual" ? null : Number(source);
+  cage.scaleReading = source === "manual" ? null : existingScaleReading;
   Object.assign(cage, isReturn
     ? buildOriginRecord(null)
     : buildOriginRecord({
@@ -6342,6 +7371,27 @@ function saveCageChanges(event) {
   setFormMessage(isReturn
     ? `Registro #${cage.id} actualizado en ${truck.name}. Devolución ${getReturnConditionMeta(cage.chickenCondition).label}, ${sexLabel}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`
     : `Registro #${cage.id} actualizado en ${truck.name}. ${sexLabel}, origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`);
+}
+
+function releaseConsumedScaleReadingIdIfUnused(removedScaleReading) {
+  const scaleId = Number(removedScaleReading?.scaleId);
+  if (!SCALE_IDS.includes(scaleId)) {
+    return;
+  }
+
+  const remainingScaleReadings = state.trucks.flatMap((truck) => (
+    Array.isArray(truck.cages)
+      ? truck.cages.map((item) => item.scaleReading).filter(Boolean)
+      : []
+  ));
+
+  if (canReleaseConsumedScaleReadingId(
+    lastRegisteredScaleReadingIds[scaleId],
+    removedScaleReading,
+    remainingScaleReadings
+  )) {
+    lastRegisteredScaleReadingIds[scaleId] = null;
+  }
 }
 
 function deleteCageRecord() {
@@ -6371,6 +7421,7 @@ function deleteCageRecord() {
   }
 
   truck.cages = truck.cages.filter((item) => item.id !== cage.id);
+  releaseConsumedScaleReadingIdIfUnused(cage.scaleReading);
 
   saveState();
   renderAll();
@@ -6440,6 +7491,8 @@ function resetDay() {
     disconnectScale(scaleId, false, true);
   });
   state = createDefaultState();
+  scaleReadingSequences = { 1: 0, 2: 0 };
+  lastRegisteredScaleReadingIds = { 1: null, 2: null };
   elements.truckPlate.value = "";
   saveState();
   renderAll();
@@ -6513,15 +7566,23 @@ function bindEvents() {
     refreshClientsFromDirectory();
   });
   window.addEventListener("pageshow", () => {
-    void loadCurrentDirectoryData();
-    void restoreScaleConnections();
+    void loadCurrentDirectoryData().finally(() => {
+      renderAll();
+      scheduleScaleConnectionRestore({ immediate: true });
+    });
   });
   window.addEventListener("focus", () => {
-    void loadCurrentDirectoryData();
-    void restoreScaleConnections();
+    void loadCurrentDirectoryData().finally(() => {
+      renderAll();
+      scheduleScaleConnectionRestore({ immediate: true });
+    });
   });
-  navigator.serial?.addEventListener?.("connect", scheduleScaleConnectionRestore);
-  navigator.bluetooth?.addEventListener?.("availabilitychanged", scheduleScaleConnectionRestore);
+  navigator.serial?.addEventListener?.("connect", () => {
+    scheduleScaleConnectionRestore({ reset: true, immediate: true });
+  });
+  navigator.bluetooth?.addEventListener?.("availabilitychanged", () => {
+    scheduleScaleConnectionRestore({ reset: true, immediate: true });
+  });
 
   elements.typeButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -6559,6 +7620,8 @@ function bindEvents() {
   elements.scaleConnectSerialButtons[2]?.addEventListener("click", () => connectSerialScale(2));
   elements.scaleDisconnectButtons[1]?.addEventListener("click", () => disconnectScale(1, true, true));
   elements.scaleDisconnectButtons[2]?.addEventListener("click", () => disconnectScale(2, true, true));
+  elements.scaleSerialSaveButtons[1]?.addEventListener("click", () => saveScaleSerialOptions(1));
+  elements.scaleSerialSaveButtons[2]?.addEventListener("click", () => saveScaleSerialOptions(2));
 
   elements.weightSource.addEventListener("change", renderWeightPreview);
   elements.selectProviderBtn.addEventListener("click", () => openProviderModal("entry"));
@@ -6935,14 +7998,17 @@ bindResponsiveLayout();
 initializeMobilePanelFromHash();
 initializeCustomerDisplaySync();
 renderAll();
-const hasRememberedScaleConnection = SCALE_IDS.some((scaleId) => {
-  return Boolean(getScaleState(scaleId).autoConnectMode);
+setFormMessage("Sistema listo. Cargando la configuración de la sucursal...");
+void loadCurrentDirectoryData().finally(() => {
+  renderAll();
+  const hasRememberedScaleConnection = SCALE_IDS.some((scaleId) => {
+    return Boolean(getScaleState(scaleId).autoConnectMode);
+  });
+  setFormMessage(
+    `${hasRememberedScaleConnection
+      ? "Sistema listo. Restaurando la última conexión de balanza..."
+      : "Sistema listo. Conecta una balanza Bluetooth o usa el peso manual del registro."
+    }${getScaleFeatureWarning() ? ` ${getScaleFeatureWarning()}` : ""}`
+  );
+  scheduleScaleConnectionRestore({ reset: true, immediate: true });
 });
-setFormMessage(
-  `${hasRememberedScaleConnection
-    ? "Sistema listo. Restaurando la última conexión de balanza..."
-    : "Sistema listo. Conecta una balanza Bluetooth o actualiza una lectura manual."
-  }${getScaleFeatureWarning() ? ` ${getScaleFeatureWarning()}` : ""}`
-);
-void restoreScaleConnections();
-void loadCurrentDirectoryData();

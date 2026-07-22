@@ -39,6 +39,10 @@
     <span aria-hidden="true">04</span>
     <strong>Registrar cobro o pago</strong>
   </a>
+  <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
+    <span aria-hidden="true">05</span>
+    <strong>Reportes PDF</strong>
+  </a>
 </nav>
 
 <dialog id="financeAuthDialog" class="fin-auth-dialog" aria-labelledby="financeAuthTitle">

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
@@ -26,6 +27,14 @@ class JornadaOperativa extends Model
     public $timestamps = false;
 
     protected $table = 'jornadas_operativas';
+
+    /**
+     * @return BelongsTo<Sucursal, $this>
+     */
+    public function sucursal(): BelongsTo
+    {
+        return $this->belongsTo(Sucursal::class);
+    }
 
     /**
      * @return HasMany<TicketDespacho, $this>

@@ -24,6 +24,7 @@ class RetailDispatchService
 {
     public function __construct(
         private readonly RetailConfigurationService $configuration,
+        private readonly ScaleReadingService $scaleReadings,
         private readonly JavaControlService $javaControl,
         private readonly FinancialObligationService $financialObligations,
         private readonly FinancialMovementService $financialMovements
@@ -33,11 +34,25 @@ class RetailDispatchService
      * @param  array<string, mixed>  $data
      * @return array{ticket: TicketDespacho, already_registered: bool}
      */
-    public function register(int $companyId, object $branch, User $actor, array $data): array
-    {
-        $this->configuration->ensureDefaults($companyId, (int) $branch->id);
+    public function register(
+        int $companyId,
+        object $branch,
+        User $actor,
+        array $data,
+        int $station = 1
+    ): array {
+        $station = $station === 2 ? 2 : 1;
+        $expectedScaleCode = $this->configuration->scaleCode($station);
 
-        return DB::transaction(function () use ($companyId, $branch, $actor, $data): array {
+        foreach ($data['weighings'] as $index => $weighing) {
+            if ($weighing['weight_source'] !== 'MANUAL' && $weighing['weight_source'] !== $expectedScaleCode) {
+                throw ValidationException::withMessages([
+                    "weighings.{$index}.weight_source" => 'La balanza no corresponde a esta estacion minorista.',
+                ]);
+            }
+        }
+
+        return DB::transaction(function () use ($companyId, $branch, $actor, $data, $station): array {
             $existing = TicketDespacho::query()
                 ->where('referencia_externa', $data['draft_id'])
                 ->lockForUpdate()
@@ -56,9 +71,21 @@ class RetailDispatchService
                     ]);
                 }
 
+                if ((int) $existing->jornada?->sucursal_id !== (int) $branch->id) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este identificador ya pertenece a otra sucursal.',
+                    ]);
+                }
+
                 if ($existing->canal !== TicketDespacho::CHANNEL_RETAIL) {
                     throw ValidationException::withMessages([
                         'draft_id' => 'Este identificador ya pertenece a un ticket de otro canal.',
+                    ]);
+                }
+
+                if ($this->existingRetailStation($existing) !== $station) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este identificador ya pertenece a otra estacion minorista.',
                     ]);
                 }
 
@@ -67,6 +94,8 @@ class RetailDispatchService
                     'already_registered' => true,
                 ];
             }
+
+            $this->configuration->ensureDefaults($companyId, (int) $branch->id, $station);
 
             $clientId = $data['client_id'] ?? null;
             $client = $clientId
@@ -104,6 +133,7 @@ class RetailDispatchService
                 ->keyBy('codigo');
             $defaultAdjustment = AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->where('estado', AjustePesoMinorista::STATUS_ACTIVE)
                 ->where('predeterminado', true)
                 ->orderBy('id')
@@ -117,6 +147,7 @@ class RetailDispatchService
                 ->values();
             $adjustments = AjustePesoMinorista::query()
                 ->where('empresa_id', $companyId)
+                ->where('estacion', $station)
                 ->where('estado', AjustePesoMinorista::STATUS_ACTIVE)
                 ->whereIn('codigo', $adjustmentCodes)
                 ->lockForUpdate()
@@ -209,6 +240,14 @@ class RetailDispatchService
                     ]);
                 }
 
+                $scaleReading = $this->scaleReadings->record(
+                    (int) $branch->id,
+                    $actor,
+                    $weighing,
+                    $weighedAt->get($index),
+                    "weighings.{$index}"
+                );
+
                 Pesada::query()->create([
                     'ticket_id' => $ticket->id,
                     'numero' => $index + 1,
@@ -219,7 +258,7 @@ class RetailDispatchService
                     'tipo_java_id' => null,
                     'tipo_bandeja_id' => $tray->id,
                     'ajuste_peso_minorista_id' => $adjustment->id,
-                    'lectura_balanza_id' => null,
+                    'lectura_balanza_id' => $scaleReading?->id,
                     'proveedor_origen_id' => null,
                     'almacen_origen_id' => null,
                     'vehiculo_id' => null,
@@ -495,6 +534,53 @@ class RetailDispatchService
         }
 
         return $result;
+    }
+
+    private function existingRetailStation(TicketDespacho $ticket): ?int
+    {
+        $scaleCodes = [
+            1 => $this->configuration->scaleCode(1),
+            2 => $this->configuration->scaleCode(2),
+        ];
+        $sourceStations = DB::table('pesadas')
+            ->where('ticket_id', $ticket->id)
+            ->whereIn('origen_peso', array_values($scaleCodes))
+            ->pluck('origen_peso')
+            ->map(fn (string $source): int => $source === $scaleCodes[2] ? 2 : 1)
+            ->unique()
+            ->values();
+
+        if ($sourceStations->count() === 1) {
+            return (int) $sourceStations->first();
+        }
+
+        if ($sourceStations->count() > 1) {
+            return null;
+        }
+
+        $adjustmentStations = DB::table('pesadas')
+            ->join(
+                'ajustes_peso_minorista',
+                'ajustes_peso_minorista.id',
+                '=',
+                'pesadas.ajuste_peso_minorista_id'
+            )
+            ->where('pesadas.ticket_id', $ticket->id)
+            ->whereIn('ajustes_peso_minorista.estacion', [1, 2])
+            ->distinct()
+            ->pluck('ajustes_peso_minorista.estacion');
+
+        if ($adjustmentStations->count() === 1) {
+            return (int) $adjustmentStations->first();
+        }
+
+        if ($adjustmentStations->count() > 1) {
+            return null;
+        }
+
+        // Los tickets manuales anteriores al aislamiento no tienen una marca
+        // de puesto inequívoca; conservar el puesto 1 mantiene su idempotencia.
+        return 1;
     }
 
     private function loadTicket(TicketDespacho $ticket): TicketDespacho

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Operation;
 
 use App\Models\AjustePesoMinorista;
+use App\Models\Balanza;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use Illuminate\Foundation\Http\FormRequest;
@@ -21,6 +22,10 @@ class StoreRetailDispatchRequest extends FormRequest
      */
     public function rules(): array
     {
+        $scaleCode = $this->retailStation() === 2
+            ? Balanza::CODE_RETAIL_2
+            : Balanza::CODE_RETAIL_1;
+
         return [
             'draft_id' => ['required', 'uuid'],
             'client_id' => ['nullable', 'integer', 'min:1'],
@@ -96,7 +101,7 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings' => ['required', 'array', 'min:1', 'max:100'],
             'weighings.*' => [
                 'required',
-                'array:local_id,chicken_type_code,adjustment_code,tray_type_code,weight_source,birds_per_tray,tray_count,read_weight_kg,weighed_at',
+                'array:local_id,chicken_type_code,adjustment_code,tray_type_code,weight_source,scale_reading,birds_per_tray,tray_count,read_weight_kg,weighed_at',
             ],
             'weighings.*.local_id' => ['required', 'integer', 'min:1', 'distinct'],
             'weighings.*.chicken_type_code' => [
@@ -110,8 +115,16 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings.*.tray_type_code' => ['required', 'string', 'max:40'],
             'weighings.*.weight_source' => [
                 'required',
-                Rule::in(['MANUAL', 'BALANZA_MINORISTA', 'BALANZA_MINORISTA_2']),
+                Rule::in(['MANUAL', $scaleCode]),
             ],
+            'weighings.*.scale_reading' => ['sometimes', 'nullable', 'array:raw_frame,connection_mode,device_name,captured_at'],
+            'weighings.*.scale_reading.raw_frame' => ['nullable', 'string', 'max:500'],
+            'weighings.*.scale_reading.connection_mode' => [
+                'nullable',
+                Rule::in(['SERIAL', 'BLE', 'BLUETOOTH']),
+            ],
+            'weighings.*.scale_reading.device_name' => ['nullable', 'string', 'max:180'],
+            'weighings.*.scale_reading.captured_at' => ['nullable', 'date'],
             'weighings.*.birds_per_tray' => ['required', 'integer', 'min:1', 'max:10'],
             'weighings.*.tray_count' => ['required', 'integer', 'min:0', 'max:1000'],
             'weighings.*.read_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
@@ -127,7 +140,7 @@ class StoreRetailDispatchRequest extends FormRequest
                     return $weighing;
                 }
 
-                return [
+                $normalized = [
                     ...$weighing,
                     'chicken_type_code' => mb_strtoupper(
                         trim((string) ($weighing['chicken_type_code'] ?? '')),
@@ -148,6 +161,12 @@ class StoreRetailDispatchRequest extends FormRequest
                         'UTF-8'
                     ),
                 ];
+
+                if (array_key_exists('scale_reading', $weighing)) {
+                    $normalized['scale_reading'] = $this->normalizeScaleReading($weighing['scale_reading']);
+                }
+
+                return $normalized;
             })
             ->all();
         $priceOverrides = $this->input('price_overrides');
@@ -194,6 +213,28 @@ class StoreRetailDispatchRequest extends FormRequest
         }
 
         $this->merge($normalized);
+    }
+
+    private function retailStation(): int
+    {
+        return (int) $this->route('retail_station') === 2 ? 2 : 1;
+    }
+
+    private function normalizeScaleReading(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        return [
+            ...$value,
+            'connection_mode' => filled($value['connection_mode'] ?? null)
+                ? mb_strtoupper(trim((string) $value['connection_mode']), 'UTF-8')
+                : null,
+            'device_name' => filled($value['device_name'] ?? null)
+                ? trim((string) $value['device_name'])
+                : null,
+        ];
     }
 
     /**

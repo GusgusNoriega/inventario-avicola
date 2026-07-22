@@ -208,6 +208,78 @@ class DispatchTicketApiTest extends TestCase
             'tara_total_kg' => 6.9,
             'peso_neto_kg' => 13.1,
         ]);
+
+        $physicalReadingId = DB::table('pesadas')->where('numero', 1)->value('lectura_balanza_id');
+        $this->assertNotNull($physicalReadingId);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $physicalReadingId,
+            'peso_kg' => 30,
+            'trama_cruda' => null,
+            'modo_conexion' => null,
+            'dispositivo' => null,
+            'capturada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('balanzas', [
+            'sucursal_id' => $this->branchId,
+            'codigo' => 'BALANZA_1',
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'numero' => 1,
+            'lectura_balanza_id' => $physicalReadingId,
+            'origen_peso' => 'BALANZA',
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'numero' => 2,
+            'lectura_balanza_id' => null,
+            'origen_peso' => 'MANUAL',
+        ]);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+    }
+
+    public function test_wholesale_scale_reading_metadata_is_normalized_audited_and_linked(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'] = [$payload['weighings'][0]];
+        $payload['weighings'][0]['scale_reading'] = [
+            'raw_frame' => 'US,GS,+00030.000kg',
+            'connection_mode' => 'serial',
+            'device_name' => '  COM9  ',
+            'captured_at' => '2026-07-22T11:45:12-05:00',
+        ];
+
+        $ticketId = $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated()
+            ->json('data.id');
+
+        $reading = DB::table('lecturas_balanza')
+            ->join('balanzas', 'balanzas.id', '=', 'lecturas_balanza.balanza_id')
+            ->where('balanzas.codigo', 'BALANZA_1')
+            ->select('lecturas_balanza.*')
+            ->sole();
+        $this->assertSame('US,GS,+00030.000kg', $reading->trama_cruda);
+        $this->assertSame('SERIAL', $reading->modo_conexion);
+        $this->assertSame('COM9', $reading->dispositivo);
+        $this->assertSame($this->user->id, (int) $reading->capturada_por);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'lectura_balanza_id' => $reading->id,
+            'origen_peso' => 'BALANZA',
+        ]);
+    }
+
+    public function test_dispatch_rejects_invalid_scale_reading_metadata(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][0]['scale_reading'] = [
+            'connection_mode' => 'WIFI',
+        ];
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.scale_reading.connection_mode');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('lecturas_balanza', 0);
     }
 
     public function test_weighing_without_cages_uses_no_tare_and_keeps_the_entered_bird_count(): void
@@ -274,6 +346,7 @@ class DispatchTicketApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
         $this->assertDatabaseCount('ticket_precios', 0);
         $this->assertDatabaseCount('pesadas', 0);
+        $this->assertDatabaseCount('lecturas_balanza', 0);
     }
 
     public function test_published_journey_rejects_a_truck_that_was_not_selected(): void
@@ -360,6 +433,56 @@ class DispatchTicketApiTest extends TestCase
 
         $this->assertDatabaseCount('tickets_despacho', 1);
         $this->assertDatabaseCount('pesadas', 2);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+    }
+
+    public function test_wholesale_idempotency_rejects_a_uuid_used_by_retail(): void
+    {
+        $payload = $this->ticketPayload();
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated();
+        DB::table('tickets_despacho')
+            ->where('referencia_externa', $payload['draft_id'])
+            ->update(['canal' => TicketDespacho::CHANNEL_RETAIL]);
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('draft_id');
+
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 2);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+    }
+
+    public function test_wholesale_idempotency_rejects_a_uuid_from_another_branch(): void
+    {
+        $payload = $this->ticketPayload();
+
+        $ticketId = $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated()
+            ->json('data.id');
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'SECUNDARIA',
+            'nombre' => 'Sucursal secundaria',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $journeyId = DB::table('tickets_despacho')->where('id', $ticketId)->value('jornada_id');
+        DB::table('jornadas_operativas')
+            ->where('id', $journeyId)
+            ->update(['sucursal_id' => $otherBranchId]);
+
+        $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('draft_id');
+
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 2);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
     }
 
     public function test_warehouse_destination_freezes_general_prices(): void

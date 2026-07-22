@@ -251,12 +251,14 @@ class RetailDispatchApiTest extends TestCase
 
         $this->assertDatabaseHas('ajustes_peso_minorista', [
             'empresa_id' => $this->user->empresa_id,
+            'estacion' => 1,
             'codigo' => AjustePesoMinorista::FEMALE_OPEN,
             'gramos_adicionales' => 275,
             'predeterminado' => true,
         ]);
         $this->assertDatabaseHas('ajustes_peso_minorista', [
             'empresa_id' => $this->user->empresa_id,
+            'estacion' => 1,
             'codigo' => AjustePesoMinorista::MALE_CLOSED,
             'gramos_adicionales' => 120,
             'predeterminado' => false,
@@ -268,7 +270,53 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
-    public function test_second_retail_station_shares_clients_prices_and_adjustments_but_has_its_own_scale(): void
+    public function test_retail_configuration_can_update_adjustments_without_resending_physical_scale_settings(): void
+    {
+        $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
+
+        $this->putJson('/api/v1/despacho-minorista/configuracion', [
+            'default_adjustment_code' => AjustePesoMinorista::MALE_OPEN,
+            'adjustments' => [[
+                'code' => AjustePesoMinorista::MALE_OPEN,
+                'additional_grams' => 85,
+            ]],
+        ])->assertOk()
+            ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA')
+            ->assertJsonPath('data.scale.connection_mode', 'SERIAL')
+            ->assertJsonPath('data.scale.device', null);
+
+        $this->assertDatabaseHas('ajustes_peso_minorista', [
+            'empresa_id' => $this->user->empresa_id,
+            'estacion' => 1,
+            'codigo' => AjustePesoMinorista::MALE_OPEN,
+            'gramos_adicionales' => 85,
+            'predeterminado' => true,
+        ]);
+        $this->assertDatabaseHas('balanzas', [
+            'sucursal_id' => $this->branchId,
+            'codigo' => 'BALANZA_MINORISTA',
+            'modo_conexion' => 'SERIAL',
+            'dispositivo' => null,
+        ]);
+    }
+
+    public function test_retail_configuration_rejects_an_empty_scale_object(): void
+    {
+        $this->putJson('/api/v1/despacho-minorista/configuracion', [
+            'scale' => [],
+            'default_adjustment_code' => AjustePesoMinorista::MALE_CLOSED,
+            'adjustments' => [[
+                'code' => AjustePesoMinorista::MALE_CLOSED,
+                'additional_grams' => 0,
+            ]],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('scale');
+
+        $this->assertDatabaseCount('balanzas', 0);
+        $this->assertDatabaseCount('ajustes_peso_minorista', 0);
+    }
+
+    public function test_second_retail_station_shares_clients_and_prices_but_has_independent_adjustments_and_scale(): void
     {
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
@@ -317,13 +365,51 @@ class RetailDispatchApiTest extends TestCase
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
             ->assertJsonPath('data.scale.device', null)
+            ->assertJsonPath('data.adjustments.0.additional_grams', 0);
+        $this->getJson('/api/v1/despacho-minorista-2/catalogo')
+            ->assertOk()
             ->assertJsonPath('data.adjustments.0.additional_grams', 135);
+
+        $this->assertDatabaseHas('ajustes_peso_minorista', [
+            'empresa_id' => $this->user->empresa_id,
+            'estacion' => 1,
+            'codigo' => AjustePesoMinorista::MALE_CLOSED,
+            'gramos_adicionales' => 0,
+        ]);
+        $this->assertDatabaseHas('ajustes_peso_minorista', [
+            'empresa_id' => $this->user->empresa_id,
+            'estacion' => 2,
+            'codigo' => AjustePesoMinorista::MALE_CLOSED,
+            'gramos_adicionales' => 135,
+        ]);
 
         $payload = $this->payload();
         $payload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA_2';
-        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+        $ticketId = $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
             ->assertCreated()
-            ->assertJsonPath('data.weighings.0.weight_source', 'BALANZA_MINORISTA_2');
+            ->assertJsonPath('data.weighings.0.weight_source', 'BALANZA_MINORISTA_2')
+            ->json('data.id');
+
+        $this->assertTrue(
+            DB::table('pesadas')
+                ->join(
+                    'ajustes_peso_minorista',
+                    'ajustes_peso_minorista.id',
+                    '=',
+                    'pesadas.ajuste_peso_minorista_id'
+                )
+                ->where('pesadas.ticket_id', $ticketId)
+                ->where('ajustes_peso_minorista.estacion', 2)
+                ->exists()
+        );
+        $this->assertTrue(
+            DB::table('pesadas')
+                ->join('lecturas_balanza', 'lecturas_balanza.id', '=', 'pesadas.lectura_balanza_id')
+                ->join('balanzas', 'balanzas.id', '=', 'lecturas_balanza.balanza_id')
+                ->where('pesadas.ticket_id', $ticketId)
+                ->where('balanzas.codigo', 'BALANZA_MINORISTA_2')
+                ->exists()
+        );
     }
 
     public function test_retail_dispatch_applies_adjustment_per_bird_and_stores_snapshots(): void
@@ -331,6 +417,7 @@ class RetailDispatchApiTest extends TestCase
         $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
         DB::table('ajustes_peso_minorista')
             ->where('empresa_id', $this->user->empresa_id)
+            ->where('estacion', 1)
             ->where('codigo', AjustePesoMinorista::FEMALE_CLOSED)
             ->update(['gramos_adicionales' => 250]);
         DB::table('tipos_bandeja')
@@ -386,6 +473,20 @@ class RetailDispatchApiTest extends TestCase
             'tara_total_kg' => 1,
             'peso_neto_kg' => 13.5,
         ]);
+        $readingId = DB::table('pesadas')->where('numero', 1)->value('lectura_balanza_id');
+        $this->assertNotNull($readingId);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $readingId,
+            'peso_kg' => 12,
+            'trama_cruda' => null,
+            'modo_conexion' => null,
+            'dispositivo' => null,
+            'capturada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('balanzas', [
+            'sucursal_id' => $this->branchId,
+            'codigo' => 'BALANZA_MINORISTA',
+        ]);
         $this->assertDatabaseHas('movimientos_javas', [
             'ticket_despacho_id' => $response->json('data.id'),
             'cliente_id' => $this->clientId,
@@ -394,6 +495,51 @@ class RetailDispatchApiTest extends TestCase
             'cantidad_bandejas' => 2,
             'vehiculo_id' => $this->deliveryVehicleId,
             'conductor_id' => $this->deliveryDriverId,
+        ]);
+    }
+
+    public function test_retail_scale_reading_metadata_is_audited_and_manual_weight_creates_no_reading(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['scale_reading'] = [
+            'raw_frame' => 'ST,GS,+00012.345kg',
+            'connection_mode' => 'bluetooth',
+            'device_name' => '  Balanza caja 1  ',
+            'captured_at' => '2026-07-22T15:15:30Z',
+        ];
+
+        $ticketId = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->json('data.id');
+
+        $reading = DB::table('lecturas_balanza')
+            ->join('balanzas', 'balanzas.id', '=', 'lecturas_balanza.balanza_id')
+            ->where('balanzas.codigo', 'BALANZA_MINORISTA')
+            ->select('lecturas_balanza.*')
+            ->sole();
+        $this->assertSame('ST,GS,+00012.345kg', $reading->trama_cruda);
+        $this->assertSame('BLUETOOTH', $reading->modo_conexion);
+        $this->assertSame('Balanza caja 1', $reading->dispositivo);
+        $this->assertSame('2026-07-22 10:15:30', $reading->capturada_at);
+        $this->assertSame($this->user->id, (int) $reading->capturada_por);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'lectura_balanza_id' => $reading->id,
+            'origen_peso' => 'BALANZA_MINORISTA',
+        ]);
+
+        $manualPayload = $this->payload();
+        $manualPayload['weighings'][0]['weight_source'] = 'MANUAL';
+        $manualPayload['weighings'][0]['scale_reading'] = $payload['weighings'][0]['scale_reading'];
+        $manualTicketId = $this->postJson('/api/v1/despacho-minorista/tickets', $manualPayload)
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $manualTicketId,
+            'lectura_balanza_id' => null,
+            'origen_peso' => 'MANUAL',
         ]);
     }
 
@@ -731,6 +877,7 @@ class RetailDispatchApiTest extends TestCase
         $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
         DB::table('ajustes_peso_minorista')
             ->where('empresa_id', $this->user->empresa_id)
+            ->where('estacion', 1)
             ->where('codigo', AjustePesoMinorista::MALE_CLOSED)
             ->update(['gramos_adicionales' => 250]);
         $payload = $this->payload();
@@ -778,6 +925,24 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
+    public function test_each_retail_endpoint_rejects_the_other_stations_scale_source(): void
+    {
+        $stationOnePayload = $this->payload();
+        $stationOnePayload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA_2';
+        $this->postJson('/api/v1/despacho-minorista/tickets', $stationOnePayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.weight_source');
+
+        $stationTwoPayload = $this->payload();
+        $stationTwoPayload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA';
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $stationTwoPayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.weight_source');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('lecturas_balanza', 0);
+    }
+
     public function test_retail_dispatch_rejects_live_chicken(): void
     {
         $payload = $this->payload();
@@ -814,6 +979,77 @@ class RetailDispatchApiTest extends TestCase
 
         $this->assertDatabaseCount('tickets_despacho', 1);
         $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+    }
+
+    public function test_retail_idempotency_rejects_a_uuid_from_another_branch(): void
+    {
+        $payload = $this->payload();
+
+        $ticketId = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->json('data.id');
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'MINORISTA-SECUNDARIA',
+            'nombre' => 'Sucursal minorista secundaria',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $journeyId = DB::table('tickets_despacho')->where('id', $ticketId)->value('jornada_id');
+        DB::table('jornadas_operativas')
+            ->where('id', $journeyId)
+            ->update(['sucursal_id' => $otherBranchId]);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('draft_id');
+
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+    }
+
+    public function test_retail_idempotency_rejects_a_draft_registered_by_the_other_station(): void
+    {
+        $stationOnePayload = $this->payload();
+        $this->postJson('/api/v1/despacho-minorista/tickets', $stationOnePayload)
+            ->assertCreated();
+
+        $stationTwoPayload = $stationOnePayload;
+        $stationTwoPayload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA_2';
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $stationTwoPayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('draft_id');
+
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+        $this->assertDatabaseMissing('balanzas', [
+            'sucursal_id' => $this->branchId,
+            'codigo' => 'BALANZA_MINORISTA_2',
+        ]);
+    }
+
+    public function test_manual_retail_idempotency_is_also_scoped_to_its_station(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['weight_source'] = 'MANUAL';
+
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertCreated();
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true);
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('draft_id');
+
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('lecturas_balanza', 0);
     }
 
     public function test_retail_idempotency_rejects_a_uuid_already_used_by_wholesale(): void

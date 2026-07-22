@@ -1,0 +1,55 @@
+.report-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+}
+.report-intro h2 { margin: 2px 0 6px; }
+.report-intro p:last-child { max-width: 760px; margin: 0; color: var(--fin-muted, #66706b); }
+.report-intro-mark {
+  display: grid;
+  min-width: 72px;
+  height: 72px;
+  place-items: center;
+  border-radius: 20px;
+  background: #173c25;
+  color: white;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.report-card { padding: 21px; }
+.report-card:last-child { grid-column: 1 / -1; }
+.report-card-heading { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; margin-bottom: 18px; }
+.report-card-heading > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: #e3f1e7;
+  color: #22633a;
+  font-weight: 900;
+}
+.report-card-heading h2 { margin: 0 0 4px; font-size: 19px; }
+.report-card-heading p { margin: 0; color: var(--fin-muted, #66706b); font-size: 13px; line-height: 1.45; }
+.report-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.report-wide { grid-column: 1 / -1; }
+.report-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 3px; }
+.report-actions .fin-btn { min-width: 128px; }
+.fin-btn-image { border-color: #315b8a; background: #eaf2fb; color: #244d79; }
+.fin-btn-image:hover { border-color: #244d79; background: #dbeaf8; }
+.report-error { border-color: #f3b7b1; background: #fff1f0; color: #9d1c13; padding: 14px 18px; }
+@media (max-width: 820px) {
+  .report-grid { grid-template-columns: 1fr; }
+  .report-card:last-child { grid-column: auto; }
+}
+@media (max-width: 540px) {
+  .report-intro { align-items: flex-start; padding: 18px; }
+  .report-intro-mark { min-width: 52px; height: 52px; border-radius: 14px; font-size: 12px; }
+  .report-form { grid-template-columns: 1fr; }
+  .report-wide { grid-column: auto; }
+  .report-actions { flex-direction: column; }
+  .report-actions .fin-btn { width: 100%; }
+}

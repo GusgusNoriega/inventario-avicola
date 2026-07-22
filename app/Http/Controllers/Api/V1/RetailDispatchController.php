@@ -179,11 +179,13 @@ class RetailDispatchController extends Controller
     public function store(StoreRetailDispatchRequest $request): JsonResponse
     {
         $branch = $this->context->branch($request);
+        $station = $this->retailStation($request);
         $result = $this->dispatches->register(
             $this->context->companyId($request),
             $branch,
             $this->context->actor($request, (int) $branch->id),
-            $request->validated()
+            $request->validated(),
+            $station
         );
 
         return response()->json([

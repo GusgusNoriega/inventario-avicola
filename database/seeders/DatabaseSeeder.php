@@ -85,21 +85,27 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        collect([
-            ['codigo' => 'MACHO_CERRADO', 'nombre' => 'Macho cerrado', 'sexo' => 'MACHO', 'presentacion' => 'CERRADO', 'predeterminado' => true],
-            ['codigo' => 'MACHO_ABIERTO', 'nombre' => 'Macho abierto', 'sexo' => 'MACHO', 'presentacion' => 'ABIERTO', 'predeterminado' => false],
-            ['codigo' => 'HEMBRA_CERRADA', 'nombre' => 'Hembra cerrada', 'sexo' => 'HEMBRA', 'presentacion' => 'CERRADA', 'predeterminado' => false],
-            ['codigo' => 'HEMBRA_ABIERTA', 'nombre' => 'Hembra abierta', 'sexo' => 'HEMBRA', 'presentacion' => 'ABIERTA', 'predeterminado' => false],
-        ])->each(fn (array $adjustment) => DB::table('ajustes_peso_minorista')->updateOrInsert(
-            ['empresa_id' => $empresaId, 'codigo' => $adjustment['codigo']],
-            [
-                ...$adjustment,
-                'gramos_adicionales' => 0,
-                'estado' => 'ACTIVO',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        ));
+        collect([1, 2])->each(function (int $station) use ($empresaId): void {
+            collect([
+                ['codigo' => 'MACHO_CERRADO', 'nombre' => 'Macho cerrado', 'sexo' => 'MACHO', 'presentacion' => 'CERRADO', 'predeterminado' => true],
+                ['codigo' => 'MACHO_ABIERTO', 'nombre' => 'Macho abierto', 'sexo' => 'MACHO', 'presentacion' => 'ABIERTO', 'predeterminado' => false],
+                ['codigo' => 'HEMBRA_CERRADA', 'nombre' => 'Hembra cerrada', 'sexo' => 'HEMBRA', 'presentacion' => 'CERRADA', 'predeterminado' => false],
+                ['codigo' => 'HEMBRA_ABIERTA', 'nombre' => 'Hembra abierta', 'sexo' => 'HEMBRA', 'presentacion' => 'ABIERTA', 'predeterminado' => false],
+            ])->each(fn (array $adjustment) => DB::table('ajustes_peso_minorista')->updateOrInsert(
+                [
+                    'empresa_id' => $empresaId,
+                    'estacion' => $station,
+                    'codigo' => $adjustment['codigo'],
+                ],
+                [
+                    ...$adjustment,
+                    'gramos_adicionales' => 0,
+                    'estado' => 'ACTIVO',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            ));
+        });
 
         collect([
             ['codigo' => 'ALMACEN_1', 'nombre' => 'Almacén 1'],
@@ -121,6 +127,18 @@ class DatabaseSeeder extends Seeder
             [
                 'codigo' => 'BALANZA_MINORISTA',
                 'nombre' => 'Balanza despacho minorista',
+                'modo_conexion' => 'SERIAL',
+                'configuracion' => json_encode([
+                    'baudRate' => 9600,
+                    'dataBits' => 8,
+                    'stopBits' => 1,
+                    'parity' => 'none',
+                    'flowControl' => 'none',
+                ], JSON_THROW_ON_ERROR),
+            ],
+            [
+                'codigo' => 'BALANZA_MINORISTA_2',
+                'nombre' => 'Balanza despacho minorista 2',
                 'modo_conexion' => 'SERIAL',
                 'configuracion' => json_encode([
                     'baudRate' => 9600,

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'empresa_id',
+    'estacion',
     'codigo',
     'nombre',
     'sexo',
@@ -61,6 +62,7 @@ class AjustePesoMinorista extends Model
     protected function casts(): array
     {
         return [
+            'estacion' => 'integer',
             'gramos_adicionales' => 'integer',
             'predeterminado' => 'boolean',
         ];

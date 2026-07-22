@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
 import {
   RetailScaleController,
+  migrateLegacyRetailScaleStorage,
   RETAIL_SCALE_STORAGE_KEY,
   RETAIL_SCALE_SERIAL_DEFAULTS
 } from "./despacho-minorista-balanza.js";
@@ -203,8 +204,15 @@ const state = {
   chickenType: null,
   sex: SEX_MALE,
   adjustmentCode: null,
-  liveWeight: 0,
-  liveSource: "manual",
+  liveWeight: null,
+  liveSource: null,
+  liveReadingAt: null,
+  liveReadingId: null,
+  liveReadingStatus: "unknown",
+  liveIsStable: false,
+  liveIsFresh: false,
+  liveRaw: "",
+  lastCapturedReadingId: null,
   selectedItem: null,
   priceEditingListIndex: null,
   storageKey: null,
@@ -551,7 +559,12 @@ function trayQuantityLabel(value) {
 function previewValues(readWeightOverride = null) {
   const tray = selectedTray();
   const adjustment = selectedAdjustment();
-  const readWeight = Number(readWeightOverride ?? state.liveWeight ?? 0);
+  const sourceWeight = readWeightOverride ?? state.liveWeight;
+  const parsedWeight = sourceWeight === null || sourceWeight === undefined || sourceWeight === ""
+    ? null
+    : Number(sourceWeight);
+  const hasReading = Number.isFinite(parsedWeight) && parsedWeight >= 0;
+  const readWeight = hasReading ? parsedWeight : null;
   const trayCount = Number(elements.trayCount.value || 0);
   const birdsPerTray = Number(elements.birdsPerTray.value || 0);
   const birds = trayCount * birdsPerTray;
@@ -566,6 +579,7 @@ function previewValues(readWeightOverride = null) {
   return {
     tray,
     adjustment,
+    hasReading,
     readWeight,
     trayCount,
     birdsPerTray,
@@ -578,29 +592,95 @@ function previewValues(readWeightOverride = null) {
   };
 }
 
+function liveReadingAvailability() {
+  const scaleState = state.scale?.getState?.() || state.scaleState || {};
+  syncLiveScaleState(scaleState);
+  const weight = Number.isFinite(scaleState.currentWeightKg)
+    ? Number(scaleState.currentWeightKg)
+    : null;
+  const source = scaleState.readingSource || null;
+  const readingAt = scaleState.readingAt || null;
+  const readingId = scaleState.readingId || null;
+  const isPhysical = source === "ble" || source === "serial";
+  const connectionMatches = !isPhysical
+    || (scaleState.status === "connected" && scaleState.connectionMode === source);
+  const readingAtMs = Date.parse(readingAt || "");
+  const freshnessMs = Number(scaleState.freshnessMs);
+  const isExpired = isPhysical
+    && Number.isFinite(readingAtMs)
+    && Number.isFinite(freshnessMs)
+    && Date.now() - readingAtMs > freshnessMs;
+  const fixedAdjustmentAvailable = RETAIL_STATION !== "2"
+    || Boolean(station2AdjustmentForList(state.activeList));
+  const ready = Number.isFinite(weight)
+    && weight > 0
+    && Boolean(scaleState.isStable)
+    && Boolean(scaleState.isFresh)
+    && connectionMatches
+    && Boolean(readingAt)
+    && Boolean(readingId)
+    && readingId !== state.lastCapturedReadingId
+    && fixedAdjustmentAvailable
+    && !state.loading;
+
+  return {
+    ready,
+    weight,
+    source,
+    readingAt,
+    readingId,
+    isPhysical,
+    isExpired,
+    connectionMatches,
+    fixedAdjustmentAvailable,
+    alreadyCaptured: Boolean(readingId)
+      && readingId === state.lastCapturedReadingId,
+    scaleState
+  };
+}
+
 function renderWeightPreview() {
+  const availability = liveReadingAvailability();
   const values = previewValues();
   const price = effectivePrice(activeList(), state.chickenType);
-  const source = state.liveSource || "manual";
+  const source = state.liveSource;
   const sourceLabels = {
     manual: "Ingreso manual",
     ble: "Balanza minorista · BLE",
     serial: "Balanza minorista · Serial"
   };
 
-  elements.adjustedWeight.textContent = values.grossWeight.toFixed(3);
-  elements.grossPreview.textContent = formatWeight(values.grossWeight);
+  elements.adjustedWeight.textContent = values.hasReading ? values.grossWeight.toFixed(3) : "---";
+  elements.grossPreview.textContent = values.hasReading ? formatWeight(values.grossWeight) : "--- kg";
   elements.tarePreview.textContent = formatWeight(values.tareWeight);
   elements.tareDetail.textContent = `${values.trayCount} × ${Number(values.tray?.weight_kg || 0).toFixed(3)} kg por bandeja`;
-  elements.netPreview.textContent = formatWeight(Math.max(values.netWeight, 0));
+  elements.netPreview.textContent = values.hasReading
+    ? formatWeight(Math.max(values.netWeight, 0))
+    : "--- kg";
   elements.netPreview.classList.toggle("is-invalid", values.readWeight > 0 && values.netWeight <= 0);
   elements.birdTotalPreview.textContent = values.trayCount === 0
     ? "Sin bandejas · 0 aves"
     : `${values.birds} ave${values.birds === 1 ? "" : "s"}`;
-  elements.weightSourceLabel.textContent = sourceLabels[source] || "Balanza minorista";
-  elements.captureState.textContent = "Peso en vivo";
-  elements.captureState.classList.remove("is-captured");
-  elements.captureWeight.classList.remove("is-captured");
+  elements.weightSourceLabel.textContent = sourceLabels[source]
+    || (availability.scaleState.status === "connected" ? "Esperando balanza" : "Sin lectura");
+  elements.captureState.textContent = availability.ready
+    ? (source === "manual" ? "Peso manual listo" : "Peso estable")
+    : !availability.fixedAdjustmentAvailable
+      ? "Ajuste no disponible"
+      : availability.alreadyCaptured
+        ? "Peso ya capturado"
+        : availability.isExpired
+          ? "Lectura vencida"
+          : state.liveReadingStatus === "unstable"
+            ? "Peso inestable"
+            : state.liveReadingStatus === "stale"
+              ? "Lectura vencida"
+              : availability.scaleState.status === "connected"
+                ? "Esperando lectura"
+                : "Sin conexión";
+  elements.captureState.classList.toggle("is-captured", availability.ready);
+  elements.captureWeight.classList.toggle("is-captured", availability.alreadyCaptured);
+  elements.captureWeight.disabled = !availability.ready;
   elements.captureWeight.lastChild.textContent = ` Capturar en lista ${state.activeList + 1}`;
   elements.captureWeight.setAttribute("aria-label", `Capturar el peso actual en la lista ${state.activeList + 1}`);
   const liveAmount = price && values.netWeight > 0
@@ -795,21 +875,43 @@ function selectList(index) {
 }
 
 function captureWeight() {
-  const manualValue = Number(String(elements.rawWeightInput.value || "0").replace(",", "."));
-  if (state.liveSource === "manual" && Number.isFinite(manualValue)) {
-    state.liveWeight = roundWeight(manualValue);
+  const availability = liveReadingAvailability();
+  if (!availability.fixedAdjustmentAvailable) {
+    setMessage("La presentación fija de esta columna no está disponible. Actualiza el catálogo antes de capturar.", true);
+    return;
   }
-
-  if (!Number.isFinite(state.liveWeight) || state.liveWeight <= 0) {
-    setMessage("La balanza debe mostrar un peso mayor que cero antes de capturarlo.", true);
-    elements.rawWeightInput.focus();
+  if (availability.alreadyCaptured) {
+    setMessage("Este peso ya fue capturado. Espera una nueva lectura estable antes de repetir.", true);
+    return;
+  }
+  if (!availability.ready) {
+    renderWeightPreview();
+    setMessage(availability.isPhysical && !availability.connectionMatches
+      ? "La balanza debe estar conectada antes de capturar."
+      : "Espera una lectura estable y reciente mayor que cero antes de capturar.", true);
     return;
   }
 
+  const scaleState = availability.scaleState;
+  const isPhysical = availability.isPhysical;
+  const connectionMode = availability.source === "ble" ? "BLUETOOTH" : "SERIAL";
   const capturedReading = {
-    readWeight: roundWeight(state.liveWeight),
-    source: state.liveSource || "manual",
-    weighedAt: new Date().toISOString()
+    readWeight: roundWeight(availability.weight),
+    source: availability.source,
+    readingId: availability.readingId,
+    readingAt: availability.readingAt,
+    weighedAt: availability.readingAt,
+    raw: isPhysical ? String(scaleState.readingRaw || state.liveRaw || "") : null,
+    device: isPhysical ? String(scaleState.deviceName || "") : null,
+    mode: isPhysical ? connectionMode : "MANUAL",
+    scaleReading: isPhysical
+      ? {
+          raw_frame: String(scaleState.readingRaw || state.liveRaw || ""),
+          connection_mode: connectionMode,
+          device_name: String(scaleState.deviceName || "") || null,
+          captured_at: availability.readingAt
+        }
+      : null
   };
 
   addWeighingToList(state.activeList, capturedReading);
@@ -861,15 +963,21 @@ function addWeighingToList(listIndex, capturedReading) {
     weightSource: capturedReading.source === "manual"
       ? "MANUAL"
       : (state.catalog.scale?.code || "BALANZA_MINORISTA"),
-    weighedAt: capturedReading.weighedAt
+    weighedAt: capturedReading.weighedAt,
+    readingId: capturedReading.readingId,
+    readingAt: capturedReading.readingAt,
+    raw: capturedReading.raw,
+    device: capturedReading.device,
+    mode: capturedReading.mode,
+    scaleReading: capturedReading.scaleReading
   });
 
+  state.lastCapturedReadingId = capturedReading.readingId;
   state.activeList = targetIndex;
   state.selectedItem = { listIndex: targetIndex, id: target.items.at(-1).id };
   if (capturedReading.source === "manual") {
-    state.liveWeight = 0;
-    state.liveSource = "manual";
-    elements.rawWeightInput.value = "0";
+    state.scale.clearReading();
+    elements.rawWeightInput.value = "";
   } else {
     elements.rawWeightInput.value = Number(state.liveWeight || 0).toFixed(3);
   }
@@ -886,7 +994,10 @@ function removeSelectedWeighing() {
   const index = list.items.findIndex((item) => item.id === selected.id);
   if (index < 0) return;
 
-  list.items.splice(index, 1);
+  const [removedItem] = list.items.splice(index, 1);
+  if (removedItem?.readingId && removedItem.readingId === state.lastCapturedReadingId) {
+    state.lastCapturedReadingId = null;
+  }
   state.selectedItem = null;
   persistLists();
   renderAll();
@@ -1831,7 +1942,8 @@ async function saveDispatch(delivery = null, payments = []) {
           birds_per_tray: item.birdsPerTray,
           tray_count: item.trayCount,
           read_weight_kg: item.readWeight,
-          weighed_at: item.weighedAt
+          weighed_at: item.weighedAt,
+          scale_reading: item.weightSource === "MANUAL" ? null : (item.scaleReading || null)
         }))
       })
     });
@@ -1912,12 +2024,7 @@ function renderSettingsAdjustments() {
 }
 
 function fillSettingsForm() {
-  const configuration = state.catalog.scale?.configuration || {};
-  const serialOptions = {
-    ...RETAIL_SCALE_SERIAL_DEFAULTS,
-    ...(configuration.serial || {}),
-    ...configuration
-  };
+  const serialOptions = state.scale?.getState?.().serialOptions || RETAIL_SCALE_SERIAL_DEFAULTS;
   applySerialOptionsToForm(serialOptions);
   elements.settingsScaleName.textContent = state.catalog.scale?.name || "Balanza minorista";
   renderSettingsAdjustments();
@@ -1961,9 +2068,8 @@ async function saveSettings(event) {
     return;
   }
 
-  let serialOptions;
   try {
-    serialOptions = state.scale.configureSerial(serialOptionsFromForm());
+    state.scale.configureSerial(serialOptionsFromForm());
   } catch (error) {
     setSettingsMessage(error.message, true);
     return;
@@ -1972,27 +2078,9 @@ async function saveSettings(event) {
   elements.saveSettings.disabled = true;
   setSettingsMessage("Guardando configuración minorista...");
   try {
-    const scaleState = state.scale.getState();
-    const selectedConnectionMode = String(
-      scaleState.connectionMode || state.catalog.scale?.connection_mode || "MANUAL"
-    ).toLowerCase();
-    const connectionMode = ["ble", "bluetooth"].includes(selectedConnectionMode)
-      ? "BLUETOOTH"
-      : selectedConnectionMode === "serial"
-        ? "SERIAL"
-        : "MANUAL";
     const response = await apiRequest(`${RETAIL_API_BASE}/configuracion`, {
       method: "PUT",
       body: JSON.stringify({
-        scale: {
-          connection_mode: connectionMode,
-          device: scaleState.deviceName || state.catalog.scale?.device || null,
-          configuration: {
-            ...serialOptions,
-            profileId: scaleState.profileId || null,
-            profileLabel: scaleState.profileLabel || null
-          }
-        },
         default_adjustment_code: elements.defaultAdjustment.value,
         adjustments
       })
@@ -2001,7 +2089,7 @@ async function saveSettings(event) {
     fillSettingsForm();
     renderAll();
     setSettingsMessage(response.message || "Configuración guardada correctamente.");
-    setMessage("Configuración de balanza y gramos actualizada.");
+    setMessage("Configuración local de conexión y gramos actualizada.");
   } catch (error) {
     const validation = error.data?.errors ? Object.values(error.data.errors).flat()[0] : null;
     setSettingsMessage(validation || error.message, true);
@@ -2032,18 +2120,13 @@ async function connectSerial() {
 
 async function disconnectScale() {
   await state.scale.disconnect({ forget: false });
-  state.liveSource = "manual";
   setSettingsMessage("Balanza desconectada. La autorización quedó recordada.");
 }
 
 function applyManualScaleReading() {
   try {
     const scaleState = state.scale.setManualReading(elements.manualScaleInput.value);
-    state.liveWeight = scaleState.currentWeightKg;
-    state.liveSource = "manual";
-    elements.rawWeightInput.value = state.liveWeight.toFixed(3);
-    renderWeightPreview();
-    setSettingsMessage(`Lectura manual aplicada: ${formatWeight(state.liveWeight)}.`);
+    setSettingsMessage(`Lectura manual aplicada: ${formatWeight(scaleState.currentWeightKg)}.`);
   } catch (error) {
     setSettingsMessage(error.message, true);
   }
@@ -2060,12 +2143,8 @@ function applyMainManualWeight(event) {
   event.preventDefault();
   try {
     const scaleState = state.scale.setManualReading(elements.manualWeightEntry.value);
-    state.liveWeight = scaleState.currentWeightKg;
-    state.liveSource = "manual";
-    elements.rawWeightInput.value = state.liveWeight.toFixed(3);
     closeModal(elements.manualWeightModal);
-    renderWeightPreview();
-    setMessage(`Peso manual recibido. La pantalla muestra ${formatWeight(previewValues().grossWeight)} con el ajuste.`);
+    setMessage(`Peso manual recibido. La pantalla muestra ${formatWeight(previewValues(scaleState.currentWeightKg).grossWeight)} con el ajuste.`);
   } catch (error) {
     setMessage(error.message, true);
     elements.manualWeightEntry.focus();
@@ -2136,18 +2215,17 @@ async function loadCatalog() {
     const scaleStorageKey = RETAIL_STATION === "1"
       ? `${RETAIL_SCALE_STORAGE_KEY}-branch-${branchId}`
       : `${RETAIL_SCALE_STORAGE_KEY}-station-${RETAIL_STATION}-branch-${branchId}`;
-    state.scale.setStorageKey(scaleStorageKey, { reload: true });
-
-    const configuration = state.catalog.scale?.configuration || {};
-    try {
-      state.scale.configureSerial({
-        ...RETAIL_SCALE_SERIAL_DEFAULTS,
-        ...(configuration.serial || {}),
-        ...configuration
+    if (RETAIL_STATION === "1") {
+      migrateLegacyRetailScaleStorage({
+        station: RETAIL_STATION,
+        storage: globalThis.localStorage,
+        targetKey: scaleStorageKey
       });
-    } catch {
-      state.scale.configureSerial(RETAIL_SCALE_SERIAL_DEFAULTS);
     }
+    state.scale.setStorageKey(scaleStorageKey, {
+      reload: true,
+      persistCurrent: false
+    });
 
     fillSettingsForm();
     state.loading = false;
@@ -2170,18 +2248,34 @@ function updateClock() {
   }).format(new Date());
 }
 
+function syncLiveScaleState(scaleState = {}) {
+  state.scaleState = scaleState;
+  state.liveWeight = Number.isFinite(scaleState.currentWeightKg)
+    ? Number(scaleState.currentWeightKg)
+    : null;
+  state.liveSource = scaleState.readingSource || null;
+  state.liveReadingAt = scaleState.readingAt || null;
+  state.liveReadingId = scaleState.readingId || null;
+  state.liveReadingStatus = scaleState.inputStatus || "unknown";
+  state.liveIsStable = Boolean(scaleState.isStable);
+  state.liveIsFresh = Boolean(scaleState.isFresh);
+  elements.rawWeightInput.value = Number.isFinite(state.liveWeight)
+    ? state.liveWeight.toFixed(3)
+    : "";
+}
+
 state.scale = new RetailScaleController({
-  onReading({ weightKg, source }) {
-    state.liveWeight = Number(weightKg || 0);
-    state.liveSource = source || "manual";
-    elements.rawWeightInput.value = state.liveWeight.toFixed(3);
+  onReading({ state: scaleState }) {
+    syncLiveScaleState(scaleState);
     renderWeightPreview();
   },
   onStatus(payload) {
-    state.scaleState = payload.state;
+    syncLiveScaleState(payload.state);
     renderScaleStatus(payload);
+    renderWeightPreview();
   },
   onRaw({ raw }) {
+    state.liveRaw = raw || "";
     elements.scaleRaw.textContent = `Trama: ${raw || "--"}`;
     elements.scaleRaw.title = raw || "";
   }
@@ -2430,14 +2524,23 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-globalThis.addEventListener("beforeunload", () => {
+let clockIntervalId = null;
+let teardownStarted = false;
+function teardownRetailStation(event) {
+  if (event?.type === "pagehide" && event.persisted) return;
+  if (teardownStarted) return;
+  teardownStarted = true;
   persistLists();
+  if (clockIntervalId) globalThis.clearInterval(clockIntervalId);
   void state.scale.destroy();
-});
+}
+
+globalThis.addEventListener("pagehide", teardownRetailStation);
+globalThis.addEventListener("beforeunload", teardownRetailStation);
 
 initializeTypography();
 updateClock();
-globalThis.setInterval(updateClock, 1000);
+clockIntervalId = globalThis.setInterval(updateClock, 1000);
 renderAll();
 renderScaleStatus(state.scale.getState());
 loadCatalog();

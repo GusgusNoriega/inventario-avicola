@@ -77,13 +77,13 @@
 
         <article class="rd-scale-panel rd-panel">
           <div class="rd-scale-head">
-            <span id="retailWeightSourceLabel">Ingreso manual</span>
-            <span id="retailCaptureState" class="rd-capture-state">Peso en vivo</span>
+            <span id="retailWeightSourceLabel">Sin lectura</span>
+            <span id="retailCaptureState" class="rd-capture-state">Sin conexión</span>
           </div>
 
-          <input id="retailRawWeightInput" type="hidden" value="0">
+          <input id="retailRawWeightInput" type="hidden" value="">
           <button id="retailManualWeightTrigger" class="rd-scale-reading" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" aria-label="Peso final ajustado. Toca para ingresar peso manual">
-            <output id="retailAdjustedWeight">0.000</output>
+            <output id="retailAdjustedWeight">---</output>
             <span aria-hidden="true">kg</span>
           </button>
 
@@ -91,7 +91,7 @@
             <span>Peso mostrado con ajuste aplicado</span>
           </div>
 
-          <button id="retailCaptureWeight" class="rd-capture-button" type="button">
+          <button id="retailCaptureWeight" class="rd-capture-button" type="button" disabled>
             <span aria-hidden="true">◎</span>
             Capturar peso
           </button>
@@ -105,7 +105,7 @@
           </div>
           <div class="rd-value-card">
             <span>Peso bruto ajustado</span>
-            <strong id="retailGrossPreview">0.000 kg</strong>
+            <strong id="retailGrossPreview">--- kg</strong>
           </div>
           <div class="rd-value-card">
             <span>Tara de bandejas</span>
@@ -114,7 +114,7 @@
           </div>
           <div class="rd-value-card is-net">
             <span>Peso neto</span>
-            <strong id="retailNetPreview">0.000 kg</strong>
+            <strong id="retailNetPreview">--- kg</strong>
             <small id="retailBirdTotalPreview">5 aves</small>
           </div>
         </article>
@@ -333,7 +333,7 @@
     <form id="retailSettingsForm" class="rd-modal-card is-settings" role="dialog" aria-modal="true" aria-labelledby="retailSettingsModalTitle">
       <header class="rd-modal-head">
         <div>
-          <p>Configuración exclusiva de esta estación</p>
+          <p>Conexión exclusiva de este navegador y estación</p>
           <h2 id="retailSettingsModalTitle">Balanza y ajustes minoristas</h2>
         </div>
         <button type="button" data-retail-close-modal="retailSettingsModal" aria-label="Cerrar">×</button>
@@ -356,7 +356,7 @@
           <div class="rd-manual-reading">
             <label>
               <span>Lectura manual de prueba (kg)</span>
-              <input id="retailManualScaleInput" type="number" min="0" step="0.001" inputmode="none" readonly placeholder="Ej. 12.450" data-retail-keyboard="decimal" data-retail-keyboard-label="Lectura manual de prueba">
+              <input id="retailManualScaleInput" type="number" min="0.001" step="0.001" inputmode="none" readonly placeholder="Ej. 12.450" data-retail-keyboard="decimal" data-retail-keyboard-label="Lectura manual de prueba">
             </label>
             <button id="retailApplyManualScale" class="rd-secondary-button" type="button">Aplicar</button>
           </div>
@@ -367,7 +367,7 @@
           <div class="rd-settings-title">
             <div>
               <span>Puerto serial</span>
-              <strong>Parámetros de comunicación</strong>
+              <strong>Parámetros guardados solo en esta computadora</strong>
             </div>
           </div>
           <div class="rd-serial-fields">

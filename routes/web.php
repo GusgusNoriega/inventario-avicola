@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Web\AuthController as WebAuthController;
+use App\Http\Controllers\Web\ReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [WebAuthController::class, 'create'])->name('login');
@@ -70,6 +71,12 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('finanzas.movimientos.nuevo');
             Route::view('/compras', 'compras')->name('compras.index');
             Route::view('/compras/nueva', 'compra-form')->name('compras.create');
+            Route::get('/finanzas/reportes', [ReportController::class, 'index'])
+                ->name('finanzas.reportes');
+            Route::get('/finanzas/reportes/{type}/pdf', [ReportController::class, 'pdf'])
+                ->name('finanzas.reportes.pdf');
+            Route::get('/finanzas/reportes/{type}/imagen', [ReportController::class, 'image'])
+                ->name('finanzas.reportes.imagen');
         });
 
         Route::middleware('module:MODULO_CONTROL_JAVAS')->group(function (): void {

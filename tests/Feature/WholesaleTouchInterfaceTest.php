@@ -60,7 +60,7 @@ class WholesaleTouchInterfaceTest extends TestCase
         }
 
         $numericInputs = $xpath->query('//input[translate(@type, "NUMBER", "number") = "number"]');
-        $this->assertCount(8, $numericInputs);
+        $this->assertCount(10, $numericInputs);
 
         foreach ($numericInputs as $input) {
             $this->assertTrue($input->hasAttribute('readonly'), "{$input->getAttribute('id')} debe ser readonly.");
