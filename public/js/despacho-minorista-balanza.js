@@ -188,7 +188,7 @@ function scaleTextRejection(text) {
     return "error";
   }
 
-  if (/\b(?:US|UNSTABLE|INESTABLE|MOTION|MOVING|DYNAMIC|DINAMICO)\b/i.test(text)
+  if (/\b(?:MOTION|MOVING|DYNAMIC|DINAMICO)\b/i.test(text)
     || /^\s*S\s+(?:D|U)(?:\s|,|$)/i.test(text)) {
     return "unstable";
   }
@@ -201,7 +201,7 @@ function candidateRole(text, start, end) {
   const contextEnd = Math.min(text.length, end + 20);
   const context = text.slice(contextStart, contextEnd).toUpperCase();
   const roles = [
-    { role: "net", pattern: /\b(?:NET|NETO|NW)\b/g },
+    { role: "net", pattern: /\b(?:NET|NETO|NT|NW)\b/g },
     { role: "gross", pattern: /\b(?:GROSS|BRUTO|GS|GW)\b/g },
     { role: "tare", pattern: /\b(?:TARE|TARA|TW)\b/g }
   ];
@@ -231,6 +231,10 @@ function analyzeIndustrialScaleText(rawText) {
     return { reading: null, rejectionReason: "unknown", stableHint: null };
   }
 
+  // Hay indicadores Serial BT que reportan siempre US aunque el peso haya
+  // dejado de cambiar. Se conserva el valor numérico y el controlador exige
+  // dos muestras consecutivas dentro de la tolerancia antes de publicarlo.
+  const reportsUnstableWeight = /\b(?:US|UNSTABLE|INESTABLE)\b/i.test(text);
   const rejectionReason = scaleTextRejection(text);
   if (rejectionReason) {
     return { reading: null, rejectionReason, stableHint: false };
@@ -310,10 +314,12 @@ function analyzeIndustrialScaleText(rawText) {
       role: bestMatch.role
     },
     rejectionReason: null,
-    stableHint: (
-      /\b(?:ST|STABLE|ESTABLE)\b/i.test(text)
-      || /^\s*S\s+S(?:\s|,|$)/i.test(text)
-    ) ? true : null
+    stableHint: reportsUnstableWeight
+      ? false
+      : (
+          /\b(?:ST|STABLE|ESTABLE)\b/i.test(text)
+          || /^\s*S\s+S(?:\s|,|$)/i.test(text)
+        ) ? true : null
   };
 }
 
@@ -1260,6 +1266,17 @@ export class RetailScaleController {
 
     const now = Date.now();
     const source = options.source || null;
+    const matchesCommittedReading = Boolean(this._state.readingId)
+      && this._state.isStable
+      && this._state.inputStatus === "stable"
+      && !this._nextStableReadingStartsNewIdentity
+      && this._state.readingSource === source
+      && Number.isFinite(this._state.currentWeightKg)
+      && Math.abs(this._state.currentWeightKg - normalizedWeight) <= WEIGHT_STABILITY_TOLERANCE_KG;
+    if (matchesCommittedReading) {
+      return this._commitStableReading(normalizedWeight, options);
+    }
+
     const pendingMatches = this._pendingReading
       && this._pendingReading.source === source
       && Math.abs(this._pendingReading.weightKg - normalizedWeight) <= WEIGHT_STABILITY_TOLERANCE_KG;

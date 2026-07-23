@@ -124,12 +124,14 @@ function attachSerialConnection(controller) {
   return connection;
 }
 
-test("parser prioriza NET/GROSS, ignora TARE y rechaza US, errores y negativos", () => {
+test("parser prioriza NET/GROSS, ignora TARE y filtra errores y negativos", () => {
   assert.equal(parseIndustrialScaleText("ST,NET 12.500 kg TARE 0.000 kg")?.weightKg, 12.5);
   assert.equal(parseIndustrialScaleText("ST NET 12.500 GROSS 14.500 kg TARE 2.000 kg")?.weightKg, 12.5);
   assert.equal(parseIndustrialScaleText("ST,GS,+ 14.250 kg")?.weightKg, 14.25);
   assert.equal(parseIndustrialScaleText("ST,TARE 2.500 kg"), null);
-  assert.equal(parseIndustrialScaleText("US,NET 12.500 kg"), null);
+  assert.equal(parseIndustrialScaleText("US,NET 12.500 kg")?.weightKg, 12.5);
+  assert.equal(parseIndustrialScaleText("US,NT,+ 8.3kg")?.weightKg, 8.3);
+  assert.equal(parseRetailScalePayload("US,NT,+ 8.3kg").stableHint, false);
   assert.equal(parseIndustrialScaleText("S D      12.500 kg"), null);
   assert.equal(parseIndustrialScaleText("S U      12.500 kg"), null);
   assert.equal(parseIndustrialScaleText("S I      12.500 kg"), null);
@@ -137,6 +139,58 @@ test("parser prioriza NET/GROSS, ignora TARE y rechaza US, errores y negativos",
   assert.equal(parseIndustrialScaleText("ERROR 12.500 kg"), null);
   assert.equal(parseIndustrialScaleText("NET -0.005 kg TARE 0.000 kg"), null);
   assert.equal(parseIndustrialScaleText("---"), null);
+});
+
+test("Minorista 1 y Minorista 2 publican una trama US tras dos muestras coincidentes", () => {
+  for (const station of ["1", "2"]) {
+    const controller = new RetailScaleController({
+      navigator: {},
+      storage: memoryStorage(),
+      storageKey: buildRetailScaleStorageKey(station, 10),
+      secureContext: true
+    });
+    const connection = attachSerialConnection(controller);
+
+    controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+    assert.equal(controller.getState().currentWeightKg, null, `Minorista ${station}: primera muestra`);
+    assert.equal(controller.getState().inputStatus, "unstable");
+    assert.equal(controller.getState().isCaptureReady, false);
+
+    controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+    assert.equal(controller.getState().currentWeightKg, 8.3, `Minorista ${station}: segunda muestra`);
+    assert.equal(controller.getState().inputStatus, "stable");
+    assert.equal(controller.getState().isCaptureReady, true);
+
+    const readingId = controller.getState().readingId;
+    controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+    controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+    assert.equal(controller.getState().inputStatus, "stable");
+    assert.equal(controller.getState().isCaptureReady, true);
+    assert.equal(controller.getState().readingId, readingId);
+  }
+});
+
+test("movimiento real exige reconfirmar dos tramas US antes de crear otra pesada", () => {
+  const { controller } = controllerWithReadings();
+  const connection = attachSerialConnection(controller);
+
+  controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+  controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+  const firstReadingId = controller.getState().readingId;
+
+  controller._handlePayload("MOTION,NT,+ 8.3kg", { source: "serial", connection });
+  assert.equal(controller.getState().inputStatus, "unstable");
+  assert.equal(controller.getState().isCaptureReady, false);
+
+  controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+  assert.equal(controller.getState().readingId, firstReadingId);
+  assert.equal(controller.getState().inputStatus, "unstable");
+  assert.equal(controller.getState().isCaptureReady, false);
+
+  controller._handlePayload("US,NT,+ 8.3kg", { source: "serial", connection });
+  assert.notEqual(controller.getState().readingId, firstReadingId);
+  assert.equal(controller.getState().inputStatus, "stable");
+  assert.equal(controller.getState().isCaptureReady, true);
 });
 
 test("perfil SIG BLE interpreta binario antes que texto", () => {
@@ -296,6 +350,14 @@ test("cero aislado conserva identidad y solo una transición confirmada crea otr
   const confirmedTransitionId = controller.getState().readingId;
   controller._handlePayload("US,NET 10.000 kg", { source: "serial", connection });
   controller._handlePayload("ST,NET 10.000 kg", { source: "serial", connection });
+  assert.equal(
+    controller.getState().readingId,
+    confirmedTransitionId,
+    "una bandera US aislada con el mismo peso no debe inventar otra pesada"
+  );
+
+  controller._handlePayload("US,NET 11.000 kg", { source: "serial", connection });
+  controller._handlePayload("US,NET 11.000 kg", { source: "serial", connection });
   assert.notEqual(controller.getState().readingId, confirmedTransitionId);
 });
 
