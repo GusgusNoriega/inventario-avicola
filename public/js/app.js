@@ -3710,11 +3710,16 @@ export function parseIndustrialScaleText(rawText) {
     return { weightKg: null, rawValue: null, status: "error", stable: false };
   }
   if (
-    /\b(?:US|UNSTABLE|MOTION|MOVING|INESTABLE|DYNAMIC|DINAMICO)\b/.test(normalizedText)
+    /\b(?:MOTION|MOVING|DYNAMIC|DINAMICO)\b/.test(normalizedText)
     || /\bS\s*(?:D|U)\b/.test(normalizedText)
   ) {
     return { weightKg: null, rawValue: null, status: "unstable", stable: false };
   }
+  // Algunos indicadores Serial BT transmiten siempre US (unstable), incluso
+  // cuando el valor ya dejó de cambiar. No se debe perder el número: el filtro
+  // local exige dos muestras consecutivas dentro de la tolerancia antes de
+  // publicarlo en la vista y habilitar su captura.
+  const reportsUnstableWeight = /\b(?:US|UNSTABLE|INESTABLE)\b/.test(normalizedText);
 
   const matches = [];
   const weightPattern = /([+-]?\s*\d+(?:[.,]\d+)?)(?:\s*(kilogramos|kilogramo|gramos|gramo|libras|libra|kgs|lbs|kg|lb|gr|g)\b)?/gi;
@@ -3776,8 +3781,10 @@ export function parseIndustrialScaleText(rawText) {
     weightKg: roundWeight(bestMatch.weightKg),
     rawValue: bestMatch.rawValue,
     status: "weight",
-    stable: /\b(?:ST|STABLE|ESTABLE)\b/.test(normalizedText)
+    stable: !reportsUnstableWeight && (
+      /\b(?:ST|STABLE|ESTABLE)\b/.test(normalizedText)
       || /\bS\s*S\b/.test(normalizedText)
+    )
   };
 }
 

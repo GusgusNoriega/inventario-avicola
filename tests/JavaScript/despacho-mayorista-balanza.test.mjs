@@ -364,7 +364,7 @@ test("parser mayorista separa GROSS/NET de TARE antes y después del valor", () 
   assert.equal(parse("ST 12.500 kg GROSS").weightKg, 12.5);
 });
 
-test("parser mayorista rechaza estados industriales, errores y negativos", () => {
+test("parser mayorista filtra estados industriales, errores y negativos", () => {
   const parse = parsing.parseIndustrialScaleText;
 
   assert.equal(parse("S D 12.500 kg").status, "unstable");
@@ -372,7 +372,10 @@ test("parser mayorista rechaza estados industriales, errores y negativos", () =>
   assert.equal(parse("S I 12.500 kg").status, "error");
   assert.equal(parse("S + 12.500 kg").status, "error");
   assert.equal(parse("S - 12.500 kg").status, "error");
-  assert.equal(parse("US,NET 12.500 kg").status, "unstable");
+  assert.equal(parse("US,NET 12.500 kg").weightKg, 12.5);
+  assert.equal(parse("US,NET 12.500 kg").stable, false);
+  assert.equal(parse("US,NT,+ 8.3kg").weightKg, 8.3);
+  assert.equal(parse("US,NT,+ 8.3kg").stable, false);
   assert.equal(parse("ERROR 12.500 kg").status, "error");
   assert.equal(parse("ST,GS,-1.000 kg ID 2").status, "negative");
   assert.equal(parse("S S 12.500 kg").stable, true);
@@ -553,6 +556,21 @@ test("cero requiere confirmación y un peso sin bandera estable requiere dos mue
     2100
   );
   assert.equal(regular.accepted, true);
+});
+
+test("dos tramas US consecutivas de la balanza real habilitan el peso mayorista", () => {
+  const firstReading = parsing.parseIndustrialScaleText("US,NT,+ 8.3kg");
+  let result = parsing.evaluateScaleStability(null, firstReading, 2000);
+
+  assert.equal(firstReading.weightKg, 8.3);
+  assert.equal(firstReading.stable, false);
+  assert.equal(result.accepted, false);
+
+  const secondReading = parsing.parseIndustrialScaleText("US,NT,+ 8.3kg");
+  result = parsing.evaluateScaleStability(result.tracker, secondReading, 2100);
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.status, "stable");
 });
 
 test("lectura pendiente conserva display pero bloquea captura y evita duplicados", () => {
