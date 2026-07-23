@@ -5235,9 +5235,6 @@ function getScaleReadingEligibility(scaleId) {
   if (!scale.readingId) {
     return { ok: false, reason: `Balanza ${scaleId}: la lectura actual no tiene una identidad válida.` };
   }
-  if (scale.readingId === lastRegisteredScaleReadingIds[scaleId]) {
-    return { ok: false, reason: `El peso actual de Balanza ${scaleId} ya fue registrado; espera una nueva pesada.` };
-  }
   if (scale.readingMode !== connection.mode || scale.readingGeneration !== connection.generation) {
     return { ok: false, reason: `La lectura de Balanza ${scaleId} no pertenece a la conexión física actual.` };
   }

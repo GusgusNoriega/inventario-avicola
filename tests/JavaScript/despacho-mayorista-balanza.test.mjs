@@ -573,7 +573,7 @@ test("dos tramas US consecutivas de la balanza real habilitan el peso mayorista"
   assert.equal(result.status, "stable");
 });
 
-test("lectura pendiente conserva display pero bloquea captura y evita duplicados", () => {
+test("lectura pendiente bloquea captura pero una lectura estable puede registrarse de nuevo", () => {
   const getWeightBlock = sourceBetween(
     "function getScaleWeight",
     "function scaleTimestampAge"
@@ -626,7 +626,11 @@ test("lectura pendiente conserva display pero bloquea captura y evita duplicados
 
   state.readingStatus = "stable";
   consumed[1] = "serial-1";
-  assert.equal(availability.getScaleReadingEligibility(1).ok, false);
+  assert.equal(
+    availability.getScaleReadingEligibility(1).ok,
+    true,
+    "el mismo peso estable debe poder registrarse varias veces sin mover la balanza"
+  );
 
   state.readingId = "serial-2";
   assert.equal(availability.getScaleReadingEligibility(1).ok, true);
