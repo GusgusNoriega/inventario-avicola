@@ -737,7 +737,7 @@ test("snapshot usa raw y hora aceptados, no la última trama inválida ni el cli
   );
   const snapshotBlock = sourceBetween(
     "function createScaleReadingSnapshot",
-    "function setCapturedScaleReading"
+    "function getWeightFromSource"
   );
   const acceptedAt = "2026-07-22T15:00:00.000Z";
 
@@ -773,11 +773,40 @@ test("snapshot usa raw y hora aceptados, no la última trama inválida ni el cli
   assert.equal(snapshot.deviceName, "Puerto prueba");
 });
 
-test("el alta mayorista consume la identidad capturada", () => {
+test("la balanza seleccionada alimenta la vista previa con su peso en vivo", () => {
+  const weightSourceBlock = sourceBetween(
+    "function getWeightFromSource",
+    "function formatWeightBreakdownDetail"
+  );
+  let liveWeight = 11.8;
+  const getWeightFromSource = new Function(
+    "readScaleWeight",
+    `
+      const SCALE_IDS = [1, 2];
+      const elements = { manualWeight: { value: "" } };
+      const roundWeight = (value) => Math.round(value * 100) / 100;
+      const getScaleWeight = (scaleId) => readScaleWeight(scaleId);
+      ${weightSourceBlock}
+      return getWeightFromSource;
+    `
+  )(() => liveWeight);
+
+  assert.equal(getWeightFromSource("2"), 11.8);
+  liveWeight = 6.7;
+  assert.equal(getWeightFromSource("2"), 6.7);
+  assert.doesNotMatch(weightSourceBlock, /CapturedScale/);
+});
+
+test("el alta mayorista captura y consume la lectura vigente al registrar", () => {
   const addStart = source.indexOf("function addCage(event)");
   const addEnd = source.indexOf("function copyJson", addStart);
   const addFlow = source.slice(addStart, addEnd);
 
+  assert.match(
+    addFlow,
+    /createScaleReadingSnapshot\(Number\(source\)\)/
+  );
+  assert.doesNotMatch(addFlow, /getCapturedScaleReading/);
   assert.match(
     addFlow,
     /lastRegisteredScaleReadingIds\[scaleReading\.scaleId\]\s*=\s*scaleReading\.readingId/

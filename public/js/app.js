@@ -170,7 +170,6 @@ const SCALE_AUTO_RECONNECT_DELAY_MS = 1200;
 const SCALE_AUTO_RECONNECT_MAX_DELAY_MS = 30000;
 const SCALE_MAX_SERIAL_BUFFER_LENGTH = 2048;
 const SCALE_READING_MAX_AGE_MS = 15000;
-const SCALE_CAPTURE_MAX_AGE_MS = 60000;
 const SCALE_STABILITY_TOLERANCE_KG = 0.02;
 const SCALE_STABLE_READING_COUNT = 2;
 const SCALE_STABILITY_WINDOW_MS = 1500;
@@ -464,7 +463,6 @@ let lastRegisteredScaleReadingIds = { 1: null, 2: null };
 let scaleRenderFrames = { 1: null, 2: null };
 let scaleLastPersistedAt = { 1: 0, 2: 0 };
 let scalePersistTimers = { 1: null, 2: null };
-let capturedScaleReadings = { 1: null, 2: null };
 let scaleRestorePromise = null;
 let scaleRestorePromiseGeneration = null;
 let scaleRestoreTimer = null;
@@ -2617,7 +2615,6 @@ function activateBranchStorage(catalog) {
     releaseScaleConnectionsForNavigation();
     activeStorageKey = nextStorageKey;
     state = nextState;
-    capturedScaleReadings = { 1: null, 2: null };
     scaleReadingSequences = { 1: 0, 2: 0 };
     lastRegisteredScaleReadingIds = { 1: null, 2: null };
     reconcileTruckClientAssignments(false);
@@ -3965,7 +3962,6 @@ function invalidateScaleReading(scaleId, status = "unknown", options = {}) {
   if (options.clearTimestamp) {
     scale.updatedAt = null;
   }
-  clearCapturedScaleReading(scaleId);
   persistScaleReading(scaleId, Boolean(options.persistImmediately));
   scheduleScaleRender(scaleId);
 }
@@ -5275,39 +5271,6 @@ function createScaleReadingSnapshot(scaleId) {
   });
 }
 
-function setCapturedScaleReading(scaleId, snapshot) {
-  capturedScaleReadings[scaleId] = normalizeScaleReadingSnapshot(snapshot);
-}
-
-function clearCapturedScaleReading(scaleId) {
-  if (capturedScaleReadings[scaleId] !== undefined) {
-    capturedScaleReadings[scaleId] = null;
-  }
-}
-
-function getCapturedScaleReading(scaleId) {
-  const snapshot = normalizeScaleReadingSnapshot(capturedScaleReadings[scaleId]);
-  if (!snapshot?.readingId) {
-    return null;
-  }
-
-  const connection = scaleConnections[scaleId];
-  const validConnection = isCurrentScaleConnection(scaleId, connection)
-    && isScaleConnectionActive(connection)
-    && connection.generation === snapshot.generation
-    && connection.mode === snapshot.connectionMode;
-  if (!validConnection || scaleTimestampAge(snapshot.capturedAt) > SCALE_CAPTURE_MAX_AGE_MS) {
-    clearCapturedScaleReading(scaleId);
-    return null;
-  }
-
-  return snapshot;
-}
-
-function getCapturedScaleWeight(scaleId) {
-  return getCapturedScaleReading(scaleId)?.weightKg ?? null;
-}
-
 function getWeightFromSource(source) {
   if (source === "manual") {
     const rawValue = String(elements.manualWeight.value ?? "").trim();
@@ -5316,7 +5279,7 @@ function getWeightFromSource(source) {
   }
 
   const scaleId = Number(source);
-  return getCapturedScaleWeight(scaleId);
+  return SCALE_IDS.includes(scaleId) ? getScaleWeight(scaleId) : null;
 }
 
 function formatWeightBreakdownDetail(breakdown, totalBirds) {
@@ -6901,7 +6864,6 @@ function updateScale(scaleId) {
     connectionMode: "manual",
     deviceName: ""
   };
-  clearCapturedScaleReading(scaleId);
   saveState();
   renderAll();
   closeScaleSettings(scaleId);
@@ -6942,25 +6904,19 @@ function updateEntryDefaults(showMessage = false) {
   }
 }
 
-function captureScale(scaleId) {
+function selectScaleForWeighing(scaleId) {
   const eligibility = getScaleReadingEligibility(scaleId);
   if (!eligibility.ok) {
-    clearCapturedScaleReading(scaleId);
     renderWeightPreview();
     setFormMessage(eligibility.reason, true);
     return;
   }
 
-  const snapshot = createScaleReadingSnapshot(scaleId);
-  if (!snapshot) {
-    setFormMessage(`No se pudo capturar una lectura válida de Balanza ${scaleId}.`, true);
-    return;
-  }
-
-  setCapturedScaleReading(scaleId, snapshot);
   elements.weightSource.value = String(scaleId);
   renderWeightPreview();
-  setFormMessage(`Peso de balanza ${scaleId} capturado: ${formatWeight(snapshot.weightKg)}.`);
+  setFormMessage(
+    `Balanza ${scaleId} seleccionada. El peso bruto se actualizará en tiempo real.`
+  );
 }
 
 function addCage(event) {
@@ -6982,7 +6938,7 @@ function addCage(event) {
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
-  const scaleReading = source === "manual" ? null : getCapturedScaleReading(Number(source));
+  const scaleReading = source === "manual" ? null : createScaleReadingSnapshot(Number(source));
   const rawWeight = source === "manual" ? getWeightFromSource(source) : scaleReading?.weightKg;
   const grossWeight = roundWeight(rawWeight);
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
@@ -7036,7 +6992,7 @@ function addCage(event) {
 
   if (source !== "manual" && !scaleReading) {
     setFormMessage(
-      `La captura de Balanza ${Number(source)} venció o perdió su conexión. Captura nuevamente el peso estable.`,
+      `Balanza ${Number(source)} no tiene ahora una lectura estable disponible para registrar.`,
       true
     );
     return;
@@ -7118,8 +7074,6 @@ function addCage(event) {
 
   if (source === "manual") {
     elements.manualWeight.value = "";
-  } else {
-    clearCapturedScaleReading(Number(source));
   }
 
   saveState();
@@ -7895,8 +7849,8 @@ function bindEvents() {
     });
   });
 
-  elements.scaleCaptureButtons[1].addEventListener("click", () => captureScale(1));
-  elements.scaleCaptureButtons[2].addEventListener("click", () => captureScale(2));
+  elements.scaleCaptureButtons[1].addEventListener("click", () => selectScaleForWeighing(1));
+  elements.scaleCaptureButtons[2].addEventListener("click", () => selectScaleForWeighing(2));
   elements.scaleSetButtons[1].addEventListener("click", () => updateScale(1));
   elements.scaleSetButtons[2].addEventListener("click", () => updateScale(2));
   elements.scaleSettingsOpenButtons[1]?.addEventListener("click", () => openScaleSettings(1));
