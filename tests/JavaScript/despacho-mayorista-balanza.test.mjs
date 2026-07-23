@@ -41,7 +41,8 @@ function loadParsingHelpers() {
       parseIndustrialScaleText,
       parseScalePayload,
       splitScaleTextFrames,
-      evaluateScaleStability
+      evaluateScaleStability,
+      canReaffirmAcceptedScaleReading
     };
   `)();
 }
@@ -457,6 +458,8 @@ test("overflow entra en descarte y bloquea captura sin borrar el peso comercial"
       const getScaleState = () => state;
       const sanitizeScaleRawText = (value) => String(value).slice(-MAX_SCALE_RAW_LENGTH);
       const getScaleModeLabel = () => "Serial BT";
+      const logScaleDebug = () => {};
+      const logReceivedScaleChunk = () => {};
       const markScaleReadingPending = (_scaleId, status) => {
         state.readingStatus = status;
         pendingStatuses.push(status);
@@ -571,6 +574,166 @@ test("dos tramas US consecutivas de la balanza real habilitan el peso mayorista"
 
   assert.equal(result.accepted, true);
   assert.equal(result.status, "stable");
+});
+
+test("tramas auxiliares conservan la lectura aceptada pero movimiento y errores la bloquean", () => {
+  const preserveBlock = sourceBetween(
+    "export function canPreserveAcceptedScaleReading",
+    "function scheduleScaleReadingExpiry"
+  );
+  const { canPreserveAcceptedScaleReading } = new Function(`
+    const SCALE_TARE_AUXILIARY_GRACE_MS = 1000;
+    ${preserveBlock}
+    return { canPreserveAcceptedScaleReading };
+  `)();
+  const acceptedAt = Date.parse("2026-07-23T20:00:00.000Z");
+  const accepted = {
+    readingValid: true,
+    readingStable: true,
+    readingStatus: "stable",
+    updatedAt: new Date(acceptedAt).toISOString()
+  };
+
+  assert.equal(canPreserveAcceptedScaleReading(accepted, "no-weight", acceptedAt + 5000), true);
+  assert.equal(canPreserveAcceptedScaleReading(accepted, "tare-only", acceptedAt + 500), true);
+  assert.equal(canPreserveAcceptedScaleReading(accepted, "tare-only", acceptedAt + 1500), false);
+  assert.equal(canPreserveAcceptedScaleReading(accepted, "unstable", acceptedAt), false);
+  assert.equal(canPreserveAcceptedScaleReading(accepted, "error", acceptedAt), false);
+  assert.equal(
+    canPreserveAcceptedScaleReading(
+      { ...accepted, readingStatus: "stabilizing" },
+      "tare-only",
+      acceptedAt
+    ),
+    false
+  );
+
+  const payloadFlow = sourceBetween("function handleScalePayload", "function getConnectionErrorMessage");
+  assert.match(payloadFlow, /canPreserveAcceptedScaleReading\(scale,\s*reading\.status\)/);
+});
+
+test("una tara auxiliar no invalida la elegibilidad de la lectura estable visible", () => {
+  const preserveBlock = sourceBetween(
+    "export function canPreserveAcceptedScaleReading",
+    "function scheduleScaleReadingExpiry"
+  );
+  const handlerBlock = sourceBetween(
+    "function handleScalePayload",
+    "function getConnectionErrorMessage"
+  );
+  const getWeightBlock = sourceBetween(
+    "function getScaleWeight",
+    "function scaleTimestampAge"
+  );
+  const eligibilityBlock = sourceBetween(
+    "function scaleTimestampAge",
+    "function createScaleReadingSnapshot"
+  );
+  const state = {
+    currentWeight: 9.2,
+    readingValid: true,
+    readingStable: true,
+    readingStatus: "stable",
+    readingRaw: "US,NT,+ 9.20kg",
+    readingMode: "serial",
+    readingGeneration: 4,
+    readingId: "serial-2",
+    updatedAt: new Date().toISOString(),
+    lastRaw: "US,NT,+ 9.20kg",
+    lastRawAt: new Date().toISOString()
+  };
+  const connection = {
+    mode: "serial",
+    generation: 4,
+    status: "connected",
+    abort: false,
+    port: { readable: {} },
+    stability: {
+      candidateWeight: 9.2,
+      count: 2,
+      firstSeenAt: 1000,
+      lastSeenAt: 1100
+    }
+  };
+
+  const flow = new Function(
+    "state",
+    "connection",
+    "parseScalePayload",
+    `
+      const SCALE_READING_MAX_AGE_MS = 15000;
+      const SCALE_TARE_AUXILIARY_GRACE_MS = 1000;
+      const roundWeight = (value) => Math.round(value * 100) / 100;
+      const getScaleState = () => state;
+      const scaleConnections = { 1: connection };
+      const isCurrentScaleConnection = () => true;
+      const isScaleConnectionActive = () => true;
+      const sanitizeScaleRawText = (value) => String(value);
+      const shouldStartNewScaleReadingIdentity = () => false;
+      const markScaleReadingPending = (_scaleId, status) => {
+        state.readingStatus = status;
+      };
+      const getScaleModeLabel = () => "Serial BT";
+      const persistScaleReading = () => {};
+      const scheduleScaleRender = () => {};
+      const applyScaleStabilityFilter = () => false;
+      const logProcessedScalePayload = () => {};
+      ${preserveBlock}
+      ${handlerBlock}
+      ${getWeightBlock}
+      ${eligibilityBlock}
+      return {
+        handle: (raw) => handleScalePayload(1, raw, { parser: "text", connection }),
+        eligibility: () => getScaleReadingEligibility(1)
+      };
+    `
+  )(state, connection, parsing.parseScalePayload);
+
+  assert.equal(flow.eligibility().ok, true);
+  assert.equal(flow.handle("TARE 7.00 kg"), false);
+  assert.equal(state.currentWeight, 9.2);
+  assert.equal(state.readingStatus, "stable");
+  assert.equal(state.readingRaw, "US,NT,+ 9.20kg");
+  assert.equal(connection.stability.count, 2);
+  assert.equal(flow.eligibility().ok, true);
+});
+
+test("el mismo peso aceptado se reafirma aunque la siguiente trama US llegue lentamente", () => {
+  const scale = {
+    currentWeight: 9.2,
+    readingValid: true,
+    readingStable: true,
+    readingStatus: "stable",
+    readingId: "serial-2",
+    readingMode: "serial",
+    readingGeneration: 4
+  };
+  const connection = {
+    mode: "serial",
+    generation: 4,
+    forceNewReading: false
+  };
+  const reading = {
+    weightKg: 9.2,
+    stable: false
+  };
+
+  assert.equal(
+    parsing.canReaffirmAcceptedScaleReading(scale, connection, reading, "serial"),
+    true
+  );
+  assert.equal(
+    parsing.canReaffirmAcceptedScaleReading(scale, { ...connection, forceNewReading: true }, reading, "serial"),
+    false
+  );
+  assert.equal(
+    parsing.canReaffirmAcceptedScaleReading({ ...scale, readingStatus: "unstable" }, connection, reading, "serial"),
+    false
+  );
+  assert.equal(
+    parsing.canReaffirmAcceptedScaleReading(scale, connection, { weightKg: 9.25 }, "serial"),
+    false
+  );
 });
 
 test("lectura pendiente bloquea captura pero una lectura estable puede registrarse de nuevo", () => {
@@ -808,13 +971,23 @@ test("el alta mayorista captura y consume la lectura vigente al registrar", () =
 
   assert.match(
     addFlow,
-    /createScaleReadingSnapshot\(Number\(source\)\)/
+    /createScaleReadingSnapshot\(scaleId,\s*scaleEligibility\)/
   );
   assert.doesNotMatch(addFlow, /getCapturedScaleReading/);
   assert.match(
     addFlow,
     /lastRegisteredScaleReadingIds\[scaleReading\.scaleId\]\s*=\s*scaleReading\.readingId/
   );
+  assert.match(addFlow, /scaleEligibility\?\.reason/);
+  assert.match(addFlow, /registro-rechazado-por-balanza/);
+});
+
+test("el simulador manual no puede sobrescribir una balanza física conectada", () => {
+  const updateFlow = sourceBetween("function updateScale", "function updateEntryDefaults");
+
+  assert.match(updateFlow, /isCurrentScaleConnection\(scaleId,\s*connection\)/);
+  assert.match(updateFlow, /isScaleConnectionActive\(connection\)/);
+  assert.match(updateFlow, /simulador-manual-rechazado/);
 });
 
 test("borrar libera la identidad solo cuando ya no queda otra fila que la use", () => {

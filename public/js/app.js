@@ -175,6 +175,10 @@ const SCALE_STABLE_READING_COUNT = 2;
 const SCALE_STABILITY_WINDOW_MS = 1500;
 const SCALE_ZERO_CONFIRMATION_COUNT = 3;
 const SCALE_ZERO_CONFIRMATION_MS = 300;
+const SCALE_TARE_AUXILIARY_GRACE_MS = 1000;
+const SCALE_DEBUG_HISTORY_LIMIT = 250;
+const SCALE_DEBUG_REPEAT_INTERVAL_MS = 3000;
+const SCALE_DEBUG_PREFIX = "[BALANZA MAYORISTA]";
 const KG_PER_LB = 0.45359237;
 const SCALE_SERIAL_DEFAULTS = {
   baudRate: 9600,
@@ -469,6 +473,11 @@ let scaleRestoreTimer = null;
 let scaleRestoreAttempt = 0;
 let scaleLifecycleGeneration = 0;
 let scalePageActive = true;
+let scaleDebugSequence = 0;
+let scaleDebugHistory = [];
+let scaleDebugEnabled = true;
+let scaleDebugLastPayloads = { 1: null, 2: null };
+let scaleDebugLastChunks = { 1: null, 2: null };
 const pendingTicketRegistrations = new Set();
 let keypadContext = {
   targetInput: null,
@@ -3284,6 +3293,170 @@ function getScaleState(scaleId) {
   return state.scales[scaleId];
 }
 
+function normalizeScaleDebugDetails(details) {
+  if (!details || typeof details !== "object") {
+    return {};
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(details, (_key, value) => {
+      if (value instanceof Error) {
+        return {
+          name: value.name,
+          message: value.message
+        };
+      }
+      return value;
+    }));
+  } catch {
+    return {
+      detalle: String(details)
+    };
+  }
+}
+
+function logScaleDebug(scaleId, event, details = {}, level = "log") {
+  if (!scaleDebugEnabled) {
+    return null;
+  }
+
+  const normalizedScaleId = SCALE_IDS.includes(Number(scaleId)) ? Number(scaleId) : null;
+  const entry = {
+    sequence: ++scaleDebugSequence,
+    timestamp: new Date().toISOString(),
+    scaleId: normalizedScaleId,
+    event: String(event || "evento"),
+    ...normalizeScaleDebugDetails(details)
+  };
+  scaleDebugHistory.push(entry);
+  if (scaleDebugHistory.length > SCALE_DEBUG_HISTORY_LIMIT) {
+    scaleDebugHistory.splice(0, scaleDebugHistory.length - SCALE_DEBUG_HISTORY_LIMIT);
+  }
+
+  const method = ["error", "warn", "info", "log"].includes(level) ? level : "log";
+  const label = normalizedScaleId
+    ? `${SCALE_DEBUG_PREFIX} Balanza ${normalizedScaleId} · ${entry.event}`
+    : `${SCALE_DEBUG_PREFIX} ${entry.event}`;
+  console[method](label, entry);
+  return entry;
+}
+
+function getScaleDebugSnapshot(scaleId) {
+  const normalizedScaleId = Number(scaleId);
+  const scale = getScaleState(normalizedScaleId);
+  const connection = scaleConnections[normalizedScaleId];
+  const readingAgeMs = scaleTimestampAge(scale.updatedAt);
+  const eligibility = getScaleReadingEligibility(normalizedScaleId);
+
+  return {
+    scaleId: normalizedScaleId,
+    connection: {
+      current: isCurrentScaleConnection(normalizedScaleId, connection),
+      active: isScaleConnectionActive(connection),
+      status: connection?.status || "none",
+      statusMessage: connection?.statusMessage || "",
+      mode: connection?.mode || null,
+      generation: connection?.generation ?? null,
+      abort: Boolean(connection?.abort),
+      deviceName: connection?.deviceName || "",
+      profileLabel: connection?.profileLabel || "",
+      serialReadable: Boolean(connection?.port?.readable),
+      bleConnected: Boolean(connection?.device?.gatt?.connected),
+      forceNewReading: Boolean(connection?.forceNewReading),
+      stability: connection?.stability
+        ? {
+            candidateWeight: connection.stability.candidateWeight,
+            count: connection.stability.count,
+            firstSeenAt: connection.stability.firstSeenAt,
+            lastSeenAt: connection.stability.lastSeenAt
+          }
+        : null
+    },
+    reading: {
+      currentWeight: scale.currentWeight,
+      valid: scale.readingValid,
+      stable: scale.readingStable,
+      status: scale.readingStatus,
+      readingId: scale.readingId,
+      mode: scale.readingMode,
+      generation: scale.readingGeneration,
+      updatedAt: scale.updatedAt,
+      ageMs: Number.isFinite(readingAgeMs) ? Math.round(readingAgeMs) : null,
+      lastRawAt: scale.lastRawAt,
+      lastRaw: scale.lastRaw,
+      acceptedRaw: scale.readingRaw
+    },
+    eligibility: {
+      ok: eligibility.ok,
+      code: eligibility.code,
+      reason: eligibility.reason || "",
+      weight: eligibility.weight ?? null,
+      ageMs: eligibility.ageMs ?? null
+    },
+    lastRegisteredReadingId: lastRegisteredScaleReadingIds[normalizedScaleId] || null
+  };
+}
+
+function buildScaleDebugReport(scaleId = null) {
+  const requestedScaleId = Number(scaleId);
+  const scaleIds = SCALE_IDS.includes(requestedScaleId) ? [requestedScaleId] : SCALE_IDS;
+  return {
+    generatedAt: new Date().toISOString(),
+    page: window.location.pathname,
+    secureContext: window.isSecureContext,
+    pageActive: scalePageActive,
+    lifecycleGeneration: scaleLifecycleGeneration,
+    scales: scaleIds.map((id) => getScaleDebugSnapshot(id)),
+    history: scaleDebugHistory.filter((entry) => !SCALE_IDS.includes(requestedScaleId)
+      || entry.scaleId === requestedScaleId)
+  };
+}
+
+function installScaleDebugConsoleApi() {
+  window.diagnosticoBalanzasMayorista = {
+    activar() {
+      scaleDebugEnabled = true;
+      return logScaleDebug(null, "diagnostico-activado", {});
+    },
+    desactivar() {
+      const entry = logScaleDebug(null, "diagnostico-desactivado", {});
+      scaleDebugEnabled = false;
+      return entry;
+    },
+    estado(scaleId = null) {
+      const report = buildScaleDebugReport(scaleId);
+      console.log(`${SCALE_DEBUG_PREFIX} Estado actual`, report);
+      return report;
+    },
+    historial() {
+      const history = scaleDebugHistory.map((entry) => ({ ...entry }));
+      console.log(`${SCALE_DEBUG_PREFIX} Historial (${history.length} eventos)`, history);
+      return history;
+    },
+    limpiar() {
+      scaleDebugHistory = [];
+      scaleDebugSequence = 0;
+      scaleDebugLastPayloads = { 1: null, 2: null };
+      scaleDebugLastChunks = { 1: null, 2: null };
+      console.info(`${SCALE_DEBUG_PREFIX} Historial limpiado.`);
+    },
+    copiar(scaleId = null) {
+      const text = JSON.stringify(buildScaleDebugReport(scaleId), null, 2);
+      console.log(`${SCALE_DEBUG_PREFIX} Diagnóstico para copiar\n${text}`);
+      if (navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(text)
+          .then(() => console.info(`${SCALE_DEBUG_PREFIX} Diagnóstico copiado al portapapeles.`))
+          .catch(() => console.warn(`${SCALE_DEBUG_PREFIX} No se pudo copiar automáticamente; copia el JSON mostrado arriba.`));
+      }
+      return text;
+    }
+  };
+
+  console.info(
+    `${SCALE_DEBUG_PREFIX} Diagnóstico activo. Ejecuta diagnosticoBalanzasMayorista.estado() para ver el estado o diagnosticoBalanzasMayorista.copiar() para obtener el informe.`
+  );
+}
+
 function clearScaleConnectionPreference(scaleId) {
   const scale = getScaleState(scaleId);
   scale.autoConnectMode = null;
@@ -3487,6 +3660,8 @@ function renderScaleConnectionPanels() {
     const connectBleButton = elements.scaleConnectBleButtons[scaleId];
     const connectSerialButton = elements.scaleConnectSerialButtons[scaleId];
     const disconnectButton = elements.scaleDisconnectButtons[scaleId];
+    const manualInput = elements.scaleInputs[scaleId];
+    const manualSetButton = elements.scaleSetButtons[scaleId];
 
     let statusClass = "scale-status-offline";
     const rememberedMode = scale.autoConnectMode
@@ -3544,6 +3719,18 @@ function renderScaleConnectionPanels() {
     if (disconnectButton) {
       disconnectButton.disabled = !isConnecting && !isConnected && !hasRememberedPreference;
     }
+    if (manualInput) {
+      manualInput.disabled = isConnecting || isConnected;
+      manualInput.title = isConnecting || isConnected
+        ? "Desconecta la balanza física antes de usar el simulador manual."
+        : "";
+    }
+    if (manualSetButton) {
+      manualSetButton.disabled = isConnecting || isConnected;
+      manualSetButton.title = isConnecting || isConnected
+        ? "Desconecta la balanza física antes de usar el simulador manual."
+        : "";
+    }
   });
 }
 
@@ -3593,6 +3780,87 @@ function sanitizeScaleRawText(rawText) {
     .trim();
 
   return text.slice(-MAX_SCALE_RAW_LENGTH);
+}
+
+function logProcessedScalePayload(scaleId, connection, reading, rawText, accepted) {
+  const scale = getScaleState(scaleId);
+  const now = Date.now();
+  const signature = [
+    connection?.generation,
+    reading?.status,
+    reading?.weightKg,
+    Boolean(reading?.stable),
+    Boolean(accepted),
+    scale.readingStatus,
+    scale.readingId,
+    rawText
+  ].join("|");
+  const previous = scaleDebugLastPayloads[scaleId];
+
+  if (
+    previous
+    && previous.signature === signature
+    && now - previous.loggedAt < SCALE_DEBUG_REPEAT_INTERVAL_MS
+  ) {
+    previous.suppressed += 1;
+    return;
+  }
+
+  scaleDebugLastPayloads[scaleId] = {
+    signature,
+    loggedAt: now,
+    suppressed: 0
+  };
+  logScaleDebug(scaleId, "trama-procesada", {
+    connectionMode: connection?.mode || null,
+    connectionStatus: connection?.status || null,
+    connectionGeneration: connection?.generation ?? null,
+    rawFrame: rawText,
+    parsedStatus: reading?.status || "no-weight",
+    parsedWeightKg: Number.isFinite(reading?.weightKg) ? reading.weightKg : null,
+    deviceStableFlag: Boolean(reading?.stable),
+    accepted: Boolean(accepted),
+    resultingReadingStatus: scale.readingStatus,
+    resultingWeightKg: scale.currentWeight,
+    resultingReadingId: scale.readingId,
+    stabilityCandidateKg: connection?.stability?.candidateWeight ?? null,
+    stabilityCount: connection?.stability?.count ?? 0,
+    repeatedFramesOmitted: previous?.signature === signature ? previous.suppressed : 0
+  });
+}
+
+function logReceivedScaleChunk(scaleId, connection, details) {
+  const now = Date.now();
+  const signature = [
+    connection?.generation,
+    details.rawChunk,
+    Boolean(details.hasDelimiter),
+    details.completeFrameCount,
+    Boolean(details.overflowed),
+    Boolean(details.discarding)
+  ].join("|");
+  const previous = scaleDebugLastChunks[scaleId];
+
+  if (
+    previous
+    && previous.signature === signature
+    && now - previous.loggedAt < SCALE_DEBUG_REPEAT_INTERVAL_MS
+  ) {
+    previous.suppressed += 1;
+    return;
+  }
+
+  scaleDebugLastChunks[scaleId] = {
+    signature,
+    loggedAt: now,
+    suppressed: 0
+  };
+  logScaleDebug(scaleId, "chunk-recibido", {
+    connectionMode: connection?.mode || null,
+    connectionGeneration: connection?.generation ?? null,
+    ...details,
+    repeatedChunksOmitted: previous?.signature === signature ? previous.suppressed : 0
+  });
 }
 
 function dataViewToBytes(value) {
@@ -3973,6 +4241,28 @@ function markScaleReadingPending(scaleId, status) {
   scheduleScaleRender(scaleId);
 }
 
+export function canPreserveAcceptedScaleReading(scale, incomingStatus, now = Date.now()) {
+  if (
+    !scale?.readingValid
+    || !scale?.readingStable
+    || scale?.readingStatus !== "stable"
+  ) {
+    return false;
+  }
+
+  const status = String(incomingStatus || "");
+  if (status === "no-weight") {
+    return true;
+  }
+  if (status !== "tare-only") {
+    return false;
+  }
+
+  const acceptedAt = Date.parse(String(scale.updatedAt || ""));
+  return Number.isFinite(acceptedAt)
+    && Math.max(0, now - acceptedAt) <= SCALE_TARE_AUXILIARY_GRACE_MS;
+}
+
 function scheduleScaleReadingExpiry(scaleId, connection, readingTimestamp) {
   if (!connection) {
     return;
@@ -3985,6 +4275,14 @@ function scheduleScaleReadingExpiry(scaleId, connection, readingTimestamp) {
     if (!isCurrentScaleConnection(scaleId, connection) || scale.updatedAt !== readingTimestamp) {
       return;
     }
+    logScaleDebug(scaleId, "lectura-vencida", {
+      connectionMode: connection.mode,
+      connectionGeneration: connection.generation,
+      readingId: scale.readingId,
+      weightKg: scale.currentWeight,
+      readingTimestamp,
+      ageMs: Math.round(scaleTimestampAge(readingTimestamp))
+    }, "warn");
     invalidateScaleReading(scaleId, "stale", { persistImmediately: true });
     connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - lectura vencida`;
     renderScaleConnectionPanels();
@@ -4063,7 +4361,38 @@ export function evaluateScaleStability(previousTracker, reading, now = Date.now(
   };
 }
 
+export function canReaffirmAcceptedScaleReading(scale, connection, reading, readingMode) {
+  const acceptedWeight = Number(scale?.currentWeight);
+  const nextWeight = Number(reading?.weightKg);
+  return Boolean(
+    scale?.readingValid
+    && scale?.readingStable
+    && scale?.readingStatus === "stable"
+    && scale?.readingId
+    && !connection?.forceNewReading
+    && scale?.readingMode === readingMode
+    && scale?.readingGeneration === connection?.generation
+    && Number.isFinite(acceptedWeight)
+    && Number.isFinite(nextWeight)
+    && Math.abs(acceptedWeight - nextWeight) <= SCALE_STABILITY_TOLERANCE_KG
+  );
+}
+
 function applyScaleStabilityFilter(scaleId, connection, reading, rawText, options) {
+  const scale = getScaleState(scaleId);
+  const readingMode = options.mode || connection?.mode || scale.connectionMode;
+  if (canReaffirmAcceptedScaleReading(scale, connection, reading, readingMode)) {
+    const now = Date.now();
+    connection.stability = {
+      candidateWeight: reading.weightKg,
+      count: Math.max(1, Number(connection.stability?.count) || 0) + 1,
+      firstSeenAt: connection.stability?.firstSeenAt || now,
+      lastSeenAt: now
+    };
+    acceptScaleReading(scaleId, connection, reading, rawText, options);
+    return true;
+  }
+
   const result = evaluateScaleStability(connection.stability, reading);
   connection.stability = result.tracker;
 
@@ -4102,24 +4431,34 @@ function handleScalePayload(scaleId, payload, options = {}) {
   }
 
   if (!Number.isFinite(reading.weightKg)) {
-    if (connection) {
+    const preserveAcceptedReading = canPreserveAcceptedScaleReading(scale, reading.status);
+    const auxiliaryFrame = ["no-weight", "tare-only"].includes(reading.status);
+    if (connection && !auxiliaryFrame) {
       connection.stability = null;
     }
-    markScaleReadingPending(scaleId, reading.status || "no-weight");
+    if (!preserveAcceptedReading) {
+      markScaleReadingPending(scaleId, reading.status || "no-weight");
+    }
     if (connection?.status === "connected") {
-      const statusLabel = reading.status === "unstable"
-        ? "lectura inestable"
-        : (reading.status === "error" ? "trama de error" : "datos sin peso comercial");
+      const statusLabel = preserveAcceptedReading
+        ? "datos auxiliares; se conserva el último peso estable"
+        : (
+            reading.status === "unstable"
+              ? "lectura inestable"
+              : (reading.status === "error" ? "trama de error" : "datos sin peso comercial")
+          );
       connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - ${statusLabel}`;
     }
 
     persistScaleReading(scaleId);
     scheduleScaleRender(scaleId);
+    logProcessedScalePayload(scaleId, connection, reading, rawText, false);
     return false;
   }
 
   if (reading.weightKg < 0) {
     markScaleReadingPending(scaleId, "negative");
+    logProcessedScalePayload(scaleId, connection, reading, rawText, false);
     return false;
   }
 
@@ -4136,6 +4475,7 @@ function handleScalePayload(scaleId, payload, options = {}) {
 
   persistScaleReading(scaleId);
   scheduleScaleRender(scaleId);
+  logProcessedScalePayload(scaleId, connection, reading, rawText, accepted);
   return accepted;
 }
 
@@ -4261,10 +4601,22 @@ function handleFramedScaleTextChunk(scaleId, connection, value, options = {}) {
   if (!chunkText) {
     return;
   }
+  const rawChunk = sanitizeScaleRawText(chunkText);
+  const previousBufferLength = String(connection.buffer || "").length;
+  const hasDelimiter = /\r\n|\r|\n/.test(chunkText);
 
   if (connection.discardUntilDelimiter) {
     const delimiter = chunkText.match(/\r\n|\r|\n/);
     if (!delimiter) {
+      logReceivedScaleChunk(scaleId, connection, {
+        rawChunk,
+        chunkLength: chunkText.length,
+        previousBufferLength,
+        hasDelimiter,
+        completeFrameCount: 0,
+        pendingFrameLength: 0,
+        discarding: true
+      });
       return;
     }
     chunkText = chunkText.slice(delimiter.index + delimiter[0].length);
@@ -4276,6 +4628,16 @@ function handleFramedScaleTextChunk(scaleId, connection, value, options = {}) {
   }
 
   const framed = splitScaleTextFrames(connection.buffer, chunkText);
+  logReceivedScaleChunk(scaleId, connection, {
+    rawChunk,
+    chunkLength: chunkText.length,
+    previousBufferLength,
+    hasDelimiter,
+    completeFrameCount: framed.completeFrames.length,
+    pendingFrameLength: framed.pendingFrame.length,
+    overflowed: framed.overflowed,
+    discarding: framed.discardUntilDelimiter
+  });
   connection.buffer = framed.pendingFrame;
   connection.discardUntilDelimiter = framed.discardUntilDelimiter;
   if (framed.overflowed) {
@@ -4286,6 +4648,12 @@ function handleFramedScaleTextChunk(scaleId, connection, value, options = {}) {
     connection.stability = null;
     connection.statusMessage = `Conectada ${getScaleModeLabel(connection.mode)} - trama inválida descartada`;
     markScaleReadingPending(scaleId, "invalid");
+    logScaleDebug(scaleId, "trama-excedida-descartada", {
+      connectionMode: connection.mode,
+      connectionGeneration: connection.generation,
+      receivedChunkLength: chunkText.length,
+      rawTail: overflowTail
+    }, "warn");
   }
   framed.completeFrames.forEach((frame) => processScaleTextFrame(scaleId, connection, frame, options));
 }
@@ -4373,6 +4741,12 @@ function handleScaleDisconnected(scaleId, message = "Balanza desconectada.", exp
     return;
   }
 
+  logScaleDebug(scaleId, "conexion-interrumpida", {
+    connectionMode: connection.mode || null,
+    connectionGeneration: connection.generation,
+    deviceName: connection.deviceName || "",
+    message
+  }, "error");
   connection.abort = true;
   clearScaleConnectionTimers(connection);
   releaseUnexpectedScaleConnection(connection);
@@ -4434,6 +4808,9 @@ function startBleReadPolling(scaleId) {
 async function disconnectScale(scaleId, showMessage = true, forgetPreference = false) {
   const connection = scaleConnections[scaleId];
   if (!connection) {
+    logScaleDebug(scaleId, "desconexion-sin-conexion-activa", {
+      forgetPreference: Boolean(forgetPreference)
+    });
     nextScaleConnectionGeneration(scaleId);
     invalidateScaleReading(scaleId, "disconnected", { persistImmediately: true });
     if (forgetPreference) {
@@ -4443,6 +4820,12 @@ async function disconnectScale(scaleId, showMessage = true, forgetPreference = f
     return;
   }
 
+  logScaleDebug(scaleId, "desconexion-iniciada", {
+    connectionMode: connection.mode || null,
+    connectionGeneration: connection.generation,
+    deviceName: connection.deviceName || "",
+    forgetPreference: Boolean(forgetPreference)
+  });
   nextScaleConnectionGeneration(scaleId);
   connection.abort = true;
   connection.status = "connecting";
@@ -4518,6 +4901,11 @@ async function disconnectScale(scaleId, showMessage = true, forgetPreference = f
   if (showMessage) {
     setFormMessage(`Balanza ${scaleId} desconectada.`);
   }
+  logScaleDebug(scaleId, "desconexion-completada", {
+    previousConnectionMode: connection.mode || null,
+    previousConnectionGeneration: connection.generation,
+    forgetPreference: Boolean(forgetPreference)
+  });
 }
 
 async function connectBleScale(scaleId, rememberedDevice = null, options = {}) {
@@ -4558,6 +4946,11 @@ async function connectBleScale(scaleId, rememberedDevice = null, options = {}) {
     abort: false
   };
   scaleConnections[scaleId] = connection;
+  logScaleDebug(scaleId, "conexion-ble-iniciada", {
+    automatic,
+    connectionGeneration: generation,
+    rememberedDevice: Boolean(rememberedDevice)
+  });
   renderScaleConnectionPanels();
 
   try {
@@ -4674,9 +5067,24 @@ async function connectBleScale(scaleId, rememberedDevice = null, options = {}) {
         ? `Balanza ${scaleId} reconectada automáticamente por BLE (${found.profile.label}).`
         : `Balanza ${scaleId} conectada por BLE (${found.profile.label}).`
     );
+    logScaleDebug(scaleId, "conexion-ble-lista", {
+      automatic,
+      connectionGeneration: connection.generation,
+      deviceName,
+      profileLabel: found.profile.label,
+      canNotify: Boolean(found.canNotify),
+      canRead: Boolean(found.canRead),
+      parser: found.profile.parser
+    }, "info");
     return true;
   } catch (error) {
     const message = getConnectionErrorMessage(error, `No se pudo conectar la balanza ${scaleId} por BLE.`);
+    logScaleDebug(scaleId, "conexion-ble-error", {
+      automatic,
+      connectionGeneration: connection.generation,
+      message,
+      error
+    }, error?.name === "NotFoundError" ? "warn" : "error");
     if (isCurrentScaleConnection(scaleId, connection)) {
       await disconnectScale(scaleId, false);
       if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
@@ -4808,6 +5216,12 @@ async function connectSerialScale(scaleId, rememberedPort = null, options = {}) 
     abort: false
   };
   scaleConnections[scaleId] = connection;
+  logScaleDebug(scaleId, "conexion-serial-iniciada", {
+    automatic,
+    connectionGeneration: generation,
+    rememberedPort: Boolean(rememberedPort),
+    serialOptions
+  });
   renderScaleConnectionPanels();
 
   try {
@@ -4851,9 +5265,22 @@ async function connectSerialScale(scaleId, rememberedPort = null, options = {}) 
         ? `Balanza ${scaleId} reconectada automáticamente por puerto serial.`
         : `Balanza ${scaleId} conectada por puerto serial Bluetooth a ${serialOptions.baudRate} baudios.`
     );
+    logScaleDebug(scaleId, "conexion-serial-lista", {
+      automatic,
+      connectionGeneration: connection.generation,
+      deviceName: connection.deviceName,
+      serialOptions,
+      portInfo: getSerialPortInfo(port)
+    }, "info");
     return true;
   } catch (error) {
     const message = getConnectionErrorMessage(error, `No se pudo abrir el puerto serial de balanza ${scaleId}.`);
+    logScaleDebug(scaleId, "conexion-serial-error", {
+      automatic,
+      connectionGeneration: connection.generation,
+      message,
+      error
+    }, error?.name === "NotFoundError" ? "warn" : "error");
     if (isCurrentScaleConnection(scaleId, connection)) {
       await disconnectScale(scaleId, false);
       if (!isScaleLifecycleCurrent(lifecycleGeneration)) {
@@ -5222,34 +5649,77 @@ function getScaleReadingEligibility(scaleId) {
   const connection = scaleConnections[scaleId];
   const scale = getScaleState(scaleId);
   const weight = getScaleWeight(scaleId);
+  const ageMs = scaleTimestampAge(scale.updatedAt);
 
   if (!isCurrentScaleConnection(scaleId, connection) || !isScaleConnectionActive(connection)) {
-    return { ok: false, reason: `Balanza ${scaleId} sin conexión física activa.` };
-  }
-  if (!scale.readingValid || !scale.readingStable || !Number.isFinite(weight)) {
-    return { ok: false, reason: `Balanza ${scaleId} todavía no tiene una lectura estable válida.` };
+    return {
+      ok: false,
+      code: "inactive-connection",
+      reason: `Balanza ${scaleId} sin conexión física activa.`,
+      ageMs
+    };
   }
   if (scale.readingStatus !== "stable") {
-    return { ok: false, reason: `Balanza ${scaleId}: la entrada actual no está estable; espera una nueva lectura válida.` };
+    return {
+      ok: false,
+      code: `reading-${scale.readingStatus || "unknown"}`,
+      reason: `Balanza ${scaleId}: la entrada actual está en estado "${scale.readingStatus || "desconocido"}"; espera una nueva lectura estable.`,
+      ageMs
+    };
+  }
+  if (!scale.readingValid || !scale.readingStable || !Number.isFinite(weight)) {
+    return {
+      ok: false,
+      code: "invalid-reading",
+      reason: `Balanza ${scaleId} todavía no tiene una lectura estable válida.`,
+      ageMs
+    };
   }
   if (!scale.readingId) {
-    return { ok: false, reason: `Balanza ${scaleId}: la lectura actual no tiene una identidad válida.` };
+    return {
+      ok: false,
+      code: "missing-reading-id",
+      reason: `Balanza ${scaleId}: la lectura actual no tiene una identidad válida.`,
+      ageMs
+    };
   }
   if (scale.readingMode !== connection.mode || scale.readingGeneration !== connection.generation) {
-    return { ok: false, reason: `La lectura de Balanza ${scaleId} no pertenece a la conexión física actual.` };
+    return {
+      ok: false,
+      code: "connection-mismatch",
+      reason: `La lectura de Balanza ${scaleId} no pertenece a la conexión física actual.`,
+      ageMs
+    };
   }
-  if (scaleTimestampAge(scale.updatedAt) > SCALE_READING_MAX_AGE_MS) {
-    return { ok: false, reason: `La lectura de Balanza ${scaleId} venció; espera una trama nueva.` };
+  if (ageMs > SCALE_READING_MAX_AGE_MS) {
+    return {
+      ok: false,
+      code: "stale-reading",
+      reason: `La lectura de Balanza ${scaleId} venció hace ${(ageMs / 1000).toFixed(1)} segundos; espera una trama nueva.`,
+      ageMs
+    };
   }
   if (weight <= 0) {
-    return { ok: false, reason: `La lectura confirmada de Balanza ${scaleId} está en cero.` };
+    return {
+      ok: false,
+      code: "zero-reading",
+      reason: `La lectura confirmada de Balanza ${scaleId} está en cero.`,
+      ageMs
+    };
   }
 
-  return { ok: true, connection, scale, weight };
+  return {
+    ok: true,
+    code: "eligible",
+    connection,
+    scale,
+    weight,
+    ageMs
+  };
 }
 
-function createScaleReadingSnapshot(scaleId) {
-  const eligible = getScaleReadingEligibility(scaleId);
+function createScaleReadingSnapshot(scaleId, eligibility = null) {
+  const eligible = eligibility || getScaleReadingEligibility(scaleId);
   if (!eligible.ok) {
     return null;
   }
@@ -6836,6 +7306,18 @@ function renderJourneyAvailability() {
 }
 
 function updateScale(scaleId) {
+  const connection = scaleConnections[scaleId];
+  if (isCurrentScaleConnection(scaleId, connection) && isScaleConnectionActive(connection)) {
+    const message = `Balanza ${scaleId} está conectada físicamente. Desconéctala antes de usar el simulador manual.`;
+    logScaleDebug(scaleId, "simulador-manual-rechazado", {
+      connectionMode: connection.mode,
+      connectionGeneration: connection.generation,
+      reason: "active-physical-connection"
+    }, "warn");
+    setFormMessage(message, true);
+    return;
+  }
+
   const raw = elements.scaleInputs[scaleId].value;
   const weight = Number(raw);
 
@@ -6865,6 +7347,9 @@ function updateScale(scaleId) {
   renderAll();
   closeScaleSettings(scaleId);
   setFormMessage(`Balanza ${scaleId} actualizada a ${formatWeight(weight)}.`);
+  logScaleDebug(scaleId, "simulador-manual-actualizado", {
+    weightKg: roundWeight(weight)
+  });
 }
 
 function updateEntryDefaults(showMessage = false) {
@@ -6904,11 +7389,22 @@ function updateEntryDefaults(showMessage = false) {
 function selectScaleForWeighing(scaleId) {
   const eligibility = getScaleReadingEligibility(scaleId);
   if (!eligibility.ok) {
+    logScaleDebug(scaleId, "seleccion-rechazada", {
+      eligibilityCode: eligibility.code,
+      reason: eligibility.reason,
+      readingAgeMs: Number.isFinite(eligibility.ageMs) ? Math.round(eligibility.ageMs) : null,
+      readingStatus: getScaleState(scaleId).readingStatus
+    }, "warn");
     renderWeightPreview();
     setFormMessage(eligibility.reason, true);
     return;
   }
 
+  logScaleDebug(scaleId, "seleccion-aceptada", {
+    weightKg: eligibility.weight,
+    readingId: eligibility.scale.readingId,
+    readingAgeMs: Math.round(eligibility.ageMs)
+  });
   elements.weightSource.value = String(scaleId);
   renderWeightPreview();
   setFormMessage(
@@ -6935,7 +7431,11 @@ function addCage(event) {
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
-  const scaleReading = source === "manual" ? null : createScaleReadingSnapshot(Number(source));
+  const scaleId = source === "manual" ? null : Number(source);
+  const scaleEligibility = scaleId ? getScaleReadingEligibility(scaleId) : null;
+  const scaleReading = source === "manual" || !scaleEligibility?.ok
+    ? null
+    : createScaleReadingSnapshot(scaleId, scaleEligibility);
   const rawWeight = source === "manual" ? getWeightFromSource(source) : scaleReading?.weightKg;
   const grossWeight = roundWeight(rawWeight);
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
@@ -6946,6 +7446,19 @@ function addCage(event) {
   const truckPlate = isReturn || warehouseOrigin ? "" : normalizeTruckPlate(elements.truckPlate.value);
   const providerVehicle = warehouseOrigin ? null : getProviderVehicleByPlate(origin, truckPlate);
   elements.truckPlate.value = truckPlate;
+  logScaleDebug(scaleId, "registro-intento", {
+    weightSource: source,
+    ticketSelected: Boolean(truckId),
+    birdsPerCage: birdsPerJava,
+    cageCount: javaCount,
+    eligibilityCode: scaleEligibility?.code || (source === "manual" ? "manual" : "unknown"),
+    eligibilityReason: scaleEligibility?.reason || "",
+    readingAgeMs: Number.isFinite(scaleEligibility?.ageMs)
+      ? Math.round(scaleEligibility.ageMs)
+      : null,
+    weightKg: Number.isFinite(rawWeight) ? rawWeight : null,
+    readingId: scaleReading?.readingId || null
+  });
 
   if (!truckId) {
     setFormMessage("Selecciona un ticket de despacho.", true);
@@ -6988,8 +7501,17 @@ function addCage(event) {
   }
 
   if (source !== "manual" && !scaleReading) {
+    logScaleDebug(scaleId, "registro-rechazado-por-balanza", {
+      eligibilityCode: scaleEligibility?.code || "snapshot-unavailable",
+      reason: scaleEligibility?.reason || "No se pudo crear la captura auditable.",
+      readingAgeMs: Number.isFinite(scaleEligibility?.ageMs)
+        ? Math.round(scaleEligibility.ageMs)
+        : null,
+      snapshot: getScaleDebugSnapshot(scaleId)
+    }, "warn");
     setFormMessage(
-      `Balanza ${Number(source)} no tiene ahora una lectura estable disponible para registrar.`,
+      scaleEligibility?.reason
+        || `Balanza ${Number(source)} no tiene ahora una lectura estable disponible para registrar.`,
       true
     );
     return;
@@ -7050,6 +7572,14 @@ function addCage(event) {
   if (scaleReading?.readingId) {
     lastRegisteredScaleReadingIds[scaleReading.scaleId] = scaleReading.readingId;
   }
+  logScaleDebug(scaleId, "registro-agregado", {
+    localRecordId: record.id,
+    weightSource: source,
+    weightKg: record.pesoLeidoKg,
+    netWeightKg: record.pesoNetoKg,
+    readingId: scaleReading?.readingId || null,
+    capturedAt: scaleReading?.capturedAt || null
+  }, "info");
 
   state.entryDefaults = isReturn
     ? {
@@ -8227,6 +8757,7 @@ function bindEvents() {
 
 renderEditTypeOptions();
 renderCrateTypeOptions();
+installScaleDebugConsoleApi();
 bindNumericInputs();
 bindTextTouchInputs();
 bindTouchSelects();
