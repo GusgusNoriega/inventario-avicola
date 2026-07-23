@@ -144,9 +144,9 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       margin: 0 auto;
       padding: 3mm 2.5mm 8mm;
       font-family: "Courier New", Courier, monospace;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 700;
-      line-height: 1.3;
+      line-height: 1.25;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -162,7 +162,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     }
 
     .business-name {
-      font-size: 14px;
+      font-size: 17px;
       font-weight: 900;
       line-height: 1.15;
     }
@@ -173,7 +173,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       justify-content: space-between;
       align-items: baseline;
       gap: 2mm;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 900;
     }
 
@@ -188,7 +188,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     .destination {
       margin: 3mm 0 1mm;
       text-align: center;
-      font-size: 11.5px;
+      font-size: 13.5px;
       font-weight: 900;
     }
 
@@ -197,7 +197,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       padding: 1.5mm 0;
       border-top: 1px dashed #000;
       border-bottom: 1px dashed #000;
-      font-size: 10px;
+      font-size: 12.5px;
       font-weight: 900;
     }
 
@@ -208,7 +208,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     .channel {
       margin-top: 1mm;
       text-align: center;
-      font-size: 9.5px;
+      font-size: 11px;
       font-weight: 900;
     }
 
@@ -229,7 +229,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     th {
       border-top: 1.5px solid #000;
       border-bottom: 1.5px solid #000;
-      font-size: 9px;
+      font-size: 10.5px;
       font-weight: 900;
       text-align: right;
       white-space: normal;
@@ -242,7 +242,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     }
 
     td {
-      font-size: 11px;
+      font-size: 12.5px;
       font-weight: 700;
     }
 
@@ -260,7 +260,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     .retail-detail-table td {
       padding-left: 0.2mm;
       padding-right: 0.2mm;
-      font-size: 8.5px;
+      font-size: 9.5px;
     }
 
     .retail-detail-table th:nth-child(1) { width: 11%; }
@@ -272,14 +272,14 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
 
     .summary-title {
       margin: 4mm 0 1mm;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 900;
     }
 
     .summary-table th,
     .summary-table td {
       text-align: right;
-      font-size: 10.5px;
+      font-size: 11.5px;
     }
 
     .summary-table th:first-child,
@@ -291,7 +291,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       margin-top: 5mm;
       display: grid;
       gap: 8mm;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 900;
     }
 
@@ -303,7 +303,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       display: flex;
       justify-content: space-between;
       gap: 2mm;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 900;
     }
   </style>

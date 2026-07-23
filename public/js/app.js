@@ -576,6 +576,22 @@ function normalizeTicketRegistration(registration) {
           id: String(registration.destination.id || ""),
           name: String(registration.destination.name || "")
         }
+      : null,
+    delivery: registration?.delivery
+      ? {
+          vehicle: registration.delivery.vehicle
+            ? {
+                id: Number(registration.delivery.vehicle.id) || null,
+                plate: String(registration.delivery.vehicle.plate || "")
+              }
+            : null,
+          driver: registration.delivery.driver
+            ? {
+                id: Number(registration.delivery.driver.id) || null,
+                name: String(registration.delivery.driver.name || "")
+              }
+            : null
+        }
       : null
   };
 }
@@ -6566,12 +6582,15 @@ function getTicketTypeCode(typeId, condition = "vivo", operationType = TICKET_OP
 }
 
 function buildDispatchTicketData(truck) {
+  const registration = normalizeTicketRegistration(truck?.registration);
   const operationType = getTruckOperationType(truck);
 
   return {
     code: getTruckTicketLabel(truck),
     operationType,
     destinationName: getTruckClientName(truck),
+    emittedAt: registration?.registeredAt || null,
+    delivery: registration?.delivery || null,
     records: truck.cages.map((cage) => ({
       typeCode: getTicketTypeCode(cage.tipo, cage.chickenCondition, operationType),
       birdsPerCage: normalizeBirdCountPerJava(

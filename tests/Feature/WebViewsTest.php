@@ -610,13 +610,37 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('PESO<br>BRUTO', $template);
         $this->assertStringContainsString('PESO<br>TARA', $template);
         $this->assertStringContainsString('<p>OBSERV:</p>', $template);
-        $this->assertStringContainsString('font-size: 11px', $template);
+        $this->assertStringContainsString('font-size: 13px', $template);
         $this->assertStringContainsString('font-weight: 700', $template);
         $this->assertStringNotContainsString('CONTROL PESO', $template);
         $this->assertStringNotContainsString('P.NETO', $template);
         $this->assertStringNotContainsString('TOTAL AVES:', $template);
         $this->assertStringNotContainsString('PLACA:', $template);
         $this->assertStringNotContainsString('ORIGEN:', $template);
+    }
+
+    public function test_dispatch_print_keeps_the_selected_delivery_truck_and_driver(): void
+    {
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+        $normalizationStart = strpos($javascript, 'function normalizeTicketRegistration');
+        $normalizationEnd = strpos($javascript, 'function createDefaultTruck', $normalizationStart);
+        $printDataStart = strpos($javascript, 'function buildDispatchTicketData');
+        $printDataEnd = strpos($javascript, 'function printDispatchTicket', $printDataStart);
+        $this->assertNotFalse($normalizationStart);
+        $this->assertNotFalse($normalizationEnd);
+        $this->assertNotFalse($printDataStart);
+        $this->assertNotFalse($printDataEnd);
+
+        $normalization = substr($javascript, $normalizationStart, $normalizationEnd - $normalizationStart);
+        $printData = substr($javascript, $printDataStart, $printDataEnd - $printDataStart);
+
+        $this->assertStringContainsString('delivery: registration?.delivery', $normalization);
+        $this->assertStringContainsString('plate: String(registration.delivery.vehicle.plate', $normalization);
+        $this->assertStringContainsString('name: String(registration.delivery.driver.name', $normalization);
+        $this->assertStringContainsString('delivery: registration?.delivery || null', $printData);
+        $this->assertStringContainsString('emittedAt: registration?.registeredAt || null', $printData);
     }
 
     public function test_printing_a_registered_ticket_clears_its_dispatch_column(): void
