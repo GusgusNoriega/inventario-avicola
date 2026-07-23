@@ -129,6 +129,9 @@ const elements = {
   manualWeightModal: document.querySelector("#retailManualWeightModal"),
   manualWeightForm: document.querySelector("#retailManualWeightForm"),
   manualWeightEntry: document.querySelector("#retailManualWeightEntry"),
+  removeWeighingModal: document.querySelector("#retailRemoveWeighingModal"),
+  removeWeighingPreview: document.querySelector("#retailRemoveWeighingPreview"),
+  confirmRemoveWeighing: document.querySelector("#retailConfirmRemoveWeighing"),
   clientModal: document.querySelector("#retailClientModal"),
   clientSearch: document.querySelector("#retailClientSearch"),
   clientOptions: document.querySelector("#retailClientOptions"),
@@ -986,19 +989,72 @@ function addWeighingToList(listIndex, capturedReading) {
   setMessage(`Pesada agregada a la lista ${targetIndex + 1}.`);
 }
 
-function removeSelectedWeighing() {
+function openRemoveWeighingModal() {
   const selected = state.selectedItem;
   if (!selected || selected.listIndex !== state.activeList) return;
 
   const list = activeList();
+  const item = list.items.find((entry) => entry.id === selected.id);
+  if (!item) {
+    state.selectedItem = null;
+    renderAll();
+    return;
+  }
+
+  const price = effectivePrice(list, item.chickenTypeCode)?.value;
+  const amount = lineAmount(list, item);
+  const signedAmount = amount === null
+    ? null
+    : (list.operationType === OPERATION_RETURN ? -amount : amount);
+  const operationLabel = list.operationType === OPERATION_RETURN ? "Devolución" : "Venta";
+  const trayLabel = Number(item.trayCount) === 0
+    ? "Sin bandejas"
+    : `${trayQuantityLabel(item.trayCount)} · ${item.trayTypeName || item.trayTypeCode || "Tipo no indicado"}`;
+  const sourceLabel = item.weightSource === "MANUAL" ? "Ingreso manual" : "Balanza";
+
+  elements.removeWeighingPreview.innerHTML = `
+    <div class="rd-remove-preview-heading">
+      <span>Lista ${selected.listIndex + 1}</span>
+      <strong>${escapeHtml(operationLabel)}</strong>
+    </div>
+    <dl>
+      <div><dt>Producto</dt><dd>${escapeHtml(item.chickenTypeName || item.chickenShortName || item.chickenTypeCode || "Pollo")}</dd></div>
+      <div><dt>Presentación</dt><dd>${escapeHtml(item.adjustmentName || item.adjustmentCode || "Sin presentación")}</dd></div>
+      <div><dt>Bandejas</dt><dd>${escapeHtml(trayLabel)}</dd></div>
+      <div><dt>Aves</dt><dd>${Number(item.birds || 0)}</dd></div>
+      <div><dt>Peso leído</dt><dd>${Number(item.readWeight || 0).toFixed(3)} kg<small>${escapeHtml(sourceLabel)}</small></dd></div>
+      <div><dt>Peso bruto</dt><dd>${Number(item.grossWeight || 0).toFixed(3)} kg</dd></div>
+      <div><dt>Tara total</dt><dd>${Number(item.tareWeight || 0).toFixed(3)} kg</dd></div>
+      <div class="is-emphasis"><dt>Peso neto</dt><dd>${Number(item.netWeight || 0).toFixed(3)} kg</dd></div>
+      <div><dt>Precio por kg</dt><dd>${Number.isFinite(price) ? formatMoney(price) : "Sin precio"}</dd></div>
+      <div class="is-emphasis"><dt>Importe</dt><dd>${signedAmount === null ? "Sin calcular" : formatMoney(signedAmount)}</dd></div>
+    </dl>
+  `;
+  openModal(elements.removeWeighingModal);
+}
+
+function confirmRemoveSelectedWeighing() {
+  const selected = state.selectedItem;
+  if (!selected || selected.listIndex !== state.activeList) {
+    closeModal(elements.removeWeighingModal);
+    return;
+  }
+
+  const list = activeList();
   const index = list.items.findIndex((item) => item.id === selected.id);
-  if (index < 0) return;
+  if (index < 0) {
+    state.selectedItem = null;
+    closeModal(elements.removeWeighingModal);
+    renderAll();
+    return;
+  }
 
   const [removedItem] = list.items.splice(index, 1);
   if (removedItem?.readingId && removedItem.readingId === state.lastCapturedReadingId) {
     state.lastCapturedReadingId = null;
   }
   state.selectedItem = null;
+  closeModal(elements.removeWeighingModal);
   persistLists();
   renderAll();
   setMessage("Pesada retirada de la lista activa.");
@@ -1024,6 +1080,7 @@ function closeModal(modal) {
     elements.trayCountModal,
     elements.birdsPerTrayModal,
     elements.manualWeightModal,
+    elements.removeWeighingModal,
     elements.clientModal,
     elements.priceModal,
     elements.paymentModal,
@@ -2298,7 +2355,8 @@ elements.manualWeightTrigger.addEventListener("click", openManualWeightModal);
 elements.manualWeightForm.addEventListener("submit", applyMainManualWeight);
 elements.captureWeight.addEventListener("click", captureWeight);
 elements.assignClient.addEventListener("click", openClientModal);
-elements.removeWeighing.addEventListener("click", removeSelectedWeighing);
+elements.removeWeighing.addEventListener("click", openRemoveWeighingModal);
+elements.confirmRemoveWeighing.addEventListener("click", confirmRemoveSelectedWeighing);
 elements.assignPrice.addEventListener("click", openPriceModal);
 elements.saveDispatch.addEventListener("click", prepareDispatchRegistration);
 elements.clientSearch.addEventListener("input", () => renderClientOptions(elements.clientSearch.value));
@@ -2476,6 +2534,7 @@ document.addEventListener("keydown", (event) => {
       elements.trayCountModal,
       elements.birdsPerTrayModal,
       elements.manualWeightModal,
+      elements.removeWeighingModal,
       elements.clientModal,
       elements.priceModal,
       elements.paymentModal,
@@ -2491,6 +2550,7 @@ document.addEventListener("keydown", (event) => {
       elements.trayCountModal,
       elements.birdsPerTrayModal,
       elements.manualWeightModal,
+      elements.removeWeighingModal,
       elements.clientModal,
       elements.priceModal,
       elements.paymentModal,

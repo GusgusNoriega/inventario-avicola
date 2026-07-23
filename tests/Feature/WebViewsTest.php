@@ -475,6 +475,30 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('[data-retail-station="2"] .rd-selection-bar', $stylesheet);
     }
 
+    public function test_both_retail_dispatch_views_confirm_before_removing_a_weighing(): void
+    {
+        foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
+            $this->get($url)
+                ->assertOk()
+                ->assertSee('id="retailRemoveWeighingModal"', false)
+                ->assertSee('role="alertdialog"', false)
+                ->assertSee('id="retailRemoveWeighingPreview"', false)
+                ->assertSee('¿Eliminar esta pesada?')
+                ->assertSee('Sí, eliminar pesada');
+        }
+
+        $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('function openRemoveWeighingModal()', $javascript);
+        $this->assertStringContainsString('function confirmRemoveSelectedWeighing()', $javascript);
+        $this->assertStringContainsString('elements.removeWeighing.addEventListener("click", openRemoveWeighingModal)', $javascript);
+        $this->assertStringContainsString('elements.confirmRemoveWeighing.addEventListener("click", confirmRemoveSelectedWeighing)', $javascript);
+        $this->assertStringContainsString('<dt>Peso leído</dt>', $javascript);
+        $this->assertStringContainsString('<dt>Peso neto</dt>', $javascript);
+        $this->assertStringContainsString('<dt>Importe</dt>', $javascript);
+    }
+
     public function test_operation_view_is_available_without_database_queries(): void
     {
         $this->get('/operacion')

@@ -241,6 +241,28 @@
     </form>
   </div>
 
+  <div id="retailRemoveWeighingModal" class="rd-modal" hidden>
+    <section class="rd-modal-card is-remove-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="retailRemoveWeighingModalTitle" aria-describedby="retailRemoveWeighingCopy">
+      <header class="rd-modal-head">
+        <div>
+          <p>Confirmación requerida</p>
+          <h2 id="retailRemoveWeighingModalTitle">¿Eliminar esta pesada?</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailRemoveWeighingModal" aria-label="Cerrar">×</button>
+      </header>
+      <p id="retailRemoveWeighingCopy" class="rd-modal-copy">Revisa los datos antes de continuar. La pesada será retirada de la lista activa.</p>
+      <div id="retailRemoveWeighingPreview" class="rd-remove-preview"></div>
+      <div class="rd-remove-warning" role="note">
+        <span aria-hidden="true">!</span>
+        <p><strong>Esta acción no se puede deshacer.</strong> Si los datos no corresponden, selecciona Cancelar.</p>
+      </div>
+      <div class="rd-modal-actions">
+        <button type="button" class="rd-secondary-button" data-retail-close-modal="retailRemoveWeighingModal">Cancelar</button>
+        <button id="retailConfirmRemoveWeighing" class="rd-danger-button" type="button">Sí, eliminar pesada</button>
+      </div>
+    </section>
+  </div>
+
   <div id="retailClientModal" class="rd-modal" hidden>
     <section class="rd-modal-card is-client" role="dialog" aria-modal="true" aria-labelledby="retailClientModalTitle">
       <header class="rd-modal-head">
