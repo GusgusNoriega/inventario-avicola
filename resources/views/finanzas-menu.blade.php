@@ -110,6 +110,23 @@
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.movimientos') }}">
+          <span class="fin-module-icon is-movements" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 6h14"></path>
+              <path d="M5 12h14"></path>
+              <path d="M5 18h8"></path>
+              <path d="M17 16v5"></path>
+              <path d="M14.5 18.5h5"></path>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Gestionar movimientos y deudas</strong>
+            <small>Busca, revisa, corrige datos o anula transacciones, saldos a favor y deudas anteriores.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="fin-module-card fin-card" href="{{ route('finanzas.reportes') }}">
           <span class="fin-module-icon is-balances" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

@@ -1390,6 +1390,85 @@ body.fin-page {
   border: 0 !important;
 }
 
+/* Gestión de movimientos, saldos y deudas */
+.fin-management-page .fin-shell { padding-bottom: 40px; }
+.fin-management-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-top: 15px;
+  padding: 16px 18px;
+  border-color: rgba(50, 202, 255, .25);
+  background: linear-gradient(135deg, rgba(50, 202, 255, .08), rgba(10, 16, 25, .92));
+}
+.fin-management-notice-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  flex: 0 0 30px;
+  color: #06141b;
+  border-radius: 50%;
+  background: var(--fin-blue);
+  font-weight: 950;
+}
+.fin-management-notice strong { color: #fff; font-size: 13px; }
+.fin-management-notice p { margin: 4px 0 0; color: var(--fin-muted); font-size: 12px; line-height: 1.5; }
+.fin-management-panel { margin-top: 15px; padding: 21px; }
+.fin-management-tabs {
+  display: flex;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 5px;
+  border: 1px solid var(--fin-border);
+  border-radius: 10px;
+  background: rgba(6, 10, 17, .72);
+}
+.fin-management-tab {
+  min-height: 42px;
+  padding: 8px 16px;
+  color: var(--fin-muted);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.fin-management-tab.is-active { color: #06141b; background: var(--fin-blue); }
+.fin-management-filters { margin-top: 14px; }
+.fin-management-table { min-width: 1120px; }
+.fin-management-table tr.is-muted td { opacity: .62; }
+.fin-management-table td:last-child { min-width: 150px; }
+.fin-management-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.fin-management-muted { color: var(--fin-muted); font-size: 11px; }
+.fin-management-detail {
+  display: block;
+  max-width: 300px;
+  color: var(--fin-soft);
+  line-height: 1.45;
+}
+.fin-management-status {
+  display: inline-flex;
+  padding: 5px 8px;
+  color: var(--fin-soft);
+  border: 1px solid var(--fin-border-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .035);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.fin-management-status.is-registrado,
+.fin-management-status.is-pendiente { color: var(--fin-green); border-color: rgba(54, 216, 128, .3); }
+.fin-management-status.is-parcial { color: var(--fin-yellow); border-color: rgba(250, 196, 73, .32); }
+.fin-management-status.is-anulado { color: var(--fin-red); border-color: rgba(255, 116, 116, .32); }
+.fin-management-status.is-reversa { color: var(--fin-muted); }
+.fin-management-full-field { grid-column: 1 / -1; }
+.fin-void-dialog .fin-purchase-dialog-card { max-width: 570px; }
+
 @media (max-width: 1180px) {
   .fin-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fin-purchases-page .fin-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1501,6 +1580,11 @@ body.fin-page {
   .fin-module-icon svg { width: 28px; height: 28px; }
   .fin-module-copy strong { font-size: 17px; }
   .fin-module-action { grid-column: 2; justify-self: start; }
+  .fin-management-panel { padding: 15px; }
+  .fin-management-tabs { flex-direction: column; }
+  .fin-management-tab { width: 100%; }
+  .fin-management-notice { padding: 14px; }
+  .fin-management-full-field { grid-column: span 1; }
 }
 
 @media (max-width: 390px) {

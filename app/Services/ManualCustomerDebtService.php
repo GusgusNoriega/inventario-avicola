@@ -65,6 +65,77 @@ class ManualCustomerDebtService
         }
     }
 
+    /** @param array<string, mixed> $filters */
+    public function list(int $companyId, array $filters): array
+    {
+        $query = DB::table('comprobantes as comprobante')
+            ->join('terceros as cliente', 'cliente.id', '=', 'comprobante.tercero_id')
+            ->leftJoin('comprobante_detalles as detalle', 'detalle.comprobante_id', '=', 'comprobante.id')
+            ->where('comprobante.empresa_id', $companyId)
+            ->where('comprobante.origen_clave', 'like', self::ORIGIN_PREFIX.'%')
+            ->when($filters['estado'] ?? null, fn ($query, string $status) => $query->where('comprobante.estado', $status))
+            ->when($filters['cliente_id'] ?? null, fn ($query, int|string $id) => $query->where('comprobante.tercero_id', $id))
+            ->when($filters['moneda'] ?? null, fn ($query, string $currency) => $query->where('comprobante.moneda', $currency))
+            ->when($filters['desde'] ?? null, fn ($query, string $date) => $query->whereDate('comprobante.fecha_emision', '>=', $date))
+            ->when($filters['hasta'] ?? null, fn ($query, string $date) => $query->whereDate('comprobante.fecha_emision', '<=', $date))
+            ->when(trim((string) ($filters['buscar'] ?? '')) !== '', function ($query) use ($filters): void {
+                $search = trim((string) $filters['buscar']);
+                $query->where(function ($nested) use ($search): void {
+                    $nested->where('comprobante.codigo', 'like', "%{$search}%")
+                        ->orWhere('cliente.nombre_razon_social', 'like', "%{$search}%")
+                        ->orWhere('cliente.numero_documento', 'like', "%{$search}%")
+                        ->orWhere('detalle.descripcion', 'like', "%{$search}%");
+                });
+            })
+            ->orderByDesc('comprobante.fecha_emision')
+            ->orderByDesc('comprobante.id')
+            ->select([
+                'comprobante.id',
+                'comprobante.codigo',
+                'comprobante.fecha_emision',
+                'comprobante.moneda',
+                'comprobante.total',
+                'comprobante.saldo_pendiente',
+                'comprobante.estado',
+                'comprobante.anulada_at',
+                'comprobante.motivo_anulacion',
+                'cliente.id as cliente_id',
+                'cliente.nombre_razon_social as cliente_nombre',
+                'cliente.numero_documento as cliente_documento',
+                'detalle.descripcion as detalle',
+            ]);
+
+        $paginator = $query->paginate((int) ($filters['per_page'] ?? 25));
+
+        return [
+            'data' => collect($paginator->items())->map(fn (object $document): array => [
+                'id' => (int) $document->id,
+                'codigo' => $document->codigo,
+                'fecha_emision' => $document->fecha_emision,
+                'moneda' => $document->moneda,
+                'total' => FinancialMoney::normalize((string) $document->total),
+                'saldo_pendiente' => FinancialMoney::normalize((string) $document->saldo_pendiente),
+                'estado' => $document->estado,
+                'detalle' => $document->detalle,
+                'anulada_at' => $document->anulada_at,
+                'motivo_anulacion' => $document->motivo_anulacion,
+                'cliente' => [
+                    'id' => (int) $document->cliente_id,
+                    'nombre' => $document->cliente_nombre,
+                    'numero_documento' => $document->cliente_documento,
+                ],
+                'puede_editar' => $document->estado === 'PENDIENTE'
+                    && FinancialMoney::compare((string) $document->saldo_pendiente, (string) $document->total) === 0,
+            ])->all(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ],
+        ];
+    }
+
     /** @return array<string, mixed> */
     public function document(int $companyId, int $documentId): array
     {
@@ -97,12 +168,120 @@ class ManualCustomerDebtService
             'saldo_pendiente' => FinancialMoney::normalize((string) $document->saldo_pendiente),
             'estado' => $document->estado,
             'detalle' => $document->detalle,
+            'anulada_at' => $document->anulada_at,
+            'motivo_anulacion' => $document->motivo_anulacion,
+            'puede_editar' => $document->estado === 'PENDIENTE'
+                && FinancialMoney::compare((string) $document->saldo_pendiente, (string) $document->total) === 0,
             'cliente' => [
                 'id' => (int) $document->tercero_id,
                 'nombre' => $document->cliente_nombre,
                 'numero_documento' => $document->cliente_documento,
             ],
         ];
+    }
+
+    /** @param array<string, mixed> $data */
+    public function update(
+        int $companyId,
+        User $actor,
+        int $documentId,
+        array $data,
+        ?string $ip = null,
+    ): void {
+        $this->assertActor($companyId, $actor);
+
+        DB::transaction(function () use ($companyId, $actor, $documentId, $data, $ip): void {
+            $document = $this->editableDocument($companyId, $documentId);
+            $client = $this->activeClient($companyId, (int) $data['cliente_id']);
+            $before = (array) $document;
+            $detailBefore = DB::table('comprobante_detalles')
+                ->where('comprobante_id', $documentId)
+                ->value('descripcion');
+            $now = now();
+
+            DB::table('comprobantes')->where('id', $documentId)->update([
+                'tercero_id' => $client->id,
+                'fecha_emision' => $data['fecha_emision'],
+                'fecha_vencimiento' => $data['fecha_emision'],
+                'moneda' => $data['moneda'],
+                'subtotal' => $data['importe'],
+                'total' => $data['importe'],
+                'saldo_pendiente' => $data['importe'],
+                'contraparte_tipo_documento_snapshot' => $client->tipo_documento,
+                'contraparte_numero_documento_snapshot' => $client->numero_documento,
+                'contraparte_nombre_snapshot' => $client->nombre_razon_social,
+                'contraparte_direccion_snapshot' => $client->direccion,
+                'updated_at' => $now,
+            ]);
+            DB::table('comprobante_detalles')->where('comprobante_id', $documentId)->update([
+                'descripcion' => $data['detalle'],
+                'subtotal' => $data['importe'],
+            ]);
+
+            $after = (array) DB::table('comprobantes')->where('id', $documentId)->first();
+            $before['detalle'] = $detailBefore;
+            $after['detalle'] = $data['detalle'];
+            $this->audit->record(
+                $companyId,
+                $actor->id,
+                'comprobantes',
+                $documentId,
+                'EDITAR_DEUDA_ANTERIOR',
+                $before,
+                $after,
+                $ip,
+            );
+        }, 3);
+    }
+
+    public function void(
+        int $companyId,
+        User $actor,
+        int $documentId,
+        string $reason,
+        ?string $ip = null,
+    ): void {
+        $this->assertActor($companyId, $actor);
+
+        DB::transaction(function () use ($companyId, $actor, $documentId, $reason, $ip): void {
+            $document = DB::table('comprobantes')
+                ->where('empresa_id', $companyId)
+                ->where('id', $documentId)
+                ->where('origen_clave', 'like', self::ORIGIN_PREFIX.'%')
+                ->lockForUpdate()
+                ->first();
+            abort_unless($document, 404, 'La deuda anterior no fue encontrada.');
+
+            if ($document->estado === 'ANULADO') {
+                return;
+            }
+            $this->assertUnapplied($document);
+            $now = now();
+            DB::table('comprobantes')->where('id', $documentId)->update([
+                'saldo_pendiente' => '0.00',
+                'estado' => 'ANULADO',
+                'anulada_por' => $actor->id,
+                'anulada_at' => $now,
+                'motivo_anulacion' => $reason,
+                'updated_at' => $now,
+            ]);
+            $after = (array) $document;
+            $after['saldo_pendiente'] = '0.00';
+            $after['estado'] = 'ANULADO';
+            $after['anulada_por'] = $actor->id;
+            $after['anulada_at'] = $now->toDateTimeString();
+            $after['motivo_anulacion'] = $reason;
+            $this->audit->record(
+                $companyId,
+                $actor->id,
+                'comprobantes',
+                $documentId,
+                'ANULAR_DEUDA_ANTERIOR',
+                (array) $document,
+                $after,
+                $ip,
+            );
+        }, 3);
     }
 
     /**
@@ -223,6 +402,50 @@ class ManualCustomerDebtService
                 'idempotency_key' => 'La clave de idempotencia ya fue usada para registrar otra deuda.',
             ]);
         }
+    }
+
+    private function editableDocument(int $companyId, int $documentId): object
+    {
+        $document = DB::table('comprobantes')
+            ->where('empresa_id', $companyId)
+            ->where('id', $documentId)
+            ->where('origen_clave', 'like', self::ORIGIN_PREFIX.'%')
+            ->lockForUpdate()
+            ->first();
+        abort_unless($document, 404, 'La deuda anterior no fue encontrada.');
+        $this->assertUnapplied($document);
+
+        return $document;
+    }
+
+    private function assertUnapplied(object $document): void
+    {
+        if ($document->estado !== 'PENDIENTE'
+            || FinancialMoney::compare((string) $document->saldo_pendiente, (string) $document->total) !== 0) {
+            throw ValidationException::withMessages([
+                'deuda' => 'La deuda ya tiene abonos aplicados. Anula primero los movimientos financieros relacionados.',
+            ]);
+        }
+    }
+
+    private function activeClient(int $companyId, int $clientId): object
+    {
+        $client = DB::table('terceros as cliente')
+            ->join('tercero_roles as rol', 'rol.tercero_id', '=', 'cliente.id')
+            ->where('cliente.id', $clientId)
+            ->where('cliente.empresa_id', $companyId)
+            ->where('cliente.estado', 'ACTIVO')
+            ->where('rol.rol', 'CLIENTE')
+            ->select('cliente.*')
+            ->lockForUpdate()
+            ->first();
+        if (! $client) {
+            throw ValidationException::withMessages([
+                'cliente_id' => 'El cliente no existe, está inactivo o pertenece a otra empresa.',
+            ]);
+        }
+
+        return $client;
     }
 
     private function assertActor(int $companyId, User $actor): void

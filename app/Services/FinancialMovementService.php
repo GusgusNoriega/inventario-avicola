@@ -67,6 +67,72 @@ class FinancialMovementService
     }
 
     /**
+     * Update descriptive data without rewriting the accounting entry.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function updateMetadata(
+        int $companyId,
+        User $actor,
+        int $paymentId,
+        array $data,
+        ?string $ip = null,
+    ): void {
+        abort_unless(
+            (int) $actor->empresa_id === $companyId
+                && $actor->isActive()
+                && $actor->hasPermission('PAGOS_REGISTRAR'),
+            403,
+            'Se requiere el permiso PAGOS_REGISTRAR.',
+        );
+
+        DB::transaction(function () use ($companyId, $actor, $paymentId, $data, $ip): void {
+            $payment = DB::table('pagos')
+                ->where('empresa_id', $companyId)
+                ->where('id', $paymentId)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
+
+            if ($payment->estado !== Pago::STATUS_REGISTERED || $payment->reversa_de_pago_id !== null) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Solo se pueden editar movimientos vigentes que no sean reversas.',
+                ]);
+            }
+
+            $after = [
+                ...(array) $payment,
+                'fecha_hora' => CarbonImmutable::parse($data['fecha_hora'])->toDateTimeString(),
+                'referencia' => isset($data['referencia']) && trim((string) $data['referencia']) !== ''
+                    ? trim((string) $data['referencia'])
+                    : null,
+                'observaciones' => isset($data['observaciones']) && trim((string) $data['observaciones']) !== ''
+                    ? trim((string) $data['observaciones'])
+                    : null,
+                'updated_at' => now()->toDateTimeString(),
+            ];
+
+            DB::table('pagos')->where('id', $paymentId)->update([
+                'fecha_hora' => $after['fecha_hora'],
+                'referencia' => $after['referencia'],
+                'observaciones' => $after['observaciones'],
+                'updated_at' => $after['updated_at'],
+            ]);
+
+            $this->audit->record(
+                $companyId,
+                $actor->id,
+                'pagos',
+                $paymentId,
+                'EDITAR_DATOS',
+                (array) $payment,
+                $after,
+                $ip,
+            );
+        }, 3);
+    }
+
+    /**
      * Apply an available provider-credit source to payables.
      * Any original cash movement remains immutable; only its accounting allocation changes.
      *

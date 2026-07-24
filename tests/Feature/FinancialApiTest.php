@@ -1296,6 +1296,95 @@ class FinancialApiTest extends TestCase
     }
 
     /** @return array{int, int} */
+    public function test_registered_movement_metadata_can_be_edited_without_changing_accounting_values(): void
+    {
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE EDICION', '10999991');
+        [, $account] = $this->ownAccount();
+        $document = $this->document('VENTA', $client, '75.00', 'CXC-EDIT');
+        $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        $paymentId = $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $client,
+            'cuenta_destino_id' => $account,
+            'metodo_pago_id' => $method,
+            'moneda' => 'PEN',
+            'importe' => '25.00',
+            'aplicaciones' => [[
+                'lado' => 'CXC',
+                'comprobante_id' => $document,
+                'importe_aplicado' => '25.00',
+            ]],
+        ])->assertCreated()->json('data.id');
+
+        $this->putJson("/api/v1/finanzas/movimientos/{$paymentId}", [
+            'fecha_hora' => '2026-07-20 14:30:00',
+            'referencia' => 'REF-CORREGIDA',
+            'observaciones' => 'Se corrigió el número entregado por caja.',
+        ])->assertOk()
+            ->assertJsonPath('data.importe', '25.00')
+            ->assertJsonPath('data.referencia', 'REF-CORREGIDA');
+
+        $this->assertDatabaseHas('pago_aplicaciones', [
+            'pago_id' => $paymentId,
+            'comprobante_id' => $document,
+            'importe_aplicado' => '25',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'pagos',
+            'entidad_id' => (string) $paymentId,
+            'accion' => 'EDITAR_DATOS',
+        ]);
+    }
+
+    public function test_manual_customer_debt_can_be_listed_edited_and_voided_only_while_unapplied(): void
+    {
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE SALDO ANTERIOR', '10999992');
+        $otherClient = $this->thirdParty('CLIENTE', 'CLIENTE SALDO CORREGIDO', '10999993');
+        $debtId = $this->postJson('/api/v1/finanzas/deudas-clientes', [
+            'idempotency_key' => (string) Str::uuid(),
+            'cliente_id' => $client,
+            'fecha_emision' => today()->subDay()->toDateString(),
+            'moneda' => 'PEN',
+            'importe' => '120.00',
+            'detalle' => 'Saldo cargado inicialmente',
+        ])->assertCreated()->json('data.id');
+
+        $this->getJson('/api/v1/finanzas/deudas-clientes?buscar=SALDO')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $debtId)
+            ->assertJsonPath('data.0.puede_editar', true);
+
+        $this->putJson("/api/v1/finanzas/deudas-clientes/{$debtId}", [
+            'cliente_id' => $otherClient,
+            'fecha_emision' => today()->toDateString(),
+            'moneda' => 'PEN',
+            'importe' => '135.00',
+            'detalle' => 'Saldo anterior corregido',
+        ])->assertOk()
+            ->assertJsonPath('data.total', '135.00')
+            ->assertJsonPath('data.saldo_pendiente', '135.00')
+            ->assertJsonPath('data.cliente.id', $otherClient);
+
+        $this->postJson("/api/v1/finanzas/deudas-clientes/{$debtId}/anular", [
+            'motivo' => 'El saldo correspondía a otro periodo',
+        ])->assertOk()
+            ->assertJsonPath('data.estado', 'ANULADO')
+            ->assertJsonPath('data.saldo_pendiente', '0.00');
+
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $debtId,
+            'accion' => 'EDITAR_DEUDA_ANTERIOR',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $debtId,
+            'accion' => 'ANULAR_DEUDA_ANTERIOR',
+        ]);
+    }
+
     private function ownAccount(): array
     {
         $entity = $this->entity('PROPIA', null, 'EMPRESA PROPIA '.Str::random(5));

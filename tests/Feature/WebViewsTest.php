@@ -112,6 +112,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Empresas y cuentas')
             ->assertSee(route('finanzas.movimientos.nuevo'), false)
             ->assertSee('Registrar cobro, deuda o pago')
+            ->assertSee(route('finanzas.movimientos'), false)
+            ->assertSee('Gestionar movimientos y deudas')
             ->assertSee(route('finanzas.reportes'), false)
             ->assertSee('Reportes PDF')
             ->assertSee(route('menu'), false)
@@ -120,7 +122,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="financeAuthDialog"', false)
             ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
 
-        $this->assertSame(5, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+        $this->assertSame(6, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
 
         $this->get('/finanzas/saldos')
             ->assertOk()
@@ -176,15 +178,27 @@ class WebViewsTest extends TestCase
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/finanzas-movimiento.js'), false);
 
+        $this->get('/finanzas/movimientos')
+            ->assertOk()
+            ->assertSee('Movimientos, saldos y deudas')
+            ->assertSee('id="financeMovementsRows"', false)
+            ->assertSee('id="financeDebtsRows"', false)
+            ->assertSee('id="financeEditMovementDialog"', false)
+            ->assertSee('id="financeEditDebtDialog"', false)
+            ->assertSee('id="financeVoidDialog"', false)
+            ->assertSee(asset('js/finanzas-movimientos.js'), false);
+
         $financeStylesheet = file_get_contents(public_path('css/finanzas.css'));
         $dashboardJavascript = file_get_contents(public_path('js/finanzas-dashboard.js'));
         $entitiesJavascript = file_get_contents(public_path('js/finanzas-entidades.js'));
         $movementJavascript = file_get_contents(public_path('js/finanzas-movimiento.js'));
+        $managementJavascript = file_get_contents(public_path('js/finanzas-movimientos.js'));
 
         $this->assertIsString($financeStylesheet);
         $this->assertIsString($dashboardJavascript);
         $this->assertIsString($entitiesJavascript);
         $this->assertIsString($movementJavascript);
+        $this->assertIsString($managementJavascript);
         $this->assertMatchesRegularExpression(
             '/html\.fin-root,\s*body\.fin-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
             $financeStylesheet,
@@ -207,6 +221,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/cartera?', $movementJavascript);
         $this->assertStringContainsString('SALDO_FAVOR_PROVEEDOR', $movementJavascript);
         $this->assertStringContainsString('DEUDA_ANTERIOR_CLIENTE', $movementJavascript);
+        $this->assertStringContainsString('/finanzas/deudas-clientes', $managementJavascript);
+        $this->assertStringContainsString('/anular', $managementJavascript);
         $this->assertStringContainsString('/finanzas/deudas-clientes', $movementJavascript);
         $this->assertStringContainsString('function usesProviderCredit()', $movementJavascript);
         $this->assertStringContainsString('aplicacion_estado: "CON_SALDO"', $movementJavascript);

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\ApplyProviderPaymentRequest;
 use App\Http\Requests\Finance\ListFinancialMovementsRequest;
 use App\Http\Requests\Finance\StoreFinancialMovementRequest;
+use App\Http\Requests\Finance\UpdateFinancialMovementRequest;
 use App\Http\Requests\Finance\VoidFinancialMovementRequest;
 use App\Services\FinancialMovementService;
 use App\Services\FinancialQueryService;
@@ -49,6 +50,22 @@ class FinancialMovementController extends Controller
     public function show(Request $request, int $movimiento): JsonResponse
     {
         return response()->json([
+            'data' => $this->queries->movement((int) $request->user()->empresa_id, $movimiento),
+        ]);
+    }
+
+    public function update(UpdateFinancialMovementRequest $request, int $movimiento): JsonResponse
+    {
+        $this->movements->updateMetadata(
+            (int) $request->user()->empresa_id,
+            $request->user(),
+            $movimiento,
+            $request->validated(),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => 'Datos del movimiento actualizados correctamente.',
             'data' => $this->queries->movement((int) $request->user()->empresa_id, $movimiento),
         ]);
     }

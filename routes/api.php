@@ -55,6 +55,9 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/movimientos', [FinancialMovementController::class, 'index']);
             Route::get('/movimientos/{movimiento}', [FinancialMovementController::class, 'show'])
                 ->whereNumber('movimiento');
+            Route::get('/deudas-clientes', [ManualCustomerDebtController::class, 'index']);
+            Route::get('/deudas-clientes/{deuda}', [ManualCustomerDebtController::class, 'show'])
+                ->whereNumber('deuda');
             Route::get('/clientes/{tercero}/resumen', [FinancialCounterpartyController::class, 'customer'])
                 ->whereNumber('tercero');
             Route::get('/proveedores/{tercero}/resumen', [FinancialCounterpartyController::class, 'provider'])
@@ -77,6 +80,9 @@ Route::prefix('v1')->group(function (): void {
 
         Route::post('/movimientos', [FinancialMovementController::class, 'store'])
             ->middleware('permission:PAGOS_REGISTRAR');
+        Route::put('/movimientos/{movimiento}', [FinancialMovementController::class, 'update'])
+            ->whereNumber('movimiento')
+            ->middleware('permission:PAGOS_REGISTRAR');
         Route::post('/movimientos/{movimiento}/aplicaciones', [FinancialMovementController::class, 'applyProviderPayment'])
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_REGISTRAR');
@@ -84,6 +90,12 @@ Route::prefix('v1')->group(function (): void {
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_ANULAR');
         Route::post('/deudas-clientes', [ManualCustomerDebtController::class, 'store'])
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::put('/deudas-clientes/{deuda}', [ManualCustomerDebtController::class, 'update'])
+            ->whereNumber('deuda')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::post('/deudas-clientes/{deuda}/anular', [ManualCustomerDebtController::class, 'void'])
+            ->whereNumber('deuda')
             ->middleware('permission:SALDOS_AJUSTAR');
     });
 
