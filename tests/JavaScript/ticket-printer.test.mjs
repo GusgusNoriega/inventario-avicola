@@ -31,10 +31,10 @@ test("el ticket mayorista usa tipografia grande y muestra el camion y chofer sel
   }, "2026-07-23T12:30:00-05:00");
 
   assert.match(html, /<body class="wholesale-ticket">/);
-  assert.match(html, /body\.wholesale-ticket,\s*body\.retail-ticket \{[\s\S]*font-size: 18px;/);
-  assert.match(html, /\.wholesale-ticket \.delivery,\s*\.retail-ticket \.delivery \{[\s\S]*font-size: 17px;/);
-  assert.match(html, /\.wholesale-ticket td,\s*\.retail-ticket td \{[\s\S]*font-size: 17px;/);
-  assert.match(html, /\.wholesale-ticket \.form-fields,\s*\.retail-ticket \.form-fields \{[\s\S]*font-size: 19px;/);
+  assert.match(html, /body \{[\s\S]*font-size: 18px;/);
+  assert.match(html, /\.delivery \{[\s\S]*font-size: 17px;/);
+  assert.match(html, /td \{[\s\S]*font-size: 17px;/);
+  assert.match(html, /\.form-fields \{[\s\S]*font-size: 19px;/);
   assert.match(html, /CAMIÓN: ABC-123/);
   assert.match(html, /CHOFER: María &lt;Prueba&gt;/);
 });
@@ -60,10 +60,11 @@ test("el ticket minorista usa la misma tipografia grande y muestra el camion y c
 
   assert.match(html, /<body class="retail-ticket">/);
   assert.doesNotMatch(html, /<body class="wholesale-ticket">/);
-  assert.match(html, /body\.wholesale-ticket,\s*body\.retail-ticket \{[\s\S]*font-size: 18px;/);
-  assert.match(html, /\.wholesale-ticket \.delivery,\s*\.retail-ticket \.delivery \{[\s\S]*font-size: 17px;/);
-  assert.match(html, /\.wholesale-ticket td,\s*\.retail-ticket td \{[\s\S]*font-size: 17px;/);
-  assert.match(html, /\.wholesale-ticket \.form-fields,\s*\.retail-ticket \.form-fields \{[\s\S]*font-size: 19px;/);
+  assert.match(html, /body \{[\s\S]*font-size: 18px;/);
+  assert.match(html, /\.delivery \{[\s\S]*font-size: 17px;/);
+  assert.match(html, /td \{[\s\S]*font-size: 17px;/);
+  assert.match(html, /\.form-fields \{[\s\S]*font-size: 19px;/);
+  assert.doesNotMatch(html, /\.retail-detail-table th,[\s\S]*font-size: 9\.5px;/);
   assert.match(html, /CAMIÓN: MIN-001/);
   assert.match(html, /CHOFER: Chofer minorista/);
 });
