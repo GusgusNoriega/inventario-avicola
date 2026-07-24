@@ -128,11 +128,13 @@ class DispatchTicketService
                 'cerrado_at' => now(),
                 'created_by' => $actor->id,
             ]);
-            $ticketPrices = $this->freezePrices(
-                $companyId,
-                $destination['client_id'],
-                $types
-            );
+            $ticketPrices = $destination['client_id']
+                ? $this->freezePrices(
+                    $companyId,
+                    $destination['client_id'],
+                    $types
+                )
+                : [];
 
             foreach ($ticketPrices as $typeId => $price) {
                 TicketPrecio::query()->create([
@@ -492,30 +494,25 @@ class DispatchTicketService
      */
     private function freezePrices(
         int $companyId,
-        ?int $clientId,
+        int $clientId,
         Collection $types
     ): array {
         $sourceTypes = $this->priceSourceTypes($types);
-        $specificPrices = collect();
-
-        if ($clientId) {
-            $specificListId = ListaPrecio::query()
-                ->where('empresa_id', $companyId)
-                ->where('tercero_id', $clientId)
-                ->where('operacion', ListaPrecio::OPERATION_SALE)
-                ->where('estado', ListaPrecio::STATUS_ACTIVE)
-                ->value('id');
-
-            if ($specificListId) {
-                $specificPrices = PrecioHistorial::query()
-                    ->where('lista_precio_id', $specificListId)
-                    ->whereIn('tipo_pollo_id', $sourceTypes->pluck('id'))
-                    ->whereNull('vigente_hasta')
-                    ->lockForUpdate()
-                    ->get()
-                    ->keyBy('tipo_pollo_id');
-            }
-        }
+        $specificListId = ListaPrecio::query()
+            ->where('empresa_id', $companyId)
+            ->where('tercero_id', $clientId)
+            ->where('operacion', ListaPrecio::OPERATION_SALE)
+            ->where('estado', ListaPrecio::STATUS_ACTIVE)
+            ->value('id');
+        $specificPrices = $specificListId
+            ? PrecioHistorial::query()
+                ->where('lista_precio_id', $specificListId)
+                ->whereIn('tipo_pollo_id', $sourceTypes->pluck('id'))
+                ->whereNull('vigente_hasta')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('tipo_pollo_id')
+            : collect();
 
         $missingTypes = $sourceTypes->filter(
             fn (TipoPollo $type) => ! $specificPrices->has($type->id)

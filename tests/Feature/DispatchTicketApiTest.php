@@ -485,7 +485,7 @@ class DispatchTicketApiTest extends TestCase
         $this->assertDatabaseCount('lecturas_balanza', 1);
     }
 
-    public function test_warehouse_destination_freezes_general_prices(): void
+    public function test_warehouse_destination_does_not_freeze_sale_prices(): void
     {
         $this->createGeneralPrices();
         $payload = $this->ticketPayload();
@@ -501,10 +501,7 @@ class DispatchTicketApiTest extends TestCase
 
         $this->assertDatabaseCount('listas_precios', 3);
         $this->assertDatabaseCount('precios_historial', 9);
-        $this->assertDatabaseHas('ticket_precios', [
-            'precio_kg' => 8.75,
-            'origen_precio' => 'GENERAL',
-        ]);
+        $this->assertDatabaseCount('ticket_precios', 0);
     }
 
     public function test_return_ticket_freezes_live_chicken_price_and_tracks_dead_condition(): void
@@ -663,7 +660,7 @@ class DispatchTicketApiTest extends TestCase
         ]);
     }
 
-    public function test_missing_internal_general_prices_rolls_back_warehouse_ticket(): void
+    public function test_warehouse_ticket_does_not_require_general_sale_prices(): void
     {
         $payload = $this->ticketPayload();
         $payload['destination'] = [
@@ -672,13 +669,18 @@ class DispatchTicketApiTest extends TestCase
         ];
 
         $this->postJson('/api/v1/operacion/tickets', $payload)
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('destination.id');
+            ->assertCreated()
+            ->assertJsonPath('data.destination.type', 'ALMACEN')
+            ->assertJsonPath('data.destination.id', $this->warehouseId);
 
-        $this->assertDatabaseCount('jornadas_operativas', 0);
-        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('jornadas_operativas', 1);
+        $this->assertDatabaseCount('tickets_despacho', 1);
         $this->assertDatabaseCount('ticket_precios', 0);
-        $this->assertDatabaseCount('pesadas', 0);
+        $this->assertDatabaseCount('pesadas', 2);
+        $this->assertDatabaseHas('tickets_despacho', [
+            'cliente_destino_id' => null,
+            'almacen_destino_id' => $this->warehouseId,
+        ]);
     }
 
     public function test_dispatch_ticket_payload_cannot_submit_prices(): void
