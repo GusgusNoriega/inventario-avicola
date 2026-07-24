@@ -79,7 +79,7 @@ function clearDisplay(statusMessage = "Esperando despacho", removeStorage = fals
   elements.ticket.textContent = "Sin lista vinculada";
   elements.scaleWeight.textContent = "---";
   elements.scaleCard.classList.remove("has-reading", "is-selected");
-  elements.scaleStatus.textContent = "Sin lectura";
+  elements.scaleStatus.textContent = "Sin cálculo";
   elements.scaleStatus.classList.add("is-waiting");
   elements.records.textContent = "0";
   elements.trays.textContent = "0";
@@ -197,8 +197,8 @@ function renderPayload(payload) {
   elements.scaleCard.classList.toggle("is-selected", displayWeight !== null);
   elements.scaleStatus.classList.toggle("is-waiting", displayWeight === null);
   elements.scaleStatus.textContent = displayWeight === null
-    ? "Sin lectura"
-    : (scale.isStable && scale.isFresh ? "Peso estable" : "En vivo");
+    ? "Sin cálculo"
+    : (scale.isStable && scale.isFresh ? "Neto estable" : "Neto en vivo");
   if (elements.announcement.textContent !== announcement) {
     elements.announcement.textContent = announcement;
   }

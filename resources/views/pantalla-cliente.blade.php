@@ -37,11 +37,11 @@
     </header>
 
     @if($isRetailCustomerDisplay)
-      <section class="customer-display-scales customer-display-scales--retail" aria-label="Peso actual de la balanza minorista">
+      <section class="customer-display-scales customer-display-scales--retail" aria-label="Peso neto calculado del despacho minorista">
         <article id="customerDisplayScaleCard1" class="customer-display-scale customer-display-scale--retail">
           <div class="customer-display-scale__head">
-            <span>Peso actual</span>
-            <small id="customerDisplayScaleStatus1" class="is-waiting">Sin lectura</small>
+            <span>Peso neto calculado</span>
+            <small id="customerDisplayScaleStatus1" class="is-waiting">Sin cálculo</small>
           </div>
           <div class="customer-display-scale__reading">
             <strong id="customerDisplayScale1">---</strong>

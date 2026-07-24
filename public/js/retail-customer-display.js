@@ -56,7 +56,8 @@ export function retailCustomerDisplayPayloadMatches(payload, {
 export function resolveRetailCustomerDisplayWeights({
   hasReading,
   readWeightKg,
-  displayWeightKg,
+  netWeightKg,
+  calculationAvailable = false,
   isPhysical = false,
   isFresh = false,
   connectionMatches = true,
@@ -67,10 +68,15 @@ export function resolveRetailCustomerDisplayWeights({
       !isPhysical
       || (Boolean(isFresh) && Boolean(connectionMatches) && !Boolean(isExpired))
     );
+  const normalizedNetWeight = Number(netWeightKg);
+  const canShowNetWeight = canShowWeight
+    && Boolean(calculationAvailable)
+    && Number.isFinite(normalizedNetWeight)
+    && normalizedNetWeight > 0;
 
   return {
     readWeightKg: canShowWeight ? readWeightKg : null,
-    displayWeightKg: canShowWeight ? displayWeightKg : null
+    displayWeightKg: canShowNetWeight ? normalizedNetWeight : null
   };
 }
 

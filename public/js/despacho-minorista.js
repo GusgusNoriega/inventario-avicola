@@ -825,10 +825,15 @@ function buildCurrentRetailCustomerDisplayState() {
   const customer = clientFor(list);
   const fixedPresentation = station2AdjustmentForList(state.activeList);
   const pricingComplete = missingPriceTypes(list).length === 0;
+  const calculationAvailable = availability.fixedAdjustmentAvailable
+    && Boolean(values.tray)
+    && Boolean(values.adjustment)
+    && Boolean(selectedChickenType());
   const displayWeights = resolveRetailCustomerDisplayWeights({
     hasReading: values.hasReading,
     readWeightKg: values.readWeight,
-    displayWeightKg: values.readWeight,
+    netWeightKg: values.netWeight,
+    calculationAvailable,
     isPhysical: availability.isPhysical,
     isFresh: availability.scaleState.isFresh,
     connectionMatches: availability.connectionMatches,

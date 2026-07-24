@@ -11,6 +11,7 @@ import {
   RETAIL_CUSTOMER_DISPLAY_PAYLOAD_TYPE,
   RETAIL_CUSTOMER_DISPLAY_RESET_TYPE
 } from "../../public/js/retail-customer-display.js";
+import { calculateRetailWeightAdjustment } from "../../public/js/retail-weight-calculation.js";
 
 const displaySource = readFileSync(
   new URL("../../public/js/pantalla-cliente-minorista.js", import.meta.url),
@@ -213,7 +214,7 @@ test("canal y almacenamiento quedan aislados por estación y por productor", () 
   assert.match(stationTwoProducerA, /minorista-2-estado-v1:producer-a$/);
 });
 
-test("el productor publica la lista activa, sus totales y el peso directo de la balanza", () => {
+test("el productor publica la lista activa, sus totales y el peso neto calculado", () => {
   const builderStart = stationSource.indexOf("function buildCurrentRetailCustomerDisplayState()");
   const builderEnd = stationSource.indexOf(
     "function flushRetailCustomerDisplayStorage()",
@@ -233,8 +234,9 @@ test("el productor publica la lista activa, sus totales y el peso directo de la 
   assert.match(builder, /const availability = liveReadingAvailability\(\)/);
   assert.match(builder, /const displayWeights = resolveRetailCustomerDisplayWeights\(/);
   assert.match(builder, /readWeightKg: values\.readWeight/);
-  assert.match(builder, /displayWeightKg: values\.readWeight/);
-  assert.doesNotMatch(builder, /displayWeightKg: values\.grossWeight/);
+  assert.match(builder, /netWeightKg: values\.netWeight/);
+  assert.match(builder, /calculationAvailable,/);
+  assert.doesNotMatch(builder, /displayWeightKg: values\.readWeight/);
   assert.match(builder, /displayWeightKg: displayWeights\.displayWeightKg/);
   assert.match(builder, /readWeightKg: displayWeights\.readWeightKg/);
 
@@ -243,6 +245,10 @@ test("el productor publica la lista activa, sus totales y el peso directo de la 
   assert.match(
     stationSource.slice(previewStart, previewEnd),
     /adjustedWeight\.textContent = values\.hasReading \? values\.readWeight\.toFixed\(3\)/
+  );
+  assert.match(
+    stationSource.slice(previewStart, previewEnd),
+    /values\.netWeight \* price\.value/
   );
   assert.match(
     stationSource.slice(previewStart, previewEnd),
@@ -262,7 +268,8 @@ test("una lectura física vencida o desconectada no se presenta como peso actual
   const physicalReading = {
     hasReading: true,
     readWeightKg: 12.4,
-    displayWeightKg: 12.64,
+    netWeightKg: 12.64,
+    calculationAvailable: true,
     isPhysical: true,
     isFresh: true,
     connectionMatches: true,
@@ -300,7 +307,8 @@ test("el peso manual sigue visible sin exigir una conexión física", () => {
   assert.deepEqual(resolveRetailCustomerDisplayWeights({
     hasReading: true,
     readWeightKg: 8.2,
-    displayWeightKg: 8.36,
+    netWeightKg: 8.36,
+    calculationAvailable: true,
     isPhysical: false,
     isFresh: false,
     connectionMatches: false,
@@ -308,6 +316,65 @@ test("el peso manual sigue visible sin exigir una conexión física", () => {
   }), {
     readWeightKg: 8.2,
     displayWeightKg: 8.36
+  });
+});
+
+test("la pantalla pública muestra el mismo neto calculado que se usa para cobrar", () => {
+  const readWeightKg = 12;
+  const trayCount = 2;
+  const trayWeightKg = 0.5;
+  const adjustment = calculateRetailWeightAdjustment({
+    chickenTypeCode: "POLLO_PELADO",
+    trayCount,
+    birdsPerTray: 5,
+    configuredAdjustmentGrams: 250
+  });
+  const netWeightKg = readWeightKg
+    + adjustment.totalAdjustmentGrams / 1000
+    - trayCount * trayWeightKg;
+  const amount = netWeightKg * 8.5;
+
+  assert.equal(netWeightKg, 13.5);
+  assert.equal(amount, 114.75);
+  assert.deepEqual(resolveRetailCustomerDisplayWeights({
+    hasReading: true,
+    readWeightKg,
+    netWeightKg,
+    calculationAvailable: true,
+    isPhysical: false
+  }), {
+    readWeightKg: 12,
+    displayWeightKg: 13.5
+  });
+});
+
+test("la pantalla pública oculta un neto incompleto o no cobrable", () => {
+  const baseReading = {
+    hasReading: true,
+    readWeightKg: 4,
+    netWeightKg: 1.5,
+    isPhysical: false
+  };
+
+  assert.deepEqual(resolveRetailCustomerDisplayWeights(baseReading), {
+    readWeightKg: 4,
+    displayWeightKg: null
+  });
+  assert.deepEqual(resolveRetailCustomerDisplayWeights({
+    ...baseReading,
+    calculationAvailable: true,
+    netWeightKg: 0
+  }), {
+    readWeightKg: 4,
+    displayWeightKg: null
+  });
+  assert.deepEqual(resolveRetailCustomerDisplayWeights({
+    ...baseReading,
+    calculationAvailable: true,
+    netWeightKg: -0.25
+  }), {
+    readWeightKg: 4,
+    displayWeightKg: null
   });
 });
 
@@ -499,7 +566,7 @@ test("el consumidor renderiza solo texto y conserva todos los totales del ticket
   assert.equal(elements.amount.textContent, "S/ 123.45");
   assert.equal(elements.amount.classList.contains("is-pending"), false);
   assert.equal(elements.scaleWeight.textContent, "7.310");
-  assert.equal(elements.scaleStatus.textContent, "Peso estable");
+  assert.equal(elements.scaleStatus.textContent, "Neto estable");
   assert.equal(elements.status.textContent, "En vivo");
   assert.match(elements.announcement.textContent, /42 pollos, 5 bandejas/);
 
@@ -529,7 +596,7 @@ test("importe pendiente y peso nulo nunca se presentan como dinero o peso cero",
   assert.equal(elements.amount.classList.contains("is-pending"), true);
   assert.equal(elements.scaleWeight.textContent, "---");
   assert.equal(elements.scaleCard.classList.contains("has-reading"), false);
-  assert.equal(elements.scaleStatus.textContent, "Sin lectura");
+  assert.equal(elements.scaleStatus.textContent, "Sin cálculo");
   assert.match(elements.announcement.textContent, /Precio pendiente\.$/);
 });
 
