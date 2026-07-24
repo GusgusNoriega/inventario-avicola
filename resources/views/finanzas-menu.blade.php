@@ -127,6 +127,23 @@
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.gastos') }}">
+          <span class="fin-module-icon is-expenses" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 6h14v13H5z"></path>
+              <path d="M8 10h8"></path>
+              <path d="M8 14h5"></path>
+              <path d="M9 3h6v3H9z"></path>
+              <path d="M17 15v4"></path>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Gastos de empresa</strong>
+            <small>Registra llantas, camisas, servicios u otros egresos e identifica de qué caja salieron.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="fin-module-card fin-card" href="{{ route('finanzas.reportes') }}">
           <span class="fin-module-icon is-balances" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

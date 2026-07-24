@@ -48,6 +48,8 @@ class Pago extends Model
 
     public const TYPE_CUSTOMER_REFUND = 'REEMBOLSO_CLIENTE';
 
+    public const TYPE_COMPANY_EXPENSE = 'GASTO_EMPRESA';
+
     public const TYPE_OPENING_BALANCE = 'SALDO_INICIAL';
 
     public const TYPE_ADJUSTMENT = 'AJUSTE';
@@ -61,6 +63,7 @@ class Pago extends Model
         self::TYPE_PROVIDER_CREDIT,
         self::TYPE_RETAIL_COLLECTION,
         self::TYPE_CUSTOMER_REFUND,
+        self::TYPE_COMPANY_EXPENSE,
         self::TYPE_OPENING_BALANCE,
         self::TYPE_ADJUSTMENT,
         self::TYPE_INTERNAL_TRANSFER,

@@ -114,6 +114,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Registrar cobro, deuda o pago')
             ->assertSee(route('finanzas.movimientos'), false)
             ->assertSee('Gestionar movimientos y deudas')
+            ->assertSee(route('finanzas.gastos'), false)
+            ->assertSee('Gastos de empresa')
             ->assertSee(route('finanzas.reportes'), false)
             ->assertSee('Reportes PDF')
             ->assertSee(route('menu'), false)
@@ -122,7 +124,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="financeAuthDialog"', false)
             ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
 
-        $this->assertSame(6, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+        $this->assertSame(7, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
 
         $this->get('/finanzas/saldos')
             ->assertOk()
@@ -188,17 +190,29 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeVoidDialog"', false)
             ->assertSee(asset('js/finanzas-movimientos.js'), false);
 
+        $this->get('/finanzas/gastos')
+            ->assertOk()
+            ->assertSee('Gastos de empresa')
+            ->assertSee('id="companyExpenseForm"', false)
+            ->assertSee('id="companyExpenseAccount"', false)
+            ->assertSee('id="companyExpenseRows"', false)
+            ->assertSee('id="companyExpenseEditDialog"', false)
+            ->assertSee('id="companyExpenseVoidDialog"', false)
+            ->assertSee(asset('js/finanzas-gastos.js'), false);
+
         $financeStylesheet = file_get_contents(public_path('css/finanzas.css'));
         $dashboardJavascript = file_get_contents(public_path('js/finanzas-dashboard.js'));
         $entitiesJavascript = file_get_contents(public_path('js/finanzas-entidades.js'));
         $movementJavascript = file_get_contents(public_path('js/finanzas-movimiento.js'));
         $managementJavascript = file_get_contents(public_path('js/finanzas-movimientos.js'));
+        $expensesJavascript = file_get_contents(public_path('js/finanzas-gastos.js'));
 
         $this->assertIsString($financeStylesheet);
         $this->assertIsString($dashboardJavascript);
         $this->assertIsString($entitiesJavascript);
         $this->assertIsString($movementJavascript);
         $this->assertIsString($managementJavascript);
+        $this->assertIsString($expensesJavascript);
         $this->assertMatchesRegularExpression(
             '/html\.fin-root,\s*body\.fin-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
             $financeStylesheet,
@@ -236,6 +250,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('queryParameters.get("cliente_id")', $movementJavascript);
         $this->assertStringContainsString('queryParameters.get("proveedor_id")', $movementJavascript);
         $this->assertStringContainsString('method: "POST"', $movementJavascript);
+        $this->assertStringContainsString('/finanzas/gastos/catalogo', $expensesJavascript);
+        $this->assertStringContainsString('/finanzas/gastos?', $expensesJavascript);
+        $this->assertStringContainsString('/anular', $expensesJavascript);
+        $this->assertStringContainsString('idempotency_key:', $expensesJavascript);
+        $this->assertStringContainsString('.fin-expense-layout', $financeStylesheet);
     }
 
     public function test_purchase_views_are_available_without_database_queries(): void

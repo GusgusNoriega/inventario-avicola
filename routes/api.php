@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AdminRoleController;
 use App\Http\Controllers\Api\V1\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
+use App\Http\Controllers\Api\V1\CompanyExpenseController;
 use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
@@ -97,6 +98,21 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/deudas-clientes/{deuda}/anular', [ManualCustomerDebtController::class, 'void'])
             ->whereNumber('deuda')
             ->middleware('permission:SALDOS_AJUSTAR');
+
+        Route::middleware('permission:FINANZAS_VER')->group(function (): void {
+            Route::get('/gastos/catalogo', [CompanyExpenseController::class, 'catalog']);
+            Route::get('/gastos', [CompanyExpenseController::class, 'index']);
+            Route::get('/gastos/{gasto}', [CompanyExpenseController::class, 'show'])
+                ->whereNumber('gasto');
+        });
+        Route::post('/gastos', [CompanyExpenseController::class, 'store'])
+            ->middleware('permission:PAGOS_REGISTRAR');
+        Route::put('/gastos/{gasto}', [CompanyExpenseController::class, 'update'])
+            ->whereNumber('gasto')
+            ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/gastos/{gasto}/anular', [CompanyExpenseController::class, 'void'])
+            ->whereNumber('gasto')
+            ->middleware('permission:PAGOS_ANULAR');
     });
 
     Route::prefix('compras')->middleware([

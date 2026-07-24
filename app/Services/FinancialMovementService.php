@@ -879,6 +879,17 @@ class FinancialMovementService
                 }
                 break;
 
+            case Pago::TYPE_COMPANY_EXPENSE:
+                $this->required($data, ['cuenta_origen_id', 'metodo_pago_id']);
+                $this->assertEmpty($data, [
+                    'cliente_id',
+                    'proveedor_id',
+                    'cuenta_destino_id',
+                ]);
+                $this->assertOwn($origin, 'cuenta_origen_id');
+                $this->assertNoApplications($data);
+                break;
+
             case 'SALDO_INICIAL':
                 $this->required($data, ['cuenta_destino_id']);
                 $this->assertOwn($destination, 'cuenta_destino_id');
@@ -1252,7 +1263,11 @@ class FinancialMovementService
         if ($data['tipo'] === 'TRANSFERENCIA_INTERNA') {
             return 'TRANSFERENCIA';
         }
-        if (in_array($data['tipo'], ['PAGO_PROVEEDOR', 'REEMBOLSO_CLIENTE'], true)) {
+        if (in_array($data['tipo'], [
+            'PAGO_PROVEEDOR',
+            'REEMBOLSO_CLIENTE',
+            Pago::TYPE_COMPANY_EXPENSE,
+        ], true)) {
             return 'EGRESO';
         }
         if (in_array($data['tipo'], ['COBRO_CLIENTE', 'COBRO_MINORISTA', 'SALDO_INICIAL'], true)) {

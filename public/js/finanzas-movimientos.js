@@ -20,6 +20,7 @@ const TYPE_LABELS = {
   SALDO_FAVOR_PROVEEDOR: "Saldo anterior con proveedor",
   COBRO_MINORISTA: "Cobro minorista",
   REEMBOLSO_CLIENTE: "Reembolso a cliente",
+  GASTO_EMPRESA: "Gasto de empresa",
   SALDO_INICIAL: "Saldo inicial",
   AJUSTE: "Ajuste",
   TRANSFERENCIA_INTERNA: "Transferencia interna"

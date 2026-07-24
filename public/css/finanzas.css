@@ -1469,6 +1469,95 @@ body.fin-page {
 .fin-management-full-field { grid-column: 1 / -1; }
 .fin-void-dialog .fin-purchase-dialog-card { max-width: 570px; }
 
+/* Gastos internos de la empresa */
+.fin-module-icon.is-expenses {
+  color: var(--fin-yellow);
+  background: linear-gradient(145deg, rgba(250, 196, 73, .18), rgba(250, 196, 73, .035));
+}
+.fin-expenses-page .fin-shell { padding-bottom: 42px; }
+.fin-expense-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 285px;
+  gap: 13px;
+  margin-top: 15px;
+  align-items: start;
+}
+.fin-expense-form { padding: 22px; }
+.fin-expense-form-grid { margin-top: 18px; }
+.fin-expense-side { display: grid; gap: 10px; }
+.fin-expense-summary,
+.fin-expense-help { padding: 18px; }
+.fin-expense-summary span,
+.fin-expense-summary strong,
+.fin-expense-summary small { display: block; }
+.fin-expense-summary span {
+  color: var(--fin-muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.fin-expense-summary strong {
+  margin-top: 9px;
+  color: #fff;
+  font-size: 29px;
+  font-variant-numeric: tabular-nums;
+}
+.fin-expense-summary small { margin-top: 6px; color: var(--fin-muted); font-size: 10px; line-height: 1.4; }
+.fin-expense-summary.is-total {
+  border-color: rgba(250, 196, 73, .32);
+  background: linear-gradient(145deg, rgba(250, 196, 73, .11), rgba(10, 16, 25, .96));
+}
+.fin-expense-summary.is-total strong { color: var(--fin-yellow); }
+.fin-expense-help { border-color: rgba(50, 202, 255, .22); }
+.fin-expense-help-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #06141b;
+  border-radius: 50%;
+  background: var(--fin-blue);
+  font-size: 18px;
+  font-weight: 950;
+}
+.fin-expense-help strong { display: block; margin-top: 12px; color: #fff; font-size: 12px; }
+.fin-expense-help p { margin: 6px 0 0; color: var(--fin-muted); font-size: 10px; line-height: 1.55; }
+.fin-expense-form-footer {
+  display: flex;
+  margin-top: 18px;
+  padding-top: 15px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--fin-border);
+}
+.fin-expense-form-footer > div:last-child { display: grid; justify-items: end; }
+.fin-expense-total span,
+.fin-expense-total strong { display: block; }
+.fin-expense-total span { color: var(--fin-muted); font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.fin-expense-total strong { margin-top: 5px; color: var(--fin-yellow); font-size: 24px; }
+.fin-expense-form-footer .fin-message { margin: 0 0 7px; }
+.fin-expense-history { margin-top: 15px; padding: 22px; }
+.fin-expense-filters { margin-top: 17px; }
+.fin-expense-table { min-width: 1080px; }
+.fin-expense-table tr.is-muted td { opacity: .6; }
+.fin-expense-table td:nth-child(2) { max-width: 250px; }
+.fin-expense-table td:nth-child(3) { max-width: 220px; }
+.fin-expense-table td strong,
+.fin-expense-table td small { overflow-wrap: anywhere; }
+.fin-expense-edit-card { width: min(760px, calc(100vw - 32px)); }
+.fin-expense-edit-note {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  color: var(--fin-soft);
+  border: 1px solid rgba(250, 196, 73, .25);
+  border-radius: 8px;
+  background: rgba(250, 196, 73, .06);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1180px) {
   .fin-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fin-purchases-page .fin-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1484,6 +1573,7 @@ body.fin-page {
   .fin-movement-columns { grid-template-columns: minmax(0, 1fr) 290px; }
   .fin-purchase-form-columns { grid-template-columns: minmax(580px, 1fr) 290px; }
   .fin-purchase-line-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fin-expense-layout { grid-template-columns: minmax(0, 1fr) 250px; }
 }
 
 @media (max-width: 860px) {
@@ -1503,6 +1593,8 @@ body.fin-page {
   .fin-purchase-form-columns { grid-template-columns: 1fr; }
   .fin-purchase-total-panel { position: static; }
   .fin-purchase-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-expense-layout { grid-template-columns: 1fr; }
+  .fin-expense-side { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .fin-module-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
   .fin-module-heading > p { max-width: none; text-align: left; }
   .fin-module-card { min-height: 170px; }
@@ -1585,6 +1677,12 @@ body.fin-page {
   .fin-management-tab { width: 100%; }
   .fin-management-notice { padding: 14px; }
   .fin-management-full-field { grid-column: span 1; }
+  .fin-expense-form,
+  .fin-expense-history { padding: 15px; }
+  .fin-expense-side { grid-template-columns: 1fr; }
+  .fin-expense-form-footer { align-items: stretch; flex-direction: column; }
+  .fin-expense-form-footer > div:last-child { justify-items: stretch; }
+  .fin-expense-form-footer .fin-btn { width: 100%; }
 }
 
 @media (max-width: 390px) {
