@@ -6616,12 +6616,12 @@ function buildTruckTableRows(truck) {
       return `
         <tr class="cage-row" data-truck-id="${escapeHtml(truck.id)}" data-cage-id="${escapeHtml(cage.id)}" tabindex="0" role="button" aria-label="Editar registro ${escapeHtml(cage.id)}">
           <td class="truck-cell-id">${escapeHtml(cage.id)}</td>
+          <td class="truck-cell-weight truck-cell-gross-weight">${grossWeight.toFixed(2)}</td>
           <td class="truck-cell-type">${typeTag}</td>
           <td class="truck-cell-sex">${sexBadge}</td>
           <td class="truck-cell-count">${avesPorJava}</td>
           <td class="truck-cell-count">${aves}</td>
           <td class="truck-cell-count">${javas}</td>
-          <td class="truck-cell-weight">${grossWeight.toFixed(2)}</td>
           <td class="truck-cell-weight">${tareWeight.toFixed(2)}</td>
           <td class="truck-cell-weight">${netWeight.toFixed(2)}</td>
           <td class="truck-cell-meta">${escapeHtml(sourceText)}</td>
@@ -7155,12 +7155,12 @@ function renderTruckColumns() {
               <thead>
                 <tr>
                   <th class="truck-head-id">#</th>
+                  <th class="truck-head-weight truck-head-gross-weight">Bruto</th>
                   <th class="truck-head-type">Tipo</th>
                   <th class="truck-head-sex">Sexo</th>
                   <th class="truck-head-count">Aves/Java</th>
                   <th class="truck-head-count">Aves</th>
                   <th class="truck-head-count">Javas</th>
-                  <th class="truck-head-weight">Bruto</th>
                   <th class="truck-head-weight">Javas kg</th>
                   <th class="truck-head-weight">Neto</th>
                   <th class="truck-head-meta">Origen</th>

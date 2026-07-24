@@ -814,6 +814,29 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('class="selected-truck-sex-counts"', $javascript);
     }
 
+    public function test_operation_records_show_gross_weight_at_the_left(): void
+    {
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+
+        $headerId = strpos($javascript, '<th class="truck-head-id">#</th>');
+        $headerGross = strpos($javascript, '<th class="truck-head-weight truck-head-gross-weight">Bruto</th>');
+        $headerType = strpos($javascript, '<th class="truck-head-type">Tipo</th>');
+        $rowId = strpos($javascript, '<td class="truck-cell-id">${escapeHtml(cage.id)}</td>');
+        $rowGross = strpos($javascript, '<td class="truck-cell-weight truck-cell-gross-weight">${grossWeight.toFixed(2)}</td>');
+        $rowType = strpos($javascript, '<td class="truck-cell-type">${typeTag}</td>');
+
+        $this->assertNotFalse($headerId);
+        $this->assertNotFalse($headerGross);
+        $this->assertNotFalse($headerType);
+        $this->assertNotFalse($rowId);
+        $this->assertNotFalse($rowGross);
+        $this->assertNotFalse($rowType);
+        $this->assertTrue($headerId < $headerGross && $headerGross < $headerType);
+        $this->assertTrue($rowId < $rowGross && $rowGross < $rowType);
+    }
+
     public function test_all_operation_numeric_fields_use_the_touch_keypad(): void
     {
         $view = file_get_contents(resource_path('views/operacion.blade.php'));

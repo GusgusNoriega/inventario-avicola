@@ -5950,6 +5950,13 @@ select {
   font-size: var(--fs-truck-table-weight);
 }
 
+.truck-head-gross-weight,
+.truck-cell-gross-weight {
+  color: var(--secondary);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .truck-cell-meta {
   font-size: var(--fs-truck-table-meta);
 }
