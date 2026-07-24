@@ -28,13 +28,14 @@ class StoreRetailDispatchRequest extends FormRequest
 
         return [
             'draft_id' => ['required', 'uuid'],
-            'client_id' => ['nullable', 'integer', 'min:1'],
+            'client_id' => ['required', 'integer', 'min:1'],
             'operation_type' => ['required', Rule::in([
                 TicketDespacho::OPERATION_DISPATCH,
                 TicketDespacho::OPERATION_RETURN,
             ])],
             'delivery' => [
                 Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                Rule::prohibitedIf(fn (): bool => ! $this->requiresDelivery()),
                 'nullable',
                 'array:mode,vehicle_id,driver_id',
             ],
@@ -74,40 +75,7 @@ class StoreRetailDispatchRequest extends FormRequest
                 ]),
             ],
             'price_overrides.*' => ['numeric', 'decimal:0,2', 'gt:0', 'max:99999999.99'],
-            'payments' => [
-                Rule::requiredIf(fn (): bool => $this->requiresImmediatePayment()),
-                Rule::prohibitedIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_RETURN),
-                'array',
-                ...($this->requiresImmediatePayment() ? ['min:1'] : []),
-                'max:5',
-            ],
-            'payments.*' => [
-                'required',
-                'array:idempotency_key,metodo_pago_id,cuenta_destino_id,moneda,importe,referencia,observaciones,fecha_hora',
-            ],
-            'payments.*.idempotency_key' => ['required', 'uuid', 'distinct'],
-            'payments.*.metodo_pago_id' => [
-                'required',
-                'integer',
-                Rule::exists('metodos_pago', 'id')->where(fn ($query) => $query
-                    ->where('estado', 'ACTIVO')),
-            ],
-            'payments.*.cuenta_destino_id' => [
-                'required',
-                'integer',
-                Rule::exists('cuentas_financieras', 'id')->where(fn ($query) => $query
-                    ->where('estado', 'ACTIVO')
-                    ->whereIn('entidad_financiera_id', DB::table('entidades_financieras')
-                        ->where('empresa_id', $this->companyId())
-                        ->where('tipo', 'PROPIA')
-                        ->where('estado', 'ACTIVO')
-                        ->select('id'))),
-            ],
-            'payments.*.moneda' => ['sometimes', Rule::in(['PEN'])],
-            'payments.*.importe' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:999999999999.99'],
-            'payments.*.referencia' => ['nullable', 'string', 'max:100'],
-            'payments.*.observaciones' => ['nullable', 'string', 'max:1000'],
-            'payments.*.fecha_hora' => ['nullable', 'date'],
+            'payments' => ['prohibited'],
             'weighings' => ['required', 'array', 'min:1', 'max:100'],
             'weighings.*' => [
                 'required',
@@ -201,27 +169,6 @@ class StoreRetailDispatchRequest extends FormRequest
             $normalized['price_overrides'] = $priceOverrides;
         }
 
-        if ($this->exists('payments') && is_array($this->input('payments'))) {
-            $normalized['payments'] = collect($this->input('payments'))
-                ->map(function (mixed $payment): mixed {
-                    if (! is_array($payment)) {
-                        return $payment;
-                    }
-
-                    return [
-                        ...$payment,
-                        'moneda' => mb_strtoupper(trim((string) ($payment['moneda'] ?? 'PEN')), 'UTF-8'),
-                        'referencia' => filled($payment['referencia'] ?? null)
-                            ? trim((string) $payment['referencia'])
-                            : null,
-                        'observaciones' => filled($payment['observaciones'] ?? null)
-                            ? trim((string) $payment['observaciones'])
-                            : null,
-                    ];
-                })
-                ->all();
-        }
-
         $delivery = $this->input('delivery');
         if (is_array($delivery)) {
             $mode = filled($delivery['mode'] ?? null)
@@ -279,9 +226,11 @@ class StoreRetailDispatchRequest extends FormRequest
             'draft_id.uuid' => 'El identificador temporal del ticket no es válido. Recarga la pantalla e inténtalo nuevamente.',
             'client_id.integer' => 'El cliente seleccionado no es válido.',
             'client_id.min' => 'El cliente seleccionado no es válido.',
+            'client_id.required' => 'Selecciona un cliente antes de registrar el ticket.',
             'operation_type.required' => 'Selecciona si el registro corresponde a una venta o una devolución.',
             'operation_type.in' => 'El tipo de operación seleccionado no es válido.',
             'delivery.required' => 'Selecciona si el cliente retira el pedido o si se entregará con un camión de la empresa.',
+            'delivery.prohibited' => 'No selecciones transporte cuando el ticket no lleva bandejas.',
             'delivery.array' => 'Los datos de transporte no tienen un formato válido.',
             'delivery.mode.required' => 'Selecciona si el cliente retira el pedido o si se entregará con un camión de la empresa.',
             'delivery.mode.in' => 'La modalidad de salida seleccionada no es válida.',
@@ -299,28 +248,6 @@ class StoreRetailDispatchRequest extends FormRequest
             'price_overrides.*.numeric' => 'Cada precio manual debe ser un número válido.',
             'price_overrides.*.gt' => 'Cada precio manual debe ser mayor que cero.',
             'price_overrides.*.max' => 'Uno de los precios manuales supera el máximo permitido.',
-            'payments.array' => 'Los datos del pago no tienen un formato válido.',
-            'payments.min' => 'Una venta sin cliente debe registrar al menos una forma de pago.',
-            'payments.max' => 'Solo puedes dividir el cobro entre cinco formas de pago.',
-            'payments.*.required' => 'Completa los datos de cada forma de pago.',
-            'payments.*.array' => 'Una de las formas de pago no tiene un formato válido.',
-            'payments.*.idempotency_key.required' => 'No se recibió el identificador de una forma de pago.',
-            'payments.*.idempotency_key.uuid' => 'El identificador de una forma de pago no es válido.',
-            'payments.*.idempotency_key.distinct' => 'Cada forma de pago debe tener un identificador diferente.',
-            'payments.*.metodo_pago_id.required' => 'Selecciona un método para cada forma de pago.',
-            'payments.*.metodo_pago_id.integer' => 'Uno de los métodos de pago seleccionados no es válido.',
-            'payments.*.cuenta_destino_id.required' => 'Selecciona la cuenta o caja que recibirá cada pago.',
-            'payments.*.cuenta_destino_id.integer' => 'Una de las cuentas o cajas seleccionadas no es válida.',
-            'payments.*.moneda.in' => 'La moneda del pago debe ser PEN.',
-            'payments.*.importe.required' => 'Ingresa el importe de cada forma de pago.',
-            'payments.*.importe.numeric' => 'Cada importe debe ser un número válido.',
-            'payments.*.importe.gt' => 'Cada importe debe ser mayor que cero.',
-            'payments.*.importe.max' => 'Uno de los importes supera el máximo permitido.',
-            'payments.*.referencia.string' => 'La referencia del pago debe ser un texto.',
-            'payments.*.referencia.max' => 'La referencia del pago no puede superar 100 caracteres.',
-            'payments.*.observaciones.string' => 'Las observaciones del pago deben ser un texto.',
-            'payments.*.observaciones.max' => 'Las observaciones del pago no pueden superar 1000 caracteres.',
-            'payments.*.fecha_hora.date' => 'La fecha y hora de uno de los pagos no es válida.',
             'weighings.required' => 'Agrega al menos una pesada a la lista.',
             'weighings.array' => 'Las pesadas no tienen un formato válido.',
             'weighings.min' => 'Agrega al menos una pesada a la lista.',
@@ -360,12 +287,8 @@ class StoreRetailDispatchRequest extends FormRequest
             'weighings.*.read_weight_kg.max' => 'El peso leído supera el máximo permitido.',
             'weighings.*.weighed_at.required' => 'No se recibió la fecha y hora de una pesada.',
             'weighings.*.weighed_at.date' => 'La fecha y hora de una pesada no es válida.',
-            'payments.required' => 'Una venta sin cliente debe registrar el pago completo.',
-            'payments.prohibited' => 'Los reembolsos de devoluciones se registran desde Finanzas.',
+            'payments.prohibited' => 'Los despachos minoristas siempre se registran a crédito. Registra los cobros por separado desde Finanzas.',
             'price_overrides.*.decimal' => 'Los precios manuales minoristas solo pueden usar hasta dos decimales.',
-            'payments.*.importe.decimal' => 'Los importes de pago solo pueden usar hasta dos decimales.',
-            'payments.*.cuenta_destino_id.exists' => 'Selecciona una cuenta o caja activa de la empresa.',
-            'payments.*.metodo_pago_id.exists' => 'Selecciona un método de pago activo.',
         ];
     }
 
@@ -373,7 +296,6 @@ class StoreRetailDispatchRequest extends FormRequest
     {
         if (
             $this->input('operation_type') !== TicketDespacho::OPERATION_DISPATCH
-            || ! filled($this->input('client_id'))
         ) {
             return false;
         }
@@ -392,12 +314,6 @@ class StoreRetailDispatchRequest extends FormRequest
     private function isCustomerPickup(): bool
     {
         return $this->input('delivery.mode') === TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP;
-    }
-
-    private function requiresImmediatePayment(): bool
-    {
-        return $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH
-            && ! filled($this->input('client_id'));
     }
 
     private function companyId(): int

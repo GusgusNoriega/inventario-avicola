@@ -341,10 +341,8 @@ class WebViewsTest extends TestCase
             ->assertSee('data-retail-add-list="7"', false)
             ->assertSee('id="retailSettingsModal"', false)
             ->assertSee('Balanza y ajustes minoristas')
-            ->assertSee('id="retailDefaultPaymentMethod"', false)
-            ->assertSee('id="retailDefaultPaymentAccount"', false)
-            ->assertSee('Método y cuenta predeterminados de esta estación')
-            ->assertSee('Podrás elegir otro método o cuenta para cualquier venta')
+            ->assertDontSee('id="retailDefaultPaymentMethod"', false)
+            ->assertDontSee('id="retailDefaultPaymentAccount"', false)
             ->assertSee('Configurar impresión')
             ->assertSee(route('install-app').'#ticketPrinterSetup', false)
             ->assertSee('target="_blank"', false)
@@ -357,14 +355,9 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailDeliveryModal"', false)
             ->assertSee('id="retailDeliveryTruck"', false)
             ->assertSee('id="retailDeliveryDriver"', false)
-            ->assertSee('id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle" novalidate', false)
-            ->assertSee('id="retailPaymentModeOptions"', false)
-            ->assertSee('data-retail-payment-mode="PAY_NOW"', false)
-            ->assertSee('data-retail-payment-mode="CREDIT"', false)
-            ->assertSee('Venta a crédito')
-            ->assertSee('id="retailPaymentCreditPanel"', false)
-            ->assertSee('id="retailPaymentCreditSummary"', false)
-            ->assertDontSee('id="retailSkipPayment"', false)
+            ->assertDontSee('id="retailPaymentForm"', false)
+            ->assertDontSee('data-retail-payment-mode=', false)
+            ->assertSee('A crédito · cobro en Finanzas')
             ->assertSee('id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate', false)
             ->assertSee('id="retailErrorModal"', false)
             ->assertSee('id="retailErrorModalDetails"', false)
@@ -399,22 +392,14 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.slice(0, LIST_COUNT)', $javascript);
         $this->assertStringContainsString('while (restoredLists.length < LIST_COUNT)', $javascript);
         $this->assertStringContainsString('from "./retail-dispatch-errors.js"', $javascript);
-        $this->assertStringContainsString('from "./retail-payment-defaults.js"', $javascript);
-        $this->assertStringContainsString('from "./retail-payment-mode.js"', $javascript);
+        $this->assertStringNotContainsString('from "./retail-payment-defaults.js"', $javascript);
+        $this->assertStringNotContainsString('from "./retail-payment-mode.js"', $javascript);
         $this->assertStringContainsString('from "./record-order.js"', $javascript);
         $this->assertStringContainsString('newestRecordsFirst(list.items).map((item) => {', $javascript);
         $this->assertStringContainsString('showRetailError(presentation)', $javascript);
-        $this->assertStringContainsString('state.paymentContext !== paymentContext', $javascript);
-        $this->assertStringContainsString('resolveRetailPaymentDefaults(state.catalog.financial)', $javascript);
-        $this->assertStringContainsString('payment_defaults: paymentDefaults', $javascript);
-        $this->assertStringContainsString('row.methodId = rowElement.querySelector("[data-payment-method]")?.value', $javascript);
-        $this->assertStringContainsString('row.accountId = rowElement.querySelector("[data-payment-account]")?.value', $javascript);
-        $this->assertStringContainsString('resolveRetailPaymentMode(state.paymentMode, hasClient)', $javascript);
-        $this->assertStringContainsString('elements.paymentModeOptions.hidden = !hasClient', $javascript);
-        $this->assertStringContainsString('control.disabled = isCredit', $javascript);
-        $this->assertStringContainsString('const creditPayments = paymentsForRetailPaymentMode(', $javascript);
-        $this->assertStringContainsString('continueDispatchAfterPayment(creditPayments)', $javascript);
-        $this->assertStringNotContainsString('function skipPayment()', $javascript);
+        $this->assertStringContainsString('continueDispatchRegistration();', $javascript);
+        $this->assertStringNotContainsString('openPaymentModal()', $javascript);
+        $this->assertStringNotContainsString('payments,', $javascript);
         $this->assertStringContainsString('adjustment_code', $javascript);
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
@@ -441,8 +426,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('elements.openManualWeight.disabled = captureLocked || Boolean(pendingCapture)', $javascript);
         $this->assertStringContainsString('priceEditingListIndex', $javascript);
         $this->assertStringContainsString('general_prices', $javascript);
-        $this->assertStringContainsString('data-retail-clear-client', $javascript);
-        $this->assertStringContainsString('list.clientId ? Number(list.clientId) : null', $javascript);
+        $this->assertStringNotContainsString('data-retail-clear-client', $javascript);
+        $this->assertStringNotContainsString('Venta sin cliente', $javascript);
+        $this->assertStringContainsString('|| !current.clientId;', $javascript);
+        $this->assertStringContainsString('Asigna un cliente antes de grabar.', $javascript);
+        $this->assertStringContainsString('client_id: Number(list.clientId)', $javascript);
         $this->assertStringContainsString('const base = client', $javascript);
         $this->assertStringContainsString('sistema-pollos-retail-typography-v1', $javascript);
         $this->assertStringContainsString('data-typography-step', $javascript);
@@ -467,7 +455,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('const next = `${current}${key}`;', $javascript);
         $this->assertStringContainsString('setTouchKeyboardInputValue(current.slice(0, -1));', $javascript);
         $this->assertStringContainsString('target.dispatchEvent(new Event("input", { bubbles: true }))', $javascript);
-        $this->assertStringContainsString('data-retail-keyboard="text"', $javascript);
+        $this->assertStringNotContainsString('data-retail-keyboard="text"', $javascript);
         $this->assertStringContainsString('data-retail-keyboard="decimal"', $javascript);
         $this->assertStringContainsString('data-retail-keyboard="integer"', $javascript);
         $this->assertStringContainsString('const MONEY_DECIMALS = 2;', $javascript);
@@ -476,7 +464,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('function lineAmount(list, item)', $javascript);
         $this->assertStringContainsString('step="0.01"', $javascript);
         $this->assertStringContainsString('acceptedKey = key.slice(0, remaining);', $javascript);
-        $this->assertStringContainsString('importe: formatMoneyValue(row.amount)', $javascript);
+        $this->assertStringNotContainsString('importe: formatMoneyValue(row.amount)', $javascript);
         $this->assertStringContainsString('[code, formatMoneyValue(value)]', $javascript);
         $this->assertStringNotContainsString('toFixed(4)', $javascript);
         $this->assertStringNotContainsString('step="0.0001"', $javascript);
@@ -500,17 +488,6 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('Math.max(trays, 1)', $weightCalculationJavascript);
         $this->assertStringContainsString('totalAdjustmentGrams: adjustmentGrams * birds', $weightCalculationJavascript);
         $this->assertStringContainsString('RETAIL_PROCESSED_CHICKEN_CODE', $weightCalculationJavascript);
-
-        $paymentDefaultsJavascript = file_get_contents(public_path('js/retail-payment-defaults.js'));
-        $this->assertIsString($paymentDefaultsJavascript);
-        $this->assertStringContainsString('resolveRetailPaymentDefaults', $paymentDefaultsJavascript);
-        $this->assertStringContainsString('financial.default_method_id', $paymentDefaultsJavascript);
-        $this->assertStringContainsString('financial.default_account_id', $paymentDefaultsJavascript);
-
-        $paymentModeJavascript = file_get_contents(public_path('js/retail-payment-mode.js'));
-        $this->assertIsString($paymentModeJavascript);
-        $this->assertStringContainsString('requestedMode === RETAIL_PAYMENT_MODE_CREDIT && Boolean(hasAssignedClient)', $paymentModeJavascript);
-        $this->assertStringContainsString('? []', $paymentModeJavascript);
 
         $blade = file_get_contents(resource_path('views/despacho-minorista.blade.php'));
         $this->assertIsString($blade);
@@ -603,11 +580,11 @@ class WebViewsTest extends TestCase
             ->assertDontSee('Seleccionar lista 1')
             ->assertDontSee('data-retail-add-list=', false)
             ->assertSee('Toca una columna para seleccionar la presentación.')
-            ->assertSee('id="retailDefaultPaymentMethod"', false)
-            ->assertSee('id="retailDefaultPaymentAccount"', false)
-            ->assertSee('id="retailPaymentModeOptions"', false)
-            ->assertSee('data-retail-payment-mode="CREDIT"', false)
-            ->assertSee('Venta a crédito')
+            ->assertDontSee('id="retailDefaultPaymentMethod"', false)
+            ->assertDontSee('id="retailDefaultPaymentAccount"', false)
+            ->assertDontSee('id="retailPaymentModeOptions"', false)
+            ->assertDontSee('data-retail-payment-mode=', false)
+            ->assertSee('A crédito · cobro en Finanzas')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false);
 
@@ -692,7 +669,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('state.deliveryMode = null', $javascript);
         $this->assertStringContainsString('elements.deliveryFields.hidden = !companyTruckSelected', $javascript);
         $this->assertStringContainsString('fleetReady && vehicleSelected && driverSelected', $javascript);
-        $this->assertStringContainsString('void saveDispatch(delivery, state.pendingPayments)', $javascript);
+        $this->assertStringContainsString('void saveDispatch(delivery)', $javascript);
+        $this->assertStringNotContainsString('state.pendingPayments', $javascript);
         $this->assertIsString($deliveryModeJavascript);
         $this->assertStringContainsString('return { mode };', $deliveryModeJavascript);
         $this->assertStringContainsString('vehicle_id: normalizedVehicleId', $deliveryModeJavascript);

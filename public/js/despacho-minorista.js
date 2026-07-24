@@ -8,16 +8,6 @@ import {
   printWeightControlTicket
 } from "./ticket-printer.js";
 import {
-  normalizeRetailPaymentDefaultId,
-  resolveRetailPaymentDefaults
-} from "./retail-payment-defaults.js";
-import {
-  paymentsForRetailPaymentMode,
-  resolveRetailPaymentMode,
-  RETAIL_PAYMENT_MODE_CREDIT,
-  RETAIL_PAYMENT_MODE_NOW
-} from "./retail-payment-mode.js";
-import {
   buildRetailDeliveryPayload,
   resolveRetailDeliveryMode,
   RETAIL_DELIVERY_MODE_COMPANY_TRUCK,
@@ -239,20 +229,6 @@ const elements = {
   priceForm: document.querySelector("#retailPriceForm"),
   priceFields: document.querySelector("#retailPriceFields"),
   clearPrices: document.querySelector("#retailClearPrices"),
-  paymentModal: document.querySelector("#retailPaymentModal"),
-  paymentForm: document.querySelector("#retailPaymentForm"),
-  paymentSummary: document.querySelector("#retailPaymentSummary"),
-  paymentModeOptions: document.querySelector("#retailPaymentModeOptions"),
-  paymentNowPanel: document.querySelector("#retailPaymentNowPanel"),
-  paymentCreditPanel: document.querySelector("#retailPaymentCreditPanel"),
-  paymentCreditSummary: document.querySelector("#retailPaymentCreditSummary"),
-  paymentRows: document.querySelector("#retailPaymentRows"),
-  addPayment: document.querySelector("#retailAddPayment"),
-  paymentSaleTotal: document.querySelector("#retailPaymentSaleTotal"),
-  paymentReceivedTotal: document.querySelector("#retailPaymentReceivedTotal"),
-  paymentPendingTotal: document.querySelector("#retailPaymentPendingTotal"),
-  paymentMessage: document.querySelector("#retailPaymentMessage"),
-  confirmPayment: document.querySelector("#retailConfirmPayment"),
   deliveryModal: document.querySelector("#retailDeliveryModal"),
   deliveryForm: document.querySelector("#retailDeliveryForm"),
   deliverySummary: document.querySelector("#retailDeliverySummary"),
@@ -287,8 +263,6 @@ const elements = {
   flowControl: document.querySelector("#retailFlowControl"),
   defaultAdjustment: document.querySelector("#retailDefaultAdjustment"),
   settingsAdjustments: document.querySelector("#retailSettingsAdjustments"),
-  defaultPaymentMethod: document.querySelector("#retailDefaultPaymentMethod"),
-  defaultPaymentAccount: document.querySelector("#retailDefaultPaymentAccount"),
   settingsMessage: document.querySelector("#retailSettingsMessage"),
   saveSettings: document.querySelector("#retailSaveSettings"),
   openTypography: document.querySelector("#retailOpenTypography"),
@@ -312,13 +286,7 @@ const state = {
     delivery_trucks: [],
     delivery_drivers: [],
     adjustments: [],
-    scale: null,
-    financial: {
-      methods: [],
-      own_accounts: [],
-      default_method_id: null,
-      default_account_id: null
-    }
+    scale: null
   },
   activeList: 0,
   chickenType: null,
@@ -341,10 +309,6 @@ const state = {
   scaleState: null,
   loading: true,
   typography: {},
-  pendingPayments: [],
-  paymentRows: [],
-  paymentContext: null,
-  paymentMode: RETAIL_PAYMENT_MODE_NOW,
   deliveryMode: null,
   pendingPrintTicket: null
 };
@@ -916,7 +880,7 @@ function buildCurrentRetailCustomerDisplayState() {
     producerInstance: RETAIL_CUSTOMER_DISPLAY_PRODUCER_INSTANCE,
     revision: ++retailCustomerDisplayRevision,
     updatedAt: new Date().toISOString(),
-    customerName: customer?.name || "Venta sin cliente",
+    customerName: customer?.name || "Cliente pendiente",
     ticketLabel: `Lista ${state.activeList + 1}`,
     listNumber: state.activeList + 1,
     operationType: list.operationType,
@@ -1324,9 +1288,9 @@ function renderLists() {
     const fixedAdjustment = station2AdjustmentForList(listIndex);
     const totals = listTotals(list);
     const operationLabel = list.operationType === OPERATION_RETURN ? "Devolución" : "Venta";
-    const headerTitle = fixedAdjustment?.name || client?.name || "Venta sin cliente";
+    const headerTitle = fixedAdjustment?.name || client?.name || "Cliente pendiente";
     const headerSubtitle = fixedAdjustment
-      ? `${client?.name || "Venta sin cliente"} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
+      ? `${client?.name || "Cliente pendiente"} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
       : `${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${trayQuantityLabel(totals.trays)}`;
     const rows = list.items.length
       ? newestRecordsFirst(list.items).map((item) => {
@@ -1374,12 +1338,13 @@ function renderLists() {
   const missingPrices = missingPriceTypes(current);
   elements.saveDispatch.disabled = state.loading
     || current.saving
-    || !current.items.length;
-  elements.saveDispatch.title = missingPrices.length
-    ? (current.clientId
+    || !current.items.length
+    || !current.clientId;
+  elements.saveDispatch.title = !current.clientId
+    ? "Asigna un cliente antes de grabar."
+    : (missingPrices.length
       ? "Configura en Directorio un precio base vigente del cliente antes de grabar."
-      : "Configura en Directorio un precio general base vigente antes de grabar.")
-    : "Grabar la lista activa";
+      : "Grabar la lista activa");
   elements.removeWeighing.disabled = current.saving
     || !state.selectedItem
     || state.selectedItem.listIndex !== state.activeList;
@@ -1682,7 +1647,6 @@ function retailModals() {
     elements.removeWeighingModal,
     elements.clientModal,
     elements.priceModal,
-    elements.paymentModal,
     elements.deliveryModal,
     elements.settingsModal
   ].filter(Boolean);
@@ -2102,13 +2066,7 @@ function renderClientOptions(search = "") {
     return `${client.name || ""} ${client.document || ""}`.toLocaleLowerCase("es").includes(normalized);
   });
 
-  const withoutClient = `
-    <button class="rd-client-option ${activeList().clientId ? "" : "is-selected"}" type="button" data-retail-clear-client role="option" aria-selected="${!activeList().clientId}">
-      <span><strong>Venta sin cliente</strong><small>Persona externa no registrada</small></span>
-      <b>${activeList().clientId ? "Seleccionar" : "Seleccionado"}</b>
-    </button>
-  `;
-  elements.clientOptions.innerHTML = withoutClient + (clients.length
+  elements.clientOptions.innerHTML = clients.length
     ? clients.map((client) => {
       const selected = String(client.id) === String(activeList().clientId);
       return `
@@ -2118,7 +2076,7 @@ function renderClientOptions(search = "") {
         </button>
       `;
     }).join("")
-    : '<p class="rd-empty-list">No hay clientes que coincidan con la búsqueda.</p>');
+    : '<p class="rd-empty-list">No hay clientes que coincidan con la búsqueda.</p>';
 }
 
 function openClientModal() {
@@ -2142,18 +2100,6 @@ function assignClient(clientId) {
   closeModal(elements.clientModal);
   renderAll();
   setMessage(`${client.name} asignado a la lista ${state.activeList + 1}.`);
-}
-
-function clearClient() {
-  const list = activeList();
-  if (list.clientId) {
-    list.clientId = "";
-    list.priceOverrides = {};
-  }
-  persistLists();
-  closeModal(elements.clientModal);
-  renderAll();
-  setMessage(`La lista ${state.activeList + 1} quedó como venta sin cliente.`);
 }
 
 function renderPriceFields() {
@@ -2267,270 +2213,16 @@ function requiresDelivery(list) {
     && list.items.some((item) => Number(item.trayCount || 0) > 0);
 }
 
-function paymentMethodOptions(selectedId = "") {
-  return (state.catalog.financial.methods || []).map((method) => `
-    <option value="${Number(method.id)}" ${String(method.id) === String(selectedId) ? "selected" : ""}>
-      ${escapeHtml(method.name)}
-    </option>
-  `).join("");
-}
-
-function paymentAccountOptions(selectedId = "") {
-  return (state.catalog.financial.own_accounts || []).map((account) => {
-    const typeLabel = {
-      CAJA: "Caja",
-      BANCO: "Cuenta bancaria",
-      BILLETERA: "Billetera",
-      OTRA: "Otra cuenta"
-    }[String(account.type || "").toUpperCase()] || "Cuenta";
-    const detail = [typeLabel, account.entity?.name, account.alias, account.bank, account.masked_number]
-      .filter(Boolean)
-      .join(" · ");
-    return `
-      <option value="${Number(account.id)}" ${String(account.id) === String(selectedId) ? "selected" : ""}>
-        ${escapeHtml(detail)}
-      </option>
-    `;
-  }).join("");
-}
-
-function newPaymentRow(amount = 0) {
-  const defaults = resolveRetailPaymentDefaults(state.catalog.financial);
-
-  return {
-    key: createDraftId(),
-    methodId: defaults.methodId,
-    accountId: defaults.accountId,
-    amount: formatMoneyValue(Math.max(0, Number(amount || 0))),
-    reference: ""
-  };
-}
-
-function renderPaymentRows() {
-  elements.paymentRows.innerHTML = state.paymentRows.map((row, index) => `
-    <article class="rd-payment-row" data-payment-row="${escapeHtml(row.key)}">
-      <div class="rd-payment-row-head">
-        <strong>Forma de pago ${index + 1}</strong>
-        <button type="button" data-remove-payment-row="${escapeHtml(row.key)}" ${state.paymentRows.length === 1 ? "hidden" : ""}>Quitar</button>
-      </div>
-      <div class="rd-payment-fields">
-        <label>
-          <span>Método</span>
-          <select data-payment-method required>${paymentMethodOptions(row.methodId)}</select>
-        </label>
-        <label>
-          <span>Cuenta o caja receptora</span>
-          <select data-payment-account required>${paymentAccountOptions(row.accountId)}</select>
-        </label>
-        <label>
-          <span>Importe</span>
-          <input data-payment-amount type="number" min="0.01" max="999999999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Importe de la forma de pago ${index + 1}" value="${escapeHtml(row.amount)}" required>
-        </label>
-        <label>
-          <span>Referencia (opcional)</span>
-          <input data-payment-reference type="text" maxlength="100" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-label="Referencia opcional de la forma de pago ${index + 1}" value="${escapeHtml(row.reference)}" placeholder="Número de operación (opcional)">
-        </label>
-      </div>
-    </article>
-  `).join("");
-  renderPaymentTotals();
-}
-
-function syncPaymentRowsFromForm() {
-  elements.paymentRows.querySelectorAll("[data-payment-row]").forEach((rowElement) => {
-    const row = state.paymentRows.find((entry) => entry.key === rowElement.dataset.paymentRow);
-    if (!row) return;
-    row.methodId = rowElement.querySelector("[data-payment-method]")?.value || "";
-    row.accountId = rowElement.querySelector("[data-payment-account]")?.value || "";
-    row.amount = rowElement.querySelector("[data-payment-amount]")?.value || "";
-    row.reference = rowElement.querySelector("[data-payment-reference]")?.value || "";
-  });
-}
-
-function paymentReceivedTotal() {
-  return centsToMoney(state.paymentRows.reduce(
-    (sum, row) => sum + Math.max(0, moneyToCents(row.amount)),
-    0
-  ));
-}
-
-function renderPaymentTotals() {
-  syncPaymentRowsFromForm();
-  const total = roundMoney(listTotals(activeList()).amount || 0);
-  const received = paymentReceivedTotal();
-  const pending = centsToMoney(Math.max(0, moneyToCents(total) - moneyToCents(received)));
-  elements.paymentSaleTotal.textContent = formatMoney(total);
-  elements.paymentReceivedTotal.textContent = formatMoney(received);
-  elements.paymentPendingTotal.textContent = formatMoney(pending);
-  elements.paymentPendingTotal.classList.toggle("is-settled", moneyToCents(pending) === 0);
-}
-
-function renderPaymentMode() {
-  const client = clientFor(activeList());
-  const hasClient = Boolean(client);
-  state.paymentMode = resolveRetailPaymentMode(state.paymentMode, hasClient);
-  const isCredit = state.paymentMode === RETAIL_PAYMENT_MODE_CREDIT;
-  const methods = state.catalog.financial.methods || [];
-  const accounts = state.catalog.financial.own_accounts || [];
-
-  elements.paymentModeOptions.hidden = !hasClient;
-  elements.paymentModeOptions.querySelectorAll("[data-retail-payment-mode]").forEach((button) => {
-    const selected = button.dataset.retailPaymentMode === state.paymentMode;
-    button.classList.toggle("is-selected", selected);
-    button.setAttribute("aria-checked", String(selected));
-  });
-  elements.paymentNowPanel.hidden = isCredit;
-  elements.paymentCreditPanel.hidden = !isCredit;
-  elements.paymentNowPanel.querySelectorAll("input, select, button").forEach((control) => {
-    control.disabled = isCredit;
-  });
-  if (!isCredit) {
-    elements.addPayment.disabled = methods.length === 0 || accounts.length === 0;
-  }
-  elements.paymentCreditSummary.textContent = isCredit && client
-    ? `El total de ${formatMoney(listTotals(activeList()).amount)} quedará pendiente a nombre de ${client.name}.`
-    : "";
-  elements.confirmPayment.textContent = isCredit
-    ? "Registrar venta a crédito"
-    : "Registrar pago y continuar";
-
-  if (isCredit) {
-    elements.paymentMessage.textContent = "No se registrará ningún cobro ahora. Podrás cobrar este ticket posteriormente desde Finanzas.";
-    elements.paymentMessage.classList.remove("is-error");
-    return;
-  }
-
-  elements.paymentMessage.textContent = methods.length && accounts.length
-    ? "Puedes dividir el cobro entre efectivo, transferencia u otros métodos."
-    : "Primero registra una entidad propia y al menos una cuenta o caja desde Finanzas.";
-  elements.paymentMessage.classList.toggle("is-error", methods.length === 0 || accounts.length === 0);
-}
-
-function selectPaymentMode(requestedMode) {
-  syncPaymentRowsFromForm();
-  state.paymentMode = resolveRetailPaymentMode(requestedMode, Boolean(clientFor(activeList())));
-  renderPaymentMode();
-}
-
-function openPaymentModal() {
+function continueDispatchRegistration() {
   const list = activeList();
-  const totals = listTotals(list);
-  const client = clientFor(list);
-  const methods = state.catalog.financial.methods || [];
-  const accounts = state.catalog.financial.own_accounts || [];
-  const paymentContext = [
-    list.draftId,
-    list.clientId || "SIN_CLIENTE",
-    list.operationType,
-    moneyToCents(totals.amount)
-  ].join(":");
-
-  if (state.paymentContext !== paymentContext || !state.paymentRows.length) {
-    state.paymentRows = [newPaymentRow(totals.amount)];
-    state.paymentMode = RETAIL_PAYMENT_MODE_NOW;
-  }
-  state.paymentContext = paymentContext;
-  elements.paymentSummary.textContent = client
-    ? `Elige si ${client.name} pagará ahora o si el ticket completo quedará como venta a crédito.`
-    : "La venta no tiene un cliente identificado y debe quedar pagada completamente.";
-  elements.addPayment.disabled = methods.length === 0 || accounts.length === 0;
-  elements.confirmPayment.disabled = false;
-  renderPaymentRows();
-  renderPaymentMode();
-  openModal(elements.paymentModal);
-}
-
-function continueDispatchAfterPayment(payments) {
-  const list = activeList();
-  state.pendingPayments = payments;
 
   if (!requiresDelivery(list)) {
-    void saveDispatch(null, payments);
+    void saveDispatch();
     return;
   }
 
   renderDeliveryOptions(list);
   openModal(elements.deliveryModal);
-}
-
-function submitPayment(event) {
-  event.preventDefault();
-  syncPaymentRowsFromForm();
-  const list = activeList();
-  const methods = state.catalog.financial.methods || [];
-  const accounts = state.catalog.financial.own_accounts || [];
-  const saleTotal = roundMoney(listTotals(list).amount || 0);
-  const received = paymentReceivedTotal();
-  const saleTotalCents = moneyToCents(saleTotal);
-  const receivedCents = moneyToCents(received);
-  const client = clientFor(list);
-  const paymentMode = resolveRetailPaymentMode(state.paymentMode, Boolean(client));
-  state.paymentMode = paymentMode;
-
-  if (paymentMode === RETAIL_PAYMENT_MODE_CREDIT) {
-    const creditPayments = paymentsForRetailPaymentMode(
-      state.paymentMode,
-      Boolean(client),
-      state.paymentRows
-    );
-    state.paymentRows = [];
-    closeModal(elements.paymentModal);
-    continueDispatchAfterPayment(creditPayments);
-    return;
-  }
-
-  if (methods.length === 0 || accounts.length === 0) {
-    elements.paymentMessage.textContent = methods.length === 0
-      ? "No hay métodos de pago activos. Registra uno en Finanzas antes de continuar."
-      : "No hay una cuenta o caja receptora activa. Regístrala en Finanzas antes de continuar.";
-    elements.paymentMessage.classList.add("is-error");
-    elements.paymentMessage.focus?.();
-    return;
-  }
-
-  if (state.paymentRows.some((row) => (
-    !Number(row.methodId)
-    || !Number(row.accountId)
-    || !hasAtMostMoneyDecimals(row.amount)
-    || Number(row.amount) < 0.01
-    || Number(row.amount) > 999999999999.99
-  ))) {
-    elements.paymentMessage.textContent = "Completa método, cuenta e importe con un máximo de dos decimales en cada forma de pago.";
-    elements.paymentMessage.classList.add("is-error");
-    return;
-  }
-  if (receivedCents > saleTotalCents) {
-    elements.paymentMessage.textContent = "El total recibido no puede superar el importe de la venta.";
-    elements.paymentMessage.classList.add("is-error");
-    return;
-  }
-  if (!client && receivedCents !== saleTotalCents) {
-    elements.paymentMessage.textContent = "La venta sin cliente debe quedar pagada completamente.";
-    elements.paymentMessage.classList.add("is-error");
-    return;
-  }
-
-  const payments = state.paymentRows.map((row) => ({
-    idempotency_key: row.key,
-    metodo_pago_id: Number(row.methodId),
-    cuenta_destino_id: Number(row.accountId),
-    moneda: "PEN",
-    importe: formatMoneyValue(row.amount),
-    referencia: String(row.reference || "").trim() || null
-  }));
-  closeModal(elements.paymentModal);
-  continueDispatchAfterPayment(payments);
-}
-
-function addPaymentRow() {
-  if (state.paymentRows.length >= 5) return;
-  syncPaymentRowsFromForm();
-  const remaining = centsToMoney(Math.max(
-    0,
-    moneyToCents(listTotals(activeList()).amount) - moneyToCents(paymentReceivedTotal())
-  ));
-  state.paymentRows.push(newPaymentRow(remaining));
-  renderPaymentRows();
 }
 
 function setDeliveryMessage(message = "", isError = false) {
@@ -2635,18 +2327,22 @@ function showMissingPricesError(list, missingTypes = missingPriceTypes(list)) {
 function prepareDispatchRegistration() {
   const list = activeList();
   if (!list || list.saving || !list.items.length) return;
+  if (!clientFor(list)) {
+    showLocalActionIssue({
+      caption: "Cliente requerido",
+      title: "Asigna un cliente al ticket",
+      message: "No se registró el despacho porque la lista no tiene un cliente asignado.",
+      help: "Cierra este aviso, usa Asignar cliente y luego vuelve a grabar."
+    });
+    return;
+  }
   const missingPrices = missingPriceTypes(list);
   if (missingPrices.length) {
     showMissingPricesError(list, missingPrices);
     return;
   }
 
-  if (list.operationType === OPERATION_RETURN) {
-    continueDispatchAfterPayment([]);
-    return;
-  }
-
-  openPaymentModal();
+  continueDispatchRegistration();
 }
 
 function submitDelivery(event) {
@@ -2667,14 +2363,14 @@ function submitDelivery(event) {
   }
 
   closeModal(elements.deliveryModal);
-  void saveDispatch(delivery, state.pendingPayments);
+  void saveDispatch(delivery);
 }
 
 function showRegisteredTicket(ticket) {
   const operationLabel = ticket.operation_type === OPERATION_RETURN ? "Devolución" : "Venta";
   elements.lastTicket.hidden = false;
   elements.lastTicket.innerHTML = `
-    <span><strong>${escapeHtml(operationLabel)} ${escapeHtml(ticket.code)}</strong><br>${escapeHtml(ticket.client?.name || "Venta sin cliente")}</span>
+    <span><strong>${escapeHtml(operationLabel)} ${escapeHtml(ticket.code)}</strong><br>${escapeHtml(ticket.client?.name || "Cliente no disponible")}</span>
     <span>${trayQuantityLabel(ticket.totals?.trays)} · ${formatWeight(ticket.totals?.net_weight_kg || 0)} · <strong>${formatMoney(ticket.totals?.amount || 0)}</strong></span>
   `;
   globalThis.setTimeout(() => {
@@ -2712,12 +2408,12 @@ function showPrintError(ticket, error) {
   showRetailError({
     caption: "Impresión pendiente",
     title: "Ticket guardado correctamente",
-    message: `${ticket.code} sí quedó registrado. No vuelvas a capturar ni a pagar este despacho.`,
+    message: `${ticket.code} sí quedó registrado. No vuelvas a capturar este despacho.`,
     help: "La lista ya quedó liberada para evitar duplicados. Puedes reintentar la impresión desde esta ventana.",
     canRetryPrint: true,
     details: [
       { label: "Impresión", value: message },
-      { label: "Estado del registro", value: "Ticket, pesadas y pago guardados correctamente." }
+      { label: "Estado del registro", value: "Ticket, pesadas y cuenta por cobrar guardados correctamente." }
     ]
   });
 }
@@ -2743,7 +2439,7 @@ async function retryPendingPrint() {
   await printTicketAndReport(ticket);
 }
 
-async function saveDispatch(delivery = null, payments = []) {
+async function saveDispatch(delivery = null) {
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
   if (!list || list.saving || !list.items.length) return;
@@ -2771,9 +2467,8 @@ async function saveDispatch(delivery = null, payments = []) {
         body: JSON.stringify({
           draft_id: list.draftId,
           operation_type: list.operationType,
-          client_id: list.clientId ? Number(list.clientId) : null,
+          client_id: Number(list.clientId),
           delivery,
-          payments,
           price_overrides: priceOverrides,
           weighings: list.items.map((item, index) => ({
             local_id: index + 1,
@@ -2797,9 +2492,6 @@ async function saveDispatch(delivery = null, payments = []) {
     }
 
     const ticket = response.data;
-    state.pendingPayments = [];
-    state.paymentRows = [];
-    state.paymentContext = null;
     state.deliveryMode = null;
     setMessage(`${response.message || "Despacho minorista registrado correctamente."} Abriendo impresión; también puedes elegir Guardar como PDF.`);
     clearRegisteredList(listIndex, list.draftId, ticket);
@@ -2875,28 +2567,11 @@ function renderSettingsAdjustments() {
   `).join("");
 }
 
-function renderPaymentDefaultSettings() {
-  const financial = state.catalog.financial || {};
-  const methods = Array.isArray(financial.methods) ? financial.methods : [];
-  const accounts = Array.isArray(financial.own_accounts) ? financial.own_accounts : [];
-  const defaults = resolveRetailPaymentDefaults(financial);
-
-  elements.defaultPaymentMethod.innerHTML = methods.length
-    ? paymentMethodOptions(defaults.methodId)
-    : '<option value="">No hay métodos de pago activos</option>';
-  elements.defaultPaymentAccount.innerHTML = accounts.length
-    ? paymentAccountOptions(defaults.accountId)
-    : '<option value="">No hay cuentas o cajas activas en PEN</option>';
-  elements.defaultPaymentMethod.disabled = methods.length === 0;
-  elements.defaultPaymentAccount.disabled = accounts.length === 0;
-}
-
 function fillSettingsForm() {
   const serialOptions = state.scale?.getState?.().serialOptions || RETAIL_SCALE_SERIAL_DEFAULTS;
   applySerialOptionsToForm(serialOptions);
   elements.settingsScaleName.textContent = state.catalog.scale?.name || "Balanza minorista";
   renderSettingsAdjustments();
-  renderPaymentDefaultSettings();
   renderScaleStatus();
   setSettingsMessage("");
 }
@@ -2909,21 +2584,6 @@ function applySettingsResponse(data) {
   if (payload.scale) {
     state.catalog.scale = payload.scale;
   }
-  if (payload.payment_defaults && typeof payload.payment_defaults === "object") {
-    const previousMethodId = state.catalog.financial.default_method_id;
-    const previousAccountId = state.catalog.financial.default_account_id;
-    const nextMethodId = normalizeRetailPaymentDefaultId(payload.payment_defaults.method_id);
-    const nextAccountId = normalizeRetailPaymentDefaultId(payload.payment_defaults.account_id);
-
-    state.catalog.financial.default_method_id = nextMethodId;
-    state.catalog.financial.default_account_id = nextAccountId;
-
-    if (previousMethodId !== nextMethodId || previousAccountId !== nextAccountId) {
-      state.paymentRows = [];
-      state.paymentContext = null;
-    }
-  }
-
   const defaultAdjustment = state.catalog.adjustments.find((entry) => entry.is_default);
   if (defaultAdjustment) {
     state.sex = defaultAdjustment.sex;
@@ -2935,8 +2595,6 @@ function applySettingsResponse(data) {
 async function saveSettings(event) {
   event.preventDefault();
   const adjustments = [];
-  const methods = state.catalog.financial.methods || [];
-  const accounts = state.catalog.financial.own_accounts || [];
   let invalid = false;
 
   elements.settingsAdjustments.querySelectorAll("[data-retail-setting-adjustment]").forEach((input) => {
@@ -2953,26 +2611,6 @@ async function saveSettings(event) {
     return;
   }
 
-  const selectedMethodId = normalizeRetailPaymentDefaultId(elements.defaultPaymentMethod.value);
-  const selectedAccountId = normalizeRetailPaymentDefaultId(elements.defaultPaymentAccount.value);
-  if (methods.length && !methods.some((method) => Number(method.id) === selectedMethodId)) {
-    setSettingsMessage("Selecciona un método de pago predeterminado activo.", true);
-    return;
-  }
-  if (accounts.length && !accounts.some((account) => Number(account.id) === selectedAccountId)) {
-    setSettingsMessage("Selecciona una cuenta o caja predeterminada activa en PEN.", true);
-    return;
-  }
-  const paymentDefaults = methods.length && accounts.length
-    ? {
-        method_id: selectedMethodId,
-        account_id: selectedAccountId
-      }
-    : {
-        method_id: null,
-        account_id: null
-      };
-
   try {
     state.scale.configureSerial(serialOptionsFromForm());
   } catch (error) {
@@ -2987,15 +2625,14 @@ async function saveSettings(event) {
       method: "PUT",
       body: JSON.stringify({
         default_adjustment_code: elements.defaultAdjustment.value,
-        adjustments,
-        payment_defaults: paymentDefaults
+        adjustments
       })
     });
     applySettingsResponse(response.data);
     fillSettingsForm();
     renderAll();
     setSettingsMessage(response.message || "Configuración guardada correctamente.");
-    setMessage("Configuración de balanza, merma y cobro predeterminado actualizada.");
+    setMessage("Configuración de balanza y merma actualizada.");
   } catch (error) {
     const validation = error.data?.errors ? Object.values(error.data.errors).flat()[0] : null;
     setSettingsMessage(validation || error.message, true);
@@ -3073,9 +2710,6 @@ function applyMainManualWeight(event) {
 
 function normalizeCatalog(data) {
   const adjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
-  const financial = data.financial && typeof data.financial === "object"
-    ? data.financial
-    : {};
   return {
     branch: data.branch || null,
     clients: Array.isArray(data.clients) ? data.clients : [],
@@ -3094,13 +2728,7 @@ function normalizeCatalog(data) {
       additional_grams: Number(adjustment.additional_grams || 0),
       is_default: Boolean(adjustment.is_default)
     })),
-    scale: data.scale || null,
-    financial: {
-      methods: Array.isArray(financial.methods) ? financial.methods : [],
-      own_accounts: Array.isArray(financial.own_accounts) ? financial.own_accounts : [],
-      default_method_id: normalizeRetailPaymentDefaultId(financial.default_method_id),
-      default_account_id: normalizeRetailPaymentDefaultId(financial.default_account_id)
-    }
+    scale: data.scale || null
   };
 }
 
@@ -3173,7 +2801,7 @@ async function loadCatalog() {
     fillSettingsForm();
     state.loading = false;
     renderAll();
-    setMessage("Estación minorista lista. Selecciona una lista y captura el peso para agregarlo directamente.");
+    setMessage("Estación minorista lista. Todos los despachos quedarán a crédito; los cobros se registran desde Finanzas.");
     void restoreRememberedScale("carga inicial");
   } catch (error) {
     state.loading = false;
@@ -3259,14 +2887,6 @@ elements.saveDispatch.addEventListener("click", prepareDispatchRegistration);
 elements.clientSearch.addEventListener("input", () => renderClientOptions(elements.clientSearch.value));
 elements.priceForm.addEventListener("submit", applyPrices);
 elements.clearPrices.addEventListener("click", clearPriceOverrides);
-elements.paymentForm.addEventListener("submit", submitPayment);
-elements.addPayment.addEventListener("click", addPaymentRow);
-elements.paymentModeOptions.addEventListener("click", (event) => {
-  const option = event.target.closest("[data-retail-payment-mode]");
-  if (option) selectPaymentMode(option.dataset.retailPaymentMode);
-});
-elements.paymentRows.addEventListener("input", renderPaymentTotals);
-elements.paymentRows.addEventListener("change", renderPaymentTotals);
 elements.deliveryModeOptions.addEventListener("click", (event) => {
   const option = event.target.closest("[data-retail-delivery-mode]");
   if (option) selectDeliveryMode(option.dataset.retailDeliveryMode);
@@ -3330,14 +2950,6 @@ document.addEventListener("click", (event) => {
   const closeTypographyButton = event.target.closest("[data-retail-close-typography]");
   if (closeTypographyButton) {
     closeTypographyDrawer();
-    return;
-  }
-
-  const removePaymentButton = event.target.closest("[data-remove-payment-row]");
-  if (removePaymentButton) {
-    syncPaymentRowsFromForm();
-    state.paymentRows = state.paymentRows.filter((row) => row.key !== removePaymentButton.dataset.removePaymentRow);
-    renderPaymentRows();
     return;
   }
 
@@ -3425,12 +3037,6 @@ document.addEventListener("click", (event) => {
   const clientButton = event.target.closest("[data-retail-client]");
   if (clientButton) {
     assignClient(clientButton.dataset.retailClient);
-    return;
-  }
-
-  const clearClientButton = event.target.closest("[data-retail-clear-client]");
-  if (clearClientButton) {
-    clearClient();
     return;
   }
 

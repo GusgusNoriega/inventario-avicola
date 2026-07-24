@@ -186,6 +186,7 @@
         <button id="retailSaveDispatch" class="rd-save-button" type="button" disabled>
           <span aria-hidden="true">✓</span>
           <span>Grabar</span>
+          <small>A crédito · cobro en Finanzas</small>
         </button>
       </aside>
     </section>
@@ -321,52 +322,6 @@
     </form>
   </div>
 
-  <div id="retailPaymentModal" class="rd-modal" hidden>
-    <form id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle" novalidate>
-      <header class="rd-modal-head">
-        <div>
-          <p>Cobro de la venta</p>
-          <h2 id="retailPaymentModalTitle">Forma de pago</h2>
-        </div>
-        <button type="button" data-retail-close-modal="retailPaymentModal" aria-label="Cerrar">×</button>
-      </header>
-      <p id="retailPaymentSummary" class="rd-delivery-summary"></p>
-      <section id="retailPaymentModeOptions" class="rd-payment-mode-options" aria-label="Modalidad de pago" role="radiogroup" hidden>
-        <button type="button" class="rd-payment-mode-option is-selected" data-retail-payment-mode="PAY_NOW" role="radio" aria-checked="true">
-          <span aria-hidden="true">S/</span>
-          <strong>Pagar ahora</strong>
-          <small>Registra el cobro al momento, total o parcial.</small>
-        </button>
-        <button type="button" class="rd-payment-mode-option" data-retail-payment-mode="CREDIT" role="radio" aria-checked="false">
-          <span aria-hidden="true">↗</span>
-          <strong>Venta a crédito</strong>
-          <small>Deja el total pendiente para cobrarlo después.</small>
-        </button>
-      </section>
-      <div id="retailPaymentNowPanel" class="rd-payment-now-panel">
-        <div id="retailPaymentRows" class="rd-payment-rows"></div>
-        <button id="retailAddPayment" class="rd-secondary-button rd-add-payment" type="button">+ Agregar otra forma de pago</button>
-        <div class="rd-payment-totals" aria-live="polite">
-          <span>Total de la venta <strong id="retailPaymentSaleTotal">S/ 0.00</strong></span>
-          <span>Total recibido <strong id="retailPaymentReceivedTotal">S/ 0.00</strong></span>
-          <span>Pendiente <strong id="retailPaymentPendingTotal">S/ 0.00</strong></span>
-        </div>
-      </div>
-      <div id="retailPaymentCreditPanel" class="rd-payment-credit-panel" hidden>
-        <span class="rd-payment-credit-icon" aria-hidden="true">✓</span>
-        <div>
-          <strong>El ticket quedará como venta a crédito</strong>
-          <p id="retailPaymentCreditSummary"></p>
-        </div>
-      </div>
-      <p id="retailPaymentMessage" class="rd-settings-message" role="alert" aria-live="assertive" tabindex="-1"></p>
-      <div class="rd-modal-actions">
-        <button type="button" class="rd-secondary-button" data-retail-close-modal="retailPaymentModal">Cancelar</button>
-        <button id="retailConfirmPayment" class="rd-primary-button" type="submit">Registrar pago y continuar</button>
-      </div>
-    </form>
-  </div>
-
   <div id="retailDeliveryModal" class="rd-modal" hidden>
     <form id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate>
       <header class="rd-modal-head">
@@ -490,28 +445,6 @@
           </label>
         </div>
         <div id="retailSettingsAdjustments" class="rd-adjustment-settings-grid"></div>
-      </section>
-
-      <section class="rd-payment-default-settings">
-        <div class="rd-settings-title">
-          <div>
-            <span>Cobro rápido</span>
-            <strong>Método y cuenta predeterminados de esta estación</strong>
-          </div>
-        </div>
-        <div class="rd-payment-default-fields">
-          <label>
-            <span>Método de pago predeterminado</span>
-            <select id="retailDefaultPaymentMethod"></select>
-          </label>
-          <label>
-            <span>Cuenta o caja receptora predeterminada</span>
-            <select id="retailDefaultPaymentAccount"></select>
-          </label>
-        </div>
-        <p class="rd-payment-default-copy">
-          Estos valores se precargarán al cobrar. Podrás elegir otro método o cuenta para cualquier venta sin cambiar esta configuración.
-        </p>
       </section>
 
       <section class="rd-printer-settings">

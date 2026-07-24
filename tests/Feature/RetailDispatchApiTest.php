@@ -203,10 +203,7 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA')
             ->assertJsonPath('data.scale.connection_mode', 'SERIAL')
             ->assertJsonPath('data.scale.configuration.baudRate', 9600)
-            ->assertJsonPath('data.financial.methods.2.code', 'EFECTIVO')
-            ->assertJsonPath('data.financial.own_accounts.0.id', $this->cashAccountId)
-            ->assertJsonPath('data.financial.default_method_id', $this->cashMethodId)
-            ->assertJsonPath('data.financial.default_account_id', $this->cashAccountId)
+            ->assertJsonMissingPath('data.financial')
             ->assertJsonMissingPath('data.cage_types');
 
         $this->assertDatabaseHas('balanzas', [
@@ -470,12 +467,10 @@ class RetailDispatchApiTest extends TestCase
 
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
-            ->assertJsonPath('data.financial.default_method_id', $this->cashMethodId)
-            ->assertJsonPath('data.financial.default_account_id', $this->cashAccountId);
+            ->assertJsonMissingPath('data.financial');
         $this->getJson('/api/v1/despacho-minorista-2/catalogo')
             ->assertOk()
-            ->assertJsonPath('data.financial.default_method_id', $transferMethodId)
-            ->assertJsonPath('data.financial.default_account_id', $bankAccountId);
+            ->assertJsonMissingPath('data.financial');
 
         $this->assertDatabaseHas('configuraciones_despacho_minorista', [
             'empresa_id' => $this->user->empresa_id,
@@ -723,6 +718,7 @@ class RetailDispatchApiTest extends TestCase
             $payload['weighings'][0]['weight_source'] = $stationData['weight_source'];
             $payload['weighings'][0]['read_weight_kg'] = 0.950;
             $payload['weighings'][0]['tray_count'] = 0;
+            unset($payload['delivery']);
             $payload['weighings'][0]['weighed_at'] = $capturedAt;
             $payload['weighings'][0]['scale_reading'] = [
                 'raw_frame' => 'ST,NET 0.950 kg',
@@ -780,6 +776,22 @@ class RetailDispatchApiTest extends TestCase
                 'delivery',
                 'delivery.mode',
             ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_dispatch_without_trays_rejects_transport_selection(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['tray_count'] = 0;
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('delivery')
+            ->assertJsonPath(
+                'errors.delivery.0',
+                'No selecciones transporte cuando el ticket no lleva bandejas.'
+            );
 
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
@@ -1010,7 +1022,6 @@ class RetailDispatchApiTest extends TestCase
             $manualPayload = $this->payload();
             $manualPayload['weighings'][0]['weight_source'] = $station['scale_code'];
             $manualPayload['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
-            $manualPayload['payments'] = [$this->paymentPayload(71.75)];
 
             $manualResponse = $this->postJson($station['endpoint'], $manualPayload)
                 ->assertCreated()
@@ -1155,29 +1166,22 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
-    public function test_lists_without_client_keep_their_own_manual_prices(): void
+    public function test_lists_with_a_client_keep_their_own_manual_prices(): void
     {
-        $generalHistoryId = $this->createGeneralPrice(7.25);
         $first = $this->payload();
-        $first['client_id'] = null;
-        unset($first['delivery']);
         $first['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => '10.25'];
-        $first['payments'] = [$this->paymentPayload('71.75')];
         $second = $this->payload();
-        $second['client_id'] = null;
-        unset($second['delivery']);
         $second['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 11.75];
-        $second['payments'] = [$this->paymentPayload(82.25)];
 
         $firstResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $first)
             ->assertCreated()
-            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.client.id', $this->clientId)
             ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 10.25)
             ->assertJsonPath('data.prices.POLLO_PELADO.source', 'MANUAL')
-            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $generalHistoryId);
+            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId);
         $secondResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $second)
             ->assertCreated()
-            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.client.id', $this->clientId)
             ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 11.75)
             ->assertJsonPath('data.prices.POLLO_PELADO.source', 'MANUAL');
 
@@ -1191,16 +1195,16 @@ class RetailDispatchApiTest extends TestCase
             'precio_kg' => 11.75,
             'origen_precio' => 'MANUAL',
         ]);
-        $this->assertDatabaseCount('movimientos_javas', 0);
+        $this->assertDatabaseCount('movimientos_javas', 2);
     }
 
-    public function test_list_without_client_uses_the_current_general_price_when_it_has_no_override(): void
+    public function test_client_without_a_specific_price_uses_the_current_general_price(): void
     {
+        DB::table('precios_historial')
+            ->where('id', $this->priceHistoryId)
+            ->update(['vigente_hasta' => now()->subSecond()]);
         $generalHistoryId = $this->createGeneralPrice(7.25);
         $payload = $this->payload();
-        $payload['client_id'] = null;
-        unset($payload['delivery']);
-        $payload['payments'] = [$this->paymentPayload(50.75)];
 
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
@@ -1208,54 +1212,47 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.general_prices.POLLO_PELADO.source', 'GENERAL')
             ->assertJsonPath('data.general_prices.POLLO_PELADO.history_id', $generalHistoryId);
 
-        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+        $ticketId = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
-            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.client.id', $this->clientId)
             ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 7.25)
             ->assertJsonPath('data.prices.POLLO_PELADO.source', 'GENERAL')
             ->assertJsonPath('data.weighings.0.price_kg', 7.25)
-            ->assertJsonPath('data.totals.amount', 50.75);
+            ->assertJsonPath('data.totals.amount', 50.75)
+            ->json('data.id');
 
-        $this->assertDatabaseHas('pagos', [
-            'tipo' => 'COBRO_MINORISTA',
-            'cliente_id' => null,
-            'cuenta_destino_id' => $this->cashAccountId,
-            'importe' => 50.75,
-            'estado' => 'REGISTRADO',
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticketId}",
+            'tercero_id' => $this->clientId,
+            'total' => 50.75,
+            'saldo_pendiente' => 50.75,
+            'estado' => 'PENDIENTE',
         ]);
+        $this->assertDatabaseCount('pagos', 0);
     }
 
-    public function test_both_retail_stations_accept_transfer_payments_without_a_reference(): void
+    public function test_both_retail_stations_reject_payments_during_dispatch_registration(): void
     {
-        $this->createGeneralPrice(7.25);
-        $transferMethodId = (int) DB::table('metodos_pago')
-            ->where('codigo', 'TRANSFERENCIA')
-            ->value('id');
-
         foreach ([
             '/api/v1/despacho-minorista/tickets',
             '/api/v1/despacho-minorista-2/tickets',
         ] as $endpoint) {
             $payload = $this->payload();
-            $payload['client_id'] = null;
-            unset($payload['delivery']);
             $payload['weighings'][0]['weight_source'] = 'MANUAL';
-            $payload['payments'] = [[
-                ...$this->paymentPayload(50.75),
-                'metodo_pago_id' => $transferMethodId,
-                'referencia' => null,
-            ]];
+            $payload['payments'] = [$this->paymentPayload(59.5)];
 
             $this->postJson($endpoint, $payload)
-                ->assertCreated();
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('payments')
+                ->assertJsonPath(
+                    'errors.payments.0',
+                    'Los despachos minoristas siempre se registran a crédito. Registra los cobros por separado desde Finanzas.'
+                );
         }
 
-        $this->assertDatabaseCount('pagos', 2);
-        $this->assertDatabaseHas('pagos', [
-            'tipo' => 'COBRO_MINORISTA',
-            'metodo_pago_id' => $transferMethodId,
-            'referencia' => null,
-        ]);
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('comprobantes', 0);
+        $this->assertDatabaseCount('pagos', 0);
     }
 
     public function test_both_retail_stations_allow_customer_credit_and_create_a_receivable(): void
@@ -1266,7 +1263,6 @@ class RetailDispatchApiTest extends TestCase
         ] as $endpoint) {
             $payload = $this->payload();
             $payload['weighings'][0]['weight_source'] = 'MANUAL';
-            $payload['payments'] = [];
 
             $ticketId = $this->postJson($endpoint, $payload)
                 ->assertCreated()
@@ -1300,131 +1296,23 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('pago_aplicaciones', 0);
     }
 
-    public function test_both_retail_stations_allow_a_customer_to_pay_when_the_sale_is_registered(): void
+    public function test_both_retail_stations_require_a_client(): void
     {
         foreach ([
             '/api/v1/despacho-minorista/tickets',
             '/api/v1/despacho-minorista-2/tickets',
         ] as $endpoint) {
             $payload = $this->payload();
+            unset($payload['client_id']);
             $payload['weighings'][0]['weight_source'] = 'MANUAL';
-            $payment = $this->paymentPayload(59.5);
-            $payload['payments'] = [$payment];
 
-            $ticketId = $this->postJson($endpoint, $payload)
-                ->assertCreated()
-                ->assertJsonPath('data.client.id', $this->clientId)
-                ->assertJsonPath('data.totals.amount', 59.5)
-                ->json('data.id');
-            $document = DB::table('comprobantes')
-                ->where('origen_clave', "VENTA:TICKET:{$ticketId}")
-                ->first();
-            $paymentId = DB::table('pagos')
-                ->where('idempotency_key', $payment['idempotency_key'])
-                ->value('id');
-
-            $this->assertNotNull($document);
-            $this->assertNotNull($paymentId);
-            $this->assertDatabaseHas('comprobantes', [
-                'id' => $document->id,
-                'tercero_id' => $this->clientId,
-                'total' => 59.5,
-                'saldo_pendiente' => 0,
-                'estado' => 'PAGADO',
-            ]);
-            $this->assertDatabaseHas('pagos', [
-                'id' => $paymentId,
-                'tipo' => 'COBRO_MINORISTA',
-                'cliente_id' => $this->clientId,
-                'cuenta_destino_id' => $this->cashAccountId,
-                'importe' => 59.5,
-                'estado' => 'REGISTRADO',
-            ]);
-            $this->assertDatabaseHas('pago_aplicaciones', [
-                'pago_id' => $paymentId,
-                'lado' => 'CXC',
-                'comprobante_id' => $document->id,
-                'importe_aplicado' => 59.5,
-            ]);
-        }
-
-        $this->assertDatabaseCount('tickets_despacho', 2);
-        $this->assertDatabaseCount('comprobantes', 2);
-        $this->assertDatabaseCount('pagos', 2);
-        $this->assertDatabaseCount('pago_aplicaciones', 2);
-    }
-
-    public function test_customer_can_make_a_partial_payment_and_keep_the_remaining_receivable(): void
-    {
-        $payload = $this->payload();
-        $payment = $this->paymentPayload(20);
-        $payload['payments'] = [$payment];
-
-        $ticketId = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
-            ->assertCreated()
-            ->assertJsonPath('data.client.id', $this->clientId)
-            ->assertJsonPath('data.totals.amount', 59.5)
-            ->json('data.id');
-        $document = DB::table('comprobantes')
-            ->where('origen_clave', "VENTA:TICKET:{$ticketId}")
-            ->first();
-        $paymentId = DB::table('pagos')
-            ->where('idempotency_key', $payment['idempotency_key'])
-            ->value('id');
-
-        $this->assertNotNull($document);
-        $this->assertNotNull($paymentId);
-        $this->assertDatabaseHas('comprobantes', [
-            'id' => $document->id,
-            'tercero_id' => $this->clientId,
-            'total' => 59.5,
-            'saldo_pendiente' => 39.5,
-            'estado' => 'PARCIAL',
-        ]);
-        $this->assertDatabaseHas('pagos', [
-            'id' => $paymentId,
-            'tipo' => 'COBRO_MINORISTA',
-            'cliente_id' => $this->clientId,
-            'importe' => 20,
-            'estado' => 'REGISTRADO',
-        ]);
-        $this->assertDatabaseHas('pago_aplicaciones', [
-            'pago_id' => $paymentId,
-            'lado' => 'CXC',
-            'comprobante_id' => $document->id,
-            'importe_aplicado' => 20,
-        ]);
-    }
-
-    public function test_both_retail_stations_reject_credit_without_a_customer(): void
-    {
-        $this->createGeneralPrice(7.25);
-
-        foreach ([
-            '/api/v1/despacho-minorista/tickets',
-            '/api/v1/despacho-minorista-2/tickets',
-        ] as $endpoint) {
-            foreach ([
-                [
-                    'payments' => [],
-                    'message' => 'Una venta sin cliente debe registrar el pago completo.',
-                ],
-                [
-                    'payments' => [$this->paymentPayload(10)],
-                    'message' => 'Una venta sin cliente debe quedar pagada completamente antes de cerrar.',
-                ],
-            ] as $case) {
-                $payload = $this->payload();
-                $payload['client_id'] = null;
-                unset($payload['delivery']);
-                $payload['weighings'][0]['weight_source'] = 'MANUAL';
-                $payload['payments'] = $case['payments'];
-
-                $this->postJson($endpoint, $payload)
-                    ->assertUnprocessable()
-                    ->assertJsonValidationErrors('payments')
-                    ->assertJsonPath('errors.payments.0', $case['message']);
-            }
+            $this->postJson($endpoint, $payload)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('client_id')
+                ->assertJsonPath(
+                    'errors.client_id.0',
+                    'Selecciona un cliente antes de registrar el ticket.'
+                );
         }
 
         $this->assertDatabaseCount('tickets_despacho', 0);
@@ -1433,31 +1321,46 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('pago_aplicaciones', 0);
     }
 
-    public function test_anonymous_retail_sale_requires_full_payment(): void
+    public function test_dispatch_payment_rejection_is_atomic(): void
     {
-        $this->createGeneralPrice(7.25);
         $payload = $this->payload();
-        $payload['client_id'] = null;
-        unset($payload['delivery']);
+        $payload['payments'] = [$this->paymentPayload(20)];
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('payments');
 
         $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pesadas', 0);
+        $this->assertDatabaseCount('comprobantes', 0);
+        $this->assertDatabaseCount('pagos', 0);
     }
 
-    public function test_retail_dispatch_rejects_payment_amounts_with_more_than_two_decimals(): void
+    public function test_empty_legacy_payments_array_still_registers_the_dispatch_as_credit(): void
     {
-        $this->createGeneralPrice(7.25);
         $payload = $this->payload();
-        $payload['client_id'] = null;
-        unset($payload['delivery']);
+        $payload['payments'] = [];
+
+        $ticketId = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticketId}",
+            'saldo_pendiente' => 59.5,
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseCount('pagos', 0);
+    }
+
+    public function test_retail_dispatch_rejects_any_payment_payload(): void
+    {
+        $payload = $this->payload();
         $payload['payments'] = [$this->paymentPayload(50.755)];
 
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('payments.0.importe');
+            ->assertJsonValidationErrors('payments');
 
         $this->assertDatabaseCount('tickets_despacho', 0);
         $this->assertDatabaseCount('pagos', 0);
@@ -1465,9 +1368,11 @@ class RetailDispatchApiTest extends TestCase
 
     public function test_retail_total_sums_each_weighing_after_rounding_it_to_cents(): void
     {
+        DB::table('precios_historial')
+            ->where('id', $this->priceHistoryId)
+            ->update(['vigente_hasta' => now()->subSecond()]);
         $this->createGeneralPrice(1.23);
         $payload = $this->payload();
-        $payload['client_id'] = null;
         unset($payload['delivery']);
         $payload['weighings'][0]['tray_count'] = 0;
         $payload['weighings'][0]['read_weight_kg'] = 1.004;
@@ -1475,17 +1380,18 @@ class RetailDispatchApiTest extends TestCase
             ...$payload['weighings'][0],
             'local_id' => 2,
         ];
-        $payload['payments'] = [$this->paymentPayload(2.46)];
-
         $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
             ->assertJsonPath('data.weighings.0.amount', 1.23)
             ->assertJsonPath('data.weighings.1.amount', 1.23)
             ->assertJsonPath('data.totals.amount', 2.46);
 
-        $this->assertDatabaseHas('pagos', [
-            'importe' => 2.46,
+        $this->assertDatabaseHas('comprobantes', [
+            'total' => 2.46,
+            'saldo_pendiente' => 2.46,
+            'estado' => 'PENDIENTE',
         ]);
+        $this->assertDatabaseCount('pagos', 0);
     }
 
     public function test_return_amounts_are_serialized_with_negative_sign(): void
@@ -1550,6 +1456,7 @@ class RetailDispatchApiTest extends TestCase
 
             $response = $this->postJson("{$stationData['base_url']}/tickets", $payload)
                 ->assertCreated()
+                ->assertJsonPath('data.delivery', null)
                 ->assertJsonPath('data.totals.trays', 0)
                 ->assertJsonPath('data.totals.birds', 5)
                 ->assertJsonPath('data.totals.read_weight_kg', 12)
@@ -1722,6 +1629,7 @@ class RetailDispatchApiTest extends TestCase
             $payload['weighings'][0]['birds_per_tray'] = 40;
             $payload['weighings'][0]['tray_count'] = 0;
             $payload['weighings'][0]['weight_source'] = $station['weight_source'];
+            unset($payload['delivery']);
 
             $response = $this->postJson($station['endpoint'], $payload)
                 ->assertCreated()

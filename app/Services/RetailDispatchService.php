@@ -14,7 +14,6 @@ use App\Models\TicketPrecio;
 use App\Models\TipoBandeja;
 use App\Models\TipoPollo;
 use App\Models\User;
-use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -26,8 +25,7 @@ class RetailDispatchService
         private readonly RetailConfigurationService $configuration,
         private readonly ScaleReadingService $scaleReadings,
         private readonly JavaControlService $javaControl,
-        private readonly FinancialObligationService $financialObligations,
-        private readonly FinancialMovementService $financialMovements
+        private readonly FinancialObligationService $financialObligations
     ) {}
 
     /**
@@ -103,16 +101,14 @@ class RetailDispatchService
 
             $this->configuration->ensureDefaults($companyId, (int) $branch->id, $station);
 
-            $clientId = $data['client_id'] ?? null;
-            $client = $clientId
-                ? Tercero::query()
-                    ->where('empresa_id', $companyId)
-                    ->where('estado', Tercero::STATUS_ACTIVE)
-                    ->conRol(TerceroRole::CLIENT)
-                    ->find($clientId)
-                : null;
+            $clientId = (int) ($data['client_id'] ?? 0);
+            $client = Tercero::query()
+                ->where('empresa_id', $companyId)
+                ->where('estado', Tercero::STATUS_ACTIVE)
+                ->conRol(TerceroRole::CLIENT)
+                ->find($clientId);
 
-            if ($clientId && ! $client) {
+            if (! $client) {
                 throw ValidationException::withMessages([
                     'client_id' => 'El cliente seleccionado no esta disponible.',
                 ]);
@@ -188,6 +184,7 @@ class RetailDispatchService
 
             $deliveryData = $data['delivery'] ?? [];
             $delivery = $data['operation_type'] === TicketDespacho::OPERATION_DISPATCH
+                && $weighings->contains(fn (array $weighing): bool => (int) $weighing['tray_count'] > 0)
                 && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK
                     ? $deliveryData
                     : [];
@@ -298,109 +295,13 @@ class RetailDispatchService
                 $companyId,
                 (int) $branch->id
             );
-            $financial = $this->financialObligations->syncTicket($companyId, $ticket, $actor);
-            $this->registerPayments(
-                $companyId,
-                $actor,
-                $ticket,
-                $financial['sale_document_id'],
-                $data['payments'] ?? []
-            );
+            $this->financialObligations->syncTicket($companyId, $ticket, $actor);
 
             return [
                 'ticket' => $this->loadTicket($ticket),
                 'already_registered' => false,
             ];
         }, 3);
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $payments
-     */
-    private function registerPayments(
-        int $companyId,
-        User $actor,
-        TicketDespacho $ticket,
-        ?int $saleDocumentId,
-        array $payments
-    ): void {
-        if ($ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN) {
-            if ($payments !== []) {
-                throw ValidationException::withMessages([
-                    'payments' => 'Una devolución genera un saldo a favor; registra el reembolso desde Finanzas.',
-                ]);
-            }
-
-            return;
-        }
-
-        $prices = $ticket->precios->keyBy('tipo_pollo_id');
-        $ticketTotal = $ticket->pesadas
-            ->where('estado', Pesada::STATUS_ACTIVE)
-            ->reduce(function (string $sum, Pesada $record) use ($prices): string {
-                $price = (string) ($prices->get($record->tipo_pollo_id)?->precio_kg ?? '0');
-                $line = bcadd(bcmul((string) $record->peso_neto_kg, $price, 6), '0.005', 2);
-
-                return bcadd($sum, $line, 2);
-            }, '0.00');
-        $paidTotal = collect($payments)->reduce(
-            fn (string $sum, array $payment): string => bcadd(
-                $sum,
-                FinancialMoney::normalize((string) ($payment['importe'] ?? '0')),
-                2
-            ),
-            '0.00'
-        );
-
-        if (bccomp($paidTotal, $ticketTotal, 2) > 0) {
-            throw ValidationException::withMessages([
-                'payments' => 'El total cobrado no puede superar el total de la venta minorista.',
-            ]);
-        }
-
-        if (! $ticket->cliente_destino_id && bccomp($paidTotal, $ticketTotal, 2) !== 0) {
-            throw ValidationException::withMessages([
-                'payments' => 'Una venta sin cliente debe quedar pagada completamente antes de cerrar.',
-            ]);
-        }
-
-        if ($payments === []) {
-            return;
-        }
-
-        if (! $saleDocumentId) {
-            throw ValidationException::withMessages([
-                'payments' => 'No fue posible generar la cuenta por cobrar de esta venta.',
-            ]);
-        }
-
-        foreach ($payments as $payment) {
-            $amount = FinancialMoney::normalize((string) $payment['importe']);
-            $this->financialMovements->register(
-                $companyId,
-                $actor,
-                [
-                    'idempotency_key' => $payment['idempotency_key'],
-                    'tipo' => 'COBRO_MINORISTA',
-                    'fecha_hora' => $payment['fecha_hora'] ?? now()->toISOString(),
-                    'cliente_id' => $ticket->cliente_destino_id,
-                    'proveedor_id' => null,
-                    'cuenta_origen_id' => null,
-                    'cuenta_destino_id' => $payment['cuenta_destino_id'],
-                    'metodo_pago_id' => $payment['metodo_pago_id'],
-                    'moneda' => $payment['moneda'] ?? 'PEN',
-                    'importe' => $amount,
-                    'referencia' => $payment['referencia'] ?? null,
-                    'observaciones' => $payment['observaciones'] ?? "Cobro del ticket {$ticket->codigo}",
-                    'aplicaciones' => [[
-                        'lado' => 'CXC',
-                        'comprobante_id' => $saleDocumentId,
-                        'importe_aplicado' => $amount,
-                    ]],
-                ],
-                allowMissingMethodReference: true,
-            );
-        }
     }
 
     /** @param Collection<int, array<string, mixed>> $weighings */

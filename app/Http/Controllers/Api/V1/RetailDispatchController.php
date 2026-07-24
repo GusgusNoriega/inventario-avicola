@@ -5,9 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Operation\StoreRetailDispatchRequest;
 use App\Http\Requests\Operation\UpdateRetailConfigurationRequest;
-use App\Models\CuentaFinanciera;
-use App\Models\EntidadFinanciera;
-use App\Models\MetodoPago;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
@@ -119,45 +116,6 @@ class RetailDispatchController extends Controller
                     ->values(),
                 'adjustments' => $retailConfiguration['adjustments'],
                 'scale' => $retailConfiguration['scale'],
-                'financial' => [
-                    'default_method_id' => $retailConfiguration['payment_defaults']['method_id'],
-                    'default_account_id' => $retailConfiguration['payment_defaults']['account_id'],
-                    'methods' => MetodoPago::query()
-                        ->where('estado', MetodoPago::STATUS_ACTIVE)
-                        ->orderBy('id')
-                        ->get(['id', 'codigo', 'nombre', 'requiere_referencia'])
-                        ->map(fn (MetodoPago $method): array => [
-                            'id' => $method->id,
-                            'code' => $method->codigo,
-                            'name' => $method->nombre,
-                            'requires_reference' => (bool) $method->requiere_referencia,
-                        ])
-                        ->values(),
-                    'own_accounts' => CuentaFinanciera::query()
-                        ->where('estado', CuentaFinanciera::STATUS_ACTIVE)
-                        ->where('moneda', 'PEN')
-                        ->whereHas('entidadFinanciera', fn ($query) => $query
-                            ->where('empresa_id', $companyId)
-                            ->where('tipo', EntidadFinanciera::TYPE_OWN)
-                            ->where('estado', EntidadFinanciera::STATUS_ACTIVE))
-                        ->with('entidadFinanciera:id,razon_social,nombre_comercial')
-                        ->orderBy('alias')
-                        ->get()
-                        ->map(fn (CuentaFinanciera $account): array => [
-                            'id' => $account->id,
-                            'type' => $account->tipo,
-                            'alias' => $account->alias,
-                            'bank' => $account->banco,
-                            'masked_number' => $this->maskedAccount($account->numero_cuenta),
-                            'currency' => $account->moneda,
-                            'entity' => [
-                                'id' => $account->entidad_financiera_id,
-                                'name' => $account->entidadFinanciera?->nombre_comercial
-                                    ?: $account->entidadFinanciera?->razon_social,
-                            ],
-                        ])
-                        ->values(),
-                ],
             ],
         ]);
     }
@@ -205,6 +163,7 @@ class RetailDispatchController extends Controller
     {
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
         $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
+        $deliveryMode = $ticket->resolvedDeliveryMode();
         $totalAmount = $ticket->pesadas->sum(function ($weighing) use ($prices, $sign): float {
             $price = round(
                 (float) ($prices->get($weighing->tipo_pollo_id)?->precio_kg ?? 0),
@@ -230,9 +189,9 @@ class RetailDispatchController extends Controller
                     'name' => $ticket->clienteDestino->nombre_razon_social,
                 ]
                 : null,
-            'delivery' => $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
+            'delivery' => $deliveryMode !== null
                 ? [
-                    'mode' => $ticket->resolvedDeliveryMode(),
+                    'mode' => $deliveryMode,
                     'vehicle' => $ticket->vehiculoEntrega
                         ? [
                             'id' => $ticket->vehiculoEntrega->id,
@@ -304,17 +263,6 @@ class RetailDispatchController extends Controller
                 ];
             })->values(),
         ];
-    }
-
-    private function maskedAccount(?string $number): ?string
-    {
-        if (! filled($number)) {
-            return null;
-        }
-
-        $visible = mb_substr((string) $number, -4);
-
-        return str_repeat('•', max(mb_strlen((string) $number) - 4, 0)).$visible;
     }
 
     private function retailStation(Request $request): int
