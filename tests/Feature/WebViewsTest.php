@@ -305,6 +305,13 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailDeliveryTruck"', false)
             ->assertSee('id="retailDeliveryDriver"', false)
             ->assertSee('id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle" novalidate', false)
+            ->assertSee('id="retailPaymentModeOptions"', false)
+            ->assertSee('data-retail-payment-mode="PAY_NOW"', false)
+            ->assertSee('data-retail-payment-mode="CREDIT"', false)
+            ->assertSee('Venta a crédito')
+            ->assertSee('id="retailPaymentCreditPanel"', false)
+            ->assertSee('id="retailPaymentCreditSummary"', false)
+            ->assertDontSee('id="retailSkipPayment"', false)
             ->assertSee('id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate', false)
             ->assertSee('id="retailErrorModal"', false)
             ->assertSee('id="retailErrorModalDetails"', false)
@@ -333,12 +340,19 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('`${RETAIL_API_BASE}/tickets`', $javascript);
         $this->assertStringContainsString('from "./retail-dispatch-errors.js"', $javascript);
         $this->assertStringContainsString('from "./retail-payment-defaults.js"', $javascript);
+        $this->assertStringContainsString('from "./retail-payment-mode.js"', $javascript);
         $this->assertStringContainsString('showRetailError(presentation)', $javascript);
         $this->assertStringContainsString('state.paymentContext !== paymentContext', $javascript);
         $this->assertStringContainsString('resolveRetailPaymentDefaults(state.catalog.financial)', $javascript);
         $this->assertStringContainsString('payment_defaults: paymentDefaults', $javascript);
         $this->assertStringContainsString('row.methodId = rowElement.querySelector("[data-payment-method]")?.value', $javascript);
         $this->assertStringContainsString('row.accountId = rowElement.querySelector("[data-payment-account]")?.value', $javascript);
+        $this->assertStringContainsString('resolveRetailPaymentMode(state.paymentMode, hasClient)', $javascript);
+        $this->assertStringContainsString('elements.paymentModeOptions.hidden = !hasClient', $javascript);
+        $this->assertStringContainsString('control.disabled = isCredit', $javascript);
+        $this->assertStringContainsString('const creditPayments = paymentsForRetailPaymentMode(', $javascript);
+        $this->assertStringContainsString('continueDispatchAfterPayment(creditPayments)', $javascript);
+        $this->assertStringNotContainsString('function skipPayment()', $javascript);
         $this->assertStringContainsString('adjustment_code', $javascript);
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
@@ -414,6 +428,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('financial.default_method_id', $paymentDefaultsJavascript);
         $this->assertStringContainsString('financial.default_account_id', $paymentDefaultsJavascript);
 
+        $paymentModeJavascript = file_get_contents(public_path('js/retail-payment-mode.js'));
+        $this->assertIsString($paymentModeJavascript);
+        $this->assertStringContainsString('requestedMode === RETAIL_PAYMENT_MODE_CREDIT && Boolean(hasAssignedClient)', $paymentModeJavascript);
+        $this->assertStringContainsString('? []', $paymentModeJavascript);
+
         $blade = file_get_contents(resource_path('views/despacho-minorista.blade.php'));
         $this->assertIsString($blade);
         preg_match_all('/<input\b[^>]*>/i', $blade, $retailInputs);
@@ -451,6 +470,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);
         $this->assertStringContainsString('.rd-payment-default-settings', $stylesheet);
         $this->assertStringContainsString('.rd-payment-default-fields', $stylesheet);
+        $this->assertStringContainsString('.rd-payment-mode-options', $stylesheet);
+        $this->assertStringContainsString('.rd-payment-credit-panel', $stylesheet);
         $this->assertStringContainsString('.rd-modal-card.is-error', $stylesheet);
         $this->assertStringContainsString('.rd-error-details', $stylesheet);
         $this->assertDoesNotMatchRegularExpression('/font-size:\s*(?:\d|\.)/', $stylesheet);
@@ -494,6 +515,9 @@ class WebViewsTest extends TestCase
             ->assertSee('Toca una columna para seleccionar la presentación.')
             ->assertSee('id="retailDefaultPaymentMethod"', false)
             ->assertSee('id="retailDefaultPaymentAccount"', false)
+            ->assertSee('id="retailPaymentModeOptions"', false)
+            ->assertSee('data-retail-payment-mode="CREDIT"', false)
+            ->assertSee('Venta a crédito')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false);
 

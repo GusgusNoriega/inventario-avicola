@@ -68,7 +68,7 @@ class StoreRetailDispatchRequest extends FormRequest
                 Rule::requiredIf(fn (): bool => $this->requiresImmediatePayment()),
                 Rule::prohibitedIf(fn (): bool => $this->input('operation_type') === TicketDespacho::OPERATION_RETURN),
                 'array',
-                'min:1',
+                ...($this->requiresImmediatePayment() ? ['min:1'] : []),
                 'max:5',
             ],
             'payments.*' => [
@@ -264,7 +264,7 @@ class StoreRetailDispatchRequest extends FormRequest
             'price_overrides.*.gt' => 'Cada precio manual debe ser mayor que cero.',
             'price_overrides.*.max' => 'Uno de los precios manuales supera el máximo permitido.',
             'payments.array' => 'Los datos del pago no tienen un formato válido.',
-            'payments.min' => 'Registra al menos una forma de pago.',
+            'payments.min' => 'Una venta sin cliente debe registrar al menos una forma de pago.',
             'payments.max' => 'Solo puedes dividir el cobro entre cinco formas de pago.',
             'payments.*.required' => 'Completa los datos de cada forma de pago.',
             'payments.*.array' => 'Una de las formas de pago no tiene un formato válido.',

@@ -308,17 +308,38 @@
         <button type="button" data-retail-close-modal="retailPaymentModal" aria-label="Cerrar">×</button>
       </header>
       <p id="retailPaymentSummary" class="rd-delivery-summary"></p>
-      <div id="retailPaymentRows" class="rd-payment-rows"></div>
-      <button id="retailAddPayment" class="rd-secondary-button rd-add-payment" type="button">+ Agregar otra forma de pago</button>
-      <div class="rd-payment-totals" aria-live="polite">
-        <span>Total de la venta <strong id="retailPaymentSaleTotal">S/ 0.00</strong></span>
-        <span>Total recibido <strong id="retailPaymentReceivedTotal">S/ 0.00</strong></span>
-        <span>Pendiente <strong id="retailPaymentPendingTotal">S/ 0.00</strong></span>
+      <section id="retailPaymentModeOptions" class="rd-payment-mode-options" aria-label="Modalidad de pago" role="radiogroup" hidden>
+        <button type="button" class="rd-payment-mode-option is-selected" data-retail-payment-mode="PAY_NOW" role="radio" aria-checked="true">
+          <span aria-hidden="true">S/</span>
+          <strong>Pagar ahora</strong>
+          <small>Registra el cobro al momento, total o parcial.</small>
+        </button>
+        <button type="button" class="rd-payment-mode-option" data-retail-payment-mode="CREDIT" role="radio" aria-checked="false">
+          <span aria-hidden="true">↗</span>
+          <strong>Venta a crédito</strong>
+          <small>Deja el total pendiente para cobrarlo después.</small>
+        </button>
+      </section>
+      <div id="retailPaymentNowPanel" class="rd-payment-now-panel">
+        <div id="retailPaymentRows" class="rd-payment-rows"></div>
+        <button id="retailAddPayment" class="rd-secondary-button rd-add-payment" type="button">+ Agregar otra forma de pago</button>
+        <div class="rd-payment-totals" aria-live="polite">
+          <span>Total de la venta <strong id="retailPaymentSaleTotal">S/ 0.00</strong></span>
+          <span>Total recibido <strong id="retailPaymentReceivedTotal">S/ 0.00</strong></span>
+          <span>Pendiente <strong id="retailPaymentPendingTotal">S/ 0.00</strong></span>
+        </div>
+      </div>
+      <div id="retailPaymentCreditPanel" class="rd-payment-credit-panel" hidden>
+        <span class="rd-payment-credit-icon" aria-hidden="true">✓</span>
+        <div>
+          <strong>El ticket quedará como venta a crédito</strong>
+          <p id="retailPaymentCreditSummary"></p>
+        </div>
       </div>
       <p id="retailPaymentMessage" class="rd-settings-message" role="alert" aria-live="assertive" tabindex="-1"></p>
       <div class="rd-modal-actions">
-        <button id="retailSkipPayment" type="button" class="rd-secondary-button">Dejar pendiente</button>
-        <button id="retailConfirmPayment" class="rd-primary-button" type="submit">Continuar</button>
+        <button type="button" class="rd-secondary-button" data-retail-close-modal="retailPaymentModal">Cancelar</button>
+        <button id="retailConfirmPayment" class="rd-primary-button" type="submit">Registrar pago y continuar</button>
       </div>
     </form>
   </div>

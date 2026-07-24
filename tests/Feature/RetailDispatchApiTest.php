@@ -1023,6 +1023,181 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
+    public function test_both_retail_stations_allow_customer_credit_and_create_a_receivable(): void
+    {
+        foreach ([
+            '/api/v1/despacho-minorista/tickets',
+            '/api/v1/despacho-minorista-2/tickets',
+        ] as $endpoint) {
+            $payload = $this->payload();
+            $payload['weighings'][0]['weight_source'] = 'MANUAL';
+            $payload['payments'] = [];
+
+            $ticketId = $this->postJson($endpoint, $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.client.id', $this->clientId)
+                ->assertJsonPath('data.totals.amount', 59.5)
+                ->json('data.id');
+            $document = DB::table('comprobantes')
+                ->where('origen_clave', "VENTA:TICKET:{$ticketId}")
+                ->first();
+
+            $this->assertNotNull($document);
+            $this->assertDatabaseHas('comprobantes', [
+                'id' => $document->id,
+                'tercero_id' => $this->clientId,
+                'operacion' => 'VENTA',
+                'naturaleza' => 'CARGO',
+                'total' => 59.5,
+                'saldo_pendiente' => 59.5,
+                'estado' => 'PENDIENTE',
+            ]);
+            $this->assertDatabaseHas('comprobante_tickets', [
+                'comprobante_id' => $document->id,
+                'ticket_id' => $ticketId,
+                'importe_aplicado' => 59.5,
+            ]);
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', 2);
+        $this->assertDatabaseCount('comprobantes', 2);
+        $this->assertDatabaseCount('pagos', 0);
+        $this->assertDatabaseCount('pago_aplicaciones', 0);
+    }
+
+    public function test_both_retail_stations_allow_a_customer_to_pay_when_the_sale_is_registered(): void
+    {
+        foreach ([
+            '/api/v1/despacho-minorista/tickets',
+            '/api/v1/despacho-minorista-2/tickets',
+        ] as $endpoint) {
+            $payload = $this->payload();
+            $payload['weighings'][0]['weight_source'] = 'MANUAL';
+            $payment = $this->paymentPayload(59.5);
+            $payload['payments'] = [$payment];
+
+            $ticketId = $this->postJson($endpoint, $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.client.id', $this->clientId)
+                ->assertJsonPath('data.totals.amount', 59.5)
+                ->json('data.id');
+            $document = DB::table('comprobantes')
+                ->where('origen_clave', "VENTA:TICKET:{$ticketId}")
+                ->first();
+            $paymentId = DB::table('pagos')
+                ->where('idempotency_key', $payment['idempotency_key'])
+                ->value('id');
+
+            $this->assertNotNull($document);
+            $this->assertNotNull($paymentId);
+            $this->assertDatabaseHas('comprobantes', [
+                'id' => $document->id,
+                'tercero_id' => $this->clientId,
+                'total' => 59.5,
+                'saldo_pendiente' => 0,
+                'estado' => 'PAGADO',
+            ]);
+            $this->assertDatabaseHas('pagos', [
+                'id' => $paymentId,
+                'tipo' => 'COBRO_MINORISTA',
+                'cliente_id' => $this->clientId,
+                'cuenta_destino_id' => $this->cashAccountId,
+                'importe' => 59.5,
+                'estado' => 'REGISTRADO',
+            ]);
+            $this->assertDatabaseHas('pago_aplicaciones', [
+                'pago_id' => $paymentId,
+                'lado' => 'CXC',
+                'comprobante_id' => $document->id,
+                'importe_aplicado' => 59.5,
+            ]);
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', 2);
+        $this->assertDatabaseCount('comprobantes', 2);
+        $this->assertDatabaseCount('pagos', 2);
+        $this->assertDatabaseCount('pago_aplicaciones', 2);
+    }
+
+    public function test_customer_can_make_a_partial_payment_and_keep_the_remaining_receivable(): void
+    {
+        $payload = $this->payload();
+        $payment = $this->paymentPayload(20);
+        $payload['payments'] = [$payment];
+
+        $ticketId = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.client.id', $this->clientId)
+            ->assertJsonPath('data.totals.amount', 59.5)
+            ->json('data.id');
+        $document = DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET:{$ticketId}")
+            ->first();
+        $paymentId = DB::table('pagos')
+            ->where('idempotency_key', $payment['idempotency_key'])
+            ->value('id');
+
+        $this->assertNotNull($document);
+        $this->assertNotNull($paymentId);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $document->id,
+            'tercero_id' => $this->clientId,
+            'total' => 59.5,
+            'saldo_pendiente' => 39.5,
+            'estado' => 'PARCIAL',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'tipo' => 'COBRO_MINORISTA',
+            'cliente_id' => $this->clientId,
+            'importe' => 20,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('pago_aplicaciones', [
+            'pago_id' => $paymentId,
+            'lado' => 'CXC',
+            'comprobante_id' => $document->id,
+            'importe_aplicado' => 20,
+        ]);
+    }
+
+    public function test_both_retail_stations_reject_credit_without_a_customer(): void
+    {
+        $this->createGeneralPrice(7.25);
+
+        foreach ([
+            '/api/v1/despacho-minorista/tickets',
+            '/api/v1/despacho-minorista-2/tickets',
+        ] as $endpoint) {
+            foreach ([
+                [
+                    'payments' => [],
+                    'message' => 'Una venta sin cliente debe registrar el pago completo.',
+                ],
+                [
+                    'payments' => [$this->paymentPayload(10)],
+                    'message' => 'Una venta sin cliente debe quedar pagada completamente antes de cerrar.',
+                ],
+            ] as $case) {
+                $payload = $this->payload();
+                $payload['client_id'] = null;
+                unset($payload['delivery']);
+                $payload['weighings'][0]['weight_source'] = 'MANUAL';
+                $payload['payments'] = $case['payments'];
+
+                $this->postJson($endpoint, $payload)
+                    ->assertUnprocessable()
+                    ->assertJsonValidationErrors('payments')
+                    ->assertJsonPath('errors.payments.0', $case['message']);
+            }
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('comprobantes', 0);
+        $this->assertDatabaseCount('pagos', 0);
+        $this->assertDatabaseCount('pago_aplicaciones', 0);
+    }
+
     public function test_anonymous_retail_sale_requires_full_payment(): void
     {
         $this->createGeneralPrice(7.25);

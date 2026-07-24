@@ -8,6 +8,12 @@ import {
   normalizeRetailPaymentDefaultId,
   resolveRetailPaymentDefaults
 } from "./retail-payment-defaults.js";
+import {
+  paymentsForRetailPaymentMode,
+  resolveRetailPaymentMode,
+  RETAIL_PAYMENT_MODE_CREDIT,
+  RETAIL_PAYMENT_MODE_NOW
+} from "./retail-payment-mode.js";
 import { calculateRetailWeightAdjustment } from "./retail-weight-calculation.js";
 import {
   buildRetailScaleStorageKey,
@@ -155,13 +161,16 @@ const elements = {
   paymentModal: document.querySelector("#retailPaymentModal"),
   paymentForm: document.querySelector("#retailPaymentForm"),
   paymentSummary: document.querySelector("#retailPaymentSummary"),
+  paymentModeOptions: document.querySelector("#retailPaymentModeOptions"),
+  paymentNowPanel: document.querySelector("#retailPaymentNowPanel"),
+  paymentCreditPanel: document.querySelector("#retailPaymentCreditPanel"),
+  paymentCreditSummary: document.querySelector("#retailPaymentCreditSummary"),
   paymentRows: document.querySelector("#retailPaymentRows"),
   addPayment: document.querySelector("#retailAddPayment"),
   paymentSaleTotal: document.querySelector("#retailPaymentSaleTotal"),
   paymentReceivedTotal: document.querySelector("#retailPaymentReceivedTotal"),
   paymentPendingTotal: document.querySelector("#retailPaymentPendingTotal"),
   paymentMessage: document.querySelector("#retailPaymentMessage"),
-  skipPayment: document.querySelector("#retailSkipPayment"),
   confirmPayment: document.querySelector("#retailConfirmPayment"),
   deliveryModal: document.querySelector("#retailDeliveryModal"),
   deliveryForm: document.querySelector("#retailDeliveryForm"),
@@ -251,6 +260,7 @@ const state = {
   pendingPayments: [],
   paymentRows: [],
   paymentContext: null,
+  paymentMode: RETAIL_PAYMENT_MODE_NOW,
   pendingPrintTicket: null
 };
 const modalFocusOrigins = new Map();
@@ -1986,6 +1996,53 @@ function renderPaymentTotals() {
   elements.paymentPendingTotal.classList.toggle("is-settled", moneyToCents(pending) === 0);
 }
 
+function renderPaymentMode() {
+  const client = clientFor(activeList());
+  const hasClient = Boolean(client);
+  state.paymentMode = resolveRetailPaymentMode(state.paymentMode, hasClient);
+  const isCredit = state.paymentMode === RETAIL_PAYMENT_MODE_CREDIT;
+  const methods = state.catalog.financial.methods || [];
+  const accounts = state.catalog.financial.own_accounts || [];
+
+  elements.paymentModeOptions.hidden = !hasClient;
+  elements.paymentModeOptions.querySelectorAll("[data-retail-payment-mode]").forEach((button) => {
+    const selected = button.dataset.retailPaymentMode === state.paymentMode;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  });
+  elements.paymentNowPanel.hidden = isCredit;
+  elements.paymentCreditPanel.hidden = !isCredit;
+  elements.paymentNowPanel.querySelectorAll("input, select, button").forEach((control) => {
+    control.disabled = isCredit;
+  });
+  if (!isCredit) {
+    elements.addPayment.disabled = methods.length === 0 || accounts.length === 0;
+  }
+  elements.paymentCreditSummary.textContent = isCredit && client
+    ? `El total de ${formatMoney(listTotals(activeList()).amount)} quedará pendiente a nombre de ${client.name}.`
+    : "";
+  elements.confirmPayment.textContent = isCredit
+    ? "Registrar venta a crédito"
+    : "Registrar pago y continuar";
+
+  if (isCredit) {
+    elements.paymentMessage.textContent = "No se registrará ningún cobro ahora. Podrás cobrar este ticket posteriormente desde Finanzas.";
+    elements.paymentMessage.classList.remove("is-error");
+    return;
+  }
+
+  elements.paymentMessage.textContent = methods.length && accounts.length
+    ? "Puedes dividir el cobro entre efectivo, transferencia u otros métodos."
+    : "Primero registra una entidad propia y al menos una cuenta o caja desde Finanzas.";
+  elements.paymentMessage.classList.toggle("is-error", methods.length === 0 || accounts.length === 0);
+}
+
+function selectPaymentMode(requestedMode) {
+  syncPaymentRowsFromForm();
+  state.paymentMode = resolveRetailPaymentMode(requestedMode, Boolean(clientFor(activeList())));
+  renderPaymentMode();
+}
+
 function openPaymentModal() {
   const list = activeList();
   const totals = listTotals(list);
@@ -2001,19 +2058,16 @@ function openPaymentModal() {
 
   if (state.paymentContext !== paymentContext || !state.paymentRows.length) {
     state.paymentRows = [newPaymentRow(totals.amount)];
+    state.paymentMode = RETAIL_PAYMENT_MODE_NOW;
   }
   state.paymentContext = paymentContext;
   elements.paymentSummary.textContent = client
-    ? `${client.name} puede pagar ahora total o parcialmente; el resto quedará en su cuenta por cobrar.`
+    ? `Elige si ${client.name} pagará ahora o si el ticket completo quedará como venta a crédito.`
     : "La venta no tiene un cliente identificado y debe quedar pagada completamente.";
-  elements.skipPayment.hidden = !client;
   elements.addPayment.disabled = methods.length === 0 || accounts.length === 0;
   elements.confirmPayment.disabled = false;
-  elements.paymentMessage.textContent = methods.length && accounts.length
-    ? "Puedes dividir el cobro entre efectivo, transferencia u otros métodos."
-    : "Primero registra una entidad propia y al menos una cuenta o caja desde Finanzas.";
-  elements.paymentMessage.classList.toggle("is-error", methods.length === 0 || accounts.length === 0);
   renderPaymentRows();
+  renderPaymentMode();
   openModal(elements.paymentModal);
 }
 
@@ -2041,6 +2095,20 @@ function submitPayment(event) {
   const saleTotalCents = moneyToCents(saleTotal);
   const receivedCents = moneyToCents(received);
   const client = clientFor(list);
+  const paymentMode = resolveRetailPaymentMode(state.paymentMode, Boolean(client));
+  state.paymentMode = paymentMode;
+
+  if (paymentMode === RETAIL_PAYMENT_MODE_CREDIT) {
+    const creditPayments = paymentsForRetailPaymentMode(
+      state.paymentMode,
+      Boolean(client),
+      state.paymentRows
+    );
+    state.paymentRows = [];
+    closeModal(elements.paymentModal);
+    continueDispatchAfterPayment(creditPayments);
+    return;
+  }
 
   if (methods.length === 0 || accounts.length === 0) {
     elements.paymentMessage.textContent = methods.length === 0
@@ -2083,13 +2151,6 @@ function submitPayment(event) {
   }));
   closeModal(elements.paymentModal);
   continueDispatchAfterPayment(payments);
-}
-
-function skipPayment() {
-  if (!clientFor(activeList())) return;
-  state.paymentRows = [];
-  closeModal(elements.paymentModal);
-  continueDispatchAfterPayment([]);
 }
 
 function addPaymentRow() {
@@ -2808,7 +2869,10 @@ elements.priceForm.addEventListener("submit", applyPrices);
 elements.clearPrices.addEventListener("click", clearPriceOverrides);
 elements.paymentForm.addEventListener("submit", submitPayment);
 elements.addPayment.addEventListener("click", addPaymentRow);
-elements.skipPayment.addEventListener("click", skipPayment);
+elements.paymentModeOptions.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-retail-payment-mode]");
+  if (option) selectPaymentMode(option.dataset.retailPaymentMode);
+});
 elements.paymentRows.addEventListener("input", renderPaymentTotals);
 elements.paymentRows.addEventListener("change", renderPaymentTotals);
 elements.deliveryForm.addEventListener("submit", submitDelivery);
