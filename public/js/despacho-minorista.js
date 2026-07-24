@@ -232,7 +232,6 @@ const state = {
   liveIsStable: false,
   liveIsFresh: false,
   liveRaw: "",
-  lastCapturedReadingId: null,
   selectedItem: null,
   priceEditingListIndex: null,
   storageKey: null,
@@ -797,7 +796,6 @@ function liveReadingAvailability() {
     && connectionMatches
     && Boolean(readingAt)
     && Boolean(readingId)
-    && readingId !== state.lastCapturedReadingId
     && fixedAdjustmentAvailable
     && !state.loading;
 
@@ -811,8 +809,6 @@ function liveReadingAvailability() {
     isExpired,
     connectionMatches,
     fixedAdjustmentAvailable,
-    alreadyCaptured: Boolean(readingId)
-      && readingId === state.lastCapturedReadingId,
     scaleState
   };
 }
@@ -854,19 +850,17 @@ function renderWeightPreview() {
     ? (source === "manual" ? "Peso manual listo" : "Peso estable")
     : !availability.fixedAdjustmentAvailable
       ? "Ajuste no disponible"
-      : availability.alreadyCaptured
-        ? "Peso ya capturado"
-        : availability.isExpired
-          ? "Lectura vencida"
-          : state.liveReadingStatus === "unstable"
-            ? "Peso inestable"
-            : state.liveReadingStatus === "stale"
-              ? "Lectura vencida"
-              : availability.scaleState.status === "connected"
-                ? "Esperando lectura"
-                : "Sin conexión";
+      : availability.isExpired
+        ? "Lectura vencida"
+        : state.liveReadingStatus === "unstable"
+          ? "Peso inestable"
+          : state.liveReadingStatus === "stale"
+            ? "Lectura vencida"
+            : availability.scaleState.status === "connected"
+              ? "Esperando lectura"
+              : "Sin conexión";
   elements.captureState.classList.toggle("is-captured", availability.ready);
-  elements.captureWeight.classList.toggle("is-captured", availability.alreadyCaptured);
+  elements.captureWeight.classList.remove("is-captured");
   elements.captureWeight.disabled = state.loading || state.lists.some((list) => list.saving);
   elements.captureWeight.title = availability.ready
     ? "Capturar el peso actual"
@@ -1094,17 +1088,6 @@ function captureWeight() {
       help: "Recarga la pantalla. Si continúa igual, revisa los ajustes de Minorista 2 antes de volver a capturar."
     });
   }
-  if (availability.alreadyCaptured) {
-    return showCaptureIssue({
-      title: "Esta lectura ya fue capturada",
-      message: "No se agregó otra pesada para evitar duplicar el mismo peso.",
-      details: [
-        { label: "Peso usado", value: formatWeight(availability.weight) },
-        { label: "Motivo", value: "La lectura estable actual ya pertenece a una pesada de esta estación." }
-      ],
-      help: "Retira o mueve el producto y espera una lectura estable nueva antes de volver a capturar."
-    });
-  }
   if (!availability.ready) {
     renderWeightPreview();
     return showCaptureIssue(unavailableReadingPresentation(availability));
@@ -1225,7 +1208,6 @@ function addWeighingToList(listIndex, capturedReading) {
     scaleReading: capturedReading.scaleReading
   });
 
-  state.lastCapturedReadingId = capturedReading.readingId;
   state.activeList = targetIndex;
   state.selectedItem = { listIndex: targetIndex, id: target.items.at(-1).id };
   if (capturedReading.source === "manual") {
@@ -1299,10 +1281,7 @@ function confirmRemoveSelectedWeighing() {
     return;
   }
 
-  const [removedItem] = list.items.splice(index, 1);
-  if (removedItem?.readingId && removedItem.readingId === state.lastCapturedReadingId) {
-    state.lastCapturedReadingId = null;
-  }
+  list.items.splice(index, 1);
   state.selectedItem = null;
   closeModal(elements.removeWeighingModal);
   persistLists();

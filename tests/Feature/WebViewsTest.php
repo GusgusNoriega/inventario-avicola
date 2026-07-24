@@ -349,6 +349,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('document.documentElement.style.setProperty', $javascript);
         $this->assertStringContainsString('localStorage.setItem(TYPOGRAPHY_STORAGE_KEY', $javascript);
         $this->assertStringContainsString('addWeighingToList(state.activeList, capturedReading)', $javascript);
+        $this->assertStringNotContainsString('lastCapturedReadingId', $javascript);
+        $this->assertStringNotContainsString('alreadyCaptured', $javascript);
+        $this->assertStringNotContainsString('Esta lectura ya fue capturada', $javascript);
         $this->assertStringContainsString('selectList(addButton.dataset.retailAddList)', $javascript);
         $this->assertStringContainsString('values.trayCount < 0', $javascript);
         $this->assertStringContainsString('elements.birdsPerTray.value = birdsOption.dataset.retailBirdsPerTrayOption', $javascript);

@@ -170,6 +170,40 @@ test("Minorista 1 y Minorista 2 publican una trama US tras dos muestras coincide
   }
 });
 
+test("una lectura estable puede capturarse varias veces aunque su peso e identidad no cambien", () => {
+  const captureStart = retailViewSource.indexOf("function captureWeight()");
+  const captureEnd = retailViewSource.indexOf("function addWeighingToList", captureStart);
+  const captureSource = retailViewSource.slice(captureStart, captureEnd);
+
+  assert.notEqual(captureStart, -1);
+  assert.notEqual(captureEnd, -1);
+  assert.doesNotMatch(retailViewSource, /lastCapturedReadingId|alreadyCaptured/);
+  assert.doesNotMatch(captureSource, /Esta lectura ya fue capturada|duplicar el mismo peso/);
+  assert.match(captureSource, /if \(!availability\.ready\)/);
+  assert.match(captureSource, /addWeighingToList\(state\.activeList, capturedReading\)/);
+
+  for (const station of ["1", "2"]) {
+    const controller = new RetailScaleController({
+      navigator: {},
+      storage: memoryStorage(),
+      storageKey: buildRetailScaleStorageKey(station, 10),
+      secureContext: true
+    });
+    const connection = attachSerialConnection(controller);
+
+    controller._handlePayload("ST,NET 0.950 kg", { source: "serial", connection });
+    const firstCapture = controller.getState();
+    controller._handlePayload("ST,NET 0.950 kg", { source: "serial", connection });
+    const secondCapture = controller.getState();
+
+    assert.equal(firstCapture.readingId, secondCapture.readingId);
+    assert.equal(firstCapture.currentWeightKg, 0.95);
+    assert.equal(secondCapture.currentWeightKg, 0.95);
+    assert.equal(firstCapture.isCaptureReady, true);
+    assert.equal(secondCapture.isCaptureReady, true);
+  }
+});
+
 test("movimiento real exige reconfirmar dos tramas US antes de crear otra pesada", () => {
   const { controller } = controllerWithReadings();
   const connection = attachSerialConnection(controller);

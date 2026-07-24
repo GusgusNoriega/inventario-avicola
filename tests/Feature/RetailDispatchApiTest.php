@@ -543,6 +543,57 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
+    public function test_both_retail_stations_register_repeated_equal_scale_readings_as_separate_weighings(): void
+    {
+        foreach ([
+            1 => [
+                'base_url' => '/api/v1/despacho-minorista',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            2 => [
+                'base_url' => '/api/v1/despacho-minorista-2',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station => $stationData) {
+            $capturedAt = now('America/Lima')->subMinute()->startOfSecond()->toIso8601String();
+            $payload = $this->payload();
+            $payload['weighings'][0]['weight_source'] = $stationData['weight_source'];
+            $payload['weighings'][0]['read_weight_kg'] = 0.950;
+            $payload['weighings'][0]['tray_count'] = 0;
+            $payload['weighings'][0]['weighed_at'] = $capturedAt;
+            $payload['weighings'][0]['scale_reading'] = [
+                'raw_frame' => 'ST,NET 0.950 kg',
+                'connection_mode' => 'SERIAL',
+                'device_name' => "Balanza minorista {$station}",
+                'captured_at' => $capturedAt,
+            ];
+            $secondWeighing = $payload['weighings'][0];
+            $secondWeighing['local_id'] = 2;
+            $payload['weighings'][] = $secondWeighing;
+
+            $response = $this->postJson("{$stationData['base_url']}/tickets", $payload)
+                ->assertCreated()
+                ->assertJsonCount(2, 'data.weighings')
+                ->assertJsonPath('data.weighings.0.read_weight_kg', 0.95)
+                ->assertJsonPath('data.weighings.1.read_weight_kg', 0.95);
+
+            $ticketId = (int) $response->json('data.id');
+            $this->assertSame(
+                2,
+                DB::table('pesadas')->where('ticket_id', $ticketId)->count()
+            );
+            $this->assertSame(
+                2,
+                DB::table('pesadas')
+                    ->where('ticket_id', $ticketId)
+                    ->where('origen_peso', $stationData['weight_source'])
+                    ->where('peso_leido_kg', 0.950)
+                    ->distinct()
+                    ->count('lectura_balanza_id')
+            );
+        }
+    }
+
     public function test_missing_adjustment_uses_the_company_default(): void
     {
         $payload = $this->payload();
