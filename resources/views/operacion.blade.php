@@ -88,7 +88,7 @@
             </button>
           </div>
           <p class="scale-display" id="display-scale-1">---</p>
-          <button id="capture-scale-1" class="btn btn-secondary" type="button" disabled>Usar balanza 1</button>
+          <button id="capture-scale-1" class="btn btn-secondary" type="button" disabled>Seleccionar balanza 1</button>
         </article>
 
         <article class="scale-card card" data-scale-card="2">
@@ -99,7 +99,7 @@
             </button>
           </div>
           <p class="scale-display" id="display-scale-2">---</p>
-          <button id="capture-scale-2" class="btn btn-secondary" type="button" disabled>Usar balanza 2</button>
+          <button id="capture-scale-2" class="btn btn-secondary" type="button" disabled>Seleccionar balanza 2</button>
         </article>
       </section>
 
@@ -185,7 +185,7 @@
               <small id="selectedWeightBreakdown" hidden></small>
             </div>
 
-            <button id="addWeighingBtn" class="btn btn-success weighing-submit-button" type="submit" disabled>Agregar registro</button>
+            <button id="addWeighingBtn" class="btn btn-success weighing-submit-button" type="submit" disabled>Capturar peso</button>
           </div>
 
           <div class="form-actions">

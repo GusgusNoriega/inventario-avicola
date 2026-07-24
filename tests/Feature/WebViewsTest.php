@@ -309,8 +309,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailOpenManualWeight"', false)
             ->assertSee('Colocar peso manual')
             ->assertSee('aria-controls="retailManualWeightModal"', false)
-            ->assertSee('la pesada se agregará de inmediato a la lista activa')
-            ->assertSee('Agregar pesada manual')
+            ->assertSee('Al confirmar quedará capturado; luego presiona Registrar')
+            ->assertSee('Capturar peso manual')
             ->assertSee('class="rd-lists-stage"', false)
             ->assertSee('aria-label="Seleccionar lista de destino"', false)
             ->assertSee('Selecciona una columna y captura; desliza para ver las listas 5 a 8.')
@@ -417,8 +417,8 @@ class WebViewsTest extends TestCase
             'elements.openManualWeight.addEventListener("click", openManualWeightModal)',
             $javascript
         );
-        $this->assertStringContainsString('elements.manualWeightTrigger.disabled = captureLocked', $javascript);
-        $this->assertStringContainsString('elements.openManualWeight.disabled = captureLocked', $javascript);
+        $this->assertStringContainsString('elements.manualWeightTrigger.disabled = captureLocked || Boolean(pendingCapture)', $javascript);
+        $this->assertStringContainsString('elements.openManualWeight.disabled = captureLocked || Boolean(pendingCapture)', $javascript);
         $this->assertStringContainsString('priceEditingListIndex', $javascript);
         $this->assertStringContainsString('general_prices', $javascript);
         $this->assertStringContainsString('data-retail-clear-client', $javascript);
@@ -428,7 +428,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data-typography-step', $javascript);
         $this->assertStringContainsString('document.documentElement.style.setProperty', $javascript);
         $this->assertStringContainsString('localStorage.setItem(TYPOGRAPHY_STORAGE_KEY', $javascript);
-        $this->assertStringContainsString('addWeighingToList(state.activeList, capturedReading)', $javascript);
+        $this->assertStringContainsString('addWeighingToList(pendingCapture.listIndex, pendingCapture.reading)', $javascript);
+        $this->assertStringContainsString('state.pendingCapture = {', $javascript);
+        $this->assertStringContainsString('` Registrar en lista ${state.activeList + 1}`', $javascript);
         $this->assertStringNotContainsString('lastCapturedReadingId', $javascript);
         $this->assertStringNotContainsString('alreadyCaptured', $javascript);
         $this->assertStringNotContainsString('Esta lectura ya fue capturada', $javascript);
@@ -751,6 +753,10 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Entrada de Camiones de Pollos')
             ->assertSee('<select id="truckPlate"', false)
+            ->assertSee('Seleccionar balanza 1')
+            ->assertSee('Seleccionar balanza 2')
+            ->assertSee('id="addWeighingBtn"', false)
+            ->assertSee('Capturar peso')
             ->assertDontSee('Precio general pollo')
             ->assertDontSee('generalPriceVivoKg', false)
             ->assertSee('type="module"', false)
@@ -761,6 +767,10 @@ class WebViewsTest extends TestCase
         $this->assertIsString($javascript);
         $this->assertStringContainsString('from "./record-order.js"', $javascript);
         $this->assertStringContainsString('newestRecordsFirst(truck.cages)', $javascript);
+        $this->assertStringContainsString('function captureWeightForRegistration(event)', $javascript);
+        $this->assertStringContainsString('function handleWeighingAction(event)', $javascript);
+        $this->assertStringContainsString('? "Registrar pesada"', $javascript);
+        $this->assertStringContainsString(': "Capturar peso"', $javascript);
     }
 
     public function test_operation_javascript_does_not_render_or_send_prices(): void

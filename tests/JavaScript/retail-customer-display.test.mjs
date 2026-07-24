@@ -226,7 +226,9 @@ test("el productor publica la lista activa, sus totales y el peso neto calculado
 
   assert.match(builder, /const list = activeList\(\)/);
   assert.match(builder, /const totals = listTotals\(list\)/);
-  assert.match(builder, /const values = previewValues\(\)/);
+  assert.match(builder, /const pendingCapture = activePendingCapture\(\)/);
+  assert.match(builder, /const values = previewValues\(pendingCapture\?\.reading\?\.readWeight\)/);
+  assert.match(builder, /weightStatus: pendingCapture \? "captured"/);
   assert.match(builder, /const customer = clientFor\(list\)/);
   assert.match(builder, /pricingComplete = missingPriceTypes\(list\)\.length === 0/);
   assert.match(builder, /customerName: customer\?\.name \|\| "Venta sin cliente"/);

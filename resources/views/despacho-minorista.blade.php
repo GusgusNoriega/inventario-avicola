@@ -252,14 +252,14 @@
         </div>
         <button type="button" data-retail-close-modal="retailManualWeightModal" aria-label="Cerrar">×</button>
       </header>
-      <p class="rd-modal-copy">Este valor se tomará como el peso directo de la balanza. Al confirmar, la pesada se agregará de inmediato a la lista activa con las bandejas, aves y producto seleccionados. El pollo pelado usa la merma configurada; el beneficiado no aplica merma.</p>
+      <p class="rd-modal-copy">Este valor se tomará como el peso directo de la balanza. Al confirmar quedará capturado; luego presiona Registrar para agregar la pesada a la lista activa con las bandejas, aves y producto seleccionados. El pollo pelado usa la merma configurada; el beneficiado no aplica merma.</p>
       <label class="rd-manual-weight-field">
         <span>Peso leído (kg)</span>
         <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="none" readonly required autocomplete="off" placeholder="Ej. 12.500" data-retail-keyboard="decimal" data-retail-keyboard-label="Peso leído en kilogramos">
       </label>
       <div class="rd-modal-actions">
         <button type="button" class="rd-secondary-button" data-retail-close-modal="retailManualWeightModal">Cancelar</button>
-        <button class="rd-primary-button" type="submit">Agregar pesada manual</button>
+        <button class="rd-primary-button" type="submit">Capturar peso manual</button>
       </div>
     </form>
   </div>

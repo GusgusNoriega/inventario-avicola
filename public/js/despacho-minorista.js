@@ -332,6 +332,7 @@ const state = {
   liveIsStable: false,
   liveIsFresh: false,
   liveRaw: "",
+  pendingCapture: null,
   selectedItem: null,
   priceEditingListIndex: null,
   storageKey: null,
@@ -717,6 +718,15 @@ function activeList() {
   return state.lists[state.activeList];
 }
 
+function activePendingCapture() {
+  const pending = state.pendingCapture;
+  return pending
+    && pending.listIndex === state.activeList
+    && pending.reading
+    ? pending
+    : null;
+}
+
 function selectedTray() {
   return state.catalog.tray_types.find((tray) => tray.code === elements.trayType.value) || null;
 }
@@ -875,7 +885,8 @@ function buildCurrentRetailCustomerDisplayState() {
   const list = activeList();
   const totals = listTotals(list);
   const availability = liveReadingAvailability();
-  const values = previewValues();
+  const pendingCapture = activePendingCapture();
+  const values = previewValues(pendingCapture?.reading?.readWeight);
   const customer = clientFor(list);
   const fixedPresentation = station2AdjustmentForList(state.activeList);
   const selectedPresentation = isProcessedChickenType()
@@ -891,10 +902,12 @@ function buildCurrentRetailCustomerDisplayState() {
     readWeightKg: values.readWeight,
     netWeightKg: values.netWeight,
     calculationAvailable,
-    isPhysical: availability.isPhysical,
-    isFresh: availability.scaleState.isFresh,
-    connectionMatches: availability.connectionMatches,
-    isExpired: availability.isExpired
+    isPhysical: pendingCapture
+      ? pendingCapture.reading.source === "ble" || pendingCapture.reading.source === "serial"
+      : availability.isPhysical,
+    isFresh: pendingCapture ? true : availability.scaleState.isFresh,
+    connectionMatches: pendingCapture ? true : availability.connectionMatches,
+    isExpired: pendingCapture ? false : availability.isExpired
   });
 
   return buildRetailCustomerDisplayPayload({
@@ -912,10 +925,10 @@ function buildCurrentRetailCustomerDisplayState() {
     pricingComplete,
     readWeightKg: displayWeights.readWeightKg,
     displayWeightKg: displayWeights.displayWeightKg,
-    weightSource: state.liveSource,
-    weightStatus: availability.isExpired ? "stale" : state.liveReadingStatus,
-    isStable: availability.scaleState.isStable,
-    isFresh: availability.scaleState.isFresh
+    weightSource: pendingCapture?.reading?.source || state.liveSource,
+    weightStatus: pendingCapture ? "captured" : (availability.isExpired ? "stale" : state.liveReadingStatus),
+    isStable: pendingCapture ? true : availability.scaleState.isStable,
+    isFresh: pendingCapture ? true : availability.scaleState.isFresh
   });
 }
 
@@ -1128,10 +1141,11 @@ function liveReadingAvailability() {
 
 function renderWeightPreview() {
   const availability = liveReadingAvailability();
-  const values = previewValues();
+  const pendingCapture = activePendingCapture();
+  const values = previewValues(pendingCapture?.reading?.readWeight);
   const calculationsAvailable = availability.fixedAdjustmentAvailable;
   const price = effectivePrice(activeList(), state.chickenType);
-  const source = state.liveSource;
+  const source = pendingCapture?.reading?.source || state.liveSource;
   const sourceLabels = {
     manual: "Ingreso manual",
     ble: "Balanza minorista · BLE",
@@ -1163,9 +1177,13 @@ function renderWeightPreview() {
     "aria-label",
     "Peso directo de la balanza. Toca para ingresar peso manual"
   );
-  elements.weightSourceLabel.textContent = sourceLabels[source]
+  elements.weightSourceLabel.textContent = pendingCapture
+    ? `${sourceLabels[source] || "Peso"} · capturado`
+    : sourceLabels[source]
     || (availability.scaleState.status === "connected" ? "Esperando balanza" : "Sin lectura");
-  elements.captureState.textContent = availability.ready
+  elements.captureState.textContent = pendingCapture
+    ? "Peso capturado"
+    : availability.ready
     ? (source === "manual" ? "Peso manual listo" : "Peso estable")
     : !availability.fixedAdjustmentAvailable
       ? "Ajuste no disponible"
@@ -1178,17 +1196,26 @@ function renderWeightPreview() {
             : availability.scaleState.status === "connected"
               ? "Esperando lectura"
               : "Sin conexión";
-  elements.captureState.classList.toggle("is-captured", availability.ready);
-  elements.captureWeight.classList.remove("is-captured");
+  elements.captureState.classList.toggle("is-captured", Boolean(pendingCapture));
+  elements.captureWeight.classList.toggle("is-captured", Boolean(pendingCapture));
   const captureLocked = state.loading || state.lists.some((list) => list.saving);
   elements.captureWeight.disabled = captureLocked;
-  elements.manualWeightTrigger.disabled = captureLocked;
-  elements.openManualWeight.disabled = captureLocked;
-  elements.captureWeight.title = availability.ready
-    ? "Capturar el peso actual"
-    : "Presiona para ver por qué la lectura todavía no puede capturarse";
-  elements.captureWeight.lastChild.textContent = ` Capturar en lista ${state.activeList + 1}`;
-  elements.captureWeight.setAttribute("aria-label", `Capturar el peso actual en la lista ${state.activeList + 1}`);
+  elements.manualWeightTrigger.disabled = captureLocked || Boolean(pendingCapture);
+  elements.openManualWeight.disabled = captureLocked || Boolean(pendingCapture);
+  elements.captureWeight.title = pendingCapture
+    ? `Registrar el peso capturado en la lista ${state.activeList + 1}`
+    : availability.ready
+      ? "Capturar el peso actual"
+      : "Presiona para ver por qué la lectura todavía no puede capturarse";
+  elements.captureWeight.lastChild.textContent = pendingCapture
+    ? ` Registrar en lista ${state.activeList + 1}`
+    : ` Capturar en lista ${state.activeList + 1}`;
+  elements.captureWeight.setAttribute(
+    "aria-label",
+    pendingCapture
+      ? `Registrar el peso capturado en la lista ${state.activeList + 1}`
+      : `Capturar el peso actual en la lista ${state.activeList + 1}`
+  );
   const liveAmount = calculationsAvailable && price && values.netWeight > 0
     ? roundMoney(values.netWeight * price.value)
     : null;
@@ -1395,6 +1422,9 @@ function selectList(index, { selectDressed = RETAIL_STATION === "2" } = {}) {
   if (selectDressed) {
     ensureDressedChickenTypeSelection();
   }
+  if (nextIndex !== state.activeList) {
+    state.pendingCapture = null;
+  }
   state.activeList = nextIndex;
   syncStation2AdjustmentWithActiveList();
   state.selectedItem = null;
@@ -1406,6 +1436,12 @@ function selectList(index, { selectDressed = RETAIL_STATION === "2" } = {}) {
 }
 
 function captureWeight() {
+  const pendingCapture = activePendingCapture();
+  if (pendingCapture) {
+    addWeighingToList(pendingCapture.listIndex, pendingCapture.reading);
+    return;
+  }
+
   const availability = liveReadingAvailability();
   if (!availability.fixedAdjustmentAvailable) {
     const expectedCode = STATION_2_LIST_ADJUSTMENT_CODES[state.activeList] || "NO DEFINIDA";
@@ -1449,7 +1485,14 @@ function captureWeight() {
       : null
   };
 
-  addWeighingToList(state.activeList, capturedReading);
+  state.pendingCapture = {
+    listIndex: state.activeList,
+    reading: capturedReading
+  };
+  renderAll();
+  setMessage(
+    `${formatWeight(capturedReading.readWeight)} capturado para la lista ${state.activeList + 1}. Presiona Registrar para agregar la pesada.`
+  );
 }
 
 function addWeighingToList(listIndex, capturedReading) {
@@ -1550,6 +1593,7 @@ function addWeighingToList(listIndex, capturedReading) {
 
   state.activeList = targetIndex;
   state.selectedItem = { listIndex: targetIndex, id: target.items.at(-1).id };
+  state.pendingCapture = null;
   if (capturedReading.source === "manual") {
     state.scale.clearReading();
     elements.rawWeightInput.value = "";
@@ -2643,6 +2687,7 @@ function clearRegisteredList(listIndex, draftId, ticket) {
   if (!current || current.draftId !== draftId) return;
 
   state.lists[listIndex] = emptyList();
+  if (state.pendingCapture?.listIndex === listIndex) state.pendingCapture = null;
   if (state.selectedItem?.listIndex === listIndex) state.selectedItem = null;
   persistLists();
   renderAll();
@@ -3021,7 +3066,7 @@ function applyMainManualWeight(event) {
           value: String(elements.manualWeightEntry.value || "").trim() || "Campo vacío"
         }
       ],
-      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Agregar pesada manual."
+      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Capturar peso manual."
     });
   }
 }
@@ -3505,6 +3550,7 @@ function handleRetailVisibilityChange() {
 
 function teardownRetailStation(event) {
   persistLists();
+  state.pendingCapture = null;
   if (teardownStarted) return;
   teardownStarted = true;
   scaleRestoreReady = false;

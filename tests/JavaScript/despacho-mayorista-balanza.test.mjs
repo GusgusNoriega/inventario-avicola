@@ -1127,22 +1127,34 @@ test("la pantalla cliente publica cliente y aves acumuladas del ticket seleccion
   assert.equal(otherTicketPayload.ticket.birds, 28);
 });
 
-test("el alta mayorista captura y consume la lectura vigente al registrar", () => {
+test("el alta mayorista captura una instantánea y la registra sin volver a consultar la balanza", () => {
+  const captureStart = source.indexOf("function captureWeightForRegistration(event)");
+  const captureEnd = source.indexOf("function handleWeighingAction", captureStart);
+  const captureFlow = source.slice(captureStart, captureEnd);
   const addStart = source.indexOf("function addCage(event)");
   const addEnd = source.indexOf("function copyJson", addStart);
   const addFlow = source.slice(addStart, addEnd);
 
+  assert.notEqual(captureStart, -1);
+  assert.notEqual(captureEnd, -1);
   assert.match(
-    addFlow,
+    captureFlow,
     /createScaleReadingSnapshot\(scaleId,\s*scaleEligibility\)/
   );
-  assert.doesNotMatch(addFlow, /getCapturedScaleReading/);
+  assert.match(captureFlow, /pendingWeighingCapture\s*=\s*\{/);
+  assert.match(captureFlow, /weightKg:\s*roundWeight\(weightKg\)/);
+  assert.match(addFlow, /const capturedWeight = getPendingWeighingCapture\(source\)/);
+  assert.match(addFlow, /const rawWeight = capturedWeight\?\.weightKg/);
+  assert.doesNotMatch(addFlow, /getScaleReadingEligibility\(/);
+  assert.doesNotMatch(addFlow, /createScaleReadingSnapshot\(/);
   assert.match(
     addFlow,
     /lastRegisteredScaleReadingIds\[scaleReading\.scaleId\]\s*=\s*scaleReading\.readingId/
   );
-  assert.match(addFlow, /scaleEligibility\?\.reason/);
+  assert.match(addFlow, /clearPendingWeighingCapture\(\)/);
   assert.match(addFlow, /registro-rechazado-por-balanza/);
+  assert.match(source, /function handleWeighingAction\(event\)[\s\S]*pendingWeighingCapture[\s\S]*addCage\(event\)[\s\S]*captureWeightForRegistration\(event\)/);
+  assert.match(source, /elements\.addWeighingBtn\.textContent = pendingWeighingCapture[\s\S]*"Registrar pesada"[\s\S]*"Capturar peso"/);
 });
 
 test("el simulador manual no puede sobrescribir una balanza física conectada", () => {

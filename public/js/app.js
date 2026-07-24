@@ -2663,6 +2663,7 @@ function activateBranchStorage(catalog) {
     releaseScaleConnectionsForNavigation();
     activeStorageKey = nextStorageKey;
     state = nextState;
+    pendingWeighingCapture = null;
     scaleReadingSequences = { 1: 0, 2: 0 };
     lastRegisteredScaleReadingIds = { 1: null, 2: null };
     reconcileTruckClientAssignments(false);
@@ -2678,6 +2679,7 @@ function activateBranchStorage(catalog) {
 let state = loadState();
 reconcileTruckClientAssignments(true);
 ensureDefaultOriginSelection(true);
+let pendingWeighingCapture = null;
 let customFontSizes = loadCustomFontSizes();
 let customerDisplayChannel = null;
 let lastCustomerDisplayStorageWrite = 0;
@@ -3023,8 +3025,22 @@ function saveState() {
 
 function getCurrentGrossWeight() {
   const source = elements.weightSource.value;
-  const weight = getWeightFromSource(source);
+  const pendingCapture = getPendingWeighingCapture(source);
+  const weight = pendingCapture?.weightKg ?? getWeightFromSource(source);
   return Number.isFinite(weight) && weight >= 0 ? roundWeight(weight) : null;
+}
+
+function getPendingWeighingCapture(source = elements.weightSource?.value) {
+  const normalizedSource = normalizeWeightSource(
+    source === "manual" ? "manual" : source
+  );
+  return pendingWeighingCapture?.source === normalizedSource
+    ? pendingWeighingCapture
+    : null;
+}
+
+function clearPendingWeighingCapture() {
+  pendingWeighingCapture = null;
 }
 
 function buildCustomerDisplayState() {
@@ -6181,8 +6197,12 @@ function renderScaleDisplays() {
     }
     if (elements.scaleCaptureButtons[scaleId]) {
       const eligibility = getScaleReadingEligibility(scaleId);
+      const captured = getPendingWeighingCapture(String(scaleId));
       elements.scaleCaptureButtons[scaleId].disabled = !eligibility.ok;
       elements.scaleCaptureButtons[scaleId].title = eligibility.ok ? "" : eligibility.reason;
+      elements.scaleCaptureButtons[scaleId].textContent = captured
+        ? `Balanza ${scaleId} capturada`
+        : `Seleccionar balanza ${scaleId}`;
     }
   });
 }
@@ -6290,9 +6310,10 @@ function renderTruckSelect() {
 function renderWeightPreview() {
   const source = elements.weightSource.value;
   const isManual = source === "manual";
+  const pendingCapture = getPendingWeighingCapture(source);
   elements.manualWeightField.hidden = !isManual;
 
-  const grossWeight = getWeightFromSource(source);
+  const grossWeight = pendingCapture?.weightKg ?? getWeightFromSource(source);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
 
@@ -7357,8 +7378,14 @@ function renderJourneyAvailability() {
   const configured = isJourneyConfigured();
   if (elements.addWeighingBtn) {
     elements.addWeighingBtn.disabled = !configured;
+    elements.addWeighingBtn.textContent = pendingWeighingCapture
+      ? "Registrar pesada"
+      : "Capturar peso";
+    elements.addWeighingBtn.classList.toggle("is-captured", Boolean(pendingWeighingCapture));
     elements.addWeighingBtn.title = configured
-      ? ""
+      ? (pendingWeighingCapture
+        ? "Registrar la pesada usando el peso ya capturado"
+        : "Capturar y congelar el peso actual")
       : "Configura la jornada antes de agregar pesadas.";
   }
 }
@@ -7463,11 +7490,80 @@ function selectScaleForWeighing(scaleId) {
     readingId: eligibility.scale.readingId,
     readingAgeMs: Math.round(eligibility.ageMs)
   });
+  clearPendingWeighingCapture();
   elements.weightSource.value = String(scaleId);
-  renderWeightPreview();
+  renderAll();
   setFormMessage(
-    `Balanza ${scaleId} seleccionada. El peso bruto se actualizará en tiempo real.`
+    `Balanza ${scaleId} seleccionada. Presiona Capturar peso cuando la lectura esté estable.`
   );
+}
+
+function captureWeightForRegistration(event) {
+  event?.preventDefault?.();
+
+  if (!isJourneyConfigured()) {
+    setFormMessage("Configura la jornada antes de capturar pesadas.", true);
+    return;
+  }
+
+  const source = normalizeWeightSource(
+    elements.weightSource.value === "manual" ? "manual" : elements.weightSource.value
+  );
+  const scaleId = source === "manual" ? null : Number(source);
+  const scaleEligibility = scaleId ? getScaleReadingEligibility(scaleId) : null;
+  const scaleReading = source === "manual"
+    ? null
+    : createScaleReadingSnapshot(scaleId, scaleEligibility);
+  const weightKg = source === "manual"
+    ? getWeightFromSource(source)
+    : scaleReading?.weightKg;
+
+  if (source !== "manual" && !scaleReading) {
+    logScaleDebug(scaleId, "captura-rechazada-por-balanza", {
+      eligibilityCode: scaleEligibility?.code || "snapshot-unavailable",
+      reason: scaleEligibility?.reason || "No se pudo crear la captura auditable.",
+      readingAgeMs: Number.isFinite(scaleEligibility?.ageMs)
+        ? Math.round(scaleEligibility.ageMs)
+        : null,
+      snapshot: getScaleDebugSnapshot(scaleId)
+    }, "warn");
+    setFormMessage(
+      scaleEligibility?.reason
+        || `Balanza ${scaleId} no tiene una lectura estable disponible para capturar.`,
+      true
+    );
+    return;
+  }
+
+  if (!Number.isFinite(weightKg) || weightKg <= 0) {
+    setFormMessage("Ingresa o selecciona un peso bruto válido mayor a 0 kg para capturarlo.", true);
+    return;
+  }
+
+  pendingWeighingCapture = {
+    source,
+    weightKg: roundWeight(weightKg),
+    scaleReading
+  };
+  logScaleDebug(scaleId, "peso-capturado", {
+    weightSource: source,
+    weightKg: pendingWeighingCapture.weightKg,
+    readingId: scaleReading?.readingId || null,
+    capturedAt: scaleReading?.capturedAt || null
+  }, "info");
+  renderAll();
+  setFormMessage(
+    `${formatWeight(pendingWeighingCapture.weightKg)} capturado${scaleId ? ` de Balanza ${scaleId}` : " manualmente"}. Presiona Registrar pesada para agregarlo.`
+  );
+}
+
+function handleWeighingAction(event) {
+  if (pendingWeighingCapture) {
+    addCage(event);
+    return;
+  }
+
+  captureWeightForRegistration(event);
 }
 
 function addCage(event) {
@@ -7490,11 +7586,9 @@ function addCage(event) {
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
   const scaleId = source === "manual" ? null : Number(source);
-  const scaleEligibility = scaleId ? getScaleReadingEligibility(scaleId) : null;
-  const scaleReading = source === "manual" || !scaleEligibility?.ok
-    ? null
-    : createScaleReadingSnapshot(scaleId, scaleEligibility);
-  const rawWeight = source === "manual" ? getWeightFromSource(source) : scaleReading?.weightKg;
+  const capturedWeight = getPendingWeighingCapture(source);
+  const scaleReading = capturedWeight?.scaleReading || null;
+  const rawWeight = capturedWeight?.weightKg;
   const grossWeight = roundWeight(rawWeight);
   const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
   const truck = state.trucks.find((item) => item.id === truckId);
@@ -7509,11 +7603,9 @@ function addCage(event) {
     ticketSelected: Boolean(truckId),
     birdsPerCage: birdsPerJava,
     cageCount: javaCount,
-    eligibilityCode: scaleEligibility?.code || (source === "manual" ? "manual" : "unknown"),
-    eligibilityReason: scaleEligibility?.reason || "",
-    readingAgeMs: Number.isFinite(scaleEligibility?.ageMs)
-      ? Math.round(scaleEligibility.ageMs)
-      : null,
+    eligibilityCode: capturedWeight ? "captured" : "missing-capture",
+    eligibilityReason: capturedWeight ? "" : "No existe un peso capturado para registrar.",
+    readingAgeMs: null,
     weightKg: Number.isFinite(rawWeight) ? rawWeight : null,
     readingId: scaleReading?.readingId || null
   });
@@ -7558,18 +7650,20 @@ function addCage(event) {
     return;
   }
 
+  if (!capturedWeight) {
+    setFormMessage("Captura primero el peso y luego presiona Registrar pesada.", true);
+    return;
+  }
+
   if (source !== "manual" && !scaleReading) {
     logScaleDebug(scaleId, "registro-rechazado-por-balanza", {
-      eligibilityCode: scaleEligibility?.code || "snapshot-unavailable",
-      reason: scaleEligibility?.reason || "No se pudo crear la captura auditable.",
-      readingAgeMs: Number.isFinite(scaleEligibility?.ageMs)
-        ? Math.round(scaleEligibility.ageMs)
-        : null,
+      eligibilityCode: "captured-snapshot-unavailable",
+      reason: "La captura física no contiene una instantánea auditable.",
+      readingAgeMs: null,
       snapshot: getScaleDebugSnapshot(scaleId)
     }, "warn");
     setFormMessage(
-      scaleEligibility?.reason
-        || `Balanza ${Number(source)} no tiene ahora una lectura estable disponible para registrar.`,
+      `La captura de Balanza ${Number(source)} no está disponible. Vuelve a capturar el peso.`,
       true
     );
     return;
@@ -7657,6 +7751,7 @@ function addCage(event) {
         truckPlate
       };
 
+  clearPendingWeighingCapture();
   if (source === "manual") {
     elements.manualWeight.value = "";
   }
@@ -8390,6 +8485,7 @@ function bindEvents() {
     refreshClientsFromDirectory();
   });
   window.addEventListener("pagehide", () => {
+    clearPendingWeighingCapture();
     releaseScaleConnectionsForNavigation({ deactivate: true });
   });
   window.addEventListener("pageshow", () => {
@@ -8451,7 +8547,10 @@ function bindEvents() {
   elements.scaleSerialSaveButtons[1]?.addEventListener("click", () => saveScaleSerialOptions(1));
   elements.scaleSerialSaveButtons[2]?.addEventListener("click", () => saveScaleSerialOptions(2));
 
-  elements.weightSource.addEventListener("change", renderWeightPreview);
+  elements.weightSource.addEventListener("change", () => {
+    clearPendingWeighingCapture();
+    renderAll();
+  });
   elements.selectProviderBtn.addEventListener("click", () => openProviderModal("entry"));
   elements.editSelectProviderBtn.addEventListener("click", () => openProviderModal("edit"));
   elements.truckPlate.addEventListener("change", () => {
@@ -8478,14 +8577,18 @@ function bindEvents() {
     renderTruckColumns();
     renderSelectedTruckDetails();
   });
-  elements.manualWeight.addEventListener("input", renderWeightPreview);
+  elements.manualWeight.addEventListener("input", () => {
+    clearPendingWeighingCapture();
+    renderWeightPreview();
+    renderJourneyAvailability();
+  });
   elements.birdCount.addEventListener("input", handleEntryBirdCountInput);
   elements.birdCount.addEventListener("change", () => updateEntryDefaults(true));
   elements.editBirdCount.addEventListener("input", handleEditBirdCountInput);
   elements.javaCount.addEventListener("input", renderWeightPreview);
   elements.javaCount.addEventListener("change", () => updateEntryDefaults(true));
   elements.crateType.addEventListener("change", () => updateEntryDefaults(true));
-  elements.form.addEventListener("submit", addCage);
+  elements.form.addEventListener("submit", handleWeighingAction);
   elements.configMenuBtn?.addEventListener("click", toggleConfigMenu);
   elements.closeConfigMenuBtn?.addEventListener("click", closeConfigMenu);
   elements.openFontSidebarBtn?.addEventListener("click", openFontSidebar);
