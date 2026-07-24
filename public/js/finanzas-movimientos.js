@@ -150,11 +150,13 @@ function debtActions(record) {
   const actions = [];
   if (record.puede_editar && permissions.adjustBalances) {
     actions.push(`<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-debt="${record.id}">Editar</button>`);
+  }
+  if (record.puede_anular && permissions.adjustBalances) {
     actions.push(`<button class="fin-btn fin-btn-danger fin-btn-small" type="button" data-void-debt="${record.id}">Anular</button>`);
   }
   return actions.length
     ? `<div class="fin-management-actions">${actions.join("")}</div>`
-    : '<span class="fin-management-muted">Con abonos o cerrada</span>';
+    : '<span class="fin-management-muted">Registro cerrado</span>';
 }
 
 function renderDebts(records) {

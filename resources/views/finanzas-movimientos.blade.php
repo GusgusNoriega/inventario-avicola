@@ -129,7 +129,7 @@
   <dialog id="financeEditDebtDialog" class="fin-purchase-dialog" aria-labelledby="financeEditDebtTitle">
     <form id="financeEditDebtForm" class="fin-purchase-dialog-card" novalidate>
       <header class="fin-purchase-dialog-head"><div><p class="fin-eyebrow">Saldo por cobrar</p><h2 id="financeEditDebtTitle">Editar deuda anterior</h2></div><button class="fin-dialog-close" type="button" data-dialog-close aria-label="Cerrar">×</button></header>
-      <p class="fin-section-copy">La deuda solo puede modificarse mientras no tenga cobros aplicados.</p>
+      <p class="fin-section-copy">Si ya tiene cobros, podrás corregir fecha, total y detalle. El nuevo total nunca puede ser menor que lo cobrado.</p>
       <input id="financeEditDebtId" type="hidden">
       <div class="fin-form-grid">
         <label class="fin-field"><span>Cliente <b>*</b></span><select id="financeEditDebtClient" required><option value="">Selecciona un cliente</option></select></label>

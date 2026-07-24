@@ -1385,6 +1385,63 @@ class FinancialApiTest extends TestCase
         ]);
     }
 
+    public function test_manual_customer_debt_with_collections_allows_safe_amount_and_detail_corrections(): void
+    {
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE DEUDA PARCIAL', '10999994');
+        [, $account] = $this->ownAccount();
+        $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        $debtId = $this->postJson('/api/v1/finanzas/deudas-clientes', [
+            'idempotency_key' => (string) Str::uuid(),
+            'cliente_id' => $client,
+            'fecha_emision' => today()->subDay()->toDateString(),
+            'moneda' => 'PEN',
+            'importe' => '120.00',
+            'detalle' => 'Saldo manual con error',
+        ])->assertCreated()->json('data.id');
+
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $client,
+            'cuenta_destino_id' => $account,
+            'metodo_pago_id' => $method,
+            'moneda' => 'PEN',
+            'importe' => '40.00',
+            'aplicaciones' => [[
+                'lado' => 'CXC',
+                'comprobante_id' => $debtId,
+                'importe_aplicado' => '40.00',
+            ]],
+        ])->assertCreated();
+
+        $this->putJson("/api/v1/finanzas/deudas-clientes/{$debtId}", [
+            'cliente_id' => $client,
+            'fecha_emision' => today()->toDateString(),
+            'moneda' => 'PEN',
+            'importe' => '150.00',
+            'detalle' => 'Saldo corregido después de un abono',
+        ])->assertOk()
+            ->assertJsonPath('data.total', '150.00')
+            ->assertJsonPath('data.saldo_pendiente', '110.00')
+            ->assertJsonPath('data.estado', 'PARCIAL')
+            ->assertJsonPath('data.puede_editar', true)
+            ->assertJsonPath('data.puede_anular', false);
+
+        $this->putJson("/api/v1/finanzas/deudas-clientes/{$debtId}", [
+            'cliente_id' => $client,
+            'fecha_emision' => today()->toDateString(),
+            'moneda' => 'PEN',
+            'importe' => '30.00',
+            'detalle' => 'Importe inválido',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('importe');
+
+        $this->postJson("/api/v1/finanzas/deudas-clientes/{$debtId}/anular", [
+            'motivo' => 'Intento de anulación con abono',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('deuda');
+    }
+
     private function ownAccount(): array
     {
         $entity = $this->entity('PROPIA', null, 'EMPRESA PROPIA '.Str::random(5));

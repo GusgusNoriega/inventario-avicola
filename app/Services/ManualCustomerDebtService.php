@@ -124,7 +124,8 @@ class ManualCustomerDebtService
                     'nombre' => $document->cliente_nombre,
                     'numero_documento' => $document->cliente_documento,
                 ],
-                'puede_editar' => $document->estado === 'PENDIENTE'
+                'puede_editar' => $document->estado !== 'ANULADO',
+                'puede_anular' => $document->estado === 'PENDIENTE'
                     && FinancialMoney::compare((string) $document->saldo_pendiente, (string) $document->total) === 0,
             ])->all(),
             'meta' => [
@@ -170,7 +171,8 @@ class ManualCustomerDebtService
             'detalle' => $document->detalle,
             'anulada_at' => $document->anulada_at,
             'motivo_anulacion' => $document->motivo_anulacion,
-            'puede_editar' => $document->estado === 'PENDIENTE'
+            'puede_editar' => $document->estado !== 'ANULADO',
+            'puede_anular' => $document->estado === 'PENDIENTE'
                 && FinancialMoney::compare((string) $document->saldo_pendiente, (string) $document->total) === 0,
             'cliente' => [
                 'id' => (int) $document->tercero_id,
@@ -193,6 +195,28 @@ class ManualCustomerDebtService
         DB::transaction(function () use ($companyId, $actor, $documentId, $data, $ip): void {
             $document = $this->editableDocument($companyId, $documentId);
             $client = $this->activeClient($companyId, (int) $data['cliente_id']);
+            $applied = FinancialMoney::subtract(
+                (string) $document->total,
+                (string) $document->saldo_pendiente,
+            );
+            if (FinancialMoney::compare($data['importe'], $applied) < 0) {
+                throw ValidationException::withMessages([
+                    'importe' => "El nuevo total no puede ser menor que lo ya cobrado ({$applied} {$document->moneda}).",
+                ]);
+            }
+            if (FinancialMoney::compare($applied, '0.00') > 0
+                && ((int) $document->tercero_id !== (int) $client->id
+                    || (string) $document->moneda !== (string) $data['moneda'])) {
+                throw ValidationException::withMessages([
+                    'deuda' => 'Una deuda con cobros solo permite corregir fecha, importe y detalle. Para cambiar cliente o moneda, anula primero los cobros relacionados.',
+                ]);
+            }
+            $newBalance = FinancialMoney::subtract($data['importe'], $applied);
+            $newStatus = match (true) {
+                FinancialMoney::compare($newBalance, '0.00') === 0 => 'PAGADO',
+                FinancialMoney::compare($applied, '0.00') > 0 => 'PARCIAL',
+                default => 'PENDIENTE',
+            };
             $before = (array) $document;
             $detailBefore = DB::table('comprobante_detalles')
                 ->where('comprobante_id', $documentId)
@@ -206,7 +230,8 @@ class ManualCustomerDebtService
                 'moneda' => $data['moneda'],
                 'subtotal' => $data['importe'],
                 'total' => $data['importe'],
-                'saldo_pendiente' => $data['importe'],
+                'saldo_pendiente' => $newBalance,
+                'estado' => $newStatus,
                 'contraparte_tipo_documento_snapshot' => $client->tipo_documento,
                 'contraparte_numero_documento_snapshot' => $client->numero_documento,
                 'contraparte_nombre_snapshot' => $client->nombre_razon_social,
@@ -413,7 +438,11 @@ class ManualCustomerDebtService
             ->lockForUpdate()
             ->first();
         abort_unless($document, 404, 'La deuda anterior no fue encontrada.');
-        $this->assertUnapplied($document);
+        if ($document->estado === 'ANULADO') {
+            throw ValidationException::withMessages([
+                'deuda' => 'Una deuda anulada no puede editarse.',
+            ]);
+        }
 
         return $document;
     }
