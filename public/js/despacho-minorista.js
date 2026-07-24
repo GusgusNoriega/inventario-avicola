@@ -814,7 +814,7 @@ function buildCurrentRetailCustomerDisplayState() {
   const displayWeights = resolveRetailCustomerDisplayWeights({
     hasReading: values.hasReading,
     readWeightKg: values.readWeight,
-    displayWeightKg: values.grossWeight,
+    displayWeightKg: values.readWeight,
     isPhysical: availability.isPhysical,
     isFresh: availability.scaleState.isFresh,
     connectionMatches: availability.connectionMatches,
@@ -1061,7 +1061,7 @@ function renderWeightPreview() {
     serial: "Balanza minorista · Serial"
   };
 
-  elements.adjustedWeight.textContent = values.hasReading ? values.grossWeight.toFixed(3) : "---";
+  elements.adjustedWeight.textContent = values.hasReading ? values.readWeight.toFixed(3) : "---";
   elements.grossPreview.textContent = values.hasReading ? formatWeight(values.grossWeight) : "--- kg";
   elements.tarePreview.textContent = formatWeight(values.tareWeight);
   elements.tareDetail.textContent = `${values.trayCount} × ${Number(values.tray?.weight_kg || 0).toFixed(3)} kg por bandeja`;
@@ -1073,13 +1073,11 @@ function renderWeightPreview() {
     ? `${values.birds} ave${values.birds === 1 ? "" : "s"} · sin bandeja`
     : `${values.birds} ave${values.birds === 1 ? "" : "s"}`;
   elements.adjustmentReadingHint.textContent = values.appliesAdjustment
-    ? "Peso mostrado con merma por pollo aplicada"
-    : "Pollo beneficiado: peso mostrado sin merma";
+    ? "Peso directo de balanza · merma aplicada solo en cálculos"
+    : "Peso directo de balanza · pollo beneficiado sin merma";
   elements.manualWeightTrigger.setAttribute(
     "aria-label",
-    values.appliesAdjustment
-      ? "Peso final con merma por pollo aplicada. Toca para ingresar peso manual"
-      : "Peso de pollo beneficiado sin merma. Toca para ingresar peso manual"
+    "Peso directo de la balanza. Toca para ingresar peso manual"
   );
   elements.weightSourceLabel.textContent = sourceLabels[source]
     || (availability.scaleState.status === "connected" ? "Esperando balanza" : "Sin lectura");
@@ -2491,8 +2489,7 @@ function buildRetailTicketPrintData(ticket) {
     delivery: ticket.delivery,
     records: (ticket.weighings || []).map((weighing) => ({
       typeCode: printedChickenTypeCode(weighing.chicken_type_code),
-      birdsPerCage: Number(weighing.birds_per_tray) || 0,
-      cages: Number(weighing.tray_count) || 0,
+      birds: Number(weighing.birds) || 0,
       grossWeight: Number(weighing.gross_weight_kg) || 0,
       tareWeight: Number(weighing.tare_weight_kg) || 0,
       netWeight: Number(weighing.net_weight_kg) || 0,
@@ -2885,9 +2882,9 @@ function applyMainManualWeight(event) {
     const values = previewValues(scaleState.currentWeightKg);
     closeModal(elements.manualWeightModal);
     setMessage(
-      `Peso manual recibido. La pantalla muestra ${formatWeight(values.grossWeight)} ${
+      `Peso manual recibido. La pantalla muestra ${formatWeight(values.readWeight)} ${
         values.appliesAdjustment
-          ? "con la merma por pollo aplicada"
+          ? "tal como fue ingresado; la merma se conserva en los cálculos"
           : "sin merma para pollo beneficiado"
       }.`
     );

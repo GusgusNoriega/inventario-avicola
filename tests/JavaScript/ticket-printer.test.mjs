@@ -55,7 +55,19 @@ test("el ticket minorista usa la misma tipografia grande y muestra el camion y c
         name: "Chofer minorista"
       }
     },
-    records: []
+    records: [
+      {
+        typeCode: "PP",
+        birds: 10,
+        birdsPerCage: 5,
+        cages: 2,
+        grossWeight: 14.5,
+        tareWeight: 1,
+        netWeight: 13.5,
+        priceKg: 8.5,
+        amount: 114.75
+      }
+    ]
   }, "2026-07-23T12:30:00-05:00");
 
   assert.match(html, /<body class="retail-ticket">/);
@@ -67,6 +79,10 @@ test("el ticket minorista usa la misma tipografia grande y muestra el camion y c
   assert.doesNotMatch(html, /\.retail-detail-table th,[\s\S]*font-size: 9\.5px;/);
   assert.match(html, /CAMIÓN: MIN-001/);
   assert.match(html, /CHOFER: Chofer minorista/);
+  assert.match(html, /<th>POLLOS<\/th>/);
+  assert.match(html, /<td class="number">10<\/td>/);
+  assert.doesNotMatch(html, /<th>AV\/B<\/th>/);
+  assert.doesNotMatch(html, /<th>BAN<\/th>/);
 });
 
 test("el bloque de transporte se omite cuando el despacho no lo requiere", () => {

@@ -213,7 +213,7 @@ test("canal y almacenamiento quedan aislados por estación y por productor", () 
   assert.match(stationTwoProducerA, /minorista-2-estado-v1:producer-a$/);
 });
 
-test("el productor publica la lista activa, su cliente, sus totales y el peso ajustado visible", () => {
+test("el productor publica la lista activa, sus totales y el peso directo de la balanza", () => {
   const builderStart = stationSource.indexOf("function buildCurrentRetailCustomerDisplayState()");
   const builderEnd = stationSource.indexOf(
     "function flushRetailCustomerDisplayStorage()",
@@ -232,11 +232,18 @@ test("el productor publica la lista activa, su cliente, sus totales y el peso aj
   assert.match(builder, /ticketLabel: `Lista \$\{state\.activeList \+ 1\}`/);
   assert.match(builder, /const availability = liveReadingAvailability\(\)/);
   assert.match(builder, /const displayWeights = resolveRetailCustomerDisplayWeights\(/);
+  assert.match(builder, /readWeightKg: values\.readWeight/);
+  assert.match(builder, /displayWeightKg: values\.readWeight/);
+  assert.doesNotMatch(builder, /displayWeightKg: values\.grossWeight/);
   assert.match(builder, /displayWeightKg: displayWeights\.displayWeightKg/);
   assert.match(builder, /readWeightKg: displayWeights\.readWeightKg/);
 
   const previewStart = stationSource.indexOf("function renderWeightPreview()");
   const previewEnd = stationSource.indexOf("function renderChickenTypes()", previewStart);
+  assert.match(
+    stationSource.slice(previewStart, previewEnd),
+    /adjustedWeight\.textContent = values\.hasReading \? values\.readWeight\.toFixed\(3\)/
+  );
   assert.match(
     stationSource.slice(previewStart, previewEnd),
     /publishRetailCustomerDisplayState\(\)/

@@ -98,13 +98,13 @@
           </div>
 
           <input id="retailRawWeightInput" type="hidden" value="">
-          <button id="retailManualWeightTrigger" class="rd-scale-reading" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" aria-label="Peso final ajustado. Toca para ingresar peso manual">
+          <button id="retailManualWeightTrigger" class="rd-scale-reading" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" aria-label="Peso directo de la balanza. Toca para ingresar peso manual">
             <output id="retailAdjustedWeight">---</output>
             <span aria-hidden="true">kg</span>
           </button>
 
           <div class="rd-adjusted-reading">
-            <span>Peso mostrado con ajuste aplicado</span>
+            <span>Peso directo de la balanza</span>
           </div>
 
           <button id="retailCaptureWeight" class="rd-capture-button" type="button" disabled>

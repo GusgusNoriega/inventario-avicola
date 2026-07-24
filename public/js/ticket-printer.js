@@ -22,6 +22,11 @@ function normalizeTicketRecord(record) {
     typeCode: String(record?.typeCode || "PV").trim() || "PV",
     birdsPerCage: Math.max(0, Number(record?.birdsPerCage) || 0),
     cages: Math.max(0, Number(record?.cages) || 0),
+    birds: Math.max(
+      0,
+      Number(record?.birds)
+      || (Math.max(0, Number(record?.birdsPerCage) || 0) * Math.max(0, Number(record?.cages) || 0))
+    ),
     grossWeight,
     tareWeight,
     netWeight,
@@ -73,13 +78,14 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   const rows = records.map((record) => `
     <tr>
       <td>${escapeTicketHtml(record.typeCode)}</td>
-      <td class="number">${record.birdsPerCage}</td>
-      <td class="number">${record.cages}</td>
       ${isRetail ? `
+        <td class="number">${record.birds}</td>
         <td class="number">${record.netWeight.toFixed(2)}</td>
         <td class="number">${escapeTicketHtml(formatTicketMoney(record.priceKg))}</td>
         <td class="number">${escapeTicketHtml(formatTicketMoney(record.amount))}</td>
       ` : `
+        <td class="number">${record.birdsPerCage}</td>
+        <td class="number">${record.cages}</td>
         <td class="number">${record.grossWeight.toFixed(2)}</td>
         <td class="number">${record.tareWeight.toFixed(2)}</td>
       `}
@@ -262,12 +268,11 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       padding-right: 0.2mm;
     }
 
-    .retail-detail-table th:nth-child(1) { width: 11%; }
-    .retail-detail-table th:nth-child(2) { width: 11%; }
-    .retail-detail-table th:nth-child(3) { width: 10%; }
-    .retail-detail-table th:nth-child(4) { width: 18%; }
-    .retail-detail-table th:nth-child(5) { width: 24%; }
-    .retail-detail-table th:nth-child(6) { width: 26%; }
+    .retail-detail-table th:nth-child(1) { width: 13%; }
+    .retail-detail-table th:nth-child(2) { width: 15%; }
+    .retail-detail-table th:nth-child(3) { width: 18%; }
+    .retail-detail-table th:nth-child(4) { width: 26%; }
+    .retail-detail-table th:nth-child(5) { width: 28%; }
 
     .summary-title {
       margin: 4mm 0 1mm;
@@ -330,7 +335,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     <thead>
       <tr>
         ${isRetail
-          ? "<th>TIPO</th><th>AV/B</th><th>BAN</th><th>NETO<br>KG</th><th>PRECIO<br>/KG</th><th>SUBTOTAL</th>"
+          ? "<th>TIPO</th><th>POLLOS</th><th>NETO<br>KG</th><th>PRECIO<br>/KG</th><th>SUBTOTAL</th>"
           : "<th>TIPO</th><th>C/A</th><th>CJ</th><th>PESO<br>BRUTO</th><th>PESO<br>TARA</th>"}
       </tr>
     </thead>
