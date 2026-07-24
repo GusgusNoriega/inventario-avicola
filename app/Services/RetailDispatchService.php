@@ -225,10 +225,12 @@ class RetailDispatchService
                 $adjustment = $adjustments->get($adjustmentCode);
                 $trayCount = (int) $weighing['tray_count'];
                 $birdsPerTray = (int) $weighing['birds_per_tray'];
-                $birdCount = $birdsPerTray * $trayCount;
+                $birdCount = $birdsPerTray * max($trayCount, 1);
                 $trayWeight = round((float) $tray->peso_kg, 3);
                 $readWeight = round((float) $weighing['read_weight_kg'], 3);
-                $additionalGramsPerBird = (int) $adjustment->gramos_adicionales;
+                $additionalGramsPerBird = $type->codigo === TipoPollo::CHICKEN_PROCESSED
+                    ? 0
+                    : (int) $adjustment->gramos_adicionales;
                 $totalAdditionalGrams = $additionalGramsPerBird * $birdCount;
                 $grossWeight = round($readWeight + ($totalAdditionalGrams / 1000), 3);
                 $tareWeight = round($trayCount * $trayWeight, 3);

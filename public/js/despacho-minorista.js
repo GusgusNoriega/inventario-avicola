@@ -1,6 +1,10 @@
 import { apiRequest } from "./api-client.js";
-import { getRetailDispatchErrorPresentation } from "./retail-dispatch-errors.js";
+import {
+  getRetailDispatchErrorPresentation,
+  getRetailLocalActionErrorPresentation
+} from "./retail-dispatch-errors.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
+import { calculateRetailWeightAdjustment } from "./retail-weight-calculation.js";
 import {
   buildRetailScaleStorageKey,
   RetailScaleController,
@@ -96,9 +100,13 @@ const elements = {
   birdsPerTrayTrigger: document.querySelector("#retailBirdsPerTrayTrigger"),
   birdsPerTrayValue: document.querySelector("#retailBirdsPerTrayValue"),
   birdsPerTrayLabel: document.querySelector("#retailBirdsPerTrayLabel"),
+  birdsPerTrayAccessibleLabel: document.querySelector("#retailBirdsPerTrayAccessibleLabel"),
+  birdsPerTrayModalTitle: document.querySelector("#retailBirdsPerTrayModalTitle"),
+  birdsPerTrayOptions: document.querySelector(".rd-birds-per-tray-options"),
   rawWeightInput: document.querySelector("#retailRawWeightInput"),
   manualWeightTrigger: document.querySelector("#retailManualWeightTrigger"),
   adjustedWeight: document.querySelector("#retailAdjustedWeight"),
+  adjustmentReadingHint: document.querySelector(".rd-adjusted-reading > span"),
   weightSourceLabel: document.querySelector("#retailWeightSourceLabel"),
   captureState: document.querySelector("#retailCaptureState"),
   captureWeight: document.querySelector("#retailCaptureWeight"),
@@ -353,9 +361,16 @@ function recalculateDraftItems() {
 
         const trayCount = Number(item.trayCount || 0);
         const birdsPerTray = Number(item.birdsPerTray || 0);
-        const birds = trayCount * birdsPerTray;
-        const adjustmentGrams = Number(adjustment.additional_grams || 0);
-        const totalAdjustmentGrams = adjustmentGrams * birds;
+        const {
+          birds,
+          adjustmentGrams,
+          totalAdjustmentGrams
+        } = calculateRetailWeightAdjustment({
+          chickenTypeCode: item.chickenTypeCode,
+          trayCount,
+          birdsPerTray,
+          configuredAdjustmentGrams: adjustment.additional_grams
+        });
         const grossWeight = roundWeight(Number(item.readWeight || 0) + totalAdjustmentGrams / 1000);
         const tareWeight = roundWeight(trayCount * Number(tray.weight_kg || 0));
 
@@ -430,6 +445,9 @@ function setMessage(message, isError = false) {
 }
 
 function showRetailError(presentation = {}) {
+  if (touchKeyboardState.target && !elements.touchKeyboard?.hidden) {
+    closeTouchKeyboard(true);
+  }
   const details = Array.isArray(presentation.details)
     ? presentation.details.filter((detail) => detail?.value)
     : [];
@@ -458,16 +476,111 @@ function showRetailError(presentation = {}) {
   openModal(elements.errorModal);
 }
 
+function showLocalActionIssue(options = {}) {
+  const presentation = getRetailLocalActionErrorPresentation(options);
+  setMessage(presentation.summary, true);
+  showRetailError(presentation);
+}
+
+function showCaptureIssue(options = {}) {
+  const details = [
+    {
+      label: "Estación",
+      value: RETAIL_STATION === "2" ? "Despacho minorista 2" : "Despacho minorista 1"
+    },
+    { label: "Lista activa", value: `Lista ${state.activeList + 1}` },
+    ...(Array.isArray(options.details) ? options.details : [])
+  ];
+
+  showLocalActionIssue({
+    caption: "Captura bloqueada",
+    ...options,
+    details
+  });
+}
+
+function unavailableReadingPresentation(availability) {
+  const scaleState = availability.scaleState || {};
+  const weight = Number.isFinite(availability.weight) && availability.weight > 0
+    ? formatWeight(availability.weight)
+    : "Sin peso válido";
+  const source = availability.source === "manual"
+    ? "Ingreso manual"
+    : availability.source === "ble"
+      ? "Balanza Bluetooth"
+      : availability.source === "serial"
+        ? "Balanza serial"
+        : "Sin origen de lectura";
+
+  if (availability.isPhysical && !availability.connectionMatches) {
+    return {
+      title: "La balanza no está conectada",
+      message: "No se agregó la pesada porque la lectura no pertenece a una conexión activa.",
+      details: [
+        { label: "Lectura detectada", value: weight },
+        { label: "Origen", value: source },
+        { label: "Motivo", value: "La conexión física de la balanza está cerrada o cambió." }
+      ],
+      help: "Abre la configuración, conecta la balanza de esta estación y espera una lectura estable antes de capturar."
+    };
+  }
+
+  if (!Number.isFinite(availability.weight) || availability.weight <= 0) {
+    return {
+      title: "No hay un peso válido para capturar",
+      message: "No se agregó la pesada porque la balanza no muestra un valor mayor que cero.",
+      details: [
+        { label: "Peso detectado", value: weight },
+        { label: "Origen", value: source }
+      ],
+      help: "Coloca el producto en la balanza o ingresa un peso manual mayor que cero y vuelve a intentar."
+    };
+  }
+
+  if (availability.isExpired || state.liveReadingStatus === "stale" || scaleState.isFresh === false) {
+    return {
+      title: "La lectura ya venció",
+      message: "No se agregó la pesada porque el peso dejó de ser reciente.",
+      details: [
+        { label: "Último peso", value: weight },
+        { label: "Origen", value: source },
+        { label: "Motivo", value: "La balanza no ha confirmado una muestra reciente." }
+      ],
+      help: "Mueve o vuelve a colocar el producto y espera una nueva lectura estable antes de capturar."
+    };
+  }
+
+  if (state.liveReadingStatus === "unstable" || scaleState.isStable === false) {
+    return {
+      title: "El peso todavía está inestable",
+      message: "No se agregó la pesada porque la balanza aún está variando.",
+      details: [
+        { label: "Peso detectado", value: weight },
+        { label: "Origen", value: source },
+        { label: "Motivo", value: "Faltan muestras coincidentes para confirmar el peso." }
+      ],
+      help: "Deja el producto quieto sobre la balanza y vuelve a presionar Capturar cuando indique Peso estable."
+    };
+  }
+
+  return {
+    title: "La lectura aún no está lista",
+    message: "No se agregó la pesada porque faltan datos de confirmación de la lectura.",
+    details: [
+      { label: "Peso detectado", value: weight },
+      { label: "Origen", value: source },
+      { label: "Estado", value: scaleState.statusMessage || "Esperando confirmación de la balanza" }
+    ],
+    help: "Espera a que la pantalla indique Peso estable y vuelve a presionar Capturar."
+  };
+}
+
 function showRegistrationIssue(message, details = [], title = "Revisa los datos del ticket") {
-  const normalizedDetails = details.length
-    ? details
-    : [{ label: "Registro", value: message }];
-  setMessage(normalizedDetails[0].value || message, true);
-  showRetailError({
+  showLocalActionIssue({
     caption: "Datos por corregir",
     title,
     message,
-    details: normalizedDetails
+    details: details.length ? details : [{ label: "Registro", value: message }]
   });
 }
 
@@ -623,9 +736,17 @@ function previewValues(readWeightOverride = null) {
   const readWeight = hasReading ? parsedWeight : null;
   const trayCount = Number(elements.trayCount.value || 0);
   const birdsPerTray = Number(elements.birdsPerTray.value || 0);
-  const birds = trayCount * birdsPerTray;
-  const adjustmentGrams = Number(adjustment?.additional_grams || 0);
-  const totalAdjustmentGrams = adjustmentGrams * birds;
+  const {
+    birds,
+    adjustmentGrams,
+    totalAdjustmentGrams,
+    appliesAdjustment
+  } = calculateRetailWeightAdjustment({
+    chickenTypeCode: state.chickenType,
+    trayCount,
+    birdsPerTray,
+    configuredAdjustmentGrams: adjustment?.additional_grams
+  });
   const grossWeight = readWeight > 0
     ? roundWeight(readWeight + totalAdjustmentGrams / 1000)
     : 0;
@@ -644,7 +765,8 @@ function previewValues(readWeightOverride = null) {
     grossWeight,
     tareWeight,
     netWeight,
-    birds
+    birds,
+    appliesAdjustment
   };
 }
 
@@ -715,8 +837,17 @@ function renderWeightPreview() {
     : "--- kg";
   elements.netPreview.classList.toggle("is-invalid", values.readWeight > 0 && values.netWeight <= 0);
   elements.birdTotalPreview.textContent = values.trayCount === 0
-    ? "Sin bandejas · 0 aves"
+    ? `${values.birds} ave${values.birds === 1 ? "" : "s"} · sin bandeja`
     : `${values.birds} ave${values.birds === 1 ? "" : "s"}`;
+  elements.adjustmentReadingHint.textContent = values.appliesAdjustment
+    ? "Peso mostrado con merma por pollo aplicada"
+    : "Pollo beneficiado: peso mostrado sin merma";
+  elements.manualWeightTrigger.setAttribute(
+    "aria-label",
+    values.appliesAdjustment
+      ? "Peso final con merma por pollo aplicada. Toca para ingresar peso manual"
+      : "Peso de pollo beneficiado sin merma. Toca para ingresar peso manual"
+  );
   elements.weightSourceLabel.textContent = sourceLabels[source]
     || (availability.scaleState.status === "connected" ? "Esperando balanza" : "Sin lectura");
   elements.captureState.textContent = availability.ready
@@ -736,7 +867,10 @@ function renderWeightPreview() {
                 : "Sin conexión";
   elements.captureState.classList.toggle("is-captured", availability.ready);
   elements.captureWeight.classList.toggle("is-captured", availability.alreadyCaptured);
-  elements.captureWeight.disabled = !availability.ready;
+  elements.captureWeight.disabled = state.loading || state.lists.some((list) => list.saving);
+  elements.captureWeight.title = availability.ready
+    ? "Capturar el peso actual"
+    : "Presiona para ver por qué la lectura todavía no puede capturarse";
   elements.captureWeight.lastChild.textContent = ` Capturar en lista ${state.activeList + 1}`;
   elements.captureWeight.setAttribute("aria-label", `Capturar el peso actual en la lista ${state.activeList + 1}`);
   const liveAmount = price && values.netWeight > 0
@@ -755,9 +889,23 @@ function renderWeightPreview() {
     : `${trayQuantityLabel(values.trayCount)}. Toca para cambiar la cantidad`);
   elements.birdsPerTrayValue.textContent = values.birdsPerTray;
   elements.birdsPerTrayLabel.textContent = `ave${values.birdsPerTray === 1 ? "" : "s"}`;
+  elements.birdsPerTrayAccessibleLabel.textContent = values.trayCount === 0
+    ? "Cantidad de aves sin bandeja"
+    : "Aves por bandeja";
+  elements.birdsPerTrayModalTitle.textContent = values.trayCount === 0
+    ? "Cantidad de aves sin bandeja"
+    : "Aves por bandeja";
+  elements.birdsPerTrayOptions.setAttribute(
+    "aria-label",
+    values.trayCount === 0
+      ? "Seleccionar cantidad de aves sin bandeja"
+      : "Seleccionar aves por bandeja"
+  );
   elements.birdsPerTrayTrigger.setAttribute(
     "aria-label",
-    `${values.birdsPerTray} ave${values.birdsPerTray === 1 ? "" : "s"} por bandeja. Toca para cambiar`
+    values.trayCount === 0
+      ? `${values.birdsPerTray} ave${values.birdsPerTray === 1 ? "" : "s"} sin bandeja. Toca para cambiar`
+      : `${values.birdsPerTray} ave${values.birdsPerTray === 1 ? "" : "s"} por bandeja. Toca para cambiar`
   );
   document.querySelectorAll("[data-retail-tray-option]").forEach((button) => {
     const selected = Number(button.dataset.retailTrayOption) === values.trayCount;
@@ -932,19 +1080,34 @@ function selectList(index) {
 function captureWeight() {
   const availability = liveReadingAvailability();
   if (!availability.fixedAdjustmentAvailable) {
-    setMessage("La presentación fija de esta columna no está disponible. Actualiza el catálogo antes de capturar.", true);
-    return;
+    const expectedCode = STATION_2_LIST_ADJUSTMENT_CODES[state.activeList] || "NO DEFINIDA";
+    return showCaptureIssue({
+      title: "La presentación fija no está disponible",
+      message: "No se agregó la pesada porque falta la presentación asignada a esta columna.",
+      details: [
+        {
+          label: "Presentación esperada",
+          value: expectedCode.replaceAll("_", " ").toLocaleLowerCase("es")
+        },
+        { label: "Catálogo", value: "La estación no recibió esta presentación como activa." }
+      ],
+      help: "Recarga la pantalla. Si continúa igual, revisa los ajustes de Minorista 2 antes de volver a capturar."
+    });
   }
   if (availability.alreadyCaptured) {
-    setMessage("Este peso ya fue capturado. Espera una nueva lectura estable antes de repetir.", true);
-    return;
+    return showCaptureIssue({
+      title: "Esta lectura ya fue capturada",
+      message: "No se agregó otra pesada para evitar duplicar el mismo peso.",
+      details: [
+        { label: "Peso usado", value: formatWeight(availability.weight) },
+        { label: "Motivo", value: "La lectura estable actual ya pertenece a una pesada de esta estación." }
+      ],
+      help: "Retira o mueve el producto y espera una lectura estable nueva antes de volver a capturar."
+    });
   }
   if (!availability.ready) {
     renderWeightPreview();
-    setMessage(availability.isPhysical && !availability.connectionMatches
-      ? "La balanza debe estar conectada antes de capturar."
-      : "Espera una lectura estable y reciente mayor que cero antes de capturar.", true);
-    return;
+    return showCaptureIssue(unavailableReadingPresentation(availability));
   }
 
   const scaleState = availability.scaleState;
@@ -980,19 +1143,54 @@ function addWeighingToList(listIndex, capturedReading) {
 
   if (!target || target.saving) return;
   if (!capturedReading || !Number.isFinite(capturedReading.readWeight) || capturedReading.readWeight <= 0) {
-    return setMessage("La balanza debe mostrar un peso mayor que cero antes de capturarlo.", true);
+    return showCaptureIssue({
+      title: "El peso leído no es válido",
+      message: "No se agregó la pesada porque el valor recibido no es mayor que cero.",
+      details: [{ label: "Peso recibido", value: formatWeight(capturedReading?.readWeight) }],
+      help: "Coloca el producto en la balanza o ingresa un peso manual mayor que cero y vuelve a intentar."
+    });
   }
   if (!values.tray || !values.adjustment || !chickenType) {
-    return setMessage("Los catálogos minoristas todavía no están disponibles.", true);
+    return showCaptureIssue({
+      title: "Faltan datos del catálogo minorista",
+      message: "No se agregó la pesada porque uno o más datos seleccionados ya no están disponibles.",
+      details: [
+        { label: "Tipo de pollo", value: chickenType?.name || "No disponible" },
+        { label: "Tipo de bandeja", value: values.tray?.name || "No disponible" },
+        { label: "Presentación", value: values.adjustment?.name || "No disponible" }
+      ],
+      help: "Recarga la pantalla para actualizar los catálogos. La lectura no se guardará hasta que todos los datos estén disponibles."
+    });
   }
   if (!Number.isInteger(values.trayCount) || values.trayCount < 0) {
-    return setMessage("La cantidad de bandejas no puede ser negativa.", true);
+    return showCaptureIssue({
+      title: "La cantidad de bandejas no es válida",
+      message: "No se agregó la pesada porque la cantidad de bandejas debe ser un entero mayor o igual que cero.",
+      details: [{ label: "Cantidad recibida", value: String(values.trayCount) }],
+      help: "Selecciona nuevamente la cantidad de bandejas y vuelve a capturar."
+    });
   }
   if (!Number.isInteger(values.birdsPerTray) || values.birdsPerTray < 1 || values.birdsPerTray > 10) {
-    return setMessage("Selecciona entre 1 y 10 aves por bandeja.", true);
+    const birdLabel = values.trayCount === 0 ? "Cantidad de aves" : "Aves por bandeja";
+    return showCaptureIssue({
+      title: "La cantidad de aves no es válida",
+      message: `No se agregó la pesada porque ${birdLabel.toLocaleLowerCase("es")} debe estar entre 1 y 10.`,
+      details: [{ label: birdLabel, value: String(values.birdsPerTray) }],
+      help: "Selecciona nuevamente la cantidad de aves y vuelve a capturar."
+    });
   }
   if (values.netWeight <= 0) {
-    return setMessage("El peso ajustado debe ser mayor que la tara total de las bandejas.", true);
+    return showCaptureIssue({
+      title: "La tara iguala o supera el peso",
+      message: "No se agregó la pesada porque el peso neto resultante no es mayor que cero.",
+      details: [
+        { label: "Peso leído", value: formatWeight(values.readWeight) },
+        { label: "Peso con ajuste", value: formatWeight(values.grossWeight) },
+        { label: "Tara de bandejas", value: formatWeight(values.tareWeight) },
+        { label: "Peso neto resultante", value: formatWeight(values.netWeight) }
+      ],
+      help: "Verifica el peso leído, el tipo y la cantidad de bandejas; corrige el dato que corresponda y vuelve a capturar."
+    });
   }
 
   target.items.push({
@@ -1633,12 +1831,22 @@ function applyPrices(event) {
   event.preventDefault();
   const listIndex = state.priceEditingListIndex;
   const list = priceEditingList();
-  if (clientFor(list)) {
-    setMessage("Los precios vigentes del cliente tienen prioridad y no se pueden reemplazar desde la lista.", true);
-    return;
+  const client = clientFor(list);
+  if (client) {
+    return showLocalActionIssue({
+      caption: "Precio no aplicado",
+      title: "El precio del cliente no se puede reemplazar",
+      message: "No se modificaron los precios de esta lista porque el cliente tiene una tarifa vigente.",
+      details: [
+        { label: "Cliente", value: client.name || "Cliente seleccionado" },
+        { label: "Lista", value: `Lista ${Number(listIndex) + 1}` },
+        { label: "Regla aplicada", value: "El precio vigente del cliente siempre tiene prioridad." }
+      ],
+      help: "Cierra esta ventana y usa el precio vigente. Si necesita cambiarse, actualízalo primero en Directorio."
+    });
   }
   const prices = {};
-  let invalid = false;
+  const invalidPrices = [];
 
   elements.priceFields.querySelectorAll("[data-retail-price-code]").forEach((input) => {
     const raw = input.value.trim();
@@ -1650,15 +1858,26 @@ function applyPrices(event) {
       || value < 0.01
       || value > 99999999.99
     ) {
-      invalid = true;
+      const type = state.catalog.chicken_types.find(
+        (item) => item.code === input.dataset.retailPriceCode
+      );
+      invalidPrices.push({
+        label: type?.name || input.dataset.retailPriceCode || "Tipo de pollo",
+        value: `Valor ingresado: ${raw || "vacío"}`
+      });
       return;
     }
     prices[input.dataset.retailPriceCode] = roundMoney(value);
   });
 
-  if (invalid) {
-    setMessage("Los precios manuales deben estar entre S/ 0.01 y S/ 99,999,999.99 y usar como máximo dos decimales.", true);
-    return;
+  if (invalidPrices.length) {
+    return showLocalActionIssue({
+      caption: "Precio no aplicado",
+      title: "Hay precios manuales no válidos",
+      message: "No se modificaron los precios de la lista. Corrige los valores indicados.",
+      details: invalidPrices,
+      help: "Cada precio debe estar entre S/ 0.01 y S/ 99,999,999.99 y usar como máximo dos decimales."
+    });
   }
 
   list.priceOverrides = prices;
@@ -2335,11 +2554,29 @@ function applyMainManualWeight(event) {
   event.preventDefault();
   try {
     const scaleState = state.scale.setManualReading(elements.manualWeightEntry.value);
+    const values = previewValues(scaleState.currentWeightKg);
     closeModal(elements.manualWeightModal);
-    setMessage(`Peso manual recibido. La pantalla muestra ${formatWeight(previewValues(scaleState.currentWeightKg).grossWeight)} con el ajuste.`);
+    setMessage(
+      `Peso manual recibido. La pantalla muestra ${formatWeight(values.grossWeight)} ${
+        values.appliesAdjustment
+          ? "con la merma por pollo aplicada"
+          : "sin merma para pollo beneficiado"
+      }.`
+    );
   } catch (error) {
-    setMessage(error.message, true);
-    elements.manualWeightEntry.focus();
+    showLocalActionIssue({
+      caption: "Peso manual rechazado",
+      title: "El peso manual no es válido",
+      message: "No se aplicó el peso ingresado y la lectura anterior se conserva.",
+      details: [
+        { label: "Motivo", value: error?.message || "El valor no pudo interpretarse como un peso." },
+        {
+          label: "Valor ingresado",
+          value: String(elements.manualWeightEntry.value || "").trim() || "Campo vacío"
+        }
+      ],
+      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Aplicar."
+    });
   }
 }
 

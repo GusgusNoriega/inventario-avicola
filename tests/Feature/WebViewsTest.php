@@ -336,8 +336,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('additional_grams', $javascript);
         $this->assertStringContainsString('new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"])', $javascript);
         $this->assertStringContainsString('availableChickenTypeCodes.has(item.chickenTypeCode)', $javascript);
-        $this->assertStringContainsString('const birds = trayCount * birdsPerTray;', $javascript);
-        $this->assertStringContainsString('const totalAdjustmentGrams = adjustmentGrams * birds;', $javascript);
+        $this->assertStringContainsString('from "./retail-weight-calculation.js"', $javascript);
+        $this->assertStringContainsString('calculateRetailWeightAdjustment({', $javascript);
         $this->assertStringContainsString('readWeight + totalAdjustmentGrams / 1000', $javascript);
         $this->assertStringContainsString('priceEditingListIndex', $javascript);
         $this->assertStringContainsString('general_prices', $javascript);
@@ -389,6 +389,12 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('type.code.replaceAll', $javascript);
         $this->assertStringNotContainsString('cage_type_code', $javascript);
         $this->assertStringNotContainsString('cantidad_javas', $javascript);
+
+        $weightCalculationJavascript = file_get_contents(public_path('js/retail-weight-calculation.js'));
+        $this->assertIsString($weightCalculationJavascript);
+        $this->assertStringContainsString('Math.max(trays, 1)', $weightCalculationJavascript);
+        $this->assertStringContainsString('totalAdjustmentGrams: adjustmentGrams * birds', $weightCalculationJavascript);
+        $this->assertStringContainsString('RETAIL_PROCESSED_CHICKEN_CODE', $weightCalculationJavascript);
 
         $blade = file_get_contents(resource_path('views/despacho-minorista.blade.php'));
         $this->assertIsString($blade);

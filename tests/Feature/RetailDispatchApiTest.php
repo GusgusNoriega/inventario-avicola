@@ -905,45 +905,143 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
-    public function test_retail_dispatch_allows_weighing_without_trays(): void
+    public function test_both_retail_stations_keep_loose_birds_and_apply_adjustment_per_bird_without_trays(): void
     {
-        $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
-        DB::table('ajustes_peso_minorista')
+        foreach ([
+            1 => [
+                'base_url' => '/api/v1/despacho-minorista',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            2 => [
+                'base_url' => '/api/v1/despacho-minorista-2',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station => $stationData) {
+            $this->getJson("{$stationData['base_url']}/catalogo")->assertOk();
+            DB::table('ajustes_peso_minorista')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('estacion', $station)
+                ->where('codigo', AjustePesoMinorista::MALE_CLOSED)
+                ->update(['gramos_adicionales' => 250]);
+            $payload = $this->payload();
+            $payload['weighings'][0]['weight_source'] = $stationData['weight_source'];
+            $payload['weighings'][0]['tray_count'] = 0;
+            unset($payload['delivery']);
+
+            $response = $this->postJson("{$stationData['base_url']}/tickets", $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.totals.trays', 0)
+                ->assertJsonPath('data.totals.birds', 5)
+                ->assertJsonPath('data.totals.read_weight_kg', 12)
+                ->assertJsonPath('data.totals.gross_weight_kg', 13.25)
+                ->assertJsonPath('data.totals.tare_weight_kg', 0)
+                ->assertJsonPath('data.totals.net_weight_kg', 13.25)
+                ->assertJsonPath('data.weighings.0.tray_count', 0)
+                ->assertJsonPath('data.weighings.0.birds_per_tray', 5)
+                ->assertJsonPath('data.weighings.0.birds', 5)
+                ->assertJsonPath('data.weighings.0.adjustment.additional_grams', 250)
+                ->assertJsonPath('data.weighings.0.tare_weight_kg', 0)
+                ->assertJsonPath('data.weighings.0.gross_weight_kg', 13.25)
+                ->assertJsonPath('data.weighings.0.net_weight_kg', 13.25);
+
+            $ticketId = (int) $response->json('data.id');
+            $this->assertDatabaseHas('pesadas', [
+                'ticket_id' => $ticketId,
+                'cantidad_bandejas' => 0,
+                'cantidad_aves' => 5,
+                'peso_leido_kg' => 12,
+                'ajuste_peso_gramos' => 250,
+                'peso_bruto_kg' => 13.25,
+                'tara_total_kg' => 0,
+                'peso_neto_kg' => 13.25,
+            ]);
+            $this->assertDatabaseHas('tickets_despacho', [
+                'id' => $ticketId,
+                'cliente_destino_id' => $this->clientId,
+                'vehiculo_entrega_id' => null,
+                'conductor_entrega_id' => null,
+            ]);
+            $this->assertDatabaseMissing('movimientos_javas', [
+                'ticket_despacho_id' => $ticketId,
+            ]);
+        }
+    }
+
+    public function test_both_retail_stations_apply_zero_adjustment_to_processed_chicken(): void
+    {
+        $processedTypeId = DB::table('tipos_pollo')->insertGetId([
+            'codigo' => TipoPollo::CHICKEN_PROCESSED,
+            'nombre' => 'Pollo beneficiado',
+            'permite_despacho' => true,
+            'estado' => TipoPollo::STATUS_ACTIVE,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $clientPriceListId = (int) DB::table('listas_precios')
             ->where('empresa_id', $this->user->empresa_id)
-            ->where('estacion', 1)
-            ->where('codigo', AjustePesoMinorista::MALE_CLOSED)
-            ->update(['gramos_adicionales' => 250]);
-        $payload = $this->payload();
-        $payload['weighings'][0]['tray_count'] = 0;
-        unset($payload['delivery']);
-
-        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
-            ->assertCreated()
-            ->assertJsonPath('data.totals.trays', 0)
-            ->assertJsonPath('data.totals.birds', 0)
-            ->assertJsonPath('data.totals.gross_weight_kg', 12)
-            ->assertJsonPath('data.totals.net_weight_kg', 12)
-            ->assertJsonPath('data.weighings.0.tray_count', 0)
-            ->assertJsonPath('data.weighings.0.birds', 0)
-            ->assertJsonPath('data.weighings.0.tare_weight_kg', 0)
-            ->assertJsonPath('data.weighings.0.gross_weight_kg', 12)
-            ->assertJsonPath('data.weighings.0.net_weight_kg', 12);
-
-        $this->assertDatabaseHas('pesadas', [
-            'cantidad_bandejas' => 0,
-            'cantidad_aves' => 0,
-            'peso_leido_kg' => 12,
-            'ajuste_peso_gramos' => 250,
-            'peso_bruto_kg' => 12,
-            'tara_total_kg' => 0,
-            'peso_neto_kg' => 12,
+            ->where('tercero_id', $this->clientId)
+            ->value('id');
+        DB::table('precios_historial')->insert([
+            'lista_precio_id' => $clientPriceListId,
+            'tipo_pollo_id' => $processedTypeId,
+            'precio_kg' => 10,
+            'vigente_desde' => now()->subMinute(),
+            'vigente_hasta' => null,
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
         ]);
-        $this->assertDatabaseHas('tickets_despacho', [
-            'cliente_destino_id' => $this->clientId,
-            'vehiculo_entrega_id' => null,
-            'conductor_entrega_id' => null,
-        ]);
-        $this->assertDatabaseCount('movimientos_javas', 0);
+        DB::table('tipos_bandeja')
+            ->where('codigo', 'BANDEJA_ESTANDAR')
+            ->update(['peso_kg' => 0.5]);
+
+        foreach ([
+            1 => [
+                'base_url' => '/api/v1/despacho-minorista',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            2 => [
+                'base_url' => '/api/v1/despacho-minorista-2',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station => $stationData) {
+            $this->getJson("{$stationData['base_url']}/catalogo")->assertOk();
+            DB::table('ajustes_peso_minorista')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('estacion', $station)
+                ->where('codigo', AjustePesoMinorista::MALE_CLOSED)
+                ->update(['gramos_adicionales' => 300]);
+            $payload = $this->payload();
+            $payload['weighings'][0]['chicken_type_code'] = TipoPollo::CHICKEN_PROCESSED;
+            $payload['weighings'][0]['weight_source'] = $stationData['weight_source'];
+
+            $response = $this->postJson("{$stationData['base_url']}/tickets", $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.totals.trays', 2)
+                ->assertJsonPath('data.totals.birds', 10)
+                ->assertJsonPath('data.totals.read_weight_kg', 12)
+                ->assertJsonPath('data.totals.gross_weight_kg', 12)
+                ->assertJsonPath('data.totals.tare_weight_kg', 1)
+                ->assertJsonPath('data.totals.net_weight_kg', 11)
+                ->assertJsonPath('data.totals.amount', 110)
+                ->assertJsonPath('data.weighings.0.chicken_type_code', TipoPollo::CHICKEN_PROCESSED)
+                ->assertJsonPath('data.weighings.0.birds', 10)
+                ->assertJsonPath('data.weighings.0.adjustment.additional_grams', 0)
+                ->assertJsonPath('data.weighings.0.gross_weight_kg', 12)
+                ->assertJsonPath('data.weighings.0.tare_weight_kg', 1)
+                ->assertJsonPath('data.weighings.0.net_weight_kg', 11);
+
+            $this->assertDatabaseHas('pesadas', [
+                'ticket_id' => (int) $response->json('data.id'),
+                'tipo_pollo_id' => $processedTypeId,
+                'cantidad_bandejas' => 2,
+                'cantidad_aves' => 10,
+                'peso_leido_kg' => 12,
+                'ajuste_peso_gramos' => 0,
+                'peso_bruto_kg' => 12,
+                'tara_total_kg' => 1,
+                'peso_neto_kg' => 11,
+            ]);
+        }
     }
 
     public function test_retail_dispatch_rejects_a_non_retail_weight_source(): void

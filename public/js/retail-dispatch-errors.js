@@ -84,6 +84,32 @@ function validationDetails(errors) {
     .filter((detail) => detail.value);
 }
 
+export function getRetailLocalActionErrorPresentation(options = {}) {
+  const defaultMessage = "No se pudo completar la acción.";
+  const message = String(options.message || defaultMessage).trim() || defaultMessage;
+  const details = (Array.isArray(options.details) ? options.details : [])
+    .map((detail) => ({
+      label: String(detail?.label || "Motivo").trim() || "Motivo",
+      value: String(detail?.value || "").trim()
+    }))
+    .filter((detail) => detail.value);
+  const normalizedDetails = details.length
+    ? details
+    : [{ label: "Motivo", value: message }];
+
+  return {
+    caption: String(options.caption || "Acción bloqueada"),
+    title: String(options.title || "No se pudo completar la acción"),
+    message,
+    summary: message,
+    details: normalizedDetails,
+    help: String(
+      options.help
+      || "Revisa los datos indicados y vuelve a intentar. La lista y sus pesadas no se modificaron."
+    )
+  };
+}
+
 export function getRetailDispatchErrorPresentation(error) {
   const status = Number(error?.status || 0);
   const details = validationDetails(error?.data?.errors);
