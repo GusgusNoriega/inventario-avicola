@@ -4,9 +4,14 @@ namespace App\Services;
 
 use App\Models\AjustePesoMinorista;
 use App\Models\Balanza;
+use App\Models\ConfiguracionDespachoMinorista;
+use App\Models\CuentaFinanciera;
+use App\Models\EntidadFinanciera;
 use App\Models\ListaPrecio;
+use App\Models\MetodoPago;
 use App\Models\Tercero;
 use App\Models\TipoPollo;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -94,12 +99,49 @@ class RetailConfigurationService
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        $hasStationConfiguration = ConfiguracionDespachoMinorista::query()
+            ->where('empresa_id', $companyId)
+            ->where('sucursal_id', $branchId)
+            ->where('estacion', $station)
+            ->exists();
+
+        if (! $hasStationConfiguration) {
+            $defaultMethodId = DB::table('metodos_pago')
+                ->where('codigo', MetodoPago::CODE_CASH)
+                ->where('estado', MetodoPago::STATUS_ACTIVE)
+                ->value('id');
+            $defaultAccountId = DB::table('cuentas_financieras as cuenta')
+                ->join('entidades_financieras as entidad', 'entidad.id', '=', 'cuenta.entidad_financiera_id')
+                ->where('entidad.empresa_id', $companyId)
+                ->where('entidad.tipo', EntidadFinanciera::TYPE_OWN)
+                ->where('entidad.estado', EntidadFinanciera::STATUS_ACTIVE)
+                ->where('cuenta.estado', CuentaFinanciera::STATUS_ACTIVE)
+                ->where('cuenta.moneda', 'PEN')
+                ->orderByRaw(
+                    'CASE WHEN cuenta.tipo = ? THEN 0 ELSE 1 END',
+                    [CuentaFinanciera::TYPE_CASH]
+                )
+                ->orderBy('cuenta.id')
+                ->value('cuenta.id');
+            $hasPaymentDefaults = $defaultMethodId !== null && $defaultAccountId !== null;
+
+            DB::table('configuraciones_despacho_minorista')->insertOrIgnore([
+                'empresa_id' => $companyId,
+                'sucursal_id' => $branchId,
+                'estacion' => $station,
+                'metodo_pago_id' => $hasPaymentDefaults ? $defaultMethodId : null,
+                'cuenta_destino_id' => $hasPaymentDefaults ? $defaultAccountId : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
     }
 
     /**
      * @return array{
      *     scale: array{code: string, name: string, connection_mode: ?string, device: ?string, configuration: array<string, mixed>},
-     *     adjustments: Collection<int, array<string, mixed>>
+     *     adjustments: Collection<int, array<string, mixed>>,
+     *     payment_defaults: array{method_id: ?int, account_id: ?int}
      * }
      */
     public function configuration(int $companyId, int $branchId, int $station = 1): array
@@ -143,12 +185,17 @@ class RetailConfigurationService
                     'is_default' => $adjustment->predeterminado,
                 ])
                 ->values(),
+            'payment_defaults' => $this->paymentDefaults($companyId, $branchId, $station),
         ];
     }
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{scale: array<string, mixed>, adjustments: Collection<int, array<string, mixed>>}
+     * @return array{
+     *     scale: array<string, mixed>,
+     *     adjustments: Collection<int, array<string, mixed>>,
+     *     payment_defaults: array{method_id: ?int, account_id: ?int}
+     * }
      */
     public function update(int $companyId, int $branchId, array $data, int $station = 1): array
     {
@@ -205,6 +252,31 @@ class RetailConfigurationService
                         'updated_at' => now(),
                     ]);
             }
+
+            if (array_key_exists('payment_defaults', $data)) {
+                $defaults = $this->validatedPaymentDefaults(
+                    $companyId,
+                    $data['payment_defaults']
+                );
+
+                $configuration = ConfiguracionDespachoMinorista::query()
+                    ->where('empresa_id', $companyId)
+                    ->where('sucursal_id', $branchId)
+                    ->where('estacion', $station)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $configuration) {
+                    throw ValidationException::withMessages([
+                        'payment_defaults' => 'No existe una configuracion para esta estacion minorista.',
+                    ]);
+                }
+
+                $configuration->update([
+                    'metodo_pago_id' => $defaults['method_id'],
+                    'cuenta_destino_id' => $defaults['account_id'],
+                ]);
+            }
         }, 3);
 
         return $this->configuration($companyId, $branchId, $station);
@@ -218,6 +290,96 @@ class RetailConfigurationService
     private function scaleName(int $station): string
     {
         return $station === 2 ? 'Balanza despacho minorista 2' : 'Balanza despacho minorista';
+    }
+
+    /** @return array{method_id: ?int, account_id: ?int} */
+    private function paymentDefaults(int $companyId, int $branchId, int $station): array
+    {
+        $configuration = ConfiguracionDespachoMinorista::query()
+            ->where('empresa_id', $companyId)
+            ->where('sucursal_id', $branchId)
+            ->where('estacion', $station)
+            ->first(['metodo_pago_id', 'cuenta_destino_id']);
+
+        if (! $configuration?->metodo_pago_id || ! $configuration?->cuenta_destino_id) {
+            return ['method_id' => null, 'account_id' => null];
+        }
+
+        $methodIsAvailable = DB::table('metodos_pago')
+            ->where('id', $configuration->metodo_pago_id)
+            ->where('estado', 'ACTIVO')
+            ->exists();
+        $accountIsAvailable = $this->validOwnPenAccountQuery(
+            $companyId,
+            (int) $configuration->cuenta_destino_id
+        )->exists();
+
+        if (! $methodIsAvailable || ! $accountIsAvailable) {
+            return ['method_id' => null, 'account_id' => null];
+        }
+
+        return [
+            'method_id' => (int) $configuration->metodo_pago_id,
+            'account_id' => (int) $configuration->cuenta_destino_id,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $defaults
+     * @return array{method_id: ?int, account_id: ?int}
+     */
+    private function validatedPaymentDefaults(int $companyId, array $defaults): array
+    {
+        $methodId = filled($defaults['method_id'] ?? null)
+            ? (int) $defaults['method_id']
+            : null;
+        $accountId = filled($defaults['account_id'] ?? null)
+            ? (int) $defaults['account_id']
+            : null;
+
+        if (($methodId === null) !== ($accountId === null)) {
+            throw ValidationException::withMessages([
+                'payment_defaults' => 'Selecciona tanto el metodo de pago como la cuenta o caja predeterminada.',
+            ]);
+        }
+
+        if ($methodId === null) {
+            return ['method_id' => null, 'account_id' => null];
+        }
+
+        $methodIsAvailable = DB::table('metodos_pago')
+            ->where('id', $methodId)
+            ->where('estado', 'ACTIVO')
+            ->lockForUpdate()
+            ->first(['id']) !== null;
+
+        if (! $methodIsAvailable) {
+            throw ValidationException::withMessages([
+                'payment_defaults.method_id' => 'El metodo de pago predeterminado no existe o esta inactivo.',
+            ]);
+        }
+
+        if ($this->validOwnPenAccountQuery($companyId, (int) $accountId)
+            ->lockForUpdate()
+            ->first(['cuenta.id']) === null) {
+            throw ValidationException::withMessages([
+                'payment_defaults.account_id' => 'La cuenta o caja predeterminada debe estar activa, ser propia, pertenecer a la empresa y usar moneda PEN.',
+            ]);
+        }
+
+        return ['method_id' => $methodId, 'account_id' => $accountId];
+    }
+
+    private function validOwnPenAccountQuery(int $companyId, int $accountId): Builder
+    {
+        return DB::table('cuentas_financieras as cuenta')
+            ->join('entidades_financieras as entidad', 'entidad.id', '=', 'cuenta.entidad_financiera_id')
+            ->where('cuenta.id', $accountId)
+            ->where('cuenta.estado', CuentaFinanciera::STATUS_ACTIVE)
+            ->where('cuenta.moneda', 'PEN')
+            ->where('entidad.empresa_id', $companyId)
+            ->where('entidad.tipo', EntidadFinanciera::TYPE_OWN)
+            ->where('entidad.estado', EntidadFinanciera::STATUS_ACTIVE);
     }
 
     /**

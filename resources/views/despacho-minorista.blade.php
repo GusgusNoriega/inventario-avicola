@@ -436,6 +436,28 @@
         <div id="retailSettingsAdjustments" class="rd-adjustment-settings-grid"></div>
       </section>
 
+      <section class="rd-payment-default-settings">
+        <div class="rd-settings-title">
+          <div>
+            <span>Cobro rápido</span>
+            <strong>Método y cuenta predeterminados de esta estación</strong>
+          </div>
+        </div>
+        <div class="rd-payment-default-fields">
+          <label>
+            <span>Método de pago predeterminado</span>
+            <select id="retailDefaultPaymentMethod"></select>
+          </label>
+          <label>
+            <span>Cuenta o caja receptora predeterminada</span>
+            <select id="retailDefaultPaymentAccount"></select>
+          </label>
+        </div>
+        <p class="rd-payment-default-copy">
+          Estos valores se precargarán al cobrar. Podrás elegir otro método o cuenta para cualquier venta sin cambiar esta configuración.
+        </p>
+      </section>
+
       <section class="rd-typography-settings">
         <div class="rd-settings-title">
           <div>

@@ -120,6 +120,8 @@ class RetailDispatchController extends Controller
                 'adjustments' => $retailConfiguration['adjustments'],
                 'scale' => $retailConfiguration['scale'],
                 'financial' => [
+                    'default_method_id' => $retailConfiguration['payment_defaults']['method_id'],
+                    'default_account_id' => $retailConfiguration['payment_defaults']['account_id'],
                     'methods' => MetodoPago::query()
                         ->where('estado', MetodoPago::STATUS_ACTIVE)
                         ->orderBy('id')
@@ -133,6 +135,7 @@ class RetailDispatchController extends Controller
                         ->values(),
                     'own_accounts' => CuentaFinanciera::query()
                         ->where('estado', CuentaFinanciera::STATUS_ACTIVE)
+                        ->where('moneda', 'PEN')
                         ->whereHas('entidadFinanciera', fn ($query) => $query
                             ->where('empresa_id', $companyId)
                             ->where('tipo', EntidadFinanciera::TYPE_OWN)

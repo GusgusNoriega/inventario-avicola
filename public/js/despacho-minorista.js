@@ -4,6 +4,10 @@ import {
   getRetailLocalActionErrorPresentation
 } from "./retail-dispatch-errors.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
+import {
+  normalizeRetailPaymentDefaultId,
+  resolveRetailPaymentDefaults
+} from "./retail-payment-defaults.js";
 import { calculateRetailWeightAdjustment } from "./retail-weight-calculation.js";
 import {
   buildRetailScaleStorageKey,
@@ -191,6 +195,8 @@ const elements = {
   flowControl: document.querySelector("#retailFlowControl"),
   defaultAdjustment: document.querySelector("#retailDefaultAdjustment"),
   settingsAdjustments: document.querySelector("#retailSettingsAdjustments"),
+  defaultPaymentMethod: document.querySelector("#retailDefaultPaymentMethod"),
+  defaultPaymentAccount: document.querySelector("#retailDefaultPaymentAccount"),
   settingsMessage: document.querySelector("#retailSettingsMessage"),
   saveSettings: document.querySelector("#retailSaveSettings"),
   openTypography: document.querySelector("#retailOpenTypography"),
@@ -217,7 +223,9 @@ const state = {
     scale: null,
     financial: {
       methods: [],
-      own_accounts: []
+      own_accounts: [],
+      default_method_id: null,
+      default_account_id: null
     }
   },
   activeList: 0,
@@ -1890,7 +1898,13 @@ function paymentMethodOptions(selectedId = "") {
 
 function paymentAccountOptions(selectedId = "") {
   return (state.catalog.financial.own_accounts || []).map((account) => {
-    const detail = [account.entity?.name, account.alias, account.bank, account.masked_number]
+    const typeLabel = {
+      CAJA: "Caja",
+      BANCO: "Cuenta bancaria",
+      BILLETERA: "Billetera",
+      OTRA: "Otra cuenta"
+    }[String(account.type || "").toUpperCase()] || "Cuenta";
+    const detail = [typeLabel, account.entity?.name, account.alias, account.bank, account.masked_number]
       .filter(Boolean)
       .join(" · ");
     return `
@@ -1902,13 +1916,12 @@ function paymentAccountOptions(selectedId = "") {
 }
 
 function newPaymentRow(amount = 0) {
-  const methods = state.catalog.financial.methods || [];
-  const accounts = state.catalog.financial.own_accounts || [];
+  const defaults = resolveRetailPaymentDefaults(state.catalog.financial);
 
   return {
     key: createDraftId(),
-    methodId: methods[0]?.id || "",
-    accountId: accounts[0]?.id || "",
+    methodId: defaults.methodId,
+    accountId: defaults.accountId,
     amount: formatMoneyValue(Math.max(0, Number(amount || 0))),
     reference: ""
   };
@@ -2410,11 +2423,28 @@ function renderSettingsAdjustments() {
   `).join("");
 }
 
+function renderPaymentDefaultSettings() {
+  const financial = state.catalog.financial || {};
+  const methods = Array.isArray(financial.methods) ? financial.methods : [];
+  const accounts = Array.isArray(financial.own_accounts) ? financial.own_accounts : [];
+  const defaults = resolveRetailPaymentDefaults(financial);
+
+  elements.defaultPaymentMethod.innerHTML = methods.length
+    ? paymentMethodOptions(defaults.methodId)
+    : '<option value="">No hay métodos de pago activos</option>';
+  elements.defaultPaymentAccount.innerHTML = accounts.length
+    ? paymentAccountOptions(defaults.accountId)
+    : '<option value="">No hay cuentas o cajas activas en PEN</option>';
+  elements.defaultPaymentMethod.disabled = methods.length === 0;
+  elements.defaultPaymentAccount.disabled = accounts.length === 0;
+}
+
 function fillSettingsForm() {
   const serialOptions = state.scale?.getState?.().serialOptions || RETAIL_SCALE_SERIAL_DEFAULTS;
   applySerialOptionsToForm(serialOptions);
   elements.settingsScaleName.textContent = state.catalog.scale?.name || "Balanza minorista";
   renderSettingsAdjustments();
+  renderPaymentDefaultSettings();
   renderScaleStatus();
   setSettingsMessage("");
 }
@@ -2426,6 +2456,20 @@ function applySettingsResponse(data) {
   }
   if (payload.scale) {
     state.catalog.scale = payload.scale;
+  }
+  if (payload.payment_defaults && typeof payload.payment_defaults === "object") {
+    const previousMethodId = state.catalog.financial.default_method_id;
+    const previousAccountId = state.catalog.financial.default_account_id;
+    const nextMethodId = normalizeRetailPaymentDefaultId(payload.payment_defaults.method_id);
+    const nextAccountId = normalizeRetailPaymentDefaultId(payload.payment_defaults.account_id);
+
+    state.catalog.financial.default_method_id = nextMethodId;
+    state.catalog.financial.default_account_id = nextAccountId;
+
+    if (previousMethodId !== nextMethodId || previousAccountId !== nextAccountId) {
+      state.paymentRows = [];
+      state.paymentContext = null;
+    }
   }
 
   const defaultAdjustment = state.catalog.adjustments.find((entry) => entry.is_default);
@@ -2439,6 +2483,8 @@ function applySettingsResponse(data) {
 async function saveSettings(event) {
   event.preventDefault();
   const adjustments = [];
+  const methods = state.catalog.financial.methods || [];
+  const accounts = state.catalog.financial.own_accounts || [];
   let invalid = false;
 
   elements.settingsAdjustments.querySelectorAll("[data-retail-setting-adjustment]").forEach((input) => {
@@ -2455,6 +2501,26 @@ async function saveSettings(event) {
     return;
   }
 
+  const selectedMethodId = normalizeRetailPaymentDefaultId(elements.defaultPaymentMethod.value);
+  const selectedAccountId = normalizeRetailPaymentDefaultId(elements.defaultPaymentAccount.value);
+  if (methods.length && !methods.some((method) => Number(method.id) === selectedMethodId)) {
+    setSettingsMessage("Selecciona un método de pago predeterminado activo.", true);
+    return;
+  }
+  if (accounts.length && !accounts.some((account) => Number(account.id) === selectedAccountId)) {
+    setSettingsMessage("Selecciona una cuenta o caja predeterminada activa en PEN.", true);
+    return;
+  }
+  const paymentDefaults = methods.length && accounts.length
+    ? {
+        method_id: selectedMethodId,
+        account_id: selectedAccountId
+      }
+    : {
+        method_id: null,
+        account_id: null
+      };
+
   try {
     state.scale.configureSerial(serialOptionsFromForm());
   } catch (error) {
@@ -2469,14 +2535,15 @@ async function saveSettings(event) {
       method: "PUT",
       body: JSON.stringify({
         default_adjustment_code: elements.defaultAdjustment.value,
-        adjustments
+        adjustments,
+        payment_defaults: paymentDefaults
       })
     });
     applySettingsResponse(response.data);
     fillSettingsForm();
     renderAll();
     setSettingsMessage(response.message || "Configuración guardada correctamente.");
-    setMessage("Configuración local de conexión y gramos actualizada.");
+    setMessage("Configuración de balanza, merma y cobro predeterminado actualizada.");
   } catch (error) {
     const validation = error.data?.errors ? Object.values(error.data.errors).flat()[0] : null;
     setSettingsMessage(validation || error.message, true);
@@ -2585,7 +2652,9 @@ function normalizeCatalog(data) {
     scale: data.scale || null,
     financial: {
       methods: Array.isArray(financial.methods) ? financial.methods : [],
-      own_accounts: Array.isArray(financial.own_accounts) ? financial.own_accounts : []
+      own_accounts: Array.isArray(financial.own_accounts) ? financial.own_accounts : [],
+      default_method_id: normalizeRetailPaymentDefaultId(financial.default_method_id),
+      default_account_id: normalizeRetailPaymentDefaultId(financial.default_account_id)
     }
   };
 }

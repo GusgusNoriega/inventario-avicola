@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(84, $migrationFiles);
+        $this->assertCount(85, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -72,6 +72,7 @@ class DatabaseSchemaTest extends TestCase
             'tipos_java',
             'tipos_bandeja',
             'ajustes_peso_minorista',
+            'configuraciones_despacho_minorista',
             'balanzas',
             'conductores',
             'vehiculos',
@@ -130,6 +131,7 @@ class DatabaseSchemaTest extends TestCase
             'conteos_diarios_javas_camiones' => ['conteo_diario_java_id', 'vehiculo_id', 'placa_snapshot', 'cantidad_javas', 'cantidad_bandejas'],
             'tipos_bandeja' => ['codigo', 'nombre', 'peso_kg', 'capacidad_aves', 'estado'],
             'ajustes_peso_minorista' => ['empresa_id', 'estacion', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
+            'configuraciones_despacho_minorista' => ['empresa_id', 'sucursal_id', 'estacion', 'metodo_pago_id', 'cuenta_destino_id'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
@@ -485,6 +487,27 @@ class DatabaseSchemaTest extends TestCase
             'codigo' => 'MACHO_CERRADO',
             'gramos_adicionales' => 175,
         ]);
+    }
+
+    public function test_retail_dispatch_configuration_schema_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_07_24_000001_create_configuraciones_despacho_minorista_table.php'
+        );
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasTable('configuraciones_despacho_minorista'));
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumns('configuraciones_despacho_minorista', [
+            'empresa_id',
+            'sucursal_id',
+            'estacion',
+            'metodo_pago_id',
+            'cuenta_destino_id',
+        ]));
     }
 
     public function test_vehicle_ownership_migration_normalizes_legacy_data_and_default(): void

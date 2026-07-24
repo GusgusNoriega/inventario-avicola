@@ -202,11 +202,20 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.scale.configuration.baudRate', 9600)
             ->assertJsonPath('data.financial.methods.2.code', 'EFECTIVO')
             ->assertJsonPath('data.financial.own_accounts.0.id', $this->cashAccountId)
+            ->assertJsonPath('data.financial.default_method_id', $this->cashMethodId)
+            ->assertJsonPath('data.financial.default_account_id', $this->cashAccountId)
             ->assertJsonMissingPath('data.cage_types');
 
         $this->assertDatabaseHas('balanzas', [
             'sucursal_id' => $this->branchId,
             'codigo' => 'BALANZA_MINORISTA',
+        ]);
+        $this->assertDatabaseHas('configuraciones_despacho_minorista', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'estacion' => 1,
+            'metodo_pago_id' => $this->cashMethodId,
+            'cuenta_destino_id' => $this->cashAccountId,
         ]);
     }
 
@@ -410,6 +419,156 @@ class RetailDispatchApiTest extends TestCase
                 ->where('balanzas.codigo', 'BALANZA_MINORISTA_2')
                 ->exists()
         );
+    }
+
+    public function test_retail_payment_defaults_are_persisted_independently_for_both_stations(): void
+    {
+        $entityId = (int) DB::table('cuentas_financieras')
+            ->where('id', $this->cashAccountId)
+            ->value('entidad_financiera_id');
+        $bankAccountId = DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $entityId,
+            'tipo' => 'BANCO',
+            'alias' => 'Cuenta bancaria puesto 2',
+            'banco' => 'Banco de prueba',
+            'numero_cuenta' => '001122334455',
+            'moneda' => 'PEN',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $transferMethodId = (int) DB::table('metodos_pago')
+            ->where('codigo', 'TRANSFERENCIA')
+            ->value('id');
+
+        $this->getJson('/api/v1/despacho-minorista/catalogo')->assertOk();
+        $this->getJson('/api/v1/despacho-minorista-2/catalogo')->assertOk();
+
+        $this->putJson(
+            '/api/v1/despacho-minorista/configuracion',
+            $this->configurationPayload([
+                'method_id' => $this->cashMethodId,
+                'account_id' => $this->cashAccountId,
+            ])
+        )->assertOk()
+            ->assertJsonPath('data.payment_defaults.method_id', $this->cashMethodId)
+            ->assertJsonPath('data.payment_defaults.account_id', $this->cashAccountId);
+
+        $this->putJson(
+            '/api/v1/despacho-minorista-2/configuracion',
+            $this->configurationPayload([
+                'method_id' => $transferMethodId,
+                'account_id' => $bankAccountId,
+            ])
+        )->assertOk()
+            ->assertJsonPath('data.payment_defaults.method_id', $transferMethodId)
+            ->assertJsonPath('data.payment_defaults.account_id', $bankAccountId);
+
+        $this->getJson('/api/v1/despacho-minorista/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.financial.default_method_id', $this->cashMethodId)
+            ->assertJsonPath('data.financial.default_account_id', $this->cashAccountId);
+        $this->getJson('/api/v1/despacho-minorista-2/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.financial.default_method_id', $transferMethodId)
+            ->assertJsonPath('data.financial.default_account_id', $bankAccountId);
+
+        $this->assertDatabaseHas('configuraciones_despacho_minorista', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'estacion' => 1,
+            'metodo_pago_id' => $this->cashMethodId,
+            'cuenta_destino_id' => $this->cashAccountId,
+        ]);
+        $this->assertDatabaseHas('configuraciones_despacho_minorista', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'estacion' => 2,
+            'metodo_pago_id' => $transferMethodId,
+            'cuenta_destino_id' => $bankAccountId,
+        ]);
+    }
+
+    public function test_retail_payment_defaults_reject_invalid_method_or_account(): void
+    {
+        $inactiveMethodId = (int) DB::table('metodos_pago')
+            ->where('codigo', 'YAPE')
+            ->value('id');
+        DB::table('metodos_pago')
+            ->where('id', $inactiveMethodId)
+            ->update(['estado' => 'INACTIVO']);
+
+        $this->putJson(
+            '/api/v1/despacho-minorista/configuracion',
+            $this->configurationPayload([
+                'method_id' => $inactiveMethodId,
+                'account_id' => $this->cashAccountId,
+            ])
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_defaults.method_id');
+
+        $otherUser = User::factory()->create();
+        $foreignEntityId = DB::table('entidades_financieras')->insertGetId([
+            'empresa_id' => $otherUser->empresa_id,
+            'tipo' => 'PROPIA',
+            'razon_social' => 'Caja de otra empresa',
+            'estado' => 'ACTIVO',
+            'created_by' => $otherUser->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $foreignAccountId = DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $foreignEntityId,
+            'tipo' => 'CAJA',
+            'alias' => 'Caja ajena',
+            'moneda' => 'PEN',
+            'estado' => 'ACTIVO',
+            'created_by' => $otherUser->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->putJson(
+            '/api/v1/despacho-minorista/configuracion',
+            $this->configurationPayload([
+                'method_id' => $this->cashMethodId,
+                'account_id' => $foreignAccountId,
+            ])
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_defaults.account_id');
+
+        $ownEntityId = (int) DB::table('cuentas_financieras')
+            ->where('id', $this->cashAccountId)
+            ->value('entidad_financiera_id');
+        $usdAccountId = DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $ownEntityId,
+            'tipo' => 'BANCO',
+            'alias' => 'Cuenta USD no compatible',
+            'moneda' => 'USD',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->putJson(
+            '/api/v1/despacho-minorista/configuracion',
+            $this->configurationPayload([
+                'method_id' => $this->cashMethodId,
+                'account_id' => $usdAccountId,
+            ])
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_defaults.account_id');
+
+        $this->putJson(
+            '/api/v1/despacho-minorista/configuracion',
+            $this->configurationPayload([
+                'method_id' => $this->cashMethodId,
+                'account_id' => null,
+            ])
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_defaults.account_id');
     }
 
     public function test_retail_dispatch_applies_adjustment_per_bird_and_stores_snapshots(): void
@@ -1319,6 +1478,22 @@ class RetailDispatchApiTest extends TestCase
                 'read_weight_kg' => 12,
                 'weighed_at' => now('America/Lima')->subMinute()->toIso8601String(),
             ]],
+        ];
+    }
+
+    /**
+     * @param  array{method_id: ?int, account_id: ?int}  $paymentDefaults
+     * @return array<string, mixed>
+     */
+    private function configurationPayload(array $paymentDefaults): array
+    {
+        return [
+            'default_adjustment_code' => AjustePesoMinorista::MALE_CLOSED,
+            'adjustments' => [[
+                'code' => AjustePesoMinorista::MALE_CLOSED,
+                'additional_grams' => 0,
+            ]],
+            'payment_defaults' => $paymentDefaults,
         ];
     }
 

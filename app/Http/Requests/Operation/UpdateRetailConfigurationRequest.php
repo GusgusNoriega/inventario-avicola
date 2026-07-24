@@ -4,6 +4,7 @@ namespace App\Http\Requests\Operation;
 
 use App\Models\AjustePesoMinorista;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class UpdateRetailConfigurationRequest extends FormRequest
@@ -41,6 +42,31 @@ class UpdateRetailConfigurationRequest extends FormRequest
             'adjustments.*' => ['required', 'array:code,additional_grams'],
             'adjustments.*.code' => ['required', 'distinct', Rule::in(AjustePesoMinorista::codes())],
             'adjustments.*.additional_grams' => ['required', 'integer', 'between:0,1000000'],
+            'payment_defaults' => [
+                'sometimes',
+                'array:method_id,account_id',
+                'required_array_keys:method_id,account_id',
+            ],
+            'payment_defaults.method_id' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => filled($this->input('payment_defaults.account_id'))),
+                'integer',
+                Rule::exists('metodos_pago', 'id')->where(fn ($query) => $query
+                    ->where('estado', 'ACTIVO')),
+            ],
+            'payment_defaults.account_id' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => filled($this->input('payment_defaults.method_id'))),
+                'integer',
+                Rule::exists('cuentas_financieras', 'id')->where(fn ($query) => $query
+                    ->where('estado', 'ACTIVO')
+                    ->where('moneda', 'PEN')
+                    ->whereIn('entidad_financiera_id', DB::table('entidades_financieras')
+                        ->where('empresa_id', $this->companyId())
+                        ->where('tipo', 'PROPIA')
+                        ->where('estado', 'ACTIVO')
+                        ->select('id'))),
+            ],
         ];
     }
 
@@ -86,5 +112,26 @@ class UpdateRetailConfigurationRequest extends FormRequest
         }
 
         $this->merge($normalized);
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'payment_defaults.array' => 'La configuracion de pago predeterminada no tiene un formato valido.',
+            'payment_defaults.required_array_keys' => 'Selecciona el metodo de pago y la cuenta o caja predeterminada.',
+            'payment_defaults.method_id.required' => 'Selecciona el metodo de pago predeterminado.',
+            'payment_defaults.method_id.integer' => 'El metodo de pago predeterminado no es valido.',
+            'payment_defaults.method_id.exists' => 'Selecciona un metodo de pago activo.',
+            'payment_defaults.account_id.required' => 'Selecciona la cuenta o caja predeterminada.',
+            'payment_defaults.account_id.integer' => 'La cuenta o caja predeterminada no es valida.',
+            'payment_defaults.account_id.exists' => 'Selecciona una cuenta o caja propia, activa y en moneda PEN.',
+        ];
+    }
+
+    private function companyId(): int
+    {
+        return (int) ($this->user()?->empresa_id
+            ?? DB::table('empresas')->where('estado', 'ACTIVO')->orderBy('id')->value('id'));
     }
 }

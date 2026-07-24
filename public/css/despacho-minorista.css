@@ -1665,6 +1665,7 @@ body.retail-dispatch-page {
 .rd-serial-fields label > span,
 .rd-manual-reading label > span,
 .rd-default-adjustment > span,
+.rd-payment-default-fields label > span,
 .rd-adjustment-setting label > span,
 .rd-delivery-fields label > span,
 .rd-price-field > span {
@@ -1682,6 +1683,7 @@ body.retail-dispatch-page {
 .rd-serial-fields select,
 .rd-manual-reading input,
 .rd-default-adjustment select,
+.rd-payment-default-fields select,
 .rd-adjustment-setting input {
   width: 100%;
   min-height: 40px;
@@ -2038,7 +2040,8 @@ body.retail-dispatch-page {
 }
 
 .rd-settings-section,
-.rd-adjustment-settings {
+.rd-adjustment-settings,
+.rd-payment-default-settings {
   min-width: 0;
   padding: 12px;
   display: grid;
@@ -2156,6 +2159,36 @@ body.retail-dispatch-page {
   min-height: 36px;
   color: #ffe266;
   font-weight: 900;
+}
+
+.rd-payment-default-settings {
+  border-color: #3d5c4b;
+  background: linear-gradient(120deg, rgba(52, 211, 123, 0.08), #0d131b 48%);
+}
+
+.rd-payment-default-fields {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 10px;
+}
+
+.rd-payment-default-fields label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.rd-payment-default-fields select {
+  min-height: 40px;
+  color: #dfffee;
+  border-color: #416b53;
+}
+
+.rd-payment-default-copy {
+  margin: 0;
+  color: #91a89b;
+  font-size: var(--rd-font-modal-text);
+  line-height: 1.4;
 }
 
 .rd-settings-message {
@@ -2464,6 +2497,7 @@ body.retail-dispatch-page {
   .rd-price-fields,
   .rd-delivery-fields,
   .rd-payment-fields,
+  .rd-payment-default-fields,
   .rd-payment-totals,
   .rd-adjustment-settings-grid {
     grid-template-columns: 1fr;
