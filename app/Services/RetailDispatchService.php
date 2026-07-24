@@ -528,9 +528,9 @@ class RetailDispatchService
                 ]);
             }
 
-            // El precio del cliente siempre prevalece. Los precios puntuales solo
-            // pertenecen al borrador/lista de una venta minorista sin cliente.
-            $isManual = ! $clientId && $overrides->has($type->codigo);
+            // Un precio puntual pertenece exclusivamente a este ticket y prevalece
+            // sobre la tarifa del cliente o la tarifa general usada como referencia.
+            $isManual = $overrides->has($type->codigo);
             $result[$type->id] = [
                 'history' => $history,
                 'source' => $isManual ? 'MANUAL' : ($specificPrice ? 'CLIENTE' : 'GENERAL'),

@@ -366,7 +366,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('general_prices', $javascript);
         $this->assertStringContainsString('data-retail-clear-client', $javascript);
         $this->assertStringContainsString('list.clientId ? Number(list.clientId) : null', $javascript);
-        $this->assertStringContainsString('if (client) return currentClientPrice(list, chickenTypeCode);', $javascript);
+        $this->assertStringContainsString('const base = client', $javascript);
         $this->assertStringContainsString('sistema-pollos-retail-typography-v1', $javascript);
         $this->assertStringContainsString('data-typography-step', $javascript);
         $this->assertStringContainsString('document.documentElement.style.setProperty', $javascript);
@@ -563,6 +563,49 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('<dt>Peso leído</dt>', $javascript);
         $this->assertStringContainsString('<dt>Peso neto</dt>', $javascript);
         $this->assertStringContainsString('<dt>Importe</dt>', $javascript);
+    }
+
+    public function test_both_retail_dispatch_views_allow_ticket_scoped_price_changes(): void
+    {
+        foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
+            $this->get($url)
+                ->assertOk()
+                ->assertSee('id="retailAssignPrice"', false)
+                ->assertSee('Cambiar precio')
+                ->assertSee('Precio puntual del ticket')
+                ->assertSee('solo en este ticket')
+                ->assertSee('sin modificar las tarifas de Directorio');
+        }
+
+        $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertMatchesRegularExpression(
+            '/const base = client[\s\S]+?if \(!base\) return null;[\s\S]+?const override = list\.priceOverrides/',
+            $javascript
+        );
+        $this->assertStringContainsString('return { value, source: "MANUAL" };', $javascript);
+        $this->assertStringContainsString('const current = hasOverride ? override : base?.value;', $javascript);
+        $this->assertStringContainsString('data-retail-base-price="${baseValue}"', $javascript);
+        $this->assertStringContainsString('if (!baseRaw) return;', $javascript);
+        $this->assertStringContainsString('moneyToCents(normalizedValue) === moneyToCents(baseRaw)', $javascript);
+        $this->assertStringContainsString('elements.clearPrices.disabled = false;', $javascript);
+        $this->assertStringContainsString('elements.priceForm.querySelector(\'[type="submit"]\').disabled = false;', $javascript);
+        $this->assertStringContainsString('if (String(list.clientId) !== String(client.id)) {', $javascript);
+        $this->assertStringContainsString('list.priceOverrides = {};', $javascript);
+        $this->assertStringContainsString('const TICKET_PRICE_OVERRIDE_VERSION = 1;', $javascript);
+        $this->assertStringContainsString(
+            'priceOverrides: clientId && !supportsClientOverrides ? {} : normalizedPriceOverrides',
+            $javascript
+        );
+        $this->assertStringContainsString(
+            'ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION',
+            $javascript
+        );
+        $this->assertStringContainsString('const priceOverrides = Object.fromEntries(', $javascript);
+        $this->assertStringContainsString('price_overrides: priceOverrides,', $javascript);
+        $this->assertStringNotContainsString('const priceOverrides = list.clientId', $javascript);
+        $this->assertStringNotContainsString('El precio del cliente no se puede reemplazar', $javascript);
     }
 
     public function test_operation_view_is_available_without_database_queries(): void

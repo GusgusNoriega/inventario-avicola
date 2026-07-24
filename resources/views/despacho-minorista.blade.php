@@ -174,7 +174,7 @@
         </button>
         <button id="retailAssignPrice" class="rd-rail-button is-price" type="button">
           <span aria-hidden="true">S/</span>
-          Asignar precio
+          Cambiar precio
         </button>
         <button id="retailSaveDispatch" class="rd-save-button" type="button" disabled>
           <span aria-hidden="true">✓</span>
@@ -305,7 +305,7 @@
         </div>
         <button type="button" data-retail-close-modal="retailPriceModal" aria-label="Cerrar">×</button>
       </header>
-      <p class="rd-modal-copy">Sin cliente, usa el precio general vigente o define uno propio para este ticket. Con cliente, siempre se respetará su precio vigente.</p>
+      <p class="rd-modal-copy">Los precios vigentes se precargan para que puedas cambiarlos solo en este ticket, sin modificar las tarifas de Directorio.</p>
       <div id="retailPriceFields" class="rd-price-fields"></div>
       <div class="rd-modal-actions">
         <button id="retailClearPrices" class="rd-secondary-button" type="button">Usar precios vigentes</button>

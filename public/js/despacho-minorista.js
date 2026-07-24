@@ -51,6 +51,7 @@ const STATION_2_LIST_ADJUSTMENT_CODES = [
 ];
 const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
+const TICKET_PRICE_OVERRIDE_VERSION = 1;
 const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
 const RETAIL_CHICKEN_TYPE_CODES = new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"]);
 const TYPOGRAPHY_STORAGE_KEY = RETAIL_STATION === "1"
@@ -351,6 +352,7 @@ function emptyList() {
     draftId: createDraftId(),
     clientId: "",
     operationType: OPERATION_SALE,
+    ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
     priceOverrides: {},
     items: [],
     saving: false
@@ -359,18 +361,23 @@ function emptyList() {
 
 function normalizeList(list) {
   const source = list && typeof list === "object" ? list : {};
+  const clientId = String(source.clientId || "");
+  const normalizedPriceOverrides = source.priceOverrides && typeof source.priceOverrides === "object"
+    ? Object.fromEntries(
+      Object.entries(source.priceOverrides)
+        .map(([code, value]) => [code, roundMoney(value)])
+        .filter(([, value]) => value > 0)
+    )
+    : {};
+  const supportsClientOverrides = Number(source.ticketPriceOverrideVersion)
+    === TICKET_PRICE_OVERRIDE_VERSION;
 
   return {
     draftId: source.draftId || createDraftId(),
-    clientId: String(source.clientId || ""),
+    clientId,
     operationType: source.operationType === OPERATION_RETURN ? OPERATION_RETURN : OPERATION_SALE,
-    priceOverrides: source.priceOverrides && typeof source.priceOverrides === "object"
-      ? Object.fromEntries(
-        Object.entries(source.priceOverrides)
-          .map(([code, value]) => [code, roundMoney(value)])
-          .filter(([, value]) => value > 0)
-      )
-      : {},
+    ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
+    priceOverrides: clientId && !supportsClientOverrides ? {} : normalizedPriceOverrides,
     items: Array.isArray(source.items)
       ? source.items
         .filter((item) => item && item.adjustmentCode && Number(item.readWeight) > 0)
@@ -403,6 +410,7 @@ function persistLists() {
     draftId: list.draftId,
     clientId: list.clientId,
     operationType: list.operationType,
+    ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
     priceOverrides: list.priceOverrides,
     items: list.items
   }));
@@ -744,10 +752,10 @@ function currentGeneralPrice(chickenTypeCode) {
 
 function effectivePrice(list, chickenTypeCode) {
   const client = clientFor(list);
-  if (client) return currentClientPrice(list, chickenTypeCode);
-
-  const general = currentGeneralPrice(chickenTypeCode);
-  if (!general) return null;
+  const base = client
+    ? currentClientPrice(list, chickenTypeCode)
+    : currentGeneralPrice(chickenTypeCode);
+  if (!base) return null;
 
   const override = list.priceOverrides?.[chickenTypeCode];
   if (override !== undefined && override !== null && override !== "") {
@@ -756,7 +764,7 @@ function effectivePrice(list, chickenTypeCode) {
     if (Number.isFinite(rawValue) && value > 0) return { value, source: "MANUAL" };
   }
 
-  return general;
+  return base;
 }
 
 function missingPriceTypes(list) {
@@ -1252,8 +1260,8 @@ function renderLists() {
     || !current.items.length;
   elements.saveDispatch.title = missingPrices.length
     ? (current.clientId
-      ? "Configura en Directorio el precio del cliente para cada tipo de pollo antes de grabar."
-      : "Asigna un precio a la lista para cada tipo de pollo antes de grabar.")
+      ? "Configura en Directorio un precio base vigente del cliente antes de grabar."
+      : "Configura en Directorio un precio general base vigente antes de grabar.")
     : "Grabar la lista activa";
   elements.removeWeighing.disabled = current.saving
     || !state.selectedItem
@@ -1979,7 +1987,11 @@ function assignClient(clientId) {
   const client = state.catalog.clients.find((entry) => String(entry.id) === String(clientId));
   if (!client) return;
 
-  activeList().clientId = String(client.id);
+  const list = activeList();
+  if (String(list.clientId) !== String(client.id)) {
+    list.clientId = String(client.id);
+    list.priceOverrides = {};
+  }
   persistLists();
   closeModal(elements.clientModal);
   renderAll();
@@ -1987,7 +1999,11 @@ function assignClient(clientId) {
 }
 
 function clearClient() {
-  activeList().clientId = "";
+  const list = activeList();
+  if (list.clientId) {
+    list.clientId = "";
+    list.priceOverrides = {};
+  }
   persistLists();
   closeModal(elements.clientModal);
   renderAll();
@@ -1998,33 +2014,36 @@ function renderPriceFields() {
   const list = priceEditingList();
   const client = clientFor(list);
   elements.priceFields.innerHTML = state.catalog.chicken_types.map((type) => {
-    const vigente = client
+    const base = client
       ? currentClientPrice(list, type.code)
       : currentGeneralPrice(type.code);
-    const current = client || !vigente ? "" : list.priceOverrides?.[type.code];
+    const override = list.priceOverrides?.[type.code];
+    const hasOverride = override !== undefined && override !== null && override !== "";
+    const current = hasOverride ? override : base?.value;
     const hasCurrent = current !== undefined && current !== null && current !== "";
+    const baseValue = base ? formatMoneyValue(base.value) : "";
+    const baseLabel = client ? "Precio vigente del cliente" : "Precio general vigente";
+    const help = !base
+      ? (client
+        ? "Este cliente no tiene un precio base vigente configurado en Directorio"
+        : "Configura primero el precio general base vigente en Directorio")
+      : (hasOverride
+        ? `Precio personalizado de este ticket: S/ ${formatMoneyValue(override)} · Base vigente: S/ ${baseValue}`
+        : `${baseLabel}: S/ ${baseValue} · ${escapeHtml(base.source)}`);
     return `
       <label class="rd-price-field">
         <span>${escapeHtml(type.name)}</span>
-        <input type="number" min="0.01" max="99999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Precio de ${escapeHtml(type.name)} por kilogramo" data-retail-price-code="${escapeHtml(type.code)}" value="${hasCurrent ? formatMoneyValue(current) : ""}" placeholder="${vigente ? formatMoneyValue(vigente.value) : "Sin precio base"}" ${client || !vigente ? "disabled" : ""}>
-        <small>${client
-          ? (vigente
-            ? `Precio del cliente: S/ ${formatMoneyValue(vigente.value)} · ${escapeHtml(vigente.source)}`
-            : "Este cliente no tiene un precio vigente configurado en Directorio")
-          : (hasCurrent
-            ? `Precio personalizado de la lista: S/ ${formatMoneyValue(current)}`
-            : (vigente
-              ? `Precio general vigente: S/ ${formatMoneyValue(vigente.value)} · ${escapeHtml(vigente.source)}`
-              : "Configura primero el precio general vigente en Directorio"))}</small>
+        <input type="number" min="0.01" max="99999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Precio de ${escapeHtml(type.name)} por kilogramo" data-retail-price-code="${escapeHtml(type.code)}" data-retail-base-price="${baseValue}" value="${hasCurrent ? formatMoneyValue(current) : ""}" placeholder="${baseValue || "Sin precio base"}" ${!base ? "disabled" : ""}>
+        <small>${help}</small>
       </label>
     `;
   }).join("");
 
   elements.priceForm.querySelector(".rd-modal-copy").textContent = client
-    ? `Se usarán siempre los precios vigentes de ${client.name}; los precios personalizados de la lista no los reemplazan.`
-    : `Venta sin cliente en la lista ${state.priceEditingListIndex + 1}. Deja un campo vacío para usar el precio general vigente.`;
-  elements.clearPrices.disabled = Boolean(client);
-  elements.priceForm.querySelector('[type="submit"]').disabled = Boolean(client);
+    ? `Los precios vigentes de ${client.name} están precargados. Puedes cambiarlos solo para este ticket; no se modificará Directorio.`
+    : `Los precios generales vigentes están precargados para la lista ${state.priceEditingListIndex + 1}. Puedes cambiarlos solo para este ticket; no se modificará Directorio.`;
+  elements.clearPrices.disabled = false;
+  elements.priceForm.querySelector('[type="submit"]').disabled = false;
 }
 
 function openPriceModal() {
@@ -2040,24 +2059,13 @@ function applyPrices(event) {
   event.preventDefault();
   const listIndex = state.priceEditingListIndex;
   const list = priceEditingList();
-  const client = clientFor(list);
-  if (client) {
-    return showLocalActionIssue({
-      caption: "Precio no aplicado",
-      title: "El precio del cliente no se puede reemplazar",
-      message: "No se modificaron los precios de esta lista porque el cliente tiene una tarifa vigente.",
-      details: [
-        { label: "Cliente", value: client.name || "Cliente seleccionado" },
-        { label: "Lista", value: `Lista ${Number(listIndex) + 1}` },
-        { label: "Regla aplicada", value: "El precio vigente del cliente siempre tiene prioridad." }
-      ],
-      help: "Cierra esta ventana y usa el precio vigente. Si necesita cambiarse, actualízalo primero en Directorio."
-    });
-  }
   const prices = {};
   const invalidPrices = [];
 
   elements.priceFields.querySelectorAll("[data-retail-price-code]").forEach((input) => {
+    const baseRaw = String(input.dataset.retailBasePrice || "").trim();
+    if (!baseRaw) return;
+
     const raw = input.value.trim();
     if (!raw) return;
     const value = Number(raw);
@@ -2076,7 +2084,9 @@ function applyPrices(event) {
       });
       return;
     }
-    prices[input.dataset.retailPriceCode] = roundMoney(value);
+    const normalizedValue = roundMoney(value);
+    if (moneyToCents(normalizedValue) === moneyToCents(baseRaw)) return;
+    prices[input.dataset.retailPriceCode] = normalizedValue;
   });
 
   if (invalidPrices.length) {
@@ -2418,13 +2428,13 @@ function showMissingPricesError(list, missingTypes = missingPriceTypes(list)) {
     return {
       label: type?.name || code,
       value: client
-        ? `El cliente ${client.name} no tiene un precio vigente para este tipo de pollo.`
-        : "No existe un precio general o personalizado disponible para este tipo de pollo."
+        ? `El cliente ${client.name} no tiene un precio base vigente para este tipo de pollo.`
+        : "No existe un precio general base vigente para este tipo de pollo."
     };
   });
   const message = client
-    ? "Faltan precios vigentes del cliente. Configúralos en Directorio antes de grabar."
-    : "Faltan precios para la lista. Configura el precio general o asigna un precio válido antes de grabar.";
+    ? "Faltan precios base vigentes del cliente. Configúralos en Directorio antes de grabar; Cambiar precio solo personaliza una tarifa base existente para este ticket."
+    : "Faltan precios generales base vigentes. Configúralos en Directorio antes de grabar; Cambiar precio solo personaliza una tarifa base existente para este ticket.";
 
   showRegistrationIssue(message, details, "Faltan precios para grabar");
 }
@@ -2580,13 +2590,11 @@ async function saveDispatch(delivery = null, payments = []) {
   setMessage(`Grabando ${list.operationType === OPERATION_RETURN ? "devolución" : "venta"} de la lista ${listIndex + 1}...`);
 
   try {
-    const priceOverrides = list.clientId
-      ? {}
-      : Object.fromEntries(
-        Object.entries(list.priceOverrides || {})
-          .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
-          .map(([code, value]) => [code, formatMoneyValue(value)])
-      );
+    const priceOverrides = Object.fromEntries(
+      Object.entries(list.priceOverrides || {})
+        .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
+        .map(([code, value]) => [code, formatMoneyValue(value)])
+    );
     let response;
     try {
       response = await apiRequest(`${RETAIL_API_BASE}/tickets`, {

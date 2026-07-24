@@ -54,6 +54,7 @@ class ClientJourneyPriceService
 
         $ticketPrices = TicketPrecio::query()
             ->whereIn('tipo_pollo_id', $applicablePrices->keys())
+            ->where('origen_precio', '!=', 'MANUAL')
             ->whereHas('ticket', fn ($query) => $query
                 ->where('cliente_destino_id', $client->id)
                 ->whereIn('jornada_id', $journeyIds))
