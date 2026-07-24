@@ -5,9 +5,23 @@ const STORAGE_KEY = PRODUCER_ID ? `${STORAGE_KEY_PREFIX}:${PRODUCER_ID}` : STORA
 
 const elements = {
   name: document.getElementById("customerDisplayName"),
-  weight: document.getElementById("customerDisplayWeight"),
+  ticket: document.getElementById("customerDisplayTicket"),
+  scales: {
+    1: {
+      card: document.getElementById("customerDisplayScaleCard1"),
+      weight: document.getElementById("customerDisplayScale1"),
+      status: document.getElementById("customerDisplayScaleStatus1")
+    },
+    2: {
+      card: document.getElementById("customerDisplayScaleCard2"),
+      weight: document.getElementById("customerDisplayScale2"),
+      status: document.getElementById("customerDisplayScaleStatus2")
+    }
+  },
+  records: document.getElementById("customerDisplayRecords"),
   cages: document.getElementById("customerDisplayCages"),
   birds: document.getElementById("customerDisplayBirds"),
+  announcement: document.getElementById("customerDisplayAnnouncement"),
   status: document.getElementById("customerDisplayStatus"),
   fullscreen: document.getElementById("customerDisplayFullscreen"),
   chooseScreen: document.getElementById("customerDisplayChooseScreen"),
@@ -21,10 +35,45 @@ let channel = null;
 let lastUpdateAt = 0;
 let lastPayloadTimestamp = 0;
 let lastRevision = 0;
+let lastProducerInstance = 0;
 
 function normalizeCount(value) {
   const count = Math.trunc(Number(value));
   return Number.isFinite(count) && count >= 0 ? count : 0;
+}
+
+function normalizeWeight(value) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+
+  const weight = Number(value);
+  return Number.isFinite(weight) && weight >= 0 ? weight : null;
+}
+
+function getPayloadScaleWeight(payload, scaleId) {
+  const scale = payload.scales?.[scaleId];
+  if (scale && Object.prototype.hasOwnProperty.call(scale, "weightKg")) {
+    return normalizeWeight(scale.weightKg);
+  }
+
+  return String(payload.weightSource || "") === String(scaleId)
+    ? normalizeWeight(payload.weightKg)
+    : null;
+}
+
+function renderScale(payload, scaleId) {
+  const scaleElements = elements.scales[scaleId];
+  const weight = getPayloadScaleWeight(payload, scaleId);
+  const isSelected = String(payload.weightSource || "") === String(scaleId);
+
+  scaleElements.weight.textContent = weight === null ? "---" : weight.toFixed(2);
+  scaleElements.card.classList.toggle("is-selected", isSelected);
+  scaleElements.card.classList.toggle("has-reading", weight !== null);
+  scaleElements.status.classList.toggle("is-waiting", weight === null);
+  scaleElements.status.textContent = weight === null
+    ? (isSelected ? "Seleccionada · sin lectura" : "Sin lectura")
+    : (isSelected ? "Seleccionada" : "En vivo");
 }
 
 function renderPayload(payload) {
@@ -38,28 +87,72 @@ function renderPayload(payload) {
 
   const payloadTimestamp = Date.parse(payload.updatedAt || "");
   const payloadRevision = Number(payload.revision);
+  const payloadProducerInstance = Number(payload.producerInstance);
+  const hasRevision = Number.isFinite(payloadRevision) && payloadRevision > 0;
+  const hasTimestamp = Number.isFinite(payloadTimestamp);
+  const hasProducerInstance = Number.isSafeInteger(payloadProducerInstance)
+    && payloadProducerInstance > 0;
+  const isSameProducerInstance = hasProducerInstance
+    && payloadProducerInstance === lastProducerInstance;
   if (
-    (Number.isFinite(payloadRevision) && payloadRevision > 0 && payloadRevision <= lastRevision)
+    (hasProducerInstance && lastProducerInstance > 0 && payloadProducerInstance < lastProducerInstance)
+    || (!hasProducerInstance && lastProducerInstance > 0)
+    || (isSameProducerInstance && hasRevision && payloadRevision <= lastRevision)
     || (
-      (!Number.isFinite(payloadRevision) || payloadRevision <= 0)
-      && Number.isFinite(payloadTimestamp)
+      isSameProducerInstance
+      && !hasRevision
+      && hasTimestamp
+      && payloadTimestamp < lastPayloadTimestamp
+    )
+    || (
+      !hasProducerInstance
+      && !lastProducerInstance
+      && hasRevision
+      && payloadRevision <= lastRevision
+      && (!hasTimestamp || payloadTimestamp <= lastPayloadTimestamp)
+    )
+    || (
+      !hasProducerInstance
+      && !lastProducerInstance
+      && !hasRevision
+      && hasTimestamp
       && payloadTimestamp < lastPayloadTimestamp
     )
   ) {
     return;
   }
 
-  const weight = Number(payload.weightKg);
-  elements.name.textContent = String(payload.customerName || "Sin cliente asignado");
-  elements.weight.textContent = Number.isFinite(weight) && weight >= 0 ? weight.toFixed(2) : "0.00";
-  elements.cages.textContent = String(normalizeCount(payload.cages));
-  elements.birds.textContent = String(normalizeCount(payload.birds));
+  const ticket = payload.ticket && typeof payload.ticket === "object" ? payload.ticket : {};
+  const customerName = String(payload.customerName || "Sin cliente asignado");
+  const ticketLabel = String(ticket.label || payload.ticketLabel || "Sin ticket seleccionado");
+  const recordCount = normalizeCount(ticket.records ?? payload.records);
+  const cageCount = normalizeCount(ticket.javas ?? ticket.cages ?? payload.cages);
+  const birdCount = normalizeCount(ticket.birds ?? payload.ticketBirds ?? payload.birds);
+  const announcement = `${customerName}. ${ticketLabel}. ${birdCount} ${birdCount === 1 ? "ave" : "aves"} en el ticket.`;
+
+  elements.name.textContent = customerName;
+  elements.ticket.textContent = ticketLabel;
+  elements.records.textContent = String(recordCount);
+  elements.cages.textContent = String(cageCount);
+  elements.birds.textContent = String(birdCount);
+  if (elements.announcement.textContent !== announcement) {
+    elements.announcement.textContent = announcement;
+  }
+  renderScale(payload, 1);
+  renderScale(payload, 2);
   elements.status.textContent = "En vivo";
   elements.status.classList.remove("is-waiting");
-  if (Number.isFinite(payloadRevision) && payloadRevision > 0) {
+  if (hasProducerInstance) {
+    if (payloadProducerInstance !== lastProducerInstance) {
+      lastRevision = 0;
+      lastPayloadTimestamp = 0;
+    }
+    lastProducerInstance = payloadProducerInstance;
+  }
+  if (hasRevision) {
     lastRevision = payloadRevision;
   }
-  if (Number.isFinite(payloadTimestamp)) {
+  if (hasTimestamp) {
     lastPayloadTimestamp = payloadTimestamp;
   }
   lastUpdateAt = Date.now();

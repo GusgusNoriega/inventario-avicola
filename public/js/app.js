@@ -11,7 +11,9 @@ let activeStorageKey = LEGACY_STORAGE_KEY;
 const CUSTOMER_DISPLAY_CHANNEL_NAME = "sistema-pollos-pantalla-cliente-v1";
 const CUSTOMER_DISPLAY_STORAGE_KEY = "sistema-pollos-pantalla-cliente-estado-v1";
 const CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY = "sistema-pollos-pantalla-cliente-productor-v1";
+const CUSTOMER_DISPLAY_PRODUCER_INSTANCE_SESSION_KEY = "sistema-pollos-pantalla-cliente-instancia-v1";
 const CUSTOMER_DISPLAY_PRODUCER_ID = getCustomerDisplayProducerId();
+const CUSTOMER_DISPLAY_PRODUCER_INSTANCE = getCustomerDisplayProducerInstance();
 const PEOPLE_STORAGE_KEY = "sistema-pollos-personas-v1";
 const PERU_LOCALE = "es-PE";
 const PERU_TIME_ZONE = "America/Lima";
@@ -252,6 +254,26 @@ function getCustomerDisplayProducerId() {
   } catch {
     return globalThis.crypto?.randomUUID?.()
       || `despacho-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+function getCustomerDisplayProducerInstance() {
+  const currentTimestamp = Date.now();
+
+  try {
+    const previousInstance = Number(
+      sessionStorage.getItem(CUSTOMER_DISPLAY_PRODUCER_INSTANCE_SESSION_KEY)
+    );
+    const nextInstance = Number.isSafeInteger(previousInstance) && previousInstance > 0
+      ? Math.max(currentTimestamp, previousInstance + 1)
+      : currentTimestamp;
+    sessionStorage.setItem(
+      CUSTOMER_DISPLAY_PRODUCER_INSTANCE_SESSION_KEY,
+      String(nextInstance)
+    );
+    return nextInstance;
+  } catch {
+    return currentTimestamp;
   }
 }
 
@@ -3006,19 +3028,35 @@ function getCurrentGrossWeight() {
 
 function buildCustomerDisplayState() {
   const selectedTruck = getSelectedTruck();
-  const birdsPerJava = normalizeBirdCountPerJava(elements.birdCount.value, 0);
-  const javaCount = normalizeJavaCount(elements.javaCount.value, 0);
   const customerName = getTruckClientName(selectedTruck);
+  const ticketTotals = calculateTruckTotals(
+    selectedTruck?.cages || [],
+    getTruckOperationType(selectedTruck)
+  );
+  const ticketLabel = selectedTruck
+    ? getTruckTicketLabel(selectedTruck)
+    : "Sin ticket seleccionado";
 
   return {
     type: "customer-display-state",
     producerId: CUSTOMER_DISPLAY_PRODUCER_ID,
+    producerInstance: CUSTOMER_DISPLAY_PRODUCER_INSTANCE,
     revision: ++customerDisplayRevision,
     customerName: customerName === "Sin destino asignado" ? "Sin cliente asignado" : customerName,
+    ticket: {
+      label: ticketLabel,
+      records: ticketTotals.records,
+      javas: ticketTotals.javas,
+      birds: ticketTotals.birds
+    },
+    scales: {
+      1: { weightKg: getScaleWeight(1) },
+      2: { weightKg: getScaleWeight(2) }
+    },
     weightKg: getCurrentGrossWeight(),
     weightSource: elements.weightSource.value,
-    cages: javaCount,
-    birds: birdsPerJava > 0 ? calculateBirdTotal(birdsPerJava, javaCount) : 0,
+    cages: ticketTotals.javas,
+    birds: ticketTotals.birds,
     updatedAt: new Date().toISOString()
   };
 }

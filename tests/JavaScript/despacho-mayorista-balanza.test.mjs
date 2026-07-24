@@ -964,6 +964,169 @@ test("la balanza seleccionada alimenta la vista previa con su peso en vivo", () 
   assert.doesNotMatch(weightSourceBlock, /CapturedScale/);
 });
 
+function loadCustomerDisplayStateBuilder(environment) {
+  const totalsBlock = sourceBetween(
+    "function calculateTruckTotals",
+    "function loadState"
+  );
+  const customerDisplayBlock = sourceBetween(
+    "function buildCustomerDisplayState",
+    "function flushCustomerDisplayStorage"
+  );
+
+  return new Function("environment", `
+    const TICKET_OPERATIONS = {
+      DISPATCH: "DESPACHO",
+      RETURN: "DEVOLUCION"
+    };
+    const DISPATCH_CHICKEN_TYPES = [
+      { id: "pollo_vivo", label: "Pollo vivo" }
+    ];
+    const RETURN_CONDITIONS = [
+      { id: "vivo", label: "Pollo vivo" },
+      { id: "muerto", label: "Pollo muerto" }
+    ];
+    const normalizeTicketOperation = (value) => value === TICKET_OPERATIONS.RETURN
+      ? TICKET_OPERATIONS.RETURN
+      : TICKET_OPERATIONS.DISPATCH;
+    const normalizeReturnCondition = (value) => value === "muerto" ? "muerto" : "vivo";
+    const normalizeType = () => "pollo_vivo";
+    const normalizeJavaCount = (value, fallback = 1) => {
+      const parsed = Math.trunc(Number(value));
+      return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+    };
+    const normalizeBirdCountPerJava = (value, fallback = 0) => {
+      const parsed = Math.trunc(Number(value));
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+    };
+    const calculateBirdTotal = (birdsPerJava, javaCount) => birdsPerJava * Math.max(javaCount, 1);
+    const normalizeChickenSex = (value) => value === "hembra" ? "hembra" : "macho";
+    const roundWeight = (value) => Math.round(value * 100) / 100;
+    const CUSTOMER_DISPLAY_PRODUCER_ID = "producer-test";
+    const CUSTOMER_DISPLAY_PRODUCER_INSTANCE = 1001;
+    let customerDisplayRevision = 0;
+    const elements = {
+      weightSource: {
+        get value() {
+          return environment.weightSource;
+        }
+      }
+    };
+    const getSelectedTruck = () => environment.selectedTruck;
+    const getTruckClientName = (truck) => truck?.customerName || "Sin destino asignado";
+    const getTruckTicketLabel = (truck) => truck?.name || "Ticket";
+    const getTruckOperationType = (truck) => truck?.operationType || TICKET_OPERATIONS.DISPATCH;
+    const getScaleWeight = (scaleId) => environment.scaleWeights[scaleId] ?? null;
+    const getCurrentGrossWeight = () => {
+      const scaleId = Number(environment.weightSource);
+      return environment.weightSource === "manual"
+        ? environment.manualWeight ?? null
+        : getScaleWeight(scaleId);
+    };
+    ${totalsBlock}
+    ${customerDisplayBlock}
+    return buildCustomerDisplayState;
+  `)(environment);
+}
+
+test("la pantalla cliente publica las dos balanzas sin depender de la fuente seleccionada", () => {
+  const environment = {
+    weightSource: "1",
+    scaleWeights: { 1: 12.34, 2: 56.78 },
+    selectedTruck: {
+      name: "Ticket 3",
+      customerName: "Mercado Central",
+      operationType: "DESPACHO",
+      cages: []
+    }
+  };
+  const buildCustomerDisplayState = loadCustomerDisplayStateBuilder(environment);
+
+  const firstPayload = buildCustomerDisplayState();
+  assert.equal(firstPayload.producerInstance, 1001);
+  assert.equal(firstPayload.weightKg, 12.34);
+  assert.equal(firstPayload.scales[1].weightKg, 12.34);
+  assert.equal(firstPayload.scales[2].weightKg, 56.78);
+
+  environment.scaleWeights[2] = 61.25;
+  const secondPayload = buildCustomerDisplayState();
+  assert.equal(secondPayload.scales[1].weightKg, 12.34);
+  assert.equal(secondPayload.scales[2].weightKg, 61.25);
+  assert.equal(secondPayload.weightKg, 12.34);
+
+  environment.weightSource = "manual";
+  environment.manualWeight = 9.5;
+  environment.scaleWeights[1] = 14.2;
+  const manualPayload = buildCustomerDisplayState();
+  assert.equal(manualPayload.weightKg, 9.5);
+  assert.equal(manualPayload.scales[1].weightKg, 14.2);
+  assert.equal(manualPayload.scales[2].weightKg, 61.25);
+});
+
+test("la pantalla cliente publica cliente y aves acumuladas del ticket seleccionado", () => {
+  const firstWeighing = {
+    tipo: "pollo_vivo",
+    chickenSex: "macho",
+    cantidadAvesPorJava: 8,
+    cantidadJavas: 2,
+    pesoBrutoKg: 30,
+    taraTotalKg: 14,
+    pesoNetoKg: 16
+  };
+  const secondWeighing = {
+    tipo: "pollo_vivo",
+    chickenSex: "hembra",
+    cantidadAvesPorJava: 9,
+    cantidadJavas: 3,
+    pesoBrutoKg: 48,
+    taraTotalKg: 21,
+    pesoNetoKg: 27
+  };
+  const environment = {
+    weightSource: "2",
+    scaleWeights: { 1: 10, 2: 20 },
+    selectedTruck: {
+      name: "Ticket 1",
+      customerName: "Cliente Uno",
+      operationType: "DESPACHO",
+      cages: [firstWeighing]
+    }
+  };
+  const buildCustomerDisplayState = loadCustomerDisplayStateBuilder(environment);
+
+  const initialPayload = buildCustomerDisplayState();
+  assert.equal(initialPayload.customerName, "Cliente Uno");
+  assert.equal(initialPayload.ticket.label, "Ticket 1");
+  assert.equal(initialPayload.ticket.records, 1);
+  assert.equal(initialPayload.ticket.javas, 2);
+  assert.equal(initialPayload.ticket.birds, 16);
+  assert.equal(initialPayload.birds, 16);
+
+  environment.selectedTruck.cages.push(secondWeighing);
+  assert.equal(buildCustomerDisplayState().ticket.birds, 43);
+
+  secondWeighing.cantidadAvesPorJava = 10;
+  assert.equal(buildCustomerDisplayState().ticket.birds, 46);
+
+  environment.selectedTruck.cages.pop();
+  assert.equal(buildCustomerDisplayState().ticket.birds, 16);
+
+  environment.selectedTruck = {
+    name: "Ticket 2",
+    customerName: "Cliente Dos",
+    operationType: "DESPACHO",
+    cages: [{
+      ...firstWeighing,
+      cantidadAvesPorJava: 7,
+      cantidadJavas: 4
+    }]
+  };
+  const otherTicketPayload = buildCustomerDisplayState();
+  assert.equal(otherTicketPayload.customerName, "Cliente Dos");
+  assert.equal(otherTicketPayload.ticket.label, "Ticket 2");
+  assert.equal(otherTicketPayload.ticket.birds, 28);
+});
+
 test("el alta mayorista captura y consume la lectura vigente al registrar", () => {
   const addStart = source.indexOf("function addCage(event)");
   const addEnd = source.indexOf("function copyJson", addStart);
