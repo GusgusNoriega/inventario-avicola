@@ -29,7 +29,10 @@ class DailyDispatchTicketController extends Controller
             'to_date' => ['nullable', 'date_format:Y-m-d'],
             'to_time' => ['nullable', 'date_format:H:i'],
             'ticket' => ['nullable', 'string', 'max:40'],
+            'include_voided' => ['nullable', 'boolean'],
         ]);
+        $isAdministrator = $request->user()?->isAdministrator() === true;
+        $includeVoided = $isAdministrator && (bool) ($filters['include_voided'] ?? false);
         $branch = $this->context->branch($request);
         $companyId = $this->context->companyId($request);
         $operatingDate = $filters['date']
@@ -46,7 +49,14 @@ class DailyDispatchTicketController extends Controller
             ->whereHas(
                 'pesadas',
                 fn (Builder $query) => $this->applyRecordRange($query, $from, $to)
-                    ->where('estado', Pesada::STATUS_ACTIVE)
+                    ->when(
+                        ! $includeVoided,
+                        fn (Builder $query) => $query->where('estado', Pesada::STATUS_ACTIVE)
+                    )
+            )
+            ->when(
+                ! $includeVoided,
+                fn (Builder $query) => $query->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
             )
             ->when(
                 $ticketSearch !== '',
@@ -56,6 +66,7 @@ class DailyDispatchTicketController extends Controller
                 'jornada',
                 'clienteDestino',
                 'almacenDestino',
+                'anuladoPor:id,nombre',
                 'pesadas' => fn ($query) => $this->applyRecordRange($query, $from, $to)
                     ->orderBy('numero'),
                 'pesadas.tipoPollo',
@@ -69,7 +80,10 @@ class DailyDispatchTicketController extends Controller
             ->orderByDesc('cerrado_at')
             ->orderByDesc('created_at')
             ->get();
-        $records = $tickets
+        $effectiveTickets = $tickets
+            ->reject(fn (TicketDespacho $ticket) => $ticket->estado === TicketDespacho::STATUS_VOIDED)
+            ->values();
+        $records = $effectiveTickets
             ->flatMap(fn (TicketDespacho $ticket) => $ticket->pesadas)
             ->filter(fn (Pesada $record) => $record->estado === Pesada::STATUS_ACTIVE)
             ->values();
@@ -94,13 +108,18 @@ class DailyDispatchTicketController extends Controller
                 ],
                 'generated_at' => now($branch->zona_horaria)->toISOString(),
                 'summary' => [
-                    ...$this->summarizeRecords($records, $tickets->count()),
-                    'by_operation' => $this->summarizeByOperation($tickets),
-                    'by_client' => $this->summarizeByClient($tickets),
+                    ...$this->summarizeRecords($records, $effectiveTickets->count()),
+                    'by_operation' => $this->summarizeByOperation($effectiveTickets),
+                    'by_client' => $this->summarizeByClient($effectiveTickets),
                 ],
                 'tickets' => $tickets
-                    ->map(fn (TicketDespacho $ticket) => $this->formatTicket($ticket))
+                    ->map(fn (TicketDespacho $ticket) => $this->formatTicket($ticket, $isAdministrator))
                     ->values(),
+                'access' => [
+                    'is_administrator' => $isAdministrator,
+                    'can_void_tickets' => $isAdministrator,
+                    'can_view_voided_tickets' => $isAdministrator,
+                ],
             ],
         ]);
     }
@@ -311,11 +330,12 @@ class DailyDispatchTicketController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function formatTicket(TicketDespacho $ticket): array
+    private function formatTicket(TicketDespacho $ticket, bool $isAdministrator = false): array
     {
         $activeRecords = $ticket->pesadas
             ->filter(fn (Pesada $record) => $record->estado === Pesada::STATUS_ACTIVE)
             ->values();
+        $historicalRecords = $ticket->pesadas->values();
 
         return [
             'id' => $ticket->id,
@@ -326,8 +346,19 @@ class DailyDispatchTicketController extends Controller
             'status' => $ticket->estado,
             'created_at' => $ticket->created_at?->toISOString(),
             'closed_at' => $ticket->cerrado_at?->toISOString(),
+            'voided_at' => $ticket->anulado_at?->toISOString(),
+            'void_reason' => $ticket->motivo_anulacion,
+            'voided_by' => $ticket->anuladoPor
+                ? [
+                    'id' => (int) $ticket->anuladoPor->id,
+                    'name' => $ticket->anuladoPor->nombre,
+                ]
+                : null,
+            'can_void' => $isAdministrator
+                && $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'destination' => $this->formatDestination($ticket),
             'summary' => $this->summarizeRecords($activeRecords, 1),
+            'historical_summary' => $this->summarizeRecords($historicalRecords, 1),
             'records' => $ticket->pesadas
                 ->map(fn (Pesada $record) => $this->formatRecord($record, $ticket))
                 ->values(),

@@ -46,13 +46,19 @@
           <p class="eyebrow">Cuenta por cobrar</p>
           <h2 id="customerFinanceTitle">Estado financiero</h2>
         </div>
-        <a
-          class="btn btn-success directory-btn"
-          href="{{ route('finanzas.movimientos.nuevo') }}?tipo=COBRO_CLIENTE&amp;cliente_id={{ request()->route('tercero') }}"
-        >Registrar abono</a>
+        <div class="customer-history-filter-actions">
+          <a
+            class="btn btn-secondary directory-btn"
+            href="{{ route('finanzas.movimientos.nuevo') }}?tipo=DEUDA_ANTERIOR_CLIENTE&amp;cliente_id={{ request()->route('tercero') }}"
+          >Agregar deuda anterior</a>
+          <a
+            class="btn btn-success directory-btn"
+            href="{{ route('finanzas.movimientos.nuevo') }}?tipo=COBRO_CLIENTE&amp;cliente_id={{ request()->route('tercero') }}"
+          >Registrar abono</a>
+        </div>
       </div>
       <div class="customer-history-stats" aria-label="Resumen financiero del cliente">
-        <article class="directory-stat card"><span>Ventas netas</span><strong id="customerFinanceDocumented">S/ 0.00</strong></article>
+        <article class="directory-stat card"><span>Ventas y deudas</span><strong id="customerFinanceDocumented">S/ 0.00</strong></article>
         <article class="directory-stat card"><span>Pagos registrados</span><strong id="customerFinancePayments">S/ 0.00</strong></article>
         <article class="directory-stat card"><span>Directo a proveedores</span><strong id="customerFinanceDirect">S/ 0.00</strong></article>
         <article class="directory-stat card directory-stat-accent"><span>Saldo neto pendiente</span><strong id="customerFinancePending">S/ 0.00</strong></article>

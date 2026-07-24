@@ -12,9 +12,9 @@
   <main class="fin-shell">
     @include('partials.finanzas-header', [
       'active' => 'movimiento',
-      'eyebrow' => 'Cobros, abonos y pagos',
+      'eyebrow' => 'Cobros, deudas y pagos',
       'title' => 'Registrar movimiento',
-      'description' => 'Elige el recorrido del dinero y aplícalo a las deudas correspondientes sin perder trazabilidad.'
+      'description' => 'Registra el recorrido del dinero o incorpora una deuda anterior de un cliente sin perder trazabilidad.'
     ])
 
     <form id="financeMovementForm" class="fin-movement-form" novalidate>
@@ -52,8 +52,13 @@
             <span><strong>Nuestra empresa → cliente</strong><small>Reembolsa una devolución y cancela el abono pendiente del cliente.</small></span>
           </label>
           <label class="fin-mode-option">
-            <input type="radio" name="financeMovementType" value="SALDO_FAVOR_PROVEEDOR">
+            <input type="radio" name="financeMovementType" value="DEUDA_ANTERIOR_CLIENTE">
             <span class="fin-mode-number">06</span>
+            <span><strong>Deuda anterior de cliente</strong><small>Agrega una deuda pendiente que existía antes y no estaba registrada en el sistema.</small></span>
+          </label>
+          <label class="fin-mode-option">
+            <input type="radio" name="financeMovementType" value="SALDO_FAVOR_PROVEEDOR">
+            <span class="fin-mode-number">07</span>
             <span><strong>Saldo anterior con proveedor</strong><small>Registra un saldo que ya existía antes del sistema, sin mover dinero de ninguna cuenta.</small></span>
           </label>
         </div>
@@ -117,7 +122,7 @@
 
           <div class="fin-form-grid">
             <label id="financeMovementDateField" class="fin-field">
-              <span>Fecha y hora <b>*</b></span>
+              <span id="financeMovementDateLabel">Fecha y hora <b>*</b></span>
               <input id="financeMovementDate" type="datetime-local" required>
             </label>
             <label id="financeMovementMethodField" class="fin-field">

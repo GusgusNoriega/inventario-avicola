@@ -43,6 +43,7 @@ class TicketWeighingManagementController extends Controller
 
         $tickets = TicketDespacho::query()
             ->whereHas('jornada', fn (Builder $query) => $query->where('sucursal_id', $branch->id))
+            ->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
             ->whereHas('pesadas', fn (Builder $query) => $query->where('estado', Pesada::STATUS_ACTIVE))
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $query->where(function (Builder $query) use ($search): void {
@@ -444,6 +445,7 @@ class TicketWeighingManagementController extends Controller
 
         return TicketDespacho::query()
             ->whereKey($ticketId)
+            ->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
             ->whereHas('jornada', fn (Builder $query) => $query->where('sucursal_id', $branch->id))
             ->firstOrFail();
     }
@@ -620,6 +622,7 @@ class TicketWeighingManagementController extends Controller
     private function isEditable(TicketDespacho $ticket, string $operatingDate): bool
     {
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $ticket->estado !== TicketDespacho::STATUS_VOIDED
             && $this->isFromOperatingDate($ticket, $operatingDate);
     }
 
@@ -629,6 +632,12 @@ class TicketWeighingManagementController extends Controller
         string $message = 'Solo se pueden modificar pesadas de la jornada operativa actual.'
     ): void {
         $ticket->loadMissing('jornada');
+
+        abort_unless(
+            $ticket->estado !== TicketDespacho::STATUS_VOIDED,
+            409,
+            'Un ticket anulado es de solo consulta para administradores.'
+        );
 
         abort_unless(
             $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE,

@@ -146,14 +146,16 @@ class FinancialQueryService
             ->paginate((int) ($filters['per_page'] ?? 50));
         $documentIds = collect($paginator->items())->pluck('id')->all();
         $tickets = $this->ticketsForDocuments($documentIds);
+        $details = $this->detailsForDocuments($documentIds);
 
         return [
-            'data' => collect($paginator->items())->map(function (object $document) use ($tickets, $side): array {
+            'data' => collect($paginator->items())->map(function (object $document) use ($tickets, $details, $side): array {
                 return [
                     'id' => (int) $document->id,
                     'lado' => $side,
                     'operacion' => $document->operacion,
                     'naturaleza' => $document->naturaleza,
+                    'tipo_documento' => $document->tipo_documento,
                     'codigo' => $document->codigo,
                     'origen_clave' => $document->origen_clave,
                     'fecha_emision' => $document->fecha_emision,
@@ -164,6 +166,9 @@ class FinancialQueryService
                     'estado' => $document->estado,
                     'tercero' => $this->documentThirdParty($document),
                     'tickets' => $tickets[(int) $document->id] ?? [],
+                    'detalle' => $document->tipo_documento === 'SALDO_ANTERIOR'
+                        ? ($details[(int) $document->id] ?? null)
+                        : null,
                 ];
             })->all(),
             'resumen' => [
@@ -511,6 +516,26 @@ class FinancialQueryService
                 'canal' => $row->canal,
                 'estado' => $row->estado,
             ])->all())->all();
+    }
+
+    /** @param list<int> $documentIds @return array<int, string> */
+    private function detailsForDocuments(array $documentIds): array
+    {
+        if ($documentIds === []) {
+            return [];
+        }
+
+        return DB::table('comprobante_detalles')
+            ->whereIn('comprobante_id', $documentIds)
+            ->orderBy('id')
+            ->get(['comprobante_id', 'descripcion'])
+            ->groupBy('comprobante_id')
+            ->map(fn ($rows): string => $rows
+                ->pluck('descripcion')
+                ->filter()
+                ->unique()
+                ->implode(', '))
+            ->all();
     }
 
     /** @param list<int> $documentIds @return array<int, list<array<string, mixed>>> */

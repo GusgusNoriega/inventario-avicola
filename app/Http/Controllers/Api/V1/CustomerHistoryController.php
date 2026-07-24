@@ -33,6 +33,7 @@ class CustomerHistoryController extends Controller
         $ticketSearch = trim($filters['ticket'] ?? '');
         $ticketQuery = TicketDespacho::query()
             ->where('cliente_destino_id', $customer->id)
+            ->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
             ->when(
                 $ticketSearch !== '',
                 fn (Builder $query) => $query->where('codigo', 'like', "%{$ticketSearch}%")

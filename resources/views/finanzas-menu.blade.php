@@ -104,8 +104,8 @@
             </svg>
           </span>
           <span class="fin-module-copy">
-            <strong>Registrar cobro o pago</strong>
-            <small>Registra cobros, depósitos directos y pagos a proveedores con trazabilidad.</small>
+            <strong>Registrar cobro, deuda o pago</strong>
+            <small>Registra cobros, deudas anteriores de clientes y pagos a proveedores con trazabilidad.</small>
           </span>
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>

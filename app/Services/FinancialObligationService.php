@@ -64,6 +64,19 @@ class FinancialObligationService
 
         $originKey = "VENTA:TICKET:{$ticket->id}";
 
+        if ($ticket->estado === TicketDespacho::STATUS_VOIDED) {
+            $this->voidDocument(
+                $companyId,
+                $originKey,
+                $actor,
+                $ticket->motivo_anulacion
+                    ? "Ticket {$ticket->codigo} anulado: {$ticket->motivo_anulacion}"
+                    : "El ticket {$ticket->codigo} fue anulado."
+            );
+
+            return null;
+        }
+
         $records = $ticket->pesadas
             ->where('estado', Pesada::STATUS_ACTIVE)
             ->values();

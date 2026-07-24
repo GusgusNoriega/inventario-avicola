@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
+use App\Http\Controllers\Api\V1\DispatchTicketVoidController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\FinancialAccountController;
 use App\Http\Controllers\Api\V1\FinancialCounterpartyController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Api\V1\FinancialQueryController;
 use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JourneyPriceController;
+use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
@@ -81,6 +83,8 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/movimientos/{movimiento}/anular', [FinancialMovementController::class, 'void'])
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_ANULAR');
+        Route::post('/deudas-clientes', [ManualCustomerDebtController::class, 'store'])
+            ->middleware('permission:SALDOS_AJUSTAR');
     });
 
     Route::prefix('compras')->middleware([
@@ -159,6 +163,14 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($journeyReadMiddleware);
     Route::get('/operacion/tickets-dia', [DailyDispatchTicketController::class, 'index'])
         ->middleware($dailyTicketsMiddleware);
+    Route::post('/operacion/tickets/{ticket}/anular', DispatchTicketVoidController::class)
+        ->whereNumber('ticket')
+        ->middleware([
+            'auth:sanctum',
+            'active',
+            'password.changed',
+            'module:MODULO_RESUMEN_JORNADA',
+        ]);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
         ->middleware($operationWriteMiddleware);
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])

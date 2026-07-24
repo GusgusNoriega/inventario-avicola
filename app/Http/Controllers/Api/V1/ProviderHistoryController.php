@@ -8,6 +8,7 @@ use App\Models\Pesada;
 use App\Models\ProveedorVehiculo;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
+use App\Models\TicketDespacho;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +31,11 @@ class ProviderHistoryController extends Controller
             ->findOrFail($tercero);
         $recordQuery = Pesada::query()
             ->where('proveedor_origen_id', $provider->id)
+            ->where('estado', Pesada::STATUS_ACTIVE)
+            ->whereHas(
+                'ticket',
+                fn (Builder $query) => $query->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
+            )
             ->when(
                 trim($filters['ticket'] ?? '') !== '',
                 fn (Builder $query) => $query->whereHas(
@@ -58,7 +64,7 @@ class ProviderHistoryController extends Controller
                 fn (Builder $query, string $date) => $query->whereDate('pesada_at', '<=', $date)
             );
 
-        $summaryQuery = (clone $recordQuery)->where('estado', Pesada::STATUS_ACTIVE);
+        $summaryQuery = clone $recordQuery;
         $summary = [
             'records' => (clone $summaryQuery)->count(),
             'tickets' => (clone $summaryQuery)->distinct('ticket_id')->count('ticket_id'),

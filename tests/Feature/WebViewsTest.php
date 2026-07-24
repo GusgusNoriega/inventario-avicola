@@ -111,7 +111,7 @@ class WebViewsTest extends TestCase
             ->assertSee(route('finanzas.entidades'), false)
             ->assertSee('Empresas y cuentas')
             ->assertSee(route('finanzas.movimientos.nuevo'), false)
-            ->assertSee('Registrar cobro o pago')
+            ->assertSee('Registrar cobro, deuda o pago')
             ->assertSee(route('finanzas.reportes'), false)
             ->assertSee('Reportes PDF')
             ->assertSee(route('menu'), false)
@@ -162,6 +162,8 @@ class WebViewsTest extends TestCase
             ->assertSee('value="COBRO_CLIENTE"', false)
             ->assertSee('value="PAGO_DIRECTO"', false)
             ->assertSee('value="PAGO_PROVEEDOR"', false)
+            ->assertSee('value="DEUDA_ANTERIOR_CLIENTE"', false)
+            ->assertSee('Deuda anterior de cliente')
             ->assertSee('value="SALDO_FAVOR_PROVEEDOR"', false)
             ->assertSee('value="COBRO_MINORISTA"', false)
             ->assertSee('value="REEMBOLSO_CLIENTE"', false)
@@ -204,6 +206,8 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('include=cuentas&estado=ACTIVO&per_page=200', $movementJavascript);
         $this->assertStringContainsString('/finanzas/cartera?', $movementJavascript);
         $this->assertStringContainsString('SALDO_FAVOR_PROVEEDOR', $movementJavascript);
+        $this->assertStringContainsString('DEUDA_ANTERIOR_CLIENTE', $movementJavascript);
+        $this->assertStringContainsString('/finanzas/deudas-clientes', $movementJavascript);
         $this->assertStringContainsString('function usesProviderCredit()', $movementJavascript);
         $this->assertStringContainsString('aplicacion_estado: "CON_SALDO"', $movementJavascript);
         $this->assertStringContainsString('responseMeta(response)', $movementJavascript);
@@ -1260,6 +1264,7 @@ class WebViewsTest extends TestCase
             ->assertSee('Histórico de precios')
             ->assertSee('data-client-id="15"', false)
             ->assertSee('id="customerFinanceSection"', false)
+            ->assertSee('tipo=DEUDA_ANTERIOR_CLIENTE&amp;cliente_id=15', false)
             ->assertSee('tipo=COBRO_CLIENTE&amp;cliente_id=15', false)
             ->assertSee(asset('js/cliente-detalle.js'), false);
     }

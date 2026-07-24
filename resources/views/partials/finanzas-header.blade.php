@@ -37,7 +37,7 @@
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'movimiento' ? 'is-active' : '' }}" href="{{ route('finanzas.movimientos.nuevo') }}" @if (($active ?? '') === 'movimiento') aria-current="page" @endif>
     <span aria-hidden="true">04</span>
-    <strong>Registrar cobro o pago</strong>
+    <strong>Registrar cobro, deuda o pago</strong>
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
     <span aria-hidden="true">05</span>

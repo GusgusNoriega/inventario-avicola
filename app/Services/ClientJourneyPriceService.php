@@ -57,6 +57,7 @@ class ClientJourneyPriceService
             ->where('origen_precio', '!=', 'MANUAL')
             ->whereHas('ticket', fn ($query) => $query
                 ->where('cliente_destino_id', $client->id)
+                ->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
                 ->whereIn('jornada_id', $journeyIds))
             ->lockForUpdate()
             ->get();

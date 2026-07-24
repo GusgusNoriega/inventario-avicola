@@ -87,6 +87,23 @@ const MODES = {
     hint: "El importe debe aplicarse por completo a uno o mas abonos pendientes del cliente.",
     nature: "ABONO"
   },
+  DEUDA_ANTERIOR_CLIENTE: {
+    badge: "Cuenta por cobrar",
+    client: true,
+    clientRequired: true,
+    provider: false,
+    origin: false,
+    destination: false,
+    method: false,
+    reference: false,
+    cxc: false,
+    cxp: false,
+    applications: false,
+    notesRequired: true,
+    destinationLabel: "Sin cuenta destino",
+    destinationHelp: "",
+    hint: "El monto quedará como deuda pendiente del cliente. No ingresa dinero a ninguna caja o cuenta."
+  },
   SALDO_FAVOR_PROVEEDOR: {
     badge: "Carga manual",
     client: false,
@@ -140,6 +157,7 @@ const elements = {
   providerCreditSource: document.getElementById("financeProviderCreditSource"),
   providerCreditSourceHelp: document.getElementById("financeProviderCreditSourceHelp"),
   dateField: document.getElementById("financeMovementDateField"),
+  dateLabel: document.getElementById("financeMovementDateLabel"),
   date: document.getElementById("financeMovementDate"),
   methodField: document.getElementById("financeMovementMethodField"),
   method: document.getElementById("financeMovementMethod"),
@@ -204,6 +222,10 @@ function currentModeKey() {
 
 function currentMode() {
   return MODES[currentModeKey()];
+}
+
+function isManualCustomerDebt() {
+  return currentModeKey() === "DEUDA_ANTERIOR_CLIENTE";
 }
 
 function providerPaymentSource() {
@@ -333,24 +355,31 @@ function updateMethodConstraints() {
   const mode = currentMode();
   const useCredit = usesProviderCredit();
   const method = selectedMethod();
-  const requiresReference = Boolean(mode.referenceRequired)
-    || (!useCredit && mode.method !== false && Boolean(firstDefined(method || {}, ["requiere_referencia", "requires_reference"], false)));
+  const requiresReference = mode.reference !== false && (
+    Boolean(mode.referenceRequired)
+    || (!useCredit && mode.method !== false && Boolean(firstDefined(method || {}, ["requiere_referencia", "requires_reference"], false)))
+  );
   elements.reference.required = requiresReference;
   elements.notes.required = Boolean(mode.notesRequired);
   elements.referenceLabel.innerHTML = requiresReference
     ? `${currentModeKey() === "SALDO_FAVOR_PROVEEDOR" ? "Referencia del saldo anterior" : "Número de operación / referencia"} <b>*</b>`
     : "Número de operación / referencia";
-  elements.notesLabel.innerHTML = mode.notesRequired ? "Observaciones <b>*</b>" : "Observaciones";
+  elements.notesLabel.innerHTML = isManualCustomerDebt()
+    ? "Detalle breve <b>*</b>"
+    : mode.notesRequired ? "Observaciones <b>*</b>" : "Observaciones";
   elements.reference.placeholder = requiresReference
     ? currentModeKey() === "SALDO_FAVOR_PROVEEDOR"
       ? "Ej: SALDO ANTERIOR JULIO 2026"
       : "Referencia obligatoria para este método"
     : "Ej: OP-384729";
-  elements.notes.placeholder = currentModeKey() === "SALDO_FAVOR_PROVEEDOR"
-    ? "Explica el origen del saldo que ya se tenía con el proveedor"
-    : useCredit
-      ? "Detalle de la aplicación del saldo a favor"
-      : "Detalle adicional del pago";
+  elements.notes.placeholder = isManualCustomerDebt()
+    ? "Ej: Saldo anterior pendiente, origen no identificado"
+    : currentModeKey() === "SALDO_FAVOR_PROVEEDOR"
+      ? "Explica el origen del saldo que ya se tenía con el proveedor"
+      : useCredit
+        ? "Detalle de la aplicación del saldo a favor"
+        : "Detalle adicional del pago";
+  elements.notes.maxLength = isManualCustomerDebt() ? 250 : 500;
   populateAccounts();
 }
 
@@ -438,20 +467,29 @@ function updateMode() {
   const hasOrigin = Boolean(mode.origin) && !useCredit;
   const hasDestination = Boolean(mode.destination) && !useCredit;
   const hasMethod = mode.method !== false && !useCredit;
+  const hasReference = mode.reference !== false && !useCredit;
   const hasApplications = mode.applications !== false;
   elements.flowBadge.textContent = mode.badge;
-  elements.detailsTitle.textContent = modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Datos del saldo anterior" : "Datos del movimiento";
+  elements.detailsTitle.textContent = ["SALDO_FAVOR_PROVEEDOR", "DEUDA_ANTERIOR_CLIENTE"].includes(modeKey)
+    ? "Datos del saldo anterior"
+    : "Datos del movimiento";
   elements.summaryTitle.textContent = useCredit
     ? "Uso del saldo a favor"
-    : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Saldo que se registrará" : "Distribución del importe";
+    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Deuda que se registrará"
+      : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Saldo que se registrará" : "Distribución del importe";
   elements.clientField.hidden = !mode.client;
   elements.client.required = mode.clientRequired;
-  elements.clientLabel.innerHTML = modeKey === "REEMBOLSO_CLIENTE"
-    ? "Cliente que recibe <b>*</b>"
-    : mode.clientRequired ? "Cliente que paga <b>*</b>" : "Cliente asignado (opcional)";
-  elements.clientHelp.textContent = modeKey === "COBRO_MINORISTA"
-    ? "Déjalo vacío cuando la venta minorista no tenga cliente asignado."
-    : "Se mostrarán sus documentos pendientes.";
+  elements.clientLabel.innerHTML = modeKey === "DEUDA_ANTERIOR_CLIENTE"
+    ? "Cliente con la deuda <b>*</b>"
+    : modeKey === "REEMBOLSO_CLIENTE"
+      ? "Cliente que recibe <b>*</b>"
+      : mode.clientRequired ? "Cliente que paga <b>*</b>" : "Cliente asignado (opcional)";
+  elements.clientHelp.textContent = modeKey === "DEUDA_ANTERIOR_CLIENTE"
+    ? "El monto se sumará a la cuenta por cobrar de este cliente."
+    : modeKey === "COBRO_MINORISTA"
+      ? "Déjalo vacío cuando la venta minorista no tenga cliente asignado."
+      : "Se mostrarán sus documentos pendientes.";
   elements.providerField.hidden = !mode.provider;
   elements.provider.required = mode.provider;
   elements.providerPaymentSourcePanel.hidden = modeKey !== "PAGO_PROVEEDOR";
@@ -465,9 +503,12 @@ function updateMode() {
   elements.destinationHelp.textContent = mode.destinationHelp;
   elements.dateField.hidden = useCredit;
   elements.date.required = !useCredit;
+  elements.dateLabel.innerHTML = modeKey === "DEUDA_ANTERIOR_CLIENTE"
+    ? "Fecha de la deuda <b>*</b>"
+    : "Fecha y hora <b>*</b>";
   elements.methodField.hidden = !hasMethod;
   elements.method.required = hasMethod;
-  elements.referenceField.hidden = useCredit;
+  elements.referenceField.hidden = !hasReference;
   elements.cxcPanel.hidden = !mode.cxc;
   elements.cxcTitle.textContent = modeKey === "REEMBOLSO_CLIENTE"
     ? "Abonos por devolver al cliente"
@@ -486,16 +527,24 @@ function updateMode() {
   } else {
     elements.amount.removeAttribute("max");
   }
-  elements.amountLabel.innerHTML = useCredit ? "Importe a usar <b>*</b>" : "Importe <b>*</b>";
+  elements.amountLabel.innerHTML = modeKey === "DEUDA_ANTERIOR_CLIENTE"
+    ? "Monto adeudado <b>*</b>"
+    : useCredit ? "Importe a usar <b>*</b>" : "Importe <b>*</b>";
   elements.totalLabel.textContent = useCredit
     ? "Importe indicado"
-    : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Saldo anterior" : "Importe del movimiento";
+    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Deuda pendiente"
+      : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Saldo anterior" : "Importe del movimiento";
   elements.unappliedLabel.textContent = useCredit
     ? "Quedará a favor"
-    : PROVIDER_CREDIT_TYPES.has(modeKey) ? "Quedará a nuestro favor" : "Sin aplicar";
+    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Saldo pendiente"
+      : PROVIDER_CREDIT_TYPES.has(modeKey) ? "Quedará a nuestro favor" : "Sin aplicar";
   elements.save.textContent = useCredit
     ? "Aplicar saldo a favor"
-    : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Registrar saldo anterior" : "Registrar movimiento";
+    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Registrar deuda anterior"
+      : modeKey === "SALDO_FAVOR_PROVEEDOR" ? "Registrar saldo anterior" : "Registrar movimiento";
   elements.currencyPrefix.textContent = currencyInputPrefix();
 
   if (!mode.client) {
@@ -543,6 +592,7 @@ function normalizeDebt(rawDebt, side) {
     total: numericValue(firstDefined(rawDebt, ["importe_total", "total", "comprobante.importe_total", "document.total"], pending)),
     date: firstDefined(rawDebt, ["fecha_emision", "fecha", "created_at", "comprobante.fecha_emision"], null),
     ticket: String(firstDefined(rawDebt, ["ticket.numero", "ticket_number", "referencia", "origen_referencia", "tickets.0.numero", "tickets.0.codigo", "tickets.0.id", "tickets.0"], "")),
+    detail: String(firstDefined(rawDebt, ["detalle", "detail", "descripcion", "description"], "")),
     status: String(firstDefined(rawDebt, ["estado", "status", "comprobante.estado"], "PENDIENTE"))
   };
 }
@@ -604,6 +654,7 @@ function renderDebt(side) {
         <span class="fin-debt-copy">
           <strong>${escapeHtml(debt.number)}${debt.ticket ? ` · Ticket ${escapeHtml(debt.ticket)}` : ""}</strong>
           <small>${escapeHtml(formatDateTime(debt.date))} · ${escapeHtml(debt.status)} · saldo ${escapeHtml(formatMoney(debt.pending, elements.currency.value))}</small>
+          ${debt.detail ? `<small>${escapeHtml(debt.detail)}</small>` : ""}
         </span>
         <span class="fin-debt-amount">${escapeHtml(currencyInputPrefix())}<input type="number" min="0.01" max="${debt.pending}" step="0.01" inputmode="decimal" data-debt-amount="${side}" data-debt-id="${escapeHtml(debt.id)}" value="${applied ? applied.toFixed(2) : ""}" ${checked ? "" : "disabled"} aria-label="Importe aplicado a ${escapeHtml(debt.number)}"></span>
       </label>`;
@@ -801,7 +852,9 @@ function movementPayload() {
 
   if (mode.clientRequired && !elements.client.value) {
     elements.client.focus();
-    throw new Error("Selecciona el cliente que realizó el pago.");
+    throw new Error(modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Selecciona el cliente que tiene la deuda."
+      : "Selecciona el cliente que realizó el pago.");
   }
   if (mode.provider && !elements.provider.value) {
     elements.provider.focus();
@@ -817,7 +870,9 @@ function movementPayload() {
   }
   if (!elements.date.value) {
     elements.date.focus();
-    throw new Error("Indica la fecha y hora del movimiento.");
+    throw new Error(modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Indica la fecha de la deuda."
+      : "Indica la fecha y hora del movimiento.");
   }
   if (mode.method !== false && !elements.method.value) {
     elements.method.focus();
@@ -831,7 +886,9 @@ function movementPayload() {
   }
   if (mode.notesRequired && !elements.notes.value.trim()) {
     elements.notes.focus();
-    throw new Error("Explica en observaciones el origen del saldo anterior.");
+    throw new Error(modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Escribe un detalle breve para identificar la deuda anterior."
+      : "Explica en observaciones el origen del saldo anterior.");
   }
   if (amount <= 0) {
     elements.amount.focus();
@@ -846,6 +903,17 @@ function movementPayload() {
   }
   if (modeKey === "REEMBOLSO_CLIENTE" && (cxc <= 0 || Math.abs(cxc - amount) > .001)) {
     throw new Error("El reembolso debe aplicarse completamente a uno o mas abonos del cliente.");
+  }
+
+  if (modeKey === "DEUDA_ANTERIOR_CLIENTE") {
+    return {
+      idempotency_key: state.idempotencyKey,
+      cliente_id: idValue(elements.client.value),
+      fecha_emision: elements.date.value.slice(0, 10),
+      moneda: elements.currency.value,
+      importe: amount.toFixed(2),
+      detalle: elements.notes.value.trim()
+    };
   }
 
   const payload = {
@@ -931,6 +999,7 @@ async function saveMovement(event) {
   event.preventDefault();
   if (state.saving) return;
   setMessage(elements.message);
+  const manualCustomerDebt = isManualCustomerDebt();
 
   try {
     const creditApplication = usesProviderCredit() ? providerCreditApplicationPayload() : null;
@@ -940,20 +1009,32 @@ async function saveMovement(event) {
     elements.reset.disabled = true;
     elements.save.textContent = creditApplication
       ? "Aplicando saldo..."
-      : currentModeKey() === "SALDO_FAVOR_PROVEEDOR" ? "Registrando saldo..." : "Registrando...";
+      : manualCustomerDebt
+        ? "Registrando deuda..."
+        : currentModeKey() === "SALDO_FAVOR_PROVEEDOR"
+        ? "Registrando saldo..."
+        : "Registrando...";
 
     const endpoint = creditApplication
       ? `/finanzas/movimientos/${encodeURIComponent(creditApplication.paymentId)}/aplicaciones`
-      : "/finanzas/movimientos";
+      : manualCustomerDebt ? "/finanzas/deudas-clientes" : "/finanzas/movimientos";
     const response = await apiRequest(endpoint, {
       method: "POST",
       body: JSON.stringify(creditApplication?.body || payload)
     });
     const movementNumber = firstDefined(response, ["data.numero", "data.id", "numero", "id"], null);
     resetMovement({ keepMessage: true });
-    setMessage(elements.message, response?.message || `Movimiento${movementNumber ? ` #${movementNumber}` : ""} registrado correctamente.`, "success");
+    setMessage(
+      elements.message,
+      response?.message || `${manualCustomerDebt ? "Deuda" : "Movimiento"}${movementNumber ? ` #${movementNumber}` : ""} registrado correctamente.`,
+      "success"
+    );
   } catch (error) {
-    setMessage(elements.message, errorMessage(error, "No se pudo registrar el movimiento."), "error");
+    setMessage(
+      elements.message,
+      errorMessage(error, manualCustomerDebt ? "No se pudo registrar la deuda anterior." : "No se pudo registrar el movimiento."),
+      "error"
+    );
   } finally {
     state.saving = false;
     elements.save.disabled = false;

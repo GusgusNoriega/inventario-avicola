@@ -83,6 +83,12 @@ class RetailDispatchService
                     ]);
                 }
 
+                if ($existing->estado === TicketDespacho::STATUS_VOIDED) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este borrador pertenece a un ticket anulado. Crea un ticket nuevo.',
+                    ]);
+                }
+
                 if ($this->existingRetailStation($existing) !== $station) {
                     throw ValidationException::withMessages([
                         'draft_id' => 'Este identificador ya pertenece a otra estacion minorista.',

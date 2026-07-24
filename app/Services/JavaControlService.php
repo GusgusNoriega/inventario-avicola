@@ -312,8 +312,12 @@ class JavaControlService
             ->selectRaw('COALESCE(SUM(cantidad_javas), 0) AS javas')
             ->selectRaw('COALESCE(SUM(cantidad_bandejas), 0) AS trays')
             ->first();
-        $javaQuantity = (int) ($quantities?->javas ?? 0);
-        $trayQuantity = (int) ($quantities?->trays ?? 0);
+        $javaQuantity = $ticket->estado === TicketDespacho::STATUS_VOIDED
+            ? 0
+            : (int) ($quantities?->javas ?? 0);
+        $trayQuantity = $ticket->estado === TicketDespacho::STATUS_VOIDED
+            ? 0
+            : (int) ($quantities?->trays ?? 0);
         $clientMovements = MovimientoJava::query()
             ->where('empresa_id', $companyId)
             ->where('cliente_id', $ticket->cliente_destino_id)

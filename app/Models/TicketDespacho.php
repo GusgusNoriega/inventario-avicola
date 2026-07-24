@@ -23,6 +23,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'observaciones',
     'cerrado_por',
     'cerrado_at',
+    'anulado_por',
+    'anulado_at',
+    'motivo_anulacion',
     'created_by',
 ])]
 class TicketDespacho extends Model
@@ -42,6 +45,8 @@ class TicketDespacho extends Model
     public const STATUS_OPEN = 'ABIERTO';
 
     public const STATUS_CLOSED = 'CERRADO';
+
+    public const STATUS_VOIDED = 'ANULADO';
 
     protected $table = 'tickets_despacho';
 
@@ -83,6 +88,14 @@ class TicketDespacho extends Model
     public function conductorEntrega(): BelongsTo
     {
         return $this->belongsTo(Conductor::class, 'conductor_entrega_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function anuladoPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'anulado_por');
     }
 
     /**
@@ -156,6 +169,7 @@ class TicketDespacho extends Model
     {
         return [
             'cerrado_at' => 'datetime',
+            'anulado_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

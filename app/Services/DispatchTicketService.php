@@ -70,6 +70,12 @@ class DispatchTicketService
                     ]);
                 }
 
+                if ($existing->estado === TicketDespacho::STATUS_VOIDED) {
+                    throw ValidationException::withMessages([
+                        'draft_id' => 'Este borrador pertenece a un ticket anulado. Crea un ticket nuevo.',
+                    ]);
+                }
+
                 return [
                     'ticket' => $this->loadTicket($existing),
                     'already_registered' => true,

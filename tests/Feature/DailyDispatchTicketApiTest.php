@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -369,6 +370,206 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.tickets.0.records.0.net_weight_kg', 12.25);
     }
 
+    public function test_only_an_administrator_can_void_a_ticket(): void
+    {
+        $ticketId = $this->createTicket('T-20260626-ADMIN', '2026-06-26', [
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 25,
+                'cages' => 1,
+                'gross_weight' => 57,
+                'tare_weight' => 7,
+                'net_weight' => 50,
+                'weighed_at' => '2026-06-26 09:15:00',
+            ],
+        ]);
+
+        $this->postJson("/api/v1/operacion/tickets/{$ticketId}/anular", [
+            'motivo' => 'Error de digitación',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticketId,
+            'estado' => TicketDespacho::STATUS_CLOSED,
+            'anulado_at' => null,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'estado' => Pesada::STATUS_ACTIVE,
+        ]);
+    }
+
+    public function test_administrator_void_keeps_audited_ticket_and_removes_all_operational_effects(): void
+    {
+        $administrator = Role::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'ADMINISTRADOR',
+            'nombre' => 'Administrador',
+        ]);
+        $this->user->roles()->attach($administrator);
+
+        $ticketId = $this->createTicket('T-20260626-VOID', '2026-06-26', [
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 25,
+                'cages' => 2,
+                'gross_weight' => 114,
+                'tare_weight' => 14,
+                'net_weight' => 100,
+                'weighed_at' => '2026-06-26 09:15:00',
+            ],
+        ]);
+        $journeyId = (int) DB::table('tickets_despacho')
+            ->where('id', $ticketId)
+            ->value('jornada_id');
+        DB::table('movimientos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $journeyId,
+            'cliente_id' => $this->clientId,
+            'tipo' => 'DESPACHO',
+            'cantidad' => 2,
+            'cantidad_bandejas' => 0,
+            'ticket_despacho_id' => $ticketId,
+            'vehiculo_id' => null,
+            'conductor_id' => null,
+            'fecha_movimiento' => '2026-06-26 09:15:00',
+            'observaciones' => null,
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $documentId = DB::table('comprobantes')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->clientId,
+            'operacion' => 'VENTA',
+            'naturaleza' => 'CARGO',
+            'tipo_documento' => 'INTERNO',
+            'codigo' => "V-{$ticketId}",
+            'origen_codigo' => 'AUTOMATICO',
+            'origen_clave' => "VENTA:TICKET:{$ticketId}",
+            'fecha_emision' => '2026-06-26',
+            'fecha_vencimiento' => '2026-06-26',
+            'moneda' => 'PEN',
+            'subtotal' => 100,
+            'impuesto' => 0,
+            'total' => 100,
+            'saldo_pendiente' => 0,
+            'estado' => 'PAGADO',
+            'contraparte_tipo_documento_snapshot' => 'RUC',
+            'contraparte_numero_documento_snapshot' => '20111111111',
+            'contraparte_nombre_snapshot' => 'Cliente destino',
+            'contraparte_direccion_snapshot' => 'Av. Principal 123',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('comprobante_tickets')->insert([
+            'comprobante_id' => $documentId,
+            'ticket_id' => $ticketId,
+            'importe_aplicado' => 100,
+        ]);
+        $paymentId = DB::table('pagos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->clientId,
+            'codigo' => 'PAG-PRUEBA-TICKET',
+            'tipo' => 'COBRO_MINORISTA',
+            'cliente_id' => $this->clientId,
+            'proveedor_id' => null,
+            'cuenta_origen_id' => null,
+            'cuenta_destino_id' => null,
+            'metodo_pago_id' => null,
+            'direccion' => 'INGRESO',
+            'fecha_hora' => '2026-06-26 09:30:00',
+            'metodo' => 'EFECTIVO',
+            'referencia' => null,
+            'moneda' => 'PEN',
+            'importe' => 100,
+            'estado' => 'REGISTRADO',
+            'idempotency_key' => (string) Str::uuid(),
+            'reversa_de_pago_id' => null,
+            'observaciones' => 'Cobro del ticket T-20260626-VOID',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('pago_aplicaciones')->insert([
+            'pago_id' => $paymentId,
+            'comprobante_id' => $documentId,
+            'lado' => 'CXC',
+            'importe_aplicado' => 100,
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        $response = $this->postJson("/api/v1/operacion/tickets/{$ticketId}/anular", [
+            'motivo' => 'Ticket duplicado por error operativo',
+        ])->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_VOIDED)
+            ->assertJsonPath('meta.idempotent', false);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticketId,
+            'estado' => TicketDespacho::STATUS_VOIDED,
+            'anulado_por' => $this->user->id,
+            'motivo_anulacion' => 'Ticket duplicado por error operativo',
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'estado' => Pesada::STATUS_VOIDED,
+            'anulada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseMissing('movimientos_javas', [
+            'ticket_despacho_id' => $ticketId,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'estado' => 'ANULADO',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'ANULADO',
+            'anulada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $response->json('data.reversed_payment_ids.0'),
+            'reversa_de_pago_id' => $paymentId,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'usuario_id' => $this->user->id,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticketId,
+            'accion' => 'ANULAR',
+        ]);
+
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-06-26&include_voided=1')
+            ->assertOk()
+            ->assertJsonPath('data.access.is_administrator', true)
+            ->assertJsonPath('data.summary.tickets', 0)
+            ->assertJsonPath('data.summary.net_weight_kg', 0)
+            ->assertJsonPath('data.tickets.0.id', $ticketId)
+            ->assertJsonPath('data.tickets.0.status', TicketDespacho::STATUS_VOIDED)
+            ->assertJsonPath('data.tickets.0.historical_summary.net_weight_kg', 100)
+            ->assertJsonPath('data.tickets.0.void_reason', 'Ticket duplicado por error operativo')
+            ->assertJsonPath('data.tickets.0.can_void', false);
+
+        $this->postJson("/api/v1/operacion/tickets/{$ticketId}/anular", [
+            'motivo' => 'Reintento de anulación',
+        ])->assertOk()
+            ->assertJsonPath('meta.idempotent', true);
+        $this->assertDatabaseCount('pagos', 2);
+
+        $this->user->roles()->detach($administrator);
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-06-26&include_voided=1')
+            ->assertOk()
+            ->assertJsonPath('data.access.is_administrator', false)
+            ->assertJsonPath('data.summary.tickets', 0)
+            ->assertJsonCount(0, 'data.tickets');
+    }
+
     private function createParty(string $name, string $document): int
     {
         return DB::table('terceros')->insertGetId([
@@ -393,7 +594,7 @@ class DailyDispatchTicketApiTest extends TestCase
         bool $toWarehouse = false,
         string $operationType = TicketDespacho::OPERATION_DISPATCH,
         string $channel = TicketDespacho::CHANNEL_WHOLESALE
-    ): void {
+    ): int {
         $journeyId = DB::table('jornadas_operativas')
             ->where('sucursal_id', $this->branchId)
             ->whereDate('fecha_operativa', $operatingDate)
@@ -470,5 +671,7 @@ class DailyDispatchTicketApiTest extends TestCase
                 'updated_at' => $record['weighed_at'],
             ]);
         }
+
+        return $ticketId;
     }
 }
