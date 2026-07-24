@@ -215,6 +215,7 @@ function buildSelectedTicketPrintData(ticket) {
     delivery: ticket.delivery,
     records: (ticket.weighings || []).map((weighing) => ({
       typeCode: getPrintedTypeCode(weighing, ticket.operation_type),
+      birds: Number(weighing.birds) || 0,
       birdsPerCage: Number(retail ? weighing.birds_per_tray : weighing.birds_per_cage) || 0,
       cages: Number(retail ? weighing.trays : weighing.cages) || 0,
       grossWeight: Number(weighing.gross_weight_kg) || 0,

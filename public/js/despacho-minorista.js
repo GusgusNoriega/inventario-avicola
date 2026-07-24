@@ -696,8 +696,13 @@ function station2AdjustmentForList(listIndex) {
 }
 
 function syncStation2AdjustmentWithActiveList() {
+  if (RETAIL_STATION !== "2") return;
   const adjustment = station2AdjustmentForList(state.activeList);
-  if (!adjustment) return;
+  if (!adjustment) {
+    state.adjustmentCode = "";
+    state.sex = SEX_MALE;
+    return;
+  }
   state.adjustmentCode = adjustment.code;
   state.sex = adjustment.sex || SEX_MALE;
 }
@@ -1053,6 +1058,7 @@ function liveReadingAvailability() {
 function renderWeightPreview() {
   const availability = liveReadingAvailability();
   const values = previewValues();
+  const calculationsAvailable = availability.fixedAdjustmentAvailable;
   const price = effectivePrice(activeList(), state.chickenType);
   const source = state.liveSource;
   const sourceLabels = {
@@ -1062,19 +1068,26 @@ function renderWeightPreview() {
   };
 
   elements.adjustedWeight.textContent = values.hasReading ? values.readWeight.toFixed(3) : "---";
-  elements.grossPreview.textContent = values.hasReading ? formatWeight(values.grossWeight) : "--- kg";
+  elements.grossPreview.textContent = values.hasReading && calculationsAvailable
+    ? formatWeight(values.grossWeight)
+    : "--- kg";
   elements.tarePreview.textContent = formatWeight(values.tareWeight);
   elements.tareDetail.textContent = `${values.trayCount} × ${Number(values.tray?.weight_kg || 0).toFixed(3)} kg por bandeja`;
-  elements.netPreview.textContent = values.hasReading
+  elements.netPreview.textContent = values.hasReading && calculationsAvailable
     ? formatWeight(Math.max(values.netWeight, 0))
     : "--- kg";
-  elements.netPreview.classList.toggle("is-invalid", values.readWeight > 0 && values.netWeight <= 0);
+  elements.netPreview.classList.toggle(
+    "is-invalid",
+    calculationsAvailable && values.readWeight > 0 && values.netWeight <= 0
+  );
   elements.birdTotalPreview.textContent = values.trayCount === 0
     ? `${values.birds} ave${values.birds === 1 ? "" : "s"} · sin bandeja`
     : `${values.birds} ave${values.birds === 1 ? "" : "s"}`;
-  elements.adjustmentReadingHint.textContent = values.appliesAdjustment
-    ? "Peso directo de balanza · merma aplicada solo en cálculos"
-    : "Peso directo de balanza · pollo beneficiado sin merma";
+  elements.adjustmentReadingHint.textContent = !calculationsAvailable
+    ? "Peso directo de balanza · ajuste no disponible"
+    : values.appliesAdjustment
+      ? "Peso directo de balanza · merma aplicada solo en cálculos"
+      : "Peso directo de balanza · pollo beneficiado sin merma";
   elements.manualWeightTrigger.setAttribute(
     "aria-label",
     "Peso directo de la balanza. Toca para ingresar peso manual"
@@ -1102,7 +1115,7 @@ function renderWeightPreview() {
     : "Presiona para ver por qué la lectura todavía no puede capturarse";
   elements.captureWeight.lastChild.textContent = ` Capturar en lista ${state.activeList + 1}`;
   elements.captureWeight.setAttribute("aria-label", `Capturar el peso actual en la lista ${state.activeList + 1}`);
-  const liveAmount = price && values.netWeight > 0
+  const liveAmount = calculationsAvailable && price && values.netWeight > 0
     ? roundMoney(values.netWeight * price.value)
     : null;
   elements.pricePreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
@@ -1279,8 +1292,10 @@ function renderLists() {
   });
 
   const activeFixedAdjustment = station2AdjustmentForList(state.activeList);
-  if (activeFixedAdjustment && elements.listSelectionHint) {
-    elements.listSelectionHint.textContent = `Columna activa: ${activeFixedAdjustment.name}.`;
+  if (RETAIL_STATION === "2" && elements.listSelectionHint) {
+    elements.listSelectionHint.textContent = activeFixedAdjustment
+      ? `Columna activa: ${activeFixedAdjustment.name}.`
+      : "Columna activa sin presentación disponible.";
   }
 }
 

@@ -85,6 +85,32 @@ test("el ticket minorista usa la misma tipografia grande y muestra el camion y c
   assert.doesNotMatch(html, /<th>BAN<\/th>/);
 });
 
+test("el ticket minorista imprime los pollos reales de una pesada sin bandejas", () => {
+  const html = buildWeightControlTicketHtml({
+    code: "T-20260723-004",
+    channel: "MINORISTA",
+    operationType: "DESPACHO",
+    destinationName: "Venta minorista",
+    records: [
+      {
+        typeCode: "PP",
+        birds: 5,
+        birdsPerCage: 5,
+        cages: 0,
+        grossWeight: 11.25,
+        tareWeight: 0,
+        netWeight: 11.25,
+        priceKg: 8,
+        amount: 90
+      }
+    ]
+  }, "2026-07-23T12:30:00-05:00");
+
+  assert.match(html, /<th>POLLOS<\/th>/);
+  assert.match(html, /<td class="number">5<\/td>/);
+  assert.doesNotMatch(html, /<td class="number">0<\/td>/);
+});
+
 test("el bloque de transporte se omite cuando el despacho no lo requiere", () => {
   const html = buildWeightControlTicketHtml({
     code: "T-20260723-002",

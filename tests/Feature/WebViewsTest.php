@@ -282,6 +282,8 @@ class WebViewsTest extends TestCase
             ->assertSee('data-retail-birds-per-tray-option="1"', false)
             ->assertSee('data-retail-birds-per-tray-option="10"', false)
             ->assertSee('id="retailAdjustedWeight"', false)
+            ->assertSee('La pantalla principal mostrará este peso tal como fue ingresado; la merma seleccionada se conservará únicamente para los cálculos.')
+            ->assertDontSee('mostrará únicamente el peso final con el ajuste seleccionado')
             ->assertSee('class="rd-lists-stage"', false)
             ->assertSee('aria-label="Seleccionar lista de destino"', false)
             ->assertSee('Selecciona una columna y captura; la pesada se agregará directamente.')
@@ -533,7 +535,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('"HEMBRA_CERRADA"', $javascript);
         $this->assertStringContainsString('"HEMBRA_ABIERTA"', $javascript);
         $this->assertStringContainsString('syncStation2AdjustmentWithActiveList()', $javascript);
-        $this->assertStringContainsString('elements.listSelectionHint.textContent = `Columna activa: ${activeFixedAdjustment.name}.`', $javascript);
+        $this->assertStringContainsString('state.adjustmentCode = "";', $javascript);
+        $this->assertStringContainsString('`Columna activa: ${activeFixedAdjustment.name}.`', $javascript);
+        $this->assertStringContainsString('"Columna activa sin presentación disponible."', $javascript);
+        $this->assertStringContainsString('"Peso directo de balanza · ajuste no disponible"', $javascript);
+        $this->assertStringContainsString('calculationsAvailable && price && values.netWeight > 0', $javascript);
         $this->assertStringNotContainsString('fixedAdjustment.additional_grams', $javascript);
 
         $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
@@ -987,6 +993,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('Despacho minorista', $managementJavascript);
         $this->assertStringContainsString('Venta externa', $managementJavascript);
         $this->assertStringContainsString('weighing.price_kg', $managementJavascript);
+        $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $managementJavascript);
         $this->assertStringContainsString('ticket.prices', $managementJavascript);
         $this->assertStringContainsString('summary.amount', $managementJavascript);
         $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);

@@ -245,7 +245,7 @@
         </div>
         <button type="button" data-retail-close-modal="retailManualWeightModal" aria-label="Cerrar">×</button>
       </header>
-      <p class="rd-modal-copy">Este valor se guarda internamente; la pantalla principal mostrará únicamente el peso final con el ajuste seleccionado.</p>
+      <p class="rd-modal-copy">La pantalla principal mostrará este peso tal como fue ingresado; la merma seleccionada se conservará únicamente para los cálculos.</p>
       <label class="rd-manual-weight-field">
         <span>Peso leído (kg)</span>
         <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="none" readonly required autocomplete="off" placeholder="Ej. 12.500" data-retail-keyboard="decimal" data-retail-keyboard-label="Peso leído en kilogramos">
