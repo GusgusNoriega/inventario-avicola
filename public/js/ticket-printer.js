@@ -307,46 +307,65 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       font-weight: 900;
     }
 
-    body.wholesale-ticket {
+    body.wholesale-ticket,
+    body.retail-ticket {
       padding-right: 1mm;
       padding-left: 1mm;
       font-size: 18px;
     }
 
-    .wholesale-ticket .business-name {
+    .wholesale-ticket .business-name,
+    .retail-ticket .business-name {
       font-size: 22px;
     }
 
-    .wholesale-ticket .document-title {
+    .wholesale-ticket .document-title,
+    .retail-ticket .document-title {
       font-size: 15.5px;
     }
 
-    .wholesale-ticket .destination {
+    .wholesale-ticket .destination,
+    .retail-ticket .destination {
       font-size: 18px;
     }
 
-    .wholesale-ticket .delivery {
+    .wholesale-ticket .delivery,
+    .retail-ticket .delivery {
       font-size: 17px;
     }
 
-    .wholesale-ticket th {
+    .wholesale-ticket th,
+    .retail-ticket th {
       font-size: 14px;
     }
 
-    .wholesale-ticket td {
+    .wholesale-ticket td,
+    .retail-ticket td {
       font-size: 17px;
     }
 
-    .wholesale-ticket .summary-title {
+    .wholesale-ticket .summary-title,
+    .retail-ticket .summary-title {
       font-size: 19px;
     }
 
     .wholesale-ticket .summary-table th,
-    .wholesale-ticket .summary-table td {
+    .wholesale-ticket .summary-table td,
+    .retail-ticket .summary-table th,
+    .retail-ticket .summary-table td {
       font-size: 15.5px;
     }
 
-    .wholesale-ticket .form-fields {
+    .wholesale-ticket .form-fields,
+    .retail-ticket .form-fields {
+      font-size: 19px;
+    }
+
+    .retail-ticket .channel {
+      font-size: 14px;
+    }
+
+    .retail-ticket .sale-total {
       font-size: 19px;
     }
   </style>
