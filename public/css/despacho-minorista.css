@@ -2163,7 +2163,8 @@ body.retail-dispatch-page {
 
 .rd-settings-section,
 .rd-adjustment-settings,
-.rd-payment-default-settings {
+.rd-payment-default-settings,
+.rd-printer-settings {
   min-width: 0;
   padding: 12px;
   display: grid;
@@ -2311,6 +2312,37 @@ body.retail-dispatch-page {
   color: #91a89b;
   font-size: var(--rd-font-modal-text);
   line-height: 1.4;
+}
+
+.rd-printer-settings {
+  border-color: #315d6a;
+  background: linear-gradient(120deg, rgba(43, 184, 235, 0.09), #0d131b 48%);
+}
+
+.rd-printer-settings > p {
+  margin: 0;
+  color: #8faab4;
+  font-size: var(--rd-font-modal-text);
+  line-height: 1.4;
+}
+
+.rd-printer-settings-link {
+  flex: 0 0 auto;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #b9edff;
+  border-color: #356d80;
+  background: #102731;
+  text-decoration: none;
+}
+
+.rd-printer-settings-link:hover,
+.rd-printer-settings-link:focus-visible {
+  border-color: #68dcff;
+  outline: 2px solid rgba(91, 216, 255, 0.24);
+  outline-offset: 2px;
 }
 
 .rd-settings-message {
@@ -2697,9 +2729,14 @@ body.retail-dispatch-page {
     padding: 12px;
   }
 
-  .rd-typography-settings .rd-settings-title {
+  .rd-typography-settings .rd-settings-title,
+  .rd-printer-settings .rd-settings-title {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .rd-printer-settings-link {
+    width: 100%;
   }
 
   .rd-typography-control {

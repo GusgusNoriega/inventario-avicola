@@ -24,19 +24,83 @@ Si el sistema se abre en una pestaña normal de Edge o Chrome, el mismo botón a
 
 ## Crear el acceso directo kiosco
 
-Abra PowerShell en la carpeta del proyecto y ejecute:
+El instalador ya usa `https://sada-csa.com/` como dirección predeterminada. Abra PowerShell en la carpeta del proyecto y ejecute:
 
 ```powershell
-.\scripts\Install-SistemaPollosKiosk.ps1 -Url "https://sistema.ejemplo.com"
+.\scripts\Install-SistemaPollosKiosk.ps1
 ```
 
-Para usar Google Chrome:
+El instalador selecciona Google Chrome cuando está disponible y usa Microsoft Edge como respaldo. Para forzar Microsoft Edge:
 
 ```powershell
-.\scripts\Install-SistemaPollosKiosk.ps1 -Url "https://sistema.ejemplo.com" -Browser Chrome
+.\scripts\Install-SistemaPollosKiosk.ps1 -Browser Edge
+```
+
+También puede descargar únicamente `Install-SistemaPollosKiosk.ps1` y ejecutarlo desde cualquier carpeta. El instalador es autónomo: se copia junto con su configuración a `%LOCALAPPDATA%\SistemaPollos\KioskLauncher`, por lo que el archivo descargado puede eliminarse después de la instalación.
+
+Para instalar otro entorno se conserva la opción de indicar una URL diferente:
+
+```powershell
+.\Install-SistemaPollosKiosk.ps1 -Url "https://otro-dominio.example/" -Browser Chrome
 ```
 
 El acceso se crea en el escritorio y conserva la pantalla completa al navegar entre todas las vistas. Use `Alt+F4` para cerrar el kiosco.
+
+## Impresión directa de tickets minoristas
+
+La aplicación web no puede enumerar, elegir ni configurar las impresoras de la computadora. Esa configuración pertenece a Windows, no al servidor `sada-csa.com`.
+
+El acceso principal comprueba la impresora predeterminada cada vez que se abre:
+
+- Si existe una impresora física predeterminada y se puede validar, Chrome o Edge imprime directamente.
+- Si no hay una predeterminada, fue eliminada, es virtual o no puede validarse con seguridad, el navegador muestra su ventana normal para elegir una impresora.
+- Microsoft Print to PDF, XPS, OneNote, Fax y los puertos `PORTPROMPT:` o `FILE:` nunca habilitan la impresión silenciosa.
+
+La impresión adaptativa está activa de forma predeterminada. También se crean dos accesos auxiliares en el escritorio:
+
+- **Sistema Pollos - Seleccionar impresora** abre siempre el sistema sin impresión silenciosa. Es la ruta de recuperación si el operador necesita elegir otro destino.
+- **Configurar impresora - Sistema Pollos** abre directamente la configuración de impresoras de Windows.
+
+Después de instalar, eliminar o cambiar la impresora predeterminada, cierre por completo el kiosco con `Alt+F4` y vuelva a abrirlo para que el launcher evalúe el nuevo estado.
+
+### Establecer la térmica durante la instalación
+
+Ejecute una sola vez, usando el nombre exacto con el que aparece la impresora en Windows:
+
+```powershell
+Add-Type -AssemblyName System.Drawing
+[System.Drawing.Printing.PrinterSettings]::InstalledPrinters
+
+.\scripts\Install-SistemaPollosKiosk.ps1 `
+    -Browser Chrome `
+    -PrinterName "NOMBRE EXACTO DE LA TERMICA" `
+    -ShortcutName "Sistema Pollos - Impresion directa"
+```
+
+`-PrinterName` primero comprueba que el nombre corresponda exactamente a una impresora instalada, después solicita a Windows establecerla como predeterminada y confirma el resultado. Si cualquiera de esos pasos falla, la instalación se detiene y no selecciona otra impresora.
+
+Si la térmica ya está configurada como predeterminada, omita `-PrinterName`:
+
+```powershell
+.\scripts\Install-SistemaPollosKiosk.ps1 `
+    -Browser Chrome
+```
+
+Para desactivar por completo la impresión directa en el acceso principal:
+
+```powershell
+.\scripts\Install-SistemaPollosKiosk.ps1 -DirectPrint:$false
+```
+
+El launcher utiliza perfiles separados llamados `Direct` y `Normal`. Esto evita que un proceso de Chrome o Edge reutilice accidentalmente la configuración silenciosa cuando corresponde mostrar el selector. La primera vez que se active cada modo puede ser necesario iniciar sesión en `sada-csa.com`.
+
+Si abre el sistema desde una pestaña común o desde la PWA instalada, el diálogo de impresión seguirá apareciendo; la impresión automática solamente funciona desde el acceso principal creado por el instalador.
+
+Antes de usarlo en producción, ajuste en las preferencias de la impresora térmica el papel de 80 mm, escala de 100 %, una copia y márgenes mínimos. La impresión directa usa la impresora predeterminada y sus preferencias actuales.
+
+Si Windows tiene activada la opción **Permitir que Windows administre mi impresora predeterminada**, es recomendable desactivarla para impedir cambios automáticos.
+
+Windows mantiene una sola impresora predeterminada por usuario. Si dos módulos deben imprimir en dos impresoras diferentes dentro de la misma sesión de Windows, este acceso no puede dirigir cada ticket a una impresora distinta; use cuentas de Windows separadas o una solución de impresión local que permita seleccionar la impresora por módulo.
 
 ## Inicio automático opcional
 

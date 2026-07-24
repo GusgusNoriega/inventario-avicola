@@ -13,9 +13,11 @@ function escapeTicketHtml(value) {
 function normalizeTicketRecord(record) {
   const grossWeight = Number(record?.grossWeight) || 0;
   const tareWeight = Number(record?.tareWeight) || 0;
+  const suppliedReadWeight = Number(record?.readWeight);
   const suppliedNetWeight = Number(record?.netWeight);
   const priceKg = Number(record?.priceKg) || 0;
   const suppliedAmount = Number(record?.amount);
+  const readWeight = Number.isFinite(suppliedReadWeight) ? suppliedReadWeight : grossWeight;
   const netWeight = Number.isFinite(suppliedNetWeight) ? suppliedNetWeight : grossWeight - tareWeight;
 
   return {
@@ -27,9 +29,11 @@ function normalizeTicketRecord(record) {
       Number(record?.birds)
       || (Math.max(0, Number(record?.birdsPerCage) || 0) * Math.max(0, Number(record?.cages) || 0))
     ),
+    readWeight,
     grossWeight,
     tareWeight,
     netWeight,
+    adjustmentWeight: grossWeight - readWeight,
     priceKg,
     amount: Number.isFinite(suppliedAmount) ? suppliedAmount : netWeight * priceKg
   };
@@ -41,16 +45,24 @@ function summarizeTicketRecords(records) {
   records.forEach((record) => {
     const current = totalsByType.get(record.typeCode) || {
       typeCode: record.typeCode,
+      birds: 0,
+      cages: 0,
+      readWeight: 0,
       grossWeight: 0,
       tareWeight: 0,
       netWeight: 0,
+      adjustmentWeight: 0,
       priceKg: record.priceKg,
       amount: 0
     };
 
+    current.birds += record.birds;
+    current.cages += record.cages;
+    current.readWeight += record.readWeight;
     current.grossWeight += record.grossWeight;
     current.tareWeight += record.tareWeight;
     current.netWeight += record.netWeight;
+    current.adjustmentWeight += record.adjustmentWeight;
     current.priceKg = record.priceKg;
     current.amount += record.amount;
     totalsByType.set(record.typeCode, current);
@@ -63,6 +75,369 @@ function formatTicketMoney(value) {
   return `S/ ${Number(value || 0).toFixed(2)}`;
 }
 
+function formatTicketNumber(value, decimals = 2) {
+  return Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+}
+
+function formatTicketDate(operatingDate, fallbackDate) {
+  const dateParts = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(operatingDate || ""));
+  if (dateParts) {
+    return `${dateParts[3]}/${dateParts[2]}/${dateParts[1]}`;
+  }
+
+  return fallbackDate.toLocaleDateString(TICKET_LOCALE, {
+    timeZone: TICKET_TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+}
+
+function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isReturn) {
+  const ticketCode = String(ticket?.code || "--");
+  const destinationName = String(ticket?.destinationName || "Venta externa");
+  const deliveryVehicle = ticket?.delivery?.vehicle || null;
+  const deliveryDriver = ticket?.delivery?.driver || null;
+  const hasAssignedTransport = Boolean(deliveryVehicle || deliveryDriver);
+  const totalBaseWeight = records.reduce(
+    (total, record) => total + record.readWeight - record.tareWeight,
+    0
+  );
+  const totalBirds = records.reduce((total, record) => total + record.birds, 0);
+  const totalAdjustmentWeight = records.reduce(
+    (total, record) => total + record.adjustmentWeight,
+    0
+  );
+  const totalNetWeight = records.reduce((total, record) => total + record.netWeight, 0);
+  const suppliedTotalAmount = Number(ticket?.totalAmount);
+  const totalAmount = Number.isFinite(suppliedTotalAmount)
+    ? suppliedTotalAmount
+    : records.reduce((total, record) => total + record.amount, 0);
+  const distinctPrices = [...new Set(
+    records.map((record) => Number(record.priceKg || 0).toFixed(2))
+  )];
+  const priceLabel = distinctPrices.length === 1
+    ? formatTicketNumber(distinctPrices[0])
+    : (distinctPrices.length > 1 ? "VARIOS" : "0.00");
+  const printedDate = formatTicketDate(ticket?.operatingDate, safePrintDate);
+  const rows = records.map((record) => `
+    <tr>
+      <td>${escapeTicketHtml(record.typeCode)}</td>
+      <td class="number">${record.birds}</td>
+      <td class="number">${record.cages}</td>
+      <td class="number">${formatTicketNumber(record.readWeight)}</td>
+      <td class="number">${formatTicketNumber(record.tareWeight)}</td>
+      <td class="control-cell">&nbsp;</td>
+    </tr>
+  `).join("");
+  const deliveryHtml = hasAssignedTransport
+    ? `<section class="delivery">
+        ${deliveryVehicle ? `<p>CAMIÓN: ${escapeTicketHtml(deliveryVehicle.plate || "--")}</p>` : ""}
+        ${deliveryDriver ? `<p>CHOFER: ${escapeTicketHtml(deliveryDriver.name || "--")}</p>` : ""}
+      </section>`
+    : "";
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeTicketHtml(ticketCode)} - CONTROL DE PESO</title>
+  <style>
+    @page {
+      size: auto;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #000;
+    }
+
+    body {
+      width: 76mm;
+      margin: 0 auto;
+      padding: 2.5mm 1.5mm 12mm;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.15;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    h1,
+    h2,
+    p {
+      margin: 0;
+    }
+
+    .center {
+      text-align: center;
+    }
+
+    .business-distributor {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .business-name {
+      margin-top: 0.4mm;
+      font-size: 21px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0.4px;
+    }
+
+    .business-product {
+      margin-top: 0.5mm;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: 0.7px;
+    }
+
+    .business-mark {
+      margin-top: 3.5mm;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .document-title {
+      margin-top: 3.5mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 2mm;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .date {
+      margin-top: 1.8mm;
+      font-size: 13px;
+    }
+
+    .operation-note {
+      margin-top: 1.5mm;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .destination {
+      margin: 7mm 0 1.3mm;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .delivery {
+      margin: 1.8mm 0 2mm;
+      font-size: 12.5px;
+      font-weight: 900;
+    }
+
+    .delivery p + p {
+      margin-top: 0.6mm;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      overflow: hidden;
+      text-overflow: clip;
+    }
+
+    .detail-table th {
+      padding: 0.8mm 0.25mm;
+      border-top: 1.4px solid #000;
+      border-right: 1px solid #000;
+      border-bottom: 1.4px solid #000;
+      font-size: 9.5px;
+      font-weight: 900;
+      line-height: 1.05;
+      text-align: center;
+      white-space: normal;
+    }
+
+    .detail-table th:first-child {
+      border-left: 1px solid #000;
+    }
+
+    .detail-table td {
+      padding: 1.3mm 0.35mm 0.5mm;
+      font-size: 13.5px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .detail-table td:first-child {
+      text-align: left;
+      font-weight: 900;
+    }
+
+    .detail-table .number {
+      text-align: right;
+    }
+
+    .detail-table .control-cell {
+      text-align: center;
+    }
+
+    .detail-table th:nth-child(1) { width: 12%; }
+    .detail-table th:nth-child(2) { width: 10%; }
+    .detail-table th:nth-child(3) { width: 10%; }
+    .detail-table th:nth-child(4) { width: 22%; }
+    .detail-table th:nth-child(5) { width: 22%; }
+    .detail-table th:nth-child(6) { width: 24%; }
+
+    .retail-summary-stack {
+      width: 64%;
+      margin: 7mm 0 0 auto;
+    }
+
+    .retail-summary-table + .retail-summary-table {
+      margin-top: 1.3mm;
+    }
+
+    .retail-summary-table th {
+      padding: 0.8mm 0.25mm;
+      border-top: 1.2px solid #000;
+      border-bottom: 1.2px solid #000;
+      font-size: 11.5px;
+      font-weight: 900;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .retail-summary-table td {
+      padding: 1.2mm 0.25mm 0.7mm;
+      border-bottom: 1.2px solid #000;
+      font-size: 12.5px;
+      font-weight: 700;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .retail-summary-table td:nth-child(2) {
+      text-align: center;
+    }
+
+    .retail-summary-table th:nth-child(1),
+    .retail-summary-table td:nth-child(1) {
+      width: 34%;
+    }
+
+    .retail-summary-table th:nth-child(2),
+    .retail-summary-table td:nth-child(2) {
+      width: 26%;
+    }
+
+    .retail-summary-table th:nth-child(3),
+    .retail-summary-table td:nth-child(3) {
+      width: 40%;
+    }
+
+    .retail-summary-table .price-various {
+      font-size: 10.5px;
+      font-weight: 900;
+    }
+
+    .form-fields {
+      margin-top: 30mm;
+      display: grid;
+      gap: 12mm;
+      font-size: 14px;
+      font-weight: 900;
+    }
+  </style>
+</head>
+<body class="retail-ticket">
+  <header class="center">
+    <p class="business-distributor">DISTRIBUIDORA</p>
+    <h1 class="business-name">DIEGO ALBERTO</h1>
+    <p class="business-product">GALLINA</p>
+    <p class="business-mark">GD</p>
+  </header>
+
+  <h2 class="document-title">
+    <span>CONTROL DE PESO</span>
+    <span>${escapeTicketHtml(ticketCode)}</span>
+  </h2>
+
+  <p class="date">FECHA ${escapeTicketHtml(printedDate)}</p>
+  ${isReturn ? '<p class="operation-note">DEVOLUCIÓN MINORISTA</p>' : ""}
+
+  <p class="destination">${escapeTicketHtml(destinationName.toLocaleUpperCase(TICKET_LOCALE))}</p>
+  ${deliveryHtml}
+
+  <table class="detail-table retail-detail-table">
+    <thead>
+      <tr>
+        <th>TIPO</th>
+        <th>C/A</th>
+        <th>C.J</th>
+        <th>PESO<br>BRUTO</th>
+        <th>PESO<br>TARA</th>
+        <th>CONTROL<br>PESO</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <section class="retail-summary-stack">
+    <table class="retail-summary-table retail-weight-summary">
+      <thead>
+        <tr><th>PESO</th><th>AVES</th><th>MERM</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${formatTicketNumber(totalBaseWeight)}</td>
+          <td>${totalBirds}</td>
+          <td>${formatTicketNumber(totalAdjustmentWeight)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="retail-summary-table retail-sale-summary">
+      <thead>
+        <tr><th>P.NETO</th><th>PRE.</th><th>SOLES</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${formatTicketNumber(totalNetWeight)}</td>
+          <td class="${distinctPrices.length > 1 ? "price-various" : ""}">${escapeTicketHtml(priceLabel)}</td>
+          <td>${formatTicketNumber(totalAmount)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="form-fields">
+    <p>OBSERV:</p>
+    <p>NOMBRE:</p>
+    <p>FIRMA:</p>
+  </section>
+</body>
+</html>`;
+}
+
 export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   const requestedPrintDate = emittedAt || ticket?.emittedAt;
   const printDate = requestedPrintDate ? new Date(requestedPrintDate) : new Date();
@@ -71,6 +446,11 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   const typeTotals = summarizeTicketRecords(records);
   const isReturn = ticket?.operationType === "DEVOLUCION";
   const isRetail = ticket?.channel === "MINORISTA";
+
+  if (isRetail) {
+    return buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isReturn);
+  }
+
   const customerKind = ticket?.customerKind === "VENTA_EXTERNA" ? "VENTA EXTERNA" : "CLIENTE REGISTRADO";
   const documentTitle = isRetail
     ? (isReturn ? "DEVOLUCION MINORISTA" : "DESPACHO MINORISTA")

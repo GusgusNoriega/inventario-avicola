@@ -17,6 +17,17 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         Route::view('/', 'menu')->name('menu');
 
         Route::view('/instalar', 'install-app')->name('install-app');
+        Route::get('/instalar/configurador-impresion', static function () {
+            $installerPath = base_path('scripts/Install-SistemaPollosKiosk.ps1');
+
+            abort_unless(is_file($installerPath), 404);
+
+            return response()->download(
+                $installerPath,
+                'Configurar-Impresion-Sistema-Pollos.ps1',
+                ['Content-Type' => 'text/plain; charset=UTF-8'],
+            );
+        })->name('install-app.printer-installer');
 
         Route::view('/operacion', 'operacion')
             ->middleware('module:MODULO_DESPACHO_MAYORISTA')

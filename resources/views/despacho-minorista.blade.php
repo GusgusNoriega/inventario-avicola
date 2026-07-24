@@ -507,6 +507,24 @@
         </p>
       </section>
 
+      <section class="rd-printer-settings">
+        <div class="rd-settings-title">
+          <div>
+            <span>Tickets de esta estación</span>
+            <strong>Impresora predeterminada e impresión directa</strong>
+          </div>
+          <a
+            class="rd-secondary-button rd-printer-settings-link"
+            href="{{ route('install-app') }}#ticketPrinterSetup"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Configurar impresión
+          </a>
+        </div>
+        <p>Abre la guía para configurar la impresora térmica local sin cerrar ni modificar estos ajustes minoristas.</p>
+      </section>
+
       <section class="rd-typography-settings">
         <div class="rd-settings-title">
           <div>

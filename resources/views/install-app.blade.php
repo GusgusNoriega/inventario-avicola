@@ -61,6 +61,59 @@
         <p>Para una estación fija que nunca muestre la interfaz del navegador, continúa usando el acceso directo en modo kiosco.</p>
       </aside>
     </section>
+
+    <section id="ticketPrinterSetup" class="pwa-printer-setup card" aria-labelledby="ticketPrinterSetupTitle">
+      <header class="pwa-printer-header">
+        <div>
+          <p class="eyebrow">Tickets de despacho minorista</p>
+          <h2 id="ticketPrinterSetupTitle">Configurar impresión</h2>
+          <p>Prepara una impresora térmica para imprimir desde <a href="https://sada-csa.com/" target="_blank" rel="noopener noreferrer">https://sada-csa.com/</a>.</p>
+        </div>
+        <span class="pwa-printer-platform">Windows · Edge o Chrome</span>
+      </header>
+
+      <div class="pwa-printer-grid">
+        <div class="pwa-printer-guide">
+          <div class="pwa-printer-limit">
+            <strong>La aplicación web no puede ver ni cambiar las impresoras de esta computadora.</strong>
+            <p>La selección se realiza localmente en Windows. El sistema solo genera el ticket y solicita su impresión.</p>
+          </div>
+
+          <div class="pwa-printer-actions">
+            <a class="pwa-printer-action is-primary" href="ms-settings:printers">
+              Abrir impresoras de Windows
+            </a>
+            <a class="pwa-printer-action" href="{{ route('install-app.printer-installer') }}" download>
+              Descargar configurador
+            </a>
+          </div>
+
+          <p class="pwa-printer-action-help">
+            Windows o el navegador pueden pedir confirmación antes de abrir la configuración. El configurador usa Chrome si está instalado y Edge como respaldo; crea un acceso directo para este dominio y no modifica tickets ni datos de ventas.
+          </p>
+
+          <div class="pwa-printer-command">
+            <span>Después de descargar, abre PowerShell en la carpeta Descargas y ejecuta:</span>
+            <code>powershell.exe -ExecutionPolicy Bypass -File .\Configurar-Impresion-Sistema-Pollos.ps1 -DirectPrint</code>
+          </div>
+        </div>
+
+        <div class="pwa-printer-steps">
+          <h3>Preparación en esta computadora</h3>
+          <ol>
+            <li>Conecta e instala la impresora térmica y configura papel de 80 mm.</li>
+            <li>Abre <strong>Impresoras y escáneres</strong>, selecciona la térmica y establécela como predeterminada.</li>
+            <li>Descarga el configurador y ejecútalo con PowerShell usando la opción <code>-DirectPrint</code>.</li>
+            <li>Abre el acceso directo creado e inicia sesión una vez.</li>
+          </ol>
+        </div>
+      </div>
+
+      <aside class="pwa-printer-fallback">
+        <strong>Impresión de respaldo</strong>
+        <p>Si el configurador no encuentra una impresora predeterminada válida, no activa la impresión silenciosa. Los tickets seguirán abriendo la ventana normal para elegir una impresora.</p>
+      </aside>
+    </section>
   </main>
 
   <script src="{{ asset('js/install-app.js') }}?v={{ filemtime(public_path('js/install-app.js')) }}"></script>

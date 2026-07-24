@@ -59,7 +59,14 @@ class WebViewsTest extends TestCase
         $this->get('/instalar')
             ->assertOk()
             ->assertSee('id="installPwaButton"', false)
+            ->assertSee('id="ticketPrinterSetup"', false)
             ->assertSee('https://sada-csa.com/', false)
+            ->assertSee('href="ms-settings:printers"', false)
+            ->assertSee(route('install-app.printer-installer'), false)
+            ->assertSee('La aplicación web no puede ver ni cambiar las impresoras de esta computadora.')
+            ->assertSee('El configurador usa Chrome si está instalado y Edge como respaldo')
+            ->assertSee('Configurar-Impresion-Sistema-Pollos.ps1 -DirectPrint')
+            ->assertSee('Los tickets seguirán abriendo la ventana normal para elegir una impresora.')
             ->assertSee(asset('js/install-app.js'), false)
             ->assertSee(asset('manifest.webmanifest'), false)
             ->assertSee(route('menu'), false);
@@ -71,6 +78,23 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('promptEvent.prompt()', $javascript);
         $this->assertStringContainsString('beforeinstallprompt', $registration);
         $this->assertStringContainsString('event.preventDefault()', $registration);
+    }
+
+    public function test_printer_configurator_is_downloaded_from_an_authenticated_route(): void
+    {
+        $response = $this->get(route('install-app.printer-installer'));
+
+        $response->assertOk()
+            ->assertDownload('Configurar-Impresion-Sistema-Pollos.ps1');
+
+        $this->assertSame(
+            realpath(base_path('scripts/Install-SistemaPollosKiosk.ps1')),
+            $response->baseResponse->getFile()->getRealPath(),
+        );
+
+        auth()->logout();
+        $this->get(route('install-app.printer-installer'))
+            ->assertRedirect(route('login'));
     }
 
     public function test_financial_views_are_available_without_database_queries(): void
@@ -297,6 +321,9 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailDefaultPaymentAccount"', false)
             ->assertSee('Método y cuenta predeterminados de esta estación')
             ->assertSee('Podrás elegir otro método o cuenta para cualquier venta')
+            ->assertSee('Configurar impresión')
+            ->assertSee(route('install-app').'#ticketPrinterSetup', false)
+            ->assertSee('target="_blank"', false)
             ->assertSee('id="retailOpenTypography"', false)
             ->assertSee('id="retailTypographyDrawer"', false)
             ->assertSee('id="retailTypographyControls"', false)
@@ -472,6 +499,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);
         $this->assertStringContainsString('.rd-payment-default-settings', $stylesheet);
         $this->assertStringContainsString('.rd-payment-default-fields', $stylesheet);
+        $this->assertStringContainsString('.rd-printer-settings', $stylesheet);
+        $this->assertStringContainsString('.rd-printer-settings-link', $stylesheet);
         $this->assertStringContainsString('.rd-payment-mode-options', $stylesheet);
         $this->assertStringContainsString('.rd-payment-credit-panel', $stylesheet);
         $this->assertStringContainsString('.rd-modal-card.is-error', $stylesheet);
@@ -772,6 +801,44 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('ORIGEN:', $template);
     }
 
+    public function test_retail_dispatch_print_template_matches_the_weight_control_receipt(): void
+    {
+        $javascript = file_get_contents(public_path('js/ticket-printer.js'));
+
+        $this->assertIsString($javascript);
+        $templateStart = strpos($javascript, 'function buildRetailWeightControlTicketHtml');
+        $templateEnd = strpos($javascript, 'export function buildWeightControlTicketHtml', $templateStart);
+        $this->assertNotFalse($templateStart);
+        $this->assertNotFalse($templateEnd);
+
+        $template = substr($javascript, $templateStart, $templateEnd - $templateStart);
+
+        $this->assertStringContainsString('DISTRIBUIDORA</p>', $template);
+        $this->assertStringContainsString('DIEGO ALBERTO</h1>', $template);
+        $this->assertStringContainsString('GALLINA</p>', $template);
+        $this->assertStringContainsString('GD</p>', $template);
+        $this->assertStringContainsString('CONTROL DE PESO', $template);
+        $this->assertStringContainsString('formatTicketDate(ticket?.operatingDate, safePrintDate)', $template);
+        $this->assertStringContainsString('<th>C/A</th>', $template);
+        $this->assertStringContainsString('<th>C.J</th>', $template);
+        $this->assertStringContainsString('PESO<br>BRUTO', $template);
+        $this->assertStringContainsString('PESO<br>TARA', $template);
+        $this->assertStringContainsString('CONTROL<br>PESO', $template);
+        $this->assertStringContainsString('<th>PESO</th><th>AVES</th><th>MERM</th>', $template);
+        $this->assertStringContainsString('<th>P.NETO</th><th>PRE.</th><th>SOLES</th>', $template);
+        $this->assertStringContainsString('total + record.readWeight - record.tareWeight', $template);
+        $this->assertStringContainsString('total + record.adjustmentWeight', $template);
+        $this->assertStringContainsString('total + record.netWeight', $template);
+        $this->assertStringContainsString('? "VARIOS"', $template);
+        $this->assertStringContainsString('Boolean(deliveryVehicle || deliveryDriver)', $template);
+        $this->assertStringContainsString('deliveryVehicle.plate', $template);
+        $this->assertStringContainsString('deliveryDriver.name', $template);
+        $this->assertStringContainsString('<p>OBSERV:</p>', $template);
+        $this->assertStringContainsString('<p>NOMBRE:</p>', $template);
+        $this->assertStringContainsString('<p>FIRMA:</p>', $template);
+        $this->assertStringNotContainsString('TRANSPORTE: RETIRO DIRECTO', $template);
+    }
+
     public function test_dispatch_print_keeps_the_selected_delivery_truck_and_driver(): void
     {
         $javascript = file_get_contents(public_path('js/app.js'));
@@ -1028,24 +1095,48 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('Venta externa', $managementJavascript);
         $this->assertStringContainsString('weighing.price_kg', $managementJavascript);
         $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $managementJavascript);
+        $this->assertStringContainsString('operatingDate: ticket.operating_date', $managementJavascript);
+        $this->assertStringContainsString('destinationName: retail ? (ticket.client?.name || "Venta externa") : ticketCustomerName(ticket)', $managementJavascript);
+        $this->assertStringContainsString('cages: Number(retail ? weighing.trays : weighing.cages) || 0', $managementJavascript);
+        $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $managementJavascript);
         $this->assertStringContainsString('ticket.prices', $managementJavascript);
         $this->assertStringContainsString('summary.amount', $managementJavascript);
         $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);
     }
 
-    public function test_retail_ticket_reprint_keeps_the_applied_price_and_customer_kind(): void
+    public function test_retail_ticket_print_and_reprint_keep_the_sale_weight_and_delivery_data(): void
     {
-        $javascript = file_get_contents(public_path('js/ticket-printer.js'));
+        $printerJavascript = file_get_contents(public_path('js/ticket-printer.js'));
+        $retailJavascript = file_get_contents(public_path('js/despacho-minorista.js'));
+        $managementJavascript = file_get_contents(public_path('js/gestion-pesadas.js'));
 
-        $this->assertIsString($javascript);
-        $this->assertStringContainsString('DESPACHO MINORISTA', $javascript);
-        $this->assertStringContainsString('VENTA EXTERNA', $javascript);
-        $this->assertStringContainsString('PRECIO<br>/KG', $javascript);
-        $this->assertStringContainsString('TOTAL TICKET', $javascript);
-        $this->assertStringContainsString('record?.priceKg', $javascript);
-        $this->assertStringContainsString('record?.amount', $javascript);
-        $this->assertStringContainsString('deliveryVehicle.plate', $javascript);
-        $this->assertStringContainsString('deliveryDriver.name', $javascript);
+        $this->assertIsString($printerJavascript);
+        $this->assertIsString($retailJavascript);
+        $this->assertIsString($managementJavascript);
+
+        $this->assertStringContainsString('record?.readWeight', $printerJavascript);
+        $this->assertStringContainsString('record?.grossWeight', $printerJavascript);
+        $this->assertStringContainsString('record?.tareWeight', $printerJavascript);
+        $this->assertStringContainsString('record?.netWeight', $printerJavascript);
+        $this->assertStringContainsString('record?.priceKg', $printerJavascript);
+        $this->assertStringContainsString('record?.amount', $printerJavascript);
+
+        foreach ([$retailJavascript, $managementJavascript] as $printDataJavascript) {
+            $this->assertStringContainsString('operatingDate: ticket.operating_date', $printDataJavascript);
+            $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $printDataJavascript);
+            $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $printDataJavascript);
+            $this->assertStringContainsString('grossWeight: Number(weighing.gross_weight_kg) || 0', $printDataJavascript);
+            $this->assertStringContainsString('tareWeight: Number(weighing.tare_weight_kg) || 0', $printDataJavascript);
+            $this->assertStringContainsString('netWeight: Number(weighing.net_weight_kg) || 0', $printDataJavascript);
+            $this->assertStringContainsString('delivery: ticket.delivery', $printDataJavascript);
+        }
+
+        $this->assertStringContainsString('cages: Number(weighing.tray_count) || 0', $retailJavascript);
+        $this->assertStringContainsString('priceKg: roundMoney(weighing.price_kg)', $retailJavascript);
+        $this->assertStringContainsString('amount: roundMoney(weighing.amount)', $retailJavascript);
+        $this->assertStringContainsString('cages: Number(retail ? weighing.trays : weighing.cages) || 0', $managementJavascript);
+        $this->assertStringContainsString('priceKg: Number(weighing.price_kg) || 0', $managementJavascript);
+        $this->assertStringContainsString('amount: Number(weighing.amount) || 0', $managementJavascript);
     }
 
     public function test_customer_history_view_is_available_without_database_queries(): void
