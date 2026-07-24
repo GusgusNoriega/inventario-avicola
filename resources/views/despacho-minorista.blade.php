@@ -220,7 +220,7 @@
   </div>
 
   <div id="retailBirdsPerTrayModal" class="rd-modal" hidden>
-    <section class="rd-modal-card is-compact" role="dialog" aria-modal="true" aria-labelledby="retailBirdsPerTrayModalTitle">
+    <section class="rd-modal-card is-compact is-bird-quantity" role="dialog" aria-modal="true" aria-labelledby="retailBirdsPerTrayModalTitle">
       <header class="rd-modal-head">
         <div>
           <p>Selección táctil</p>
@@ -229,7 +229,7 @@
         <button type="button" data-retail-close-modal="retailBirdsPerTrayModal" aria-label="Cerrar">×</button>
       </header>
       <div class="rd-number-options rd-birds-per-tray-options" role="group" aria-label="Seleccionar aves por bandeja">
-        @for ($quantity = 1; $quantity <= 10; $quantity++)
+        @for ($quantity = 1; $quantity <= 40; $quantity++)
           <button type="button" data-retail-birds-per-tray-option="{{ $quantity }}">{{ $quantity }}</button>
         @endfor
       </div>

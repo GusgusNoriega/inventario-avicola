@@ -13,6 +13,12 @@ test("la cantidad de aves se conserva al retirar todas las bandejas", () => {
   assert.equal(calculateRetailBirdCount(0, 5), 5);
 });
 
+test("la selección máxima calcula correctamente hasta cuarenta aves", () => {
+  assert.equal(calculateRetailBirdCount(0, 40), 40);
+  assert.equal(calculateRetailBirdCount(1, 40), 40);
+  assert.equal(calculateRetailBirdCount(2, 40), 80);
+});
+
 test("pollo pelado recibe la merma configurada por cada pollo con y sin bandeja", () => {
   assert.deepEqual(
     calculateRetailWeightAdjustment({

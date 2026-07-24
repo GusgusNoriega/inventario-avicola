@@ -49,6 +49,7 @@ const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
 const LIST_COUNT = 4;
+const MAX_RETAIL_BIRD_QUANTITY = 40;
 const STATION_2_LIST_ADJUSTMENT_CODES = [
   "MACHO_CERRADO",
   "MACHO_ABIERTO",
@@ -1418,11 +1419,15 @@ function addWeighingToList(listIndex, capturedReading) {
       help: "Selecciona nuevamente la cantidad de bandejas y vuelve a capturar."
     });
   }
-  if (!Number.isInteger(values.birdsPerTray) || values.birdsPerTray < 1 || values.birdsPerTray > 10) {
+  if (
+    !Number.isInteger(values.birdsPerTray)
+    || values.birdsPerTray < 1
+    || values.birdsPerTray > MAX_RETAIL_BIRD_QUANTITY
+  ) {
     const birdLabel = values.trayCount === 0 ? "Cantidad de aves" : "Aves por bandeja";
     return showCaptureIssue({
       title: "La cantidad de aves no es válida",
-      message: `No se agregó la pesada porque ${birdLabel.toLocaleLowerCase("es")} debe estar entre 1 y 10.`,
+      message: `No se agregó la pesada porque ${birdLabel.toLocaleLowerCase("es")} debe estar entre 1 y ${MAX_RETAIL_BIRD_QUANTITY}.`,
       details: [{ label: birdLabel, value: String(values.birdsPerTray) }],
       help: "Selecciona nuevamente la cantidad de aves y vuelve a capturar."
     });
@@ -3032,7 +3037,10 @@ function renderTrayOptions() {
   `).join("");
   const tray = selectedTray();
   if (tray?.bird_capacity) {
-    elements.birdsPerTray.value = Math.min(10, Math.max(1, Math.round(Number(tray.bird_capacity))));
+    elements.birdsPerTray.value = Math.min(
+      MAX_RETAIL_BIRD_QUANTITY,
+      Math.max(1, Math.round(Number(tray.bird_capacity)))
+    );
   }
 }
 
@@ -3157,7 +3165,10 @@ elements.openCustomerDisplay?.addEventListener("click", openRetailCustomerDispla
 elements.trayType.addEventListener("change", () => {
   const tray = selectedTray();
   if (tray?.bird_capacity) {
-    elements.birdsPerTray.value = Math.min(10, Math.max(1, Math.round(Number(tray.bird_capacity))));
+    elements.birdsPerTray.value = Math.min(
+      MAX_RETAIL_BIRD_QUANTITY,
+      Math.max(1, Math.round(Number(tray.bird_capacity)))
+    );
   }
   renderWeightPreview();
 });

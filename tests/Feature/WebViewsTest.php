@@ -576,6 +576,33 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('[data-retail-station="2"] .rd-selection-bar', $stylesheet);
     }
 
+    public function test_both_retail_dispatch_views_allow_selecting_up_to_forty_birds(): void
+    {
+        foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
+            $response = $this->get($url)
+                ->assertOk()
+                ->assertSee('class="rd-modal-card is-compact is-bird-quantity"', false)
+                ->assertSee('data-retail-birds-per-tray-option="1"', false)
+                ->assertSee('data-retail-birds-per-tray-option="40"', false)
+                ->assertDontSee('data-retail-birds-per-tray-option="41"', false);
+
+            $content = (string) $response->getContent();
+            $this->assertSame(
+                40,
+                preg_match_all('/data-retail-birds-per-tray-option="\d+"/', $content),
+            );
+        }
+
+        $javascript = (string) file_get_contents(public_path('js/despacho-minorista.js'));
+        $stylesheet = (string) file_get_contents(public_path('css/despacho-minorista.css'));
+
+        $this->assertStringContainsString('const MAX_RETAIL_BIRD_QUANTITY = 40;', $javascript);
+        $this->assertStringContainsString('values.birdsPerTray > MAX_RETAIL_BIRD_QUANTITY', $javascript);
+        $this->assertStringContainsString('debe estar entre 1 y ${MAX_RETAIL_BIRD_QUANTITY}', $javascript);
+        $this->assertStringContainsString('.rd-modal-card.is-bird-quantity', $stylesheet);
+        $this->assertStringContainsString('.rd-birds-per-tray-options', $stylesheet);
+    }
+
     public function test_both_retail_dispatch_views_offer_customer_pickup_before_company_fleet(): void
     {
         foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {

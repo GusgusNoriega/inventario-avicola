@@ -1500,6 +1500,10 @@ body.retail-dispatch-page {
   border-top-color: #f1c64b;
 }
 
+.rd-modal-card.is-bird-quantity {
+  width: min(760px, calc(100vw - 36px));
+}
+
 .rd-modal-card.is-remove-confirmation {
   width: min(720px, calc(100vw - 36px));
   border-top-color: #ef646d;
@@ -1589,6 +1593,10 @@ body.retail-dispatch-page {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
+}
+
+.rd-birds-per-tray-options {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 
 .rd-number-options button {
@@ -2643,6 +2651,10 @@ body.retail-dispatch-page {
 }
 
 @media (max-width: 760px) {
+  .rd-birds-per-tray-options {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
   .rd-topbar,
   .rd-capture-deck,
   .rd-selection-bar,

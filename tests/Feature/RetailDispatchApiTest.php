@@ -1706,14 +1706,58 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
-    public function test_retail_dispatch_rejects_more_than_ten_birds_per_tray(): void
+    public function test_both_retail_stations_accept_up_to_forty_birds_in_one_selection(): void
     {
-        $payload = $this->payload();
-        $payload['weighings'][0]['birds_per_tray'] = 11;
+        foreach ([
+            [
+                'endpoint' => '/api/v1/despacho-minorista/tickets',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            [
+                'endpoint' => '/api/v1/despacho-minorista-2/tickets',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station) {
+            $payload = $this->payload();
+            $payload['weighings'][0]['birds_per_tray'] = 40;
+            $payload['weighings'][0]['tray_count'] = 0;
+            $payload['weighings'][0]['weight_source'] = $station['weight_source'];
 
-        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('weighings.0.birds_per_tray');
+            $response = $this->postJson($station['endpoint'], $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.totals.birds', 40)
+                ->assertJsonPath('data.weighings.0.birds_per_tray', 40)
+                ->assertJsonPath('data.weighings.0.tray_count', 0);
+
+            $this->assertDatabaseHas('pesadas', [
+                'ticket_id' => (int) $response->json('data.id'),
+                'aves_por_bandeja' => 40,
+                'cantidad_bandejas' => 0,
+                'cantidad_aves' => 40,
+            ]);
+        }
+    }
+
+    public function test_both_retail_stations_reject_more_than_forty_birds_in_one_selection(): void
+    {
+        foreach ([
+            [
+                'endpoint' => '/api/v1/despacho-minorista/tickets',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            [
+                'endpoint' => '/api/v1/despacho-minorista-2/tickets',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station) {
+            $payload = $this->payload();
+            $payload['weighings'][0]['birds_per_tray'] = 41;
+            $payload['weighings'][0]['weight_source'] = $station['weight_source'];
+
+            $this->postJson($station['endpoint'], $payload)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('weighings.0.birds_per_tray');
+        }
 
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
