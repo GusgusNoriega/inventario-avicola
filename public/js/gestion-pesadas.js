@@ -45,7 +45,15 @@ const elements = {
   deleteCopy: document.getElementById("deleteWeighingCopy"),
   deleteReason: document.getElementById("deleteWeighingReason"),
   deleteMessage: document.getElementById("deleteWeighingMessage"),
-  deleteCancel: document.getElementById("deleteWeighingCancel")
+  deleteCancel: document.getElementById("deleteWeighingCancel"),
+  voidTicketModal: document.getElementById("voidTicketModal"),
+  voidTicketForm: document.getElementById("voidTicketForm"),
+  voidTicketCode: document.getElementById("voidTicketCode"),
+  voidTicketReason: document.getElementById("voidTicketReason"),
+  voidTicketMessage: document.getElementById("voidTicketMessage"),
+  voidTicketClose: document.getElementById("voidTicketClose"),
+  voidTicketCancel: document.getElementById("voidTicketCancel"),
+  voidTicketSubmit: document.getElementById("voidTicketSubmit")
 };
 
 const state = {
@@ -55,6 +63,7 @@ const state = {
   editingWeighing: null,
   editingChickenSex: "MACHO",
   deletingWeighing: null,
+  voidingTicket: null,
   searchTimer: null,
   searching: false,
   saving: false
@@ -409,6 +418,7 @@ function renderSelectedTicket() {
           <p>${escapeHtml(ticketCustomerName(ticket))}</p>
         </div>
         <div class="weighing-ticket-detail-actions">
+          ${ticket.can_void ? '<button class="btn btn-danger" type="button" data-void-selected-ticket>Anular ticket</button>' : ""}
           <button class="btn btn-primary" type="button" data-print-selected-ticket ${(ticket.weighings || []).length ? "" : "disabled"}>Imprimir ticket</button>
           <button class="btn btn-ghost" type="button" data-refresh-ticket>Actualizar</button>
         </div>
@@ -779,6 +789,72 @@ async function deleteWeighing(event) {
   }
 }
 
+function openVoidTicketModal() {
+  const ticket = state.selectedTicket;
+
+  if (!ticket?.can_void) {
+    setMessage("Solo un administrador puede anular tickets cerrados.", true);
+    return;
+  }
+
+  state.voidingTicket = ticket;
+  elements.voidTicketCode.textContent = ticket.code || "--";
+  elements.voidTicketReason.value = "";
+  setModalMessage(elements.voidTicketMessage, "");
+  elements.voidTicketModal.hidden = false;
+  elements.voidTicketReason.focus();
+}
+
+function closeVoidTicketModal() {
+  if (state.saving) {
+    return;
+  }
+
+  state.voidingTicket = null;
+  elements.voidTicketModal.hidden = true;
+  setModalMessage(elements.voidTicketMessage, "");
+}
+
+async function voidTicket(event) {
+  event.preventDefault();
+  if (!state.voidingTicket || state.saving) {
+    return;
+  }
+
+  const reason = elements.voidTicketReason.value.trim();
+  if (reason.length < 3) {
+    setModalMessage(elements.voidTicketMessage, "Escribe un motivo de al menos 3 caracteres.", true);
+    elements.voidTicketReason.focus();
+    return;
+  }
+
+  state.saving = true;
+  elements.voidTicketSubmit.disabled = true;
+  elements.voidTicketSubmit.textContent = "Anulando...";
+  setModalMessage(elements.voidTicketMessage, "Anulando ticket...");
+  const ticketId = state.voidingTicket.id;
+  const ticketCode = state.voidingTicket.code;
+
+  try {
+    const response = await apiRequest(`/operacion/tickets/${ticketId}/anular`, {
+      method: "POST",
+      body: JSON.stringify({ motivo: reason })
+    });
+    state.voidingTicket = null;
+    state.selectedTicket = null;
+    elements.voidTicketModal.hidden = true;
+    renderSelectedTicket();
+    await searchTickets(false);
+    setMessage(response.message || `${ticketCode} anulado correctamente.`);
+  } catch (error) {
+    setModalMessage(elements.voidTicketMessage, getErrorMessage(error, "No se pudo anular el ticket."), true);
+  } finally {
+    state.saving = false;
+    elements.voidTicketSubmit.disabled = false;
+    elements.voidTicketSubmit.textContent = "Sí, anular ticket";
+  }
+}
+
 function bindEvents() {
   elements.searchForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -801,10 +877,13 @@ function bindEvents() {
     }
   });
   elements.selectedPanel.addEventListener("click", (event) => {
+    const voidButton = event.target.closest("[data-void-selected-ticket]");
     const printButton = event.target.closest("[data-print-selected-ticket]");
     const editButton = event.target.closest("[data-edit-weighing]");
     const deleteButton = event.target.closest("[data-delete-weighing]");
-    if (printButton) {
+    if (voidButton) {
+      openVoidTicketModal();
+    } else if (printButton) {
       printSelectedTicket();
     } else if (editButton) {
       openEditModal(editButton.dataset.editWeighing);
@@ -827,6 +906,9 @@ function bindEvents() {
   elements.editCancel.addEventListener("click", closeEditModal);
   elements.deleteForm.addEventListener("submit", deleteWeighing);
   elements.deleteCancel.addEventListener("click", closeDeleteModal);
+  elements.voidTicketForm.addEventListener("submit", voidTicket);
+  elements.voidTicketClose.addEventListener("click", closeVoidTicketModal);
+  elements.voidTicketCancel.addEventListener("click", closeVoidTicketModal);
   elements.birdsPerCage.addEventListener("input", applySuggestedChickenSex);
   [elements.cages, elements.birdsPerCage, elements.grossWeight, elements.cageType]
     .forEach((control) => control.addEventListener("input", updateWeightPreview));
@@ -845,11 +927,18 @@ function bindEvents() {
       closeDeliveryModal();
     }
   });
+  elements.voidTicketModal.addEventListener("click", (event) => {
+    if (event.target === elements.voidTicketModal) {
+      closeVoidTicketModal();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") {
       return;
     }
-    if (!elements.deleteModal.hidden) {
+    if (!elements.voidTicketModal.hidden) {
+      closeVoidTicketModal();
+    } else if (!elements.deleteModal.hidden) {
       closeDeleteModal();
     } else if (!elements.deliveryModal.hidden) {
       closeDeliveryModal();

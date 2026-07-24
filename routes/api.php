@@ -169,7 +169,7 @@ Route::prefix('v1')->group(function (): void {
             'auth:sanctum',
             'active',
             'password.changed',
-            'module:MODULO_RESUMEN_JORNADA',
+            'module:MODULO_RESUMEN_JORNADA,MODULO_GESTION_PESADAS',
         ]);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
         ->middleware($operationWriteMiddleware);

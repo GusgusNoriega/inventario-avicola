@@ -155,9 +155,12 @@ class TicketWeighingManagementApiTest extends TestCase
     {
         $this->getJson('/api/v1/operacion/gestion-pesadas?search=20260627-001')
             ->assertOk()
+            ->assertJsonPath('data.access.is_administrator', false)
+            ->assertJsonPath('data.access.can_void_tickets', false)
             ->assertJsonCount(1, 'data.tickets')
             ->assertJsonPath('data.tickets.0.id', $this->ticketId)
             ->assertJsonPath('data.tickets.0.editable', true)
+            ->assertJsonPath('data.tickets.0.can_void', false)
             ->assertJsonPath('data.tickets.0.weighings_count', 1);
 
         $this->getJson('/api/v1/operacion/gestion-pesadas?search=Distribuidora')
@@ -167,8 +170,11 @@ class TicketWeighingManagementApiTest extends TestCase
 
         $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
             ->assertOk()
+            ->assertJsonPath('data.access.is_administrator', false)
+            ->assertJsonPath('data.access.can_void_tickets', false)
             ->assertJsonPath('data.ticket.code', 'T-20260627-001')
             ->assertJsonPath('data.ticket.editable', true)
+            ->assertJsonPath('data.ticket.can_void', false)
             ->assertJsonPath('data.ticket.delivery.vehicle.id', $this->deliveryVehicleId)
             ->assertJsonPath('data.ticket.delivery.vehicle.plate', 'ENT-001')
             ->assertJsonPath('data.ticket.delivery.driver.id', $this->deliveryDriverId)
@@ -184,6 +190,57 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonPath('data.ticket.weighings.0.id', $this->weighingId)
             ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_MALE)
             ->assertJsonPath('data.ticket.summary.net_weight_kg', 26);
+    }
+
+    public function test_administrator_can_void_a_ticket_from_weighing_management(): void
+    {
+        $this->postJson("/api/v1/operacion/tickets/{$this->ticketId}/anular", [
+            'motivo' => 'Intento sin permisos administrativos',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $this->ticketId,
+            'estado' => TicketDespacho::STATUS_CLOSED,
+        ]);
+
+        $administrator = Role::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'ADMINISTRADOR',
+            'nombre' => 'Administrador',
+        ]);
+        $this->user->roles()->attach($administrator);
+
+        $this->getJson('/api/v1/operacion/gestion-pesadas?search=20260627-001')
+            ->assertOk()
+            ->assertJsonPath('data.access.is_administrator', true)
+            ->assertJsonPath('data.access.can_void_tickets', true)
+            ->assertJsonPath('data.tickets.0.can_void', true);
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertOk()
+            ->assertJsonPath('data.access.is_administrator', true)
+            ->assertJsonPath('data.ticket.can_void', true);
+
+        $this->postJson("/api/v1/operacion/tickets/{$this->ticketId}/anular", [
+            'motivo' => 'Ticket duplicado en gestión de pesadas',
+        ])->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_VOIDED);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $this->ticketId,
+            'estado' => TicketDespacho::STATUS_VOIDED,
+            'anulado_por' => $this->user->id,
+            'motivo_anulacion' => 'Ticket duplicado en gestión de pesadas',
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'estado' => Pesada::STATUS_VOIDED,
+            'anulada_por' => $this->user->id,
+        ]);
+
+        $this->getJson('/api/v1/operacion/gestion-pesadas?search=20260627-001')
+            ->assertOk()
+            ->assertJsonCount(0, 'data.tickets');
     }
 
     public function test_current_journey_ticket_delivery_can_be_updated_and_is_audited(): void

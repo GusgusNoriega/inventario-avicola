@@ -8815,6 +8815,11 @@ body.customer-history-page {
   width: min(580px, 100%);
 }
 
+.weighing-void-ticket-card {
+  width: min(620px, 100%);
+  border-top: 4px solid var(--danger);
+}
+
 .weighing-delivery-card {
   width: min(720px, 100%);
 }
@@ -8845,9 +8850,22 @@ body.customer-history-page {
   color: var(--text-soft);
 }
 
-.weighing-delete-card textarea {
+.weighing-delete-card textarea,
+.weighing-void-ticket-card textarea {
   width: 100%;
+  min-height: 110px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-main);
+  padding: 10px 12px;
+  font: inherit;
   resize: vertical;
+}
+
+.weighing-void-ticket-card .form-message {
+  min-height: 22px;
+  margin: 10px 0;
 }
 
 @media (min-width: 1001px) {

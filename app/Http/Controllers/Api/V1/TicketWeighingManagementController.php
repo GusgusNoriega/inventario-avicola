@@ -39,6 +39,7 @@ class TicketWeighingManagementController extends Controller
             (int) $branch->empresa_id,
             $branch->zona_horaria
         );
+        $isAdministrator = $request->user()?->isAdministrator() === true;
         $search = trim((string) ($filters['search'] ?? ''));
 
         $tickets = TicketDespacho::query()
@@ -67,8 +68,11 @@ class TicketWeighingManagementController extends Controller
                 'code' => $ticket->codigo,
                 'channel' => $ticket->canal,
                 'operation_type' => $ticket->tipo_operacion,
+                'status' => $ticket->estado,
                 'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
                 'editable' => $this->isEditable($ticket, $currentOperatingDate),
+                'can_void' => $isAdministrator
+                    && $ticket->estado === TicketDespacho::STATUS_CLOSED,
                 'customer_type' => $this->customerType($ticket),
                 'client' => $this->formatClient($ticket),
                 'destination' => $this->formatDestination($ticket),
@@ -86,6 +90,10 @@ class TicketWeighingManagementController extends Controller
                 ],
                 'current_operating_date' => $currentOperatingDate,
                 'tickets' => $tickets,
+                'access' => [
+                    'is_administrator' => $isAdministrator,
+                    'can_void_tickets' => $isAdministrator,
+                ],
             ],
         ]);
     }
@@ -99,15 +107,21 @@ class TicketWeighingManagementController extends Controller
             (int) $branch->empresa_id,
             $branch->zona_horaria
         );
+        $isAdministrator = $request->user()?->isAdministrator() === true;
 
         return response()->json([
             'data' => [
                 'ticket' => $this->formatTicket(
                     $selected,
                     $branch->zona_horaria,
-                    $currentOperatingDate
+                    $currentOperatingDate,
+                    $isAdministrator
                 ),
                 'catalogs' => $this->catalogsFor($selected, (int) $branch->empresa_id),
+                'access' => [
+                    'is_administrator' => $isAdministrator,
+                    'can_void_tickets' => $isAdministrator,
+                ],
             ],
         ]);
     }
@@ -187,7 +201,8 @@ class TicketWeighingManagementController extends Controller
             'data' => ['ticket' => $this->formatTicket(
                 $selected,
                 $branch->zona_horaria,
-                $currentOperatingDate
+                $currentOperatingDate,
+                $request->user()?->isAdministrator() === true
             )],
         ]);
     }
@@ -369,7 +384,8 @@ class TicketWeighingManagementController extends Controller
             'data' => ['ticket' => $this->formatTicket(
                 $selected,
                 $branch->zona_horaria,
-                $currentOperatingDate
+                $currentOperatingDate,
+                $request->user()?->isAdministrator() === true
             )],
         ]);
     }
@@ -434,7 +450,8 @@ class TicketWeighingManagementController extends Controller
             'data' => ['ticket' => $this->formatTicket(
                 $selected,
                 $branch->zona_horaria,
-                $currentOperatingDate
+                $currentOperatingDate,
+                $request->user()?->isAdministrator() === true
             )],
         ]);
     }
@@ -476,7 +493,8 @@ class TicketWeighingManagementController extends Controller
     private function formatTicket(
         TicketDespacho $ticket,
         string $timezone,
-        string $currentOperatingDate
+        string $currentOperatingDate,
+        bool $isAdministrator = false
     ): array {
         $records = $ticket->pesadas->where('estado', Pesada::STATUS_ACTIVE)->values();
         $editable = $this->isEditable($ticket, $currentOperatingDate);
@@ -495,8 +513,11 @@ class TicketWeighingManagementController extends Controller
             'code' => $ticket->codigo,
             'channel' => $ticket->canal,
             'operation_type' => $ticket->tipo_operacion,
+            'status' => $ticket->estado,
             'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
             'editable' => $editable,
+            'can_void' => $isAdministrator
+                && $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'edit_restriction' => $editable
                 ? null
                 : ($isRetail

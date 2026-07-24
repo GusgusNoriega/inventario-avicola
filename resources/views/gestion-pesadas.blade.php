@@ -177,6 +177,35 @@
     </div>
   </div>
 
+  <div id="voidTicketModal" class="weighing-modal" hidden>
+    <div class="weighing-modal-card weighing-void-ticket-card card" role="alertdialog" aria-modal="true" aria-labelledby="voidTicketTitle" aria-describedby="voidTicketCopy">
+      <div class="weighing-modal-head">
+        <div>
+          <p class="eyebrow">Acción exclusiva de administrador</p>
+          <h2 id="voidTicketTitle">Anular ticket</h2>
+        </div>
+        <button id="voidTicketClose" class="btn btn-ghost" type="button" aria-label="Cerrar">Cerrar</button>
+      </div>
+      <p id="voidTicketCopy" class="weighing-delete-copy">
+        Vas a anular el ticket <strong id="voidTicketCode">--</strong>. El registro se conservará para auditoría, pero dejará de tener efecto operativo y financiero.
+      </p>
+      <div class="daily-ticket-void-warning">
+        También se anularán sus pesadas, se retirará su efecto en el control de javas y se neutralizará su cuenta por cobrar. Los cobros exclusivos del ticket se reversarán automáticamente.
+      </div>
+      <form id="voidTicketForm">
+        <label class="field">
+          Motivo de anulación
+          <textarea id="voidTicketReason" minlength="3" maxlength="250" rows="4" required placeholder="Explica claramente por qué se anula este ticket"></textarea>
+        </label>
+        <p id="voidTicketMessage" class="form-message" role="alert"></p>
+        <div class="weighing-modal-actions">
+          <button id="voidTicketCancel" class="btn btn-ghost" type="button">Cancelar</button>
+          <button id="voidTicketSubmit" class="btn btn-danger" type="submit">Sí, anular ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script type="module" src="{{ asset('js/gestion-pesadas.js') }}?v={{ filemtime(public_path('js/gestion-pesadas.js')) }}"></script>
 </body>
 </html>

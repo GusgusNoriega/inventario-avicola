@@ -1184,6 +1184,10 @@ class WebViewsTest extends TestCase
             ->assertSee('editTicketVehicle', false)
             ->assertSee('editTicketDriver', false)
             ->assertSee('editOriginTruck', false)
+            ->assertSee('voidTicketModal', false)
+            ->assertSee('voidTicketReason', false)
+            ->assertSee('Acción exclusiva de administrador')
+            ->assertSee('Sí, anular ticket')
             ->assertSee('Solo aparecen camiones incluidos en la jornada de este ticket.')
             ->assertSee(asset('js/gestion-pesadas.js'), false);
 
@@ -1196,6 +1200,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./ticket-printer.js"', $managementJavascript);
         $this->assertStringContainsString('data-print-selected-ticket', $managementJavascript);
         $this->assertStringContainsString('data-edit-ticket-delivery', $managementJavascript);
+        $this->assertStringContainsString('ticket.can_void', $managementJavascript);
+        $this->assertStringContainsString('data-void-selected-ticket', $managementJavascript);
+        $this->assertStringContainsString('`/operacion/tickets/${ticketId}/anular`', $managementJavascript);
+        $this->assertStringContainsString('JSON.stringify({ motivo: reason })', $managementJavascript);
         $this->assertStringContainsString('/transporte', $managementJavascript);
         $this->assertStringContainsString('origin_trucks', $managementJavascript);
         $this->assertStringContainsString('origin_program_detail_id', $managementJavascript);
