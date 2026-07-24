@@ -300,6 +300,13 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailDeliveryModal"', false)
             ->assertSee('id="retailDeliveryTruck"', false)
             ->assertSee('id="retailDeliveryDriver"', false)
+            ->assertSee('id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle" novalidate', false)
+            ->assertSee('id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate', false)
+            ->assertSee('id="retailErrorModal"', false)
+            ->assertSee('id="retailErrorModalDetails"', false)
+            ->assertSee('id="retailRetryPrint"', false)
+            ->assertSee('id="retailErrorLogin"', false)
+            ->assertSee('La lista y sus pesadas se conservan')
             ->assertSee('Guardar e imprimir / PDF')
             ->assertSee('Grabar')
             ->assertSee('id="retailTareDetail"', false)
@@ -320,6 +327,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('`${RETAIL_API_BASE}/catalogo`', $javascript);
         $this->assertStringContainsString('`${RETAIL_API_BASE}/configuracion`', $javascript);
         $this->assertStringContainsString('`${RETAIL_API_BASE}/tickets`', $javascript);
+        $this->assertStringContainsString('from "./retail-dispatch-errors.js"', $javascript);
+        $this->assertStringContainsString('showRetailError(presentation)', $javascript);
+        $this->assertStringContainsString('state.paymentContext !== paymentContext', $javascript);
         $this->assertStringContainsString('adjustment_code', $javascript);
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
@@ -370,8 +380,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('delivery_trucks', $javascript);
         $this->assertStringContainsString('delivery_drivers', $javascript);
         $this->assertStringContainsString('delivery,', $javascript);
-        $this->assertStringContainsString('await printRegisteredTicket(ticket, listIndex, list.draftId)', $javascript);
-        $this->assertStringContainsString('clearRegisteredList(listIndex, draftId, ticket)', $javascript);
+        $this->assertStringContainsString('clearRegisteredList(listIndex, list.draftId, ticket);', $javascript);
+        $this->assertStringContainsString('await printTicketAndReport(ticket);', $javascript);
+        $this->assertStringContainsString('state.pendingPrintTicket = ticket;', $javascript);
+        $this->assertStringContainsString('elements.retryPrint.addEventListener', $javascript);
         $this->assertStringNotContainsString('state.captured', $javascript);
         $this->assertStringNotContainsString('g adicionales', $javascript);
         $this->assertStringNotContainsString('type.code.replaceAll', $javascript);
@@ -413,6 +425,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('--rd-font-presentation:', $stylesheet);
         $this->assertStringContainsString('--rd-font-table-cell:', $stylesheet);
         $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);
+        $this->assertStringContainsString('.rd-modal-card.is-error', $stylesheet);
+        $this->assertStringContainsString('.rd-error-details', $stylesheet);
         $this->assertDoesNotMatchRegularExpression('/font-size:\s*(?:\d|\.)/', $stylesheet);
     }
 

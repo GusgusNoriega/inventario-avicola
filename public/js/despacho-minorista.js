@@ -1,4 +1,5 @@
 import { apiRequest } from "./api-client.js";
+import { getRetailDispatchErrorPresentation } from "./retail-dispatch-errors.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
 import {
   buildRetailScaleStorageKey,
@@ -157,6 +158,14 @@ const elements = {
   deliveryDriver: document.querySelector("#retailDeliveryDriver"),
   deliveryMessage: document.querySelector("#retailDeliveryMessage"),
   confirmDelivery: document.querySelector("#retailConfirmDelivery"),
+  errorModal: document.querySelector("#retailErrorModal"),
+  errorModalCaption: document.querySelector("#retailErrorModalCaption"),
+  errorModalTitle: document.querySelector("#retailErrorModalTitle"),
+  errorModalMessage: document.querySelector("#retailErrorModalMessage"),
+  errorModalDetails: document.querySelector("#retailErrorModalDetails"),
+  errorModalHelp: document.querySelector("#retailErrorModalHelp"),
+  errorLogin: document.querySelector("#retailErrorLogin"),
+  retryPrint: document.querySelector("#retailRetryPrint"),
   settingsModal: document.querySelector("#retailSettingsModal"),
   settingsForm: document.querySelector("#retailSettingsForm"),
   settingsScaleName: document.querySelector("#retailSettingsScaleName"),
@@ -225,7 +234,9 @@ const state = {
   loading: true,
   typography: {},
   pendingPayments: [],
-  paymentRows: []
+  paymentRows: [],
+  paymentContext: null,
+  pendingPrintTicket: null
 };
 const modalFocusOrigins = new Map();
 const touchKeyboardState = {
@@ -416,6 +427,48 @@ function formatMoney(value, signed = false) {
 function setMessage(message, isError = false) {
   elements.message.textContent = message || "";
   elements.message.classList.toggle("is-error", Boolean(isError));
+}
+
+function showRetailError(presentation = {}) {
+  const details = Array.isArray(presentation.details)
+    ? presentation.details.filter((detail) => detail?.value)
+    : [];
+
+  elements.errorModalCaption.textContent = presentation.caption || "Error al grabar";
+  elements.errorModalTitle.textContent = presentation.title || "No se registró el ticket";
+  elements.errorModalMessage.textContent = presentation.message || "No se pudo grabar el despacho.";
+  elements.errorModalHelp.textContent = presentation.help
+    || "La lista y sus pesadas se conservan para que puedas corregir el problema y volver a intentar.";
+  elements.errorLogin.hidden = presentation.action !== "login";
+  elements.retryPrint.hidden = !presentation.canRetryPrint;
+  elements.errorModalDetails.replaceChildren();
+  elements.errorModalDetails.hidden = details.length === 0;
+
+  details.forEach((detail) => {
+    const wrapper = document.createElement("div");
+    const label = document.createElement("dt");
+    const value = document.createElement("dd");
+    wrapper.className = "rd-error-detail";
+    label.textContent = detail.label || "Motivo";
+    value.textContent = detail.value;
+    wrapper.append(label, value);
+    elements.errorModalDetails.appendChild(wrapper);
+  });
+
+  openModal(elements.errorModal);
+}
+
+function showRegistrationIssue(message, details = [], title = "Revisa los datos del ticket") {
+  const normalizedDetails = details.length
+    ? details
+    : [{ label: "Registro", value: message }];
+  setMessage(normalizedDetails[0].value || message, true);
+  showRetailError({
+    caption: "Datos por corregir",
+    title,
+    message,
+    details: normalizedDetails
+  });
 }
 
 function setSettingsMessage(message, isError = false) {
@@ -824,8 +877,7 @@ function renderLists() {
   const missingPrices = missingPriceTypes(current);
   elements.saveDispatch.disabled = state.loading
     || current.saving
-    || !current.items.length
-    || missingPrices.length > 0;
+    || !current.items.length;
   elements.saveDispatch.title = missingPrices.length
     ? (current.clientId
       ? "Configura en Directorio el precio del cliente para cada tipo de pollo antes de grabar."
@@ -865,7 +917,7 @@ function renderAll() {
 function selectList(index) {
   const nextIndex = Number(index);
   if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= LIST_COUNT) return;
-  if (activeList().saving) return;
+  if (state.lists.some((list) => list.saving)) return;
 
   state.activeList = nextIndex;
   syncStation2AdjustmentWithActiveList();
@@ -1060,6 +1112,25 @@ function confirmRemoveSelectedWeighing() {
   setMessage("Pesada retirada de la lista activa.");
 }
 
+function retailModals() {
+  return [
+    elements.errorModal,
+    elements.trayCountModal,
+    elements.birdsPerTrayModal,
+    elements.manualWeightModal,
+    elements.removeWeighingModal,
+    elements.clientModal,
+    elements.priceModal,
+    elements.paymentModal,
+    elements.deliveryModal,
+    elements.settingsModal
+  ].filter(Boolean);
+}
+
+function hasOpenRetailModal() {
+  return retailModals().some((modal) => !modal.hidden);
+}
+
 function openModal(modal) {
   if (!modal) return;
   modalFocusOrigins.set(modal.id, document.activeElement);
@@ -1076,18 +1147,7 @@ function closeModal(modal) {
     closeTouchKeyboard(true);
   }
   modal.hidden = true;
-  const hasOpenModal = [
-    elements.trayCountModal,
-    elements.birdsPerTrayModal,
-    elements.manualWeightModal,
-    elements.removeWeighingModal,
-    elements.clientModal,
-    elements.priceModal,
-    elements.paymentModal,
-    elements.deliveryModal,
-    elements.settingsModal
-  ].some((entry) => entry && !entry.hidden);
-  if (!hasOpenModal) {
+  if (!hasOpenRetailModal()) {
     elements.station.inert = false;
     elements.station.removeAttribute("aria-hidden");
   }
@@ -1721,14 +1781,23 @@ function openPaymentModal() {
   const client = clientFor(list);
   const methods = state.catalog.financial.methods || [];
   const accounts = state.catalog.financial.own_accounts || [];
+  const paymentContext = [
+    list.draftId,
+    list.clientId || "SIN_CLIENTE",
+    list.operationType,
+    moneyToCents(totals.amount)
+  ].join(":");
 
-  state.paymentRows = [newPaymentRow(totals.amount)];
+  if (state.paymentContext !== paymentContext || !state.paymentRows.length) {
+    state.paymentRows = [newPaymentRow(totals.amount)];
+  }
+  state.paymentContext = paymentContext;
   elements.paymentSummary.textContent = client
     ? `${client.name} puede pagar ahora total o parcialmente; el resto quedará en su cuenta por cobrar.`
     : "La venta no tiene un cliente identificado y debe quedar pagada completamente.";
   elements.skipPayment.hidden = !client;
   elements.addPayment.disabled = methods.length === 0 || accounts.length === 0;
-  elements.confirmPayment.disabled = methods.length === 0 || accounts.length === 0;
+  elements.confirmPayment.disabled = false;
   elements.paymentMessage.textContent = methods.length && accounts.length
     ? "Puedes dividir el cobro entre efectivo, transferencia u otros métodos."
     : "Primero registra una entidad propia y al menos una cuenta o caja desde Finanzas.";
@@ -1754,11 +1823,22 @@ function submitPayment(event) {
   event.preventDefault();
   syncPaymentRowsFromForm();
   const list = activeList();
+  const methods = state.catalog.financial.methods || [];
+  const accounts = state.catalog.financial.own_accounts || [];
   const saleTotal = roundMoney(listTotals(list).amount || 0);
   const received = paymentReceivedTotal();
   const saleTotalCents = moneyToCents(saleTotal);
   const receivedCents = moneyToCents(received);
   const client = clientFor(list);
+
+  if (methods.length === 0 || accounts.length === 0) {
+    elements.paymentMessage.textContent = methods.length === 0
+      ? "No hay métodos de pago activos. Registra uno en Finanzas antes de continuar."
+      : "No hay una cuenta o caja receptora activa. Regístrala en Finanzas antes de continuar.";
+    elements.paymentMessage.classList.add("is-error");
+    elements.paymentMessage.focus?.();
+    return;
+  }
 
   if (state.paymentRows.some((row) => (
     !Number(row.methodId)
@@ -1843,16 +1923,33 @@ function renderDeliveryOptions(list) {
   elements.confirmDelivery.disabled = !fleetReady;
   setDeliveryMessage(fleetReady
     ? "El camión y el chofer quedarán vinculados al ticket para consultar la trazabilidad de las bandejas."
-    : "Debes registrar al menos un camión y un chofer activos en Mi flota antes de completar este despacho.", !fleetReady);
+      : "Debes registrar al menos un camión y un chofer activos en Mi flota antes de completar este despacho.", !fleetReady);
+}
+
+function showMissingPricesError(list, missingTypes = missingPriceTypes(list)) {
+  const client = clientFor(list);
+  const details = missingTypes.map((code) => {
+    const type = state.catalog.chicken_types.find((item) => item.code === code);
+    return {
+      label: type?.name || code,
+      value: client
+        ? `El cliente ${client.name} no tiene un precio vigente para este tipo de pollo.`
+        : "No existe un precio general o personalizado disponible para este tipo de pollo."
+    };
+  });
+  const message = client
+    ? "Faltan precios vigentes del cliente. Configúralos en Directorio antes de grabar."
+    : "Faltan precios para la lista. Configura el precio general o asigna un precio válido antes de grabar.";
+
+  showRegistrationIssue(message, details, "Faltan precios para grabar");
 }
 
 function prepareDispatchRegistration() {
   const list = activeList();
   if (!list || list.saving || !list.items.length) return;
-  if (missingPriceTypes(list).length) {
-    setMessage(list.clientId
-      ? "Falta un precio vigente del cliente para uno o más tipos de pollo de esta lista."
-      : "Falta el precio general o personalizado para uno o más tipos de pollo de esta lista.", true);
+  const missingPrices = missingPriceTypes(list);
+  if (missingPrices.length) {
+    showMissingPricesError(list, missingPrices);
     return;
   }
 
@@ -1931,34 +2028,69 @@ function clearRegisteredList(listIndex, draftId, ticket) {
   persistLists();
   renderAll();
   showRegisteredTicket(ticket);
-  setMessage(`${ticket.code} impreso o enviado a PDF. La lista ${listIndex + 1} quedó lista para un nuevo despacho.`);
+  setMessage(`${ticket.code} quedó registrado. La lista ${listIndex + 1} ya está disponible para un nuevo despacho.`);
 }
 
-function printRegisteredTicket(ticket, listIndex, draftId) {
+function printRegisteredTicket(ticket) {
   return new Promise((resolve, reject) => {
     printWeightControlTicket(buildRetailTicketPrintData(ticket), {
       frameTitle: `Impresión de ${ticket.code}`,
-      onSuccess: () => {
-        clearRegisteredList(listIndex, draftId, ticket);
-        resolve();
-      },
-      onError: () => reject(new Error("El ticket quedó guardado, pero no se pudo abrir la impresión. Presiona Grabar para intentarlo nuevamente."))
+      onSuccess: resolve,
+      onError: () => reject(new Error("El ticket quedó guardado, pero no se pudo abrir la ventana de impresión."))
     });
   });
+}
+
+function showPrintError(ticket, error) {
+  const message = error?.message || "El ticket quedó guardado, pero no se pudo abrir la impresión.";
+  state.pendingPrintTicket = ticket;
+  setMessage(message, true);
+  showRetailError({
+    caption: "Impresión pendiente",
+    title: "Ticket guardado correctamente",
+    message: `${ticket.code} sí quedó registrado. No vuelvas a capturar ni a pagar este despacho.`,
+    help: "La lista ya quedó liberada para evitar duplicados. Puedes reintentar la impresión desde esta ventana.",
+    canRetryPrint: true,
+    details: [
+      { label: "Impresión", value: message },
+      { label: "Estado del registro", value: "Ticket, pesadas y pago guardados correctamente." }
+    ]
+  });
+}
+
+async function printTicketAndReport(ticket) {
+  try {
+    await printRegisteredTicket(ticket);
+    state.pendingPrintTicket = null;
+    setMessage(`${ticket.code} impreso o enviado a PDF correctamente.`);
+    return true;
+  } catch (error) {
+    showPrintError(ticket, error);
+    return false;
+  }
+}
+
+async function retryPendingPrint() {
+  const ticket = state.pendingPrintTicket;
+  if (!ticket) return;
+
+  closeModal(elements.errorModal);
+  setMessage(`Abriendo nuevamente la impresión de ${ticket.code}...`);
+  await printTicketAndReport(ticket);
 }
 
 async function saveDispatch(delivery = null, payments = []) {
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
   if (!list || list.saving || !list.items.length) return;
-  if (missingPriceTypes(list).length) {
-    setMessage(list.clientId
-      ? "Falta un precio vigente del cliente para uno o más tipos de pollo de esta lista."
-      : "Falta el precio general o personalizado para uno o más tipos de pollo de esta lista.", true);
+  const missingPrices = missingPriceTypes(list);
+  if (missingPrices.length) {
+    showMissingPricesError(list, missingPrices);
     return;
   }
 
   list.saving = true;
+  elements.station.inert = true;
   renderLists();
   setMessage(`Grabando ${list.operationType === OPERATION_RETURN ? "devolución" : "venta"} de la lista ${listIndex + 1}...`);
 
@@ -1970,41 +2102,52 @@ async function saveDispatch(delivery = null, payments = []) {
           .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
           .map(([code, value]) => [code, formatMoneyValue(value)])
       );
-    const response = await apiRequest(`${RETAIL_API_BASE}/tickets`, {
-      method: "POST",
-      body: JSON.stringify({
-        draft_id: list.draftId,
-        operation_type: list.operationType,
-        client_id: list.clientId ? Number(list.clientId) : null,
-        delivery,
-        payments,
-        price_overrides: priceOverrides,
-        weighings: list.items.map((item, index) => ({
-          local_id: index + 1,
-          chicken_type_code: item.chickenTypeCode,
-          adjustment_code: item.adjustmentCode,
-          tray_type_code: item.trayTypeCode,
-          weight_source: item.weightSource,
-          birds_per_tray: item.birdsPerTray,
-          tray_count: item.trayCount,
-          read_weight_kg: item.readWeight,
-          weighed_at: item.weighedAt,
-          scale_reading: item.weightSource === "MANUAL" ? null : (item.scaleReading || null)
-        }))
-      })
-    });
+    let response;
+    try {
+      response = await apiRequest(`${RETAIL_API_BASE}/tickets`, {
+        method: "POST",
+        body: JSON.stringify({
+          draft_id: list.draftId,
+          operation_type: list.operationType,
+          client_id: list.clientId ? Number(list.clientId) : null,
+          delivery,
+          payments,
+          price_overrides: priceOverrides,
+          weighings: list.items.map((item, index) => ({
+            local_id: index + 1,
+            chicken_type_code: item.chickenTypeCode,
+            adjustment_code: item.adjustmentCode,
+            tray_type_code: item.trayTypeCode,
+            weight_source: item.weightSource,
+            birds_per_tray: item.birdsPerTray,
+            tray_count: item.trayCount,
+            read_weight_kg: item.readWeight,
+            weighed_at: item.weighedAt,
+            scale_reading: item.weightSource === "MANUAL" ? null : (item.scaleReading || null)
+          }))
+        })
+      });
+    } catch (error) {
+      const presentation = getRetailDispatchErrorPresentation(error);
+      setMessage(presentation.summary, true);
+      showRetailError(presentation);
+      return;
+    }
 
     const ticket = response.data;
     state.pendingPayments = [];
     state.paymentRows = [];
+    state.paymentContext = null;
     setMessage(`${response.message || "Despacho minorista registrado correctamente."} Abriendo impresión; también puedes elegir Guardar como PDF.`);
-    await printRegisteredTicket(ticket, listIndex, list.draftId);
-  } catch (error) {
-    const validation = error.data?.errors ? Object.values(error.data.errors).flat()[0] : null;
-    setMessage(validation || error.message, true);
+    clearRegisteredList(listIndex, list.draftId, ticket);
+    await printTicketAndReport(ticket);
   } finally {
     if (state.lists[listIndex] === list) list.saving = false;
     renderLists();
+    if (!hasOpenRetailModal()) {
+      elements.station.inert = false;
+      elements.station.removeAttribute("aria-hidden");
+    }
   }
 }
 
@@ -2244,8 +2387,27 @@ function renderTrayOptions() {
 async function loadCatalog() {
   state.loading = true;
   renderLists();
+  let response;
   try {
-    const response = await apiRequest(`${RETAIL_API_BASE}/catalogo`);
+    response = await apiRequest(`${RETAIL_API_BASE}/catalogo`);
+  } catch (error) {
+    state.loading = false;
+    renderAll();
+    const presentation = getRetailDispatchErrorPresentation(error);
+    setMessage(presentation.summary, true);
+    showRetailError({
+      ...presentation,
+      caption: presentation.caption || "Error de carga",
+      title: "No se pudo preparar la estación",
+      message: "El servidor no entregó los datos necesarios para registrar despachos.",
+      help: presentation.action === "login"
+        ? "La lista guardada en este navegador se conservará mientras vuelves a iniciar sesión."
+        : "Vuelve a intentarlo. Si el problema continúa, comunica el motivo mostrado al administrador."
+    });
+    return;
+  }
+
+  try {
     state.catalog = normalizeCatalog(response.data || {});
     const branchId = state.catalog.branch?.id || "default";
     restoreLists(branchId);
@@ -2283,7 +2445,15 @@ async function loadCatalog() {
   } catch (error) {
     state.loading = false;
     renderAll();
-    setMessage(error.message, true);
+    const message = "Los datos llegaron, pero la estación no pudo inicializarse correctamente.";
+    setMessage(message, true);
+    showRetailError({
+      caption: "Error de inicialización",
+      title: "No se pudo preparar la estación",
+      message,
+      help: "Recarga la página. Si el problema continúa, comunica este mensaje al administrador.",
+      details: [{ label: "Interfaz", value: "No se modificó ni se registró ningún despacho." }]
+    });
   }
 }
 
@@ -2357,6 +2527,7 @@ elements.skipPayment.addEventListener("click", skipPayment);
 elements.paymentRows.addEventListener("input", renderPaymentTotals);
 elements.paymentRows.addEventListener("change", renderPaymentTotals);
 elements.deliveryForm.addEventListener("submit", submitDelivery);
+elements.retryPrint.addEventListener("click", () => void retryPendingPrint());
 elements.openSettings.addEventListener("click", () => {
   fillSettingsForm();
   openModal(elements.settingsModal);
@@ -2464,6 +2635,7 @@ document.addEventListener("click", (event) => {
 
   const itemRow = event.target.closest("[data-retail-item]");
   if (itemRow) {
+    if (state.lists.some((list) => list.saving)) return;
     const separator = itemRow.dataset.retailItem.indexOf(":");
     const listIndex = Number(itemRow.dataset.retailItem.slice(0, separator));
     const itemId = itemRow.dataset.retailItem.slice(separator + 1);
@@ -2519,33 +2691,13 @@ document.addEventListener("keydown", (event) => {
       return;
     }
     closeTypographyDrawer();
-    [
-      elements.trayCountModal,
-      elements.birdsPerTrayModal,
-      elements.manualWeightModal,
-      elements.removeWeighingModal,
-      elements.clientModal,
-      elements.priceModal,
-      elements.paymentModal,
-      elements.deliveryModal,
-      elements.settingsModal
-    ]
+    retailModals()
       .filter((modal) => !modal.hidden)
       .forEach(closeModal);
   }
 
   if (event.key === "Tab") {
-    const openModalElement = [
-      elements.trayCountModal,
-      elements.birdsPerTrayModal,
-      elements.manualWeightModal,
-      elements.removeWeighingModal,
-      elements.clientModal,
-      elements.priceModal,
-      elements.paymentModal,
-      elements.deliveryModal,
-      elements.settingsModal
-    ].find((modal) => modal && !modal.hidden);
+    const openModalElement = retailModals().find((modal) => !modal.hidden);
     if (openModalElement) {
       const focusable = [...openModalElement.querySelectorAll(
         'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'

@@ -299,7 +299,7 @@
   </div>
 
   <div id="retailPaymentModal" class="rd-modal" hidden>
-    <form id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle">
+    <form id="retailPaymentForm" class="rd-modal-card is-payment" role="dialog" aria-modal="true" aria-labelledby="retailPaymentModalTitle" novalidate>
       <header class="rd-modal-head">
         <div>
           <p>Cobro de la venta</p>
@@ -315,7 +315,7 @@
         <span>Total recibido <strong id="retailPaymentReceivedTotal">S/ 0.00</strong></span>
         <span>Pendiente <strong id="retailPaymentPendingTotal">S/ 0.00</strong></span>
       </div>
-      <p id="retailPaymentMessage" class="rd-settings-message" role="status" aria-live="polite"></p>
+      <p id="retailPaymentMessage" class="rd-settings-message" role="alert" aria-live="assertive" tabindex="-1"></p>
       <div class="rd-modal-actions">
         <button id="retailSkipPayment" type="button" class="rd-secondary-button">Dejar pendiente</button>
         <button id="retailConfirmPayment" class="rd-primary-button" type="submit">Continuar</button>
@@ -324,7 +324,7 @@
   </div>
 
   <div id="retailDeliveryModal" class="rd-modal" hidden>
-    <form id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle">
+    <form id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate>
       <header class="rd-modal-head">
         <div>
           <p>Trazabilidad de bandejas</p>
@@ -349,6 +349,26 @@
         <button id="retailConfirmDelivery" class="rd-primary-button" type="submit">Guardar e imprimir / PDF</button>
       </div>
     </form>
+  </div>
+
+  <div id="retailErrorModal" class="rd-modal rd-error-modal" hidden>
+    <section class="rd-modal-card is-error" role="alertdialog" aria-modal="true" aria-labelledby="retailErrorModalTitle" aria-describedby="retailErrorModalMessage retailErrorModalHelp">
+      <header class="rd-modal-head">
+        <div>
+          <p id="retailErrorModalCaption">Error al grabar</p>
+          <h2 id="retailErrorModalTitle">No se registró el ticket</h2>
+        </div>
+        <button type="button" data-retail-close-modal="retailErrorModal" aria-label="Cerrar">×</button>
+      </header>
+      <p id="retailErrorModalMessage" class="rd-error-summary"></p>
+      <dl id="retailErrorModalDetails" class="rd-error-details"></dl>
+      <p id="retailErrorModalHelp" class="rd-error-help">La lista y sus pesadas se conservan para que puedas corregir el problema y volver a intentar.</p>
+      <div class="rd-modal-actions">
+        <a id="retailErrorLogin" class="rd-secondary-button rd-error-action-link" href="{{ route('login') }}" hidden>Ir a iniciar sesión</a>
+        <button id="retailRetryPrint" type="button" class="rd-secondary-button" hidden>Reintentar impresión</button>
+        <button id="retailCloseErrorModal" type="button" class="rd-primary-button" data-retail-close-modal="retailErrorModal">Entendido</button>
+      </div>
+    </section>
   </div>
 
   <div id="retailSettingsModal" class="rd-modal" hidden>

@@ -1000,6 +1000,37 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
+    public function test_retail_validation_errors_are_explained_in_spanish(): void
+    {
+        $payload = $this->payload();
+        unset($payload['operation_type'], $payload['weighings'][0]['weighed_at']);
+        $payload['weighings'][0]['birds_per_tray'] = 'muchas';
+
+        $response = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'operation_type',
+                'weighings.0.birds_per_tray',
+                'weighings.0.weighed_at',
+            ]);
+
+        $errors = $response->json('errors');
+        $this->assertSame(
+            'Selecciona si el registro corresponde a una venta o una devolución.',
+            $errors['operation_type'][0]
+        );
+        $this->assertSame(
+            'La cantidad de aves por bandeja debe ser un número entero.',
+            $errors['weighings.0.birds_per_tray'][0]
+        );
+        $this->assertSame(
+            'No se recibió la fecha y hora de una pesada.',
+            $errors['weighings.0.weighed_at'][0]
+        );
+        $this->assertStringNotContainsString('validation.', json_encode($errors, JSON_THROW_ON_ERROR));
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
     public function test_repeating_the_same_retail_draft_is_idempotent(): void
     {
         $payload = $this->payload();
