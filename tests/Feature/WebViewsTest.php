@@ -381,6 +381,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./retail-dispatch-errors.js"', $javascript);
         $this->assertStringContainsString('from "./retail-payment-defaults.js"', $javascript);
         $this->assertStringContainsString('from "./retail-payment-mode.js"', $javascript);
+        $this->assertStringContainsString('from "./record-order.js"', $javascript);
+        $this->assertStringContainsString('newestRecordsFirst(list.items).map((item) => {', $javascript);
         $this->assertStringContainsString('showRetailError(presentation)', $javascript);
         $this->assertStringContainsString('state.paymentContext !== paymentContext', $javascript);
         $this->assertStringContainsString('resolveRetailPaymentDefaults(state.catalog.financial)', $javascript);
@@ -753,6 +755,12 @@ class WebViewsTest extends TestCase
             ->assertDontSee('generalPriceVivoKg', false)
             ->assertSee('type="module"', false)
             ->assertSee(asset('js/app.js'), false);
+
+        $javascript = file_get_contents(public_path('js/app.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('from "./record-order.js"', $javascript);
+        $this->assertStringContainsString('newestRecordsFirst(truck.cages)', $javascript);
     }
 
     public function test_operation_javascript_does_not_render_or_send_prices(): void

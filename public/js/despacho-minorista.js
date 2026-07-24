@@ -41,6 +41,7 @@ import {
   RETAIL_CUSTOMER_DISPLAY_REQUEST_TYPE,
   RETAIL_CUSTOMER_DISPLAY_RESET_TYPE
 } from "./retail-customer-display.js";
+import { newestRecordsFirst } from "./record-order.js";
 
 const retailStationElement = document.querySelector("#retailStation");
 const RETAIL_STATION = String(retailStationElement?.dataset.retailStation || "1");
@@ -1301,7 +1302,7 @@ function renderLists() {
       ? `${client?.name || "Venta sin cliente"} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
       : `${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${trayQuantityLabel(totals.trays)}`;
     const rows = list.items.length
-      ? list.items.map((item) => {
+      ? newestRecordsFirst(list.items).map((item) => {
         const selected = state.selectedItem?.listIndex === listIndex && state.selectedItem?.id === item.id;
         const amount = lineAmount(list, item) || 0;
         const signedAmount = list.operationType === OPERATION_RETURN ? -amount : amount;

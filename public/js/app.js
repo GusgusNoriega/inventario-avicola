@@ -2,6 +2,7 @@
 
 import { apiRequest } from "./api-client.js";
 import { printWeightControlTicket } from "./ticket-printer.js";
+import { newestRecordsFirst } from "./record-order.js";
 
 const LEGACY_STORAGE_KEY = STORAGE_KEY;
 const STORAGE_KEY_PREFIX = "sistema-pollos-state-v2";
@@ -6567,7 +6568,7 @@ function selectDailyProviderVehicle(originId, plate) {
 function buildTruckTableRows(truck) {
   const isReturn = isReturnTicket(truck);
 
-  return truck.cages
+  return newestRecordsFirst(truck.cages)
     .map((cage) => {
       const typeMeta = isReturn
         ? getReturnConditionMeta(cage.chickenCondition)
