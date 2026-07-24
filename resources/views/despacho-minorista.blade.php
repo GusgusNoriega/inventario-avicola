@@ -140,10 +140,14 @@
         </article>
       </section>
 
-      <section class="rd-selection-bar" aria-label="Características y destino de la pesada">
-        <div class="rd-chicken-types" id="retailChickenTypes" role="group" aria-label="Tipo de pollo"></div>
-
-        <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo" @if($retailStation === 2) hidden @endif></div>
+      <section class="rd-selection-bar" aria-label="Producto y presentación de la pesada">
+        <div class="rd-product-selection">
+          <p class="rd-product-selection-copy">
+            <strong>Pollo pelado por defecto</strong>
+            <span>Elige beneficiado únicamente cuando el despacho sea sin merma.</span>
+          </p>
+          <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"></div>
+        </div>
       </section>
     </form>
 
@@ -249,7 +253,7 @@
         </div>
         <button type="button" data-retail-close-modal="retailManualWeightModal" aria-label="Cerrar">×</button>
       </header>
-      <p class="rd-modal-copy">Este valor se tomará como el peso directo de la balanza. Al confirmar, la pesada se agregará de inmediato a la lista activa con las bandejas, aves, tipo de pollo y merma seleccionados.</p>
+      <p class="rd-modal-copy">Este valor se tomará como el peso directo de la balanza. Al confirmar, la pesada se agregará de inmediato a la lista activa con las bandejas, aves y producto seleccionados. El pollo pelado usa la merma configurada; el beneficiado no aplica merma.</p>
       <label class="rd-manual-weight-field">
         <span>Peso leído (kg)</span>
         <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="none" readonly required autocomplete="off" placeholder="Ej. 12.500" data-retail-keyboard="decimal" data-retail-keyboard-label="Peso leído en kilogramos">

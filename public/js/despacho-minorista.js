@@ -23,7 +23,10 @@ import {
   RETAIL_DELIVERY_MODE_COMPANY_TRUCK,
   RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP
 } from "./retail-delivery-mode.js";
-import { calculateRetailWeightAdjustment } from "./retail-weight-calculation.js";
+import {
+  calculateRetailWeightAdjustment,
+  RETAIL_PROCESSED_CHICKEN_CODE
+} from "./retail-weight-calculation.js";
 import {
   buildRetailScaleStorageKey,
   RetailScaleController,
@@ -51,6 +54,7 @@ const STORAGE_PREFIX = RETAIL_STATION === "1"
 const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
+const RETAIL_DRESSED_CHICKEN_CODE = "POLLO_PELADO";
 const LIST_COUNT = 4;
 const MAX_RETAIL_BIRD_QUANTITY = 40;
 const STATION_2_LIST_ADJUSTMENT_CODES = [
@@ -63,7 +67,10 @@ const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
 const TICKET_PRICE_OVERRIDE_VERSION = 1;
 const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
-const RETAIL_CHICKEN_TYPE_CODES = new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"]);
+const RETAIL_CHICKEN_TYPE_CODES = new Set([
+  RETAIL_DRESSED_CHICKEN_CODE,
+  RETAIL_PROCESSED_CHICKEN_CODE
+]);
 const TYPOGRAPHY_STORAGE_KEY = RETAIL_STATION === "1"
   ? "sistema-pollos-retail-typography-v1"
   : `sistema-pollos-retail-typography-v1-station-${RETAIL_STATION}`;
@@ -192,7 +199,6 @@ const elements = {
   tareDetail: document.querySelector("#retailTareDetail"),
   netPreview: document.querySelector("#retailNetPreview"),
   birdTotalPreview: document.querySelector("#retailBirdTotalPreview"),
-  chickenTypes: document.querySelector("#retailChickenTypes"),
   adjustments: document.querySelector("#retailAdjustments"),
   listSelectionHint: document.querySelector("#retailListSelectionHint"),
   listsGrid: document.querySelector("#retailListsGrid"),
@@ -475,7 +481,9 @@ function recalculateDraftItems() {
         return {
           ...item,
           adjustmentCode: adjustment.code,
-          adjustmentName: adjustment.name,
+          adjustmentName: isProcessedChickenType(item.chickenTypeCode)
+            ? "Sin merma"
+            : adjustment.name,
           chickenSex: adjustment.sex,
           presentation: adjustment.presentation,
           adjustmentGrams,
@@ -695,8 +703,31 @@ function selectedTray() {
   return state.catalog.tray_types.find((tray) => tray.code === elements.trayType.value) || null;
 }
 
+function chickenTypeByCode(code) {
+  const normalizedCode = String(code || "").toUpperCase();
+  return state.catalog.chicken_types.find(
+    (type) => String(type.code || "").toUpperCase() === normalizedCode
+  ) || null;
+}
+
+function isProcessedChickenType(code = state.chickenType) {
+  return String(code || "").toUpperCase() === RETAIL_PROCESSED_CHICKEN_CODE;
+}
+
+function selectChickenType(code) {
+  const chickenType = chickenTypeByCode(code);
+  if (!chickenType) return false;
+  state.chickenType = chickenType.code;
+  return true;
+}
+
+function ensureDressedChickenTypeSelection() {
+  if (selectChickenType(RETAIL_DRESSED_CHICKEN_CODE)) return;
+  state.chickenType = state.catalog.chicken_types[0]?.code || null;
+}
+
 function selectedChickenType() {
-  return state.catalog.chicken_types.find((type) => type.code === state.chickenType) || null;
+  return chickenTypeByCode(state.chickenType);
 }
 
 function selectedAdjustment() {
@@ -829,6 +860,9 @@ function buildCurrentRetailCustomerDisplayState() {
   const values = previewValues();
   const customer = clientFor(list);
   const fixedPresentation = station2AdjustmentForList(state.activeList);
+  const selectedPresentation = isProcessedChickenType()
+    ? "Pollo beneficiado · sin merma"
+    : (fixedPresentation?.name || selectedAdjustment()?.name || "");
   const pricingComplete = missingPriceTypes(list).length === 0;
   const calculationAvailable = availability.fixedAdjustmentAvailable
     && Boolean(values.tray)
@@ -855,7 +889,7 @@ function buildCurrentRetailCustomerDisplayState() {
     ticketLabel: `Lista ${state.activeList + 1}`,
     listNumber: state.activeList + 1,
     operationType: list.operationType,
-    presentation: fixedPresentation?.name || "",
+    presentation: selectedPresentation,
     totals,
     pricingComplete,
     readWeightKg: displayWeights.readWeightKg,
@@ -1184,23 +1218,6 @@ function renderWeightPreview() {
   publishRetailCustomerDisplayState();
 }
 
-function renderChickenTypes() {
-  if (!state.catalog.chicken_types.length) {
-    elements.chickenTypes.innerHTML = '<span class="rd-empty-list">Sin tipos de pollo</span>';
-    return;
-  }
-
-  if (!state.catalog.chicken_types.some((type) => type.code === state.chickenType)) {
-    state.chickenType = state.catalog.chicken_types[0].code;
-  }
-
-  elements.chickenTypes.innerHTML = state.catalog.chicken_types.map((type) => `
-    <button type="button" data-retail-chicken="${escapeHtml(type.code)}" class="${type.code === state.chickenType ? "is-active" : ""}" aria-pressed="${type.code === state.chickenType}">
-      ${escapeHtml(type.name)}
-    </button>
-  `).join("");
-}
-
 function ensureAdjustmentSelection() {
   const available = state.catalog.adjustments;
   const current = available.find((adjustment) => adjustment.code === state.adjustmentCode);
@@ -1213,22 +1230,44 @@ function ensureAdjustmentSelection() {
 }
 
 function renderAdjustments() {
+  elements.adjustments.hidden = false;
   if (RETAIL_STATION === "2") {
     syncStation2AdjustmentWithActiveList();
-    elements.adjustments.hidden = true;
-    elements.adjustments.innerHTML = "";
-    return;
+  } else {
+    ensureAdjustmentSelection();
   }
 
-  elements.adjustments.hidden = false;
-  ensureAdjustmentSelection();
-  const available = state.catalog.adjustments;
+  const processed = isProcessedChickenType();
+  const available = RETAIL_STATION === "2"
+    ? STATION_2_LIST_ADJUSTMENT_CODES
+      .map((code, listIndex) => ({
+        adjustment: state.catalog.adjustments.find((entry) => entry.code === code),
+        listIndex
+      }))
+      .filter(({ adjustment }) => Boolean(adjustment))
+    : state.catalog.adjustments.map((adjustment) => ({ adjustment, listIndex: null }));
+  const adjustmentButtons = available.map(({ adjustment, listIndex }) => {
+    const selected = !processed && adjustment.code === state.adjustmentCode;
+    const listAttribute = Number.isInteger(listIndex)
+      ? ` data-retail-list-adjustment="${listIndex}"`
+      : "";
+    return `
+      <button type="button" data-retail-adjustment="${escapeHtml(adjustment.code)}"${listAttribute} class="${selected ? "is-active" : ""}" aria-pressed="${selected}">
+        ${escapeHtml(adjustment.name)}
+      </button>
+    `;
+  }).join("");
+  const processedType = chickenTypeByCode(RETAIL_PROCESSED_CHICKEN_CODE);
+  const processedButton = processedType
+    ? `
+      <button type="button" data-retail-processed="${escapeHtml(processedType.code)}" class="is-processed ${processed ? "is-active" : ""}" aria-pressed="${processed}">
+        ${escapeHtml(processedType.name)}
+        <small>Sin merma</small>
+      </button>
+    `
+    : "";
 
-  elements.adjustments.innerHTML = available.map((adjustment) => `
-    <button type="button" data-retail-adjustment="${escapeHtml(adjustment.code)}" class="${adjustment.code === state.adjustmentCode ? "is-active" : ""}" aria-pressed="${adjustment.code === state.adjustmentCode}">
-      ${escapeHtml(adjustment.name)}
-    </button>
-  `).join("");
+  elements.adjustments.innerHTML = adjustmentButtons + processedButton;
 }
 
 function renderLists() {
@@ -1315,32 +1354,36 @@ function renderLists() {
 
   const activeFixedAdjustment = station2AdjustmentForList(state.activeList);
   if (RETAIL_STATION === "2" && elements.listSelectionHint) {
-    elements.listSelectionHint.textContent = activeFixedAdjustment
-      ? `Columna activa: ${activeFixedAdjustment.name}.`
+    elements.listSelectionHint.textContent = isProcessedChickenType()
+      ? `Pollo beneficiado sin merma · destino: lista ${state.activeList + 1}.`
+      : activeFixedAdjustment
+        ? `Pollo pelado · columna activa: ${activeFixedAdjustment.name}.`
       : "Columna activa sin presentación disponible.";
   }
 }
 
 function renderAll() {
   syncStation2AdjustmentWithActiveList();
-  renderChickenTypes();
   renderAdjustments();
   renderWeightPreview();
   renderLists();
 }
 
-function selectList(index) {
+function selectList(index, { selectDressed = RETAIL_STATION === "2" } = {}) {
   const nextIndex = Number(index);
   if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= LIST_COUNT) return;
   if (state.lists.some((list) => list.saving)) return;
 
+  if (selectDressed) {
+    ensureDressedChickenTypeSelection();
+  }
   state.activeList = nextIndex;
   syncStation2AdjustmentWithActiveList();
   state.selectedItem = null;
   renderAll();
   const fixedAdjustment = station2AdjustmentForList(nextIndex);
   setMessage(fixedAdjustment
-    ? `${fixedAdjustment.name} activo.`
+    ? `Pollo pelado · ${fixedAdjustment.name} activo; se aplicará la merma configurada.`
     : `Lista ${nextIndex + 1} activa.`);
 }
 
@@ -1459,7 +1502,9 @@ function addWeighingToList(listIndex, capturedReading) {
     chickenTypeName: chickenType.name,
     chickenShortName: chickenType.name.replace(/^Pollo\s+/i, ""),
     adjustmentCode: values.adjustment.code,
-    adjustmentName: values.adjustment.name,
+    adjustmentName: isProcessedChickenType(chickenType.code)
+      ? "Sin merma"
+      : values.adjustment.name,
     chickenSex: values.adjustment.sex,
     presentation: values.adjustment.presentation,
     adjustmentGrams: values.adjustmentGrams,
@@ -3046,7 +3091,7 @@ async function loadCatalog() {
       state.sex = defaultAdjustment.sex;
       state.adjustmentCode = defaultAdjustment.code;
     }
-    state.chickenType = state.catalog.chicken_types[0]?.code || null;
+    ensureDressedChickenTypeSelection();
 
     const scaleStorageKey = buildRetailScaleStorageKey(RETAIL_STATION, branchId);
     if (RETAIL_STATION === "1") {
@@ -3249,20 +3294,33 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  const chickenButton = event.target.closest("[data-retail-chicken]");
-  if (chickenButton) {
-    state.chickenType = chickenButton.dataset.retailChicken;
-    renderChickenTypes();
+  const processedButton = event.target.closest("[data-retail-processed]");
+  if (processedButton) {
+    selectChickenType(processedButton.dataset.retailProcessed);
+    renderAdjustments();
     renderWeightPreview();
+    renderLists();
+    setMessage("Pollo beneficiado activo: no se aplicará merma.");
     return;
   }
 
   const adjustmentButton = event.target.closest("[data-retail-adjustment]");
   if (adjustmentButton) {
+    ensureDressedChickenTypeSelection();
+    const station2ListIndex = Number(adjustmentButton.dataset.retailListAdjustment);
+    if (
+      RETAIL_STATION === "2"
+      && Number.isInteger(station2ListIndex)
+      && station2ListIndex >= 0
+    ) {
+      selectList(station2ListIndex);
+      return;
+    }
     state.adjustmentCode = adjustmentButton.dataset.retailAdjustment;
     state.sex = selectedAdjustment()?.sex || SEX_MALE;
     renderAdjustments();
     renderWeightPreview();
+    setMessage(`Pollo pelado · ${selectedAdjustment()?.name || "presentación"} activa; se aplicará la merma configurada.`);
     return;
   }
 

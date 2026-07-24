@@ -241,7 +241,7 @@ test("el productor publica la lista activa, sus totales y el peso neto calculado
   assert.match(builder, /readWeightKg: displayWeights\.readWeightKg/);
 
   const previewStart = stationSource.indexOf("function renderWeightPreview()");
-  const previewEnd = stationSource.indexOf("function renderChickenTypes()", previewStart);
+  const previewEnd = stationSource.indexOf("function ensureAdjustmentSelection()", previewStart);
   assert.match(
     stationSource.slice(previewStart, previewEnd),
     /adjustedWeight\.textContent = values\.hasReading \? values\.readWeight\.toFixed\(3\)/

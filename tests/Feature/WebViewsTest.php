@@ -353,6 +353,10 @@ class WebViewsTest extends TestCase
             ->assertSee('Guardar e imprimir / PDF')
             ->assertSee('Grabar')
             ->assertSee('id="retailTareDetail"', false)
+            ->assertSee('Pollo pelado por defecto')
+            ->assertSee('Elige beneficiado únicamente cuando el despacho sea sin merma.')
+            ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"', false)
+            ->assertDontSee('id="retailChickenTypes"', false)
             ->assertSee('id="retailTouchKeyboard"', false)
             ->assertSee('data-retail-keyboard="text"', false)
             ->assertSee('data-retail-keyboard="decimal"', false)
@@ -389,7 +393,12 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('read_weight_kg', $javascript);
         $this->assertStringContainsString('tray_type_code', $javascript);
         $this->assertStringContainsString('additional_grams', $javascript);
-        $this->assertStringContainsString('new Set(["POLLO_PELADO", "POLLO_BENEFICIADO"])', $javascript);
+        $this->assertStringContainsString('const RETAIL_DRESSED_CHICKEN_CODE = "POLLO_PELADO";', $javascript);
+        $this->assertStringContainsString('RETAIL_PROCESSED_CHICKEN_CODE', $javascript);
+        $this->assertStringContainsString('data-retail-processed=', $javascript);
+        $this->assertStringNotContainsString('data-retail-chicken=', $javascript);
+        $this->assertStringContainsString('ensureDressedChickenTypeSelection();', $javascript);
+        $this->assertStringContainsString('"Pollo beneficiado activo: no se aplicará merma."', $javascript);
         $this->assertStringContainsString('availableChickenTypeCodes.has(item.chickenTypeCode)', $javascript);
         $this->assertStringContainsString('from "./retail-weight-calculation.js"', $javascript);
         $this->assertStringContainsString('calculateRetailWeightAdjustment({', $javascript);
@@ -553,7 +562,10 @@ class WebViewsTest extends TestCase
             ->assertSee('Despacho minorista 2')
             ->assertSee('data-retail-station="2"', false)
             ->assertSee('data-retail-api-base="/despacho-minorista-2"', false)
-            ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo"  hidden', false)
+            ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"', false)
+            ->assertDontSee('id="retailChickenTypes"', false)
+            ->assertSee('Pollo pelado por defecto')
+            ->assertSee('Elige beneficiado únicamente cuando el despacho sea sin merma.')
             ->assertSee('id="retailOpenManualWeight"', false)
             ->assertSee('Colocar peso manual')
             ->assertSee('aria-controls="retailManualWeightModal"', false)
@@ -581,7 +593,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('"HEMBRA_ABIERTA"', $javascript);
         $this->assertStringContainsString('syncStation2AdjustmentWithActiveList()', $javascript);
         $this->assertStringContainsString('state.adjustmentCode = "";', $javascript);
-        $this->assertStringContainsString('`Columna activa: ${activeFixedAdjustment.name}.`', $javascript);
+        $this->assertStringContainsString('data-retail-list-adjustment=', $javascript);
+        $this->assertStringContainsString('`Pollo beneficiado sin merma · destino: lista ${state.activeList + 1}.`', $javascript);
+        $this->assertStringContainsString('`Pollo pelado · columna activa: ${activeFixedAdjustment.name}.`', $javascript);
         $this->assertStringContainsString('"Columna activa sin presentación disponible."', $javascript);
         $this->assertStringContainsString('"Peso directo de balanza · ajuste no disponible"', $javascript);
         $this->assertStringContainsString('calculationsAvailable && price && values.netWeight > 0', $javascript);
@@ -589,7 +603,9 @@ class WebViewsTest extends TestCase
 
         $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
         $this->assertIsString($stylesheet);
-        $this->assertStringContainsString('[data-retail-station="2"] .rd-selection-bar', $stylesheet);
+        $this->assertStringContainsString('.rd-product-selection', $stylesheet);
+        $this->assertStringContainsString('grid-template-columns: repeat(5, minmax(0, 1fr));', $stylesheet);
+        $this->assertStringContainsString('.rd-adjustment-buttons button.is-processed.is-active', $stylesheet);
     }
 
     public function test_both_retail_dispatch_views_allow_selecting_up_to_forty_birds(): void
