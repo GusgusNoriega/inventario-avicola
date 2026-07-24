@@ -92,6 +92,12 @@ test("el ticket minorista reproduce el encabezado, detalle y resumen del control
 
   assert.match(html, /<body class="retail-ticket">/);
   assert.doesNotMatch(html, /<body class="wholesale-ticket">/);
+  assert.match(html, /body \{[\s\S]*font-size: 15px;/);
+  assert.match(html, /\.business-name \{[\s\S]*font-size: 23px;/);
+  assert.match(html, /\.detail-table th \{[\s\S]*font-size: 11\.5px;/);
+  assert.match(html, /\.detail-table td \{[\s\S]*font-size: 15\.5px;/);
+  assert.match(html, /\.retail-summary-table td \{[\s\S]*font-size: 14\.5px;/);
+  assert.match(html, /\.form-fields \{[\s\S]*font-size: 16px;/);
   assert.match(compact, /DISTRIBUIDORA.*DIEGO ALBERTO.*GALLINA.*GD/);
   assert.match(
     compact,

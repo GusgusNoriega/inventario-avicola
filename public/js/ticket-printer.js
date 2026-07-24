@@ -168,7 +168,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       margin: 0 auto;
       padding: 2.5mm 1.5mm 12mm;
       font-family: "Courier New", Courier, monospace;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 700;
       line-height: 1.15;
       -webkit-print-color-adjust: exact;
@@ -186,14 +186,14 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
     }
 
     .business-distributor {
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 700;
       letter-spacing: 0.3px;
     }
 
     .business-name {
       margin-top: 0.4mm;
-      font-size: 21px;
+      font-size: 23px;
       font-weight: 900;
       line-height: 1;
       letter-spacing: 0.4px;
@@ -201,14 +201,14 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 
     .business-product {
       margin-top: 0.5mm;
-      font-size: 17px;
+      font-size: 19px;
       font-weight: 900;
       letter-spacing: 0.7px;
     }
 
     .business-mark {
       margin-top: 3.5mm;
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 900;
     }
 
@@ -218,33 +218,33 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       justify-content: space-between;
       align-items: baseline;
       gap: 2mm;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 900;
     }
 
     .date {
       margin-top: 1.8mm;
-      font-size: 13px;
+      font-size: 15px;
     }
 
     .operation-note {
       margin-top: 1.5mm;
       text-align: center;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 900;
     }
 
     .destination {
       margin: 7mm 0 1.3mm;
       text-align: center;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 900;
       overflow-wrap: anywhere;
     }
 
     .delivery {
       margin: 1.8mm 0 2mm;
-      font-size: 12.5px;
+      font-size: 14.5px;
       font-weight: 900;
     }
 
@@ -269,7 +269,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       border-top: 1.4px solid #000;
       border-right: 1px solid #000;
       border-bottom: 1.4px solid #000;
-      font-size: 9.5px;
+      font-size: 11.5px;
       font-weight: 900;
       line-height: 1.05;
       text-align: center;
@@ -282,7 +282,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 
     .detail-table td {
       padding: 1.3mm 0.35mm 0.5mm;
-      font-size: 13.5px;
+      font-size: 15.5px;
       font-weight: 700;
       white-space: nowrap;
     }
@@ -320,7 +320,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       padding: 0.8mm 0.25mm;
       border-top: 1.2px solid #000;
       border-bottom: 1.2px solid #000;
-      font-size: 11.5px;
+      font-size: 13.5px;
       font-weight: 900;
       text-align: center;
       white-space: nowrap;
@@ -329,7 +329,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
     .retail-summary-table td {
       padding: 1.2mm 0.25mm 0.7mm;
       border-bottom: 1.2px solid #000;
-      font-size: 12.5px;
+      font-size: 14.5px;
       font-weight: 700;
       text-align: right;
       white-space: nowrap;
@@ -355,7 +355,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
     }
 
     .retail-summary-table .price-various {
-      font-size: 10.5px;
+      font-size: 12.5px;
       font-weight: 900;
     }
 
@@ -363,7 +363,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       margin-top: 30mm;
       display: grid;
       gap: 12mm;
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 900;
     }
   </style>
