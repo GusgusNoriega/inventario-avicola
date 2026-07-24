@@ -176,6 +176,7 @@ const elements = {
   birdsPerTrayOptions: document.querySelector(".rd-birds-per-tray-options"),
   rawWeightInput: document.querySelector("#retailRawWeightInput"),
   manualWeightTrigger: document.querySelector("#retailManualWeightTrigger"),
+  openManualWeight: document.querySelector("#retailOpenManualWeight"),
   adjustedWeight: document.querySelector("#retailAdjustedWeight"),
   adjustmentReadingHint: document.querySelector(".rd-adjusted-reading > span"),
   weightSourceLabel: document.querySelector("#retailWeightSourceLabel"),
@@ -1124,7 +1125,10 @@ function renderWeightPreview() {
               : "Sin conexión";
   elements.captureState.classList.toggle("is-captured", availability.ready);
   elements.captureWeight.classList.remove("is-captured");
-  elements.captureWeight.disabled = state.loading || state.lists.some((list) => list.saving);
+  const captureLocked = state.loading || state.lists.some((list) => list.saving);
+  elements.captureWeight.disabled = captureLocked;
+  elements.manualWeightTrigger.disabled = captureLocked;
+  elements.openManualWeight.disabled = captureLocked;
   elements.captureWeight.title = availability.ready
     ? "Capturar el peso actual"
     : "Presiona para ver por qué la lectura todavía no puede capturarse";
@@ -2971,16 +2975,9 @@ function openManualWeightModal() {
 function applyMainManualWeight(event) {
   event.preventDefault();
   try {
-    const scaleState = state.scale.setManualReading(elements.manualWeightEntry.value);
-    const values = previewValues(scaleState.currentWeightKg);
+    state.scale.setManualReading(elements.manualWeightEntry.value);
     closeModal(elements.manualWeightModal);
-    setMessage(
-      `Peso manual recibido. La pantalla muestra ${formatWeight(values.readWeight)} ${
-        values.appliesAdjustment
-          ? "tal como fue ingresado; la merma se conserva en los cálculos"
-          : "sin merma para pollo beneficiado"
-      }.`
-    );
+    captureWeight();
   } catch (error) {
     showLocalActionIssue({
       caption: "Peso manual rechazado",
@@ -2993,7 +2990,7 @@ function applyMainManualWeight(event) {
           value: String(elements.manualWeightEntry.value || "").trim() || "Campo vacío"
         }
       ],
-      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Aplicar."
+      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Agregar pesada manual."
     });
   }
 }
@@ -3175,6 +3172,7 @@ elements.trayType.addEventListener("change", () => {
 elements.trayCountTrigger.addEventListener("click", () => openModal(elements.trayCountModal));
 elements.birdsPerTrayTrigger.addEventListener("click", () => openModal(elements.birdsPerTrayModal));
 elements.manualWeightTrigger.addEventListener("click", openManualWeightModal);
+elements.openManualWeight.addEventListener("click", openManualWeightModal);
 elements.manualWeightForm.addEventListener("submit", applyMainManualWeight);
 elements.captureWeight.addEventListener("click", captureWeight);
 elements.assignClient.addEventListener("click", openClientModal);

@@ -114,7 +114,11 @@ test("la captura bloqueada explica el motivo en el modal compartido por ambas es
   );
   assert.match(
     retailDispatchSource,
-    /elements\.captureWeight\.disabled = state\.loading \|\| state\.lists\.some/
+    /const captureLocked = state\.loading \|\| state\.lists\.some/
+  );
+  assert.match(
+    retailDispatchSource,
+    /elements\.captureWeight\.disabled = captureLocked/
   );
   assert.doesNotMatch(
     retailDispatchSource,

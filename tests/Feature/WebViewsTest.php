@@ -306,8 +306,11 @@ class WebViewsTest extends TestCase
             ->assertSee('data-retail-birds-per-tray-option="1"', false)
             ->assertSee('data-retail-birds-per-tray-option="10"', false)
             ->assertSee('id="retailAdjustedWeight"', false)
-            ->assertSee('La pantalla principal mostrará este peso tal como fue ingresado; la merma seleccionada se conservará únicamente para los cálculos.')
-            ->assertDontSee('mostrará únicamente el peso final con el ajuste seleccionado')
+            ->assertSee('id="retailOpenManualWeight"', false)
+            ->assertSee('Colocar peso manual')
+            ->assertSee('aria-controls="retailManualWeightModal"', false)
+            ->assertSee('la pesada se agregará de inmediato a la lista activa')
+            ->assertSee('Agregar pesada manual')
             ->assertSee('class="rd-lists-stage"', false)
             ->assertSee('aria-label="Seleccionar lista de destino"', false)
             ->assertSee('Selecciona una columna y captura; la pesada se agregará directamente.')
@@ -391,6 +394,16 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./retail-weight-calculation.js"', $javascript);
         $this->assertStringContainsString('calculateRetailWeightAdjustment({', $javascript);
         $this->assertStringContainsString('readWeight + totalAdjustmentGrams / 1000', $javascript);
+        $this->assertMatchesRegularExpression(
+            '/function applyMainManualWeight\\(event\\)[\\s\\S]+?setManualReading\\(elements\\.manualWeightEntry\\.value\\)[\\s\\S]+?captureWeight\\(\\)/',
+            $javascript
+        );
+        $this->assertStringContainsString(
+            'elements.openManualWeight.addEventListener("click", openManualWeightModal)',
+            $javascript
+        );
+        $this->assertStringContainsString('elements.manualWeightTrigger.disabled = captureLocked', $javascript);
+        $this->assertStringContainsString('elements.openManualWeight.disabled = captureLocked', $javascript);
         $this->assertStringContainsString('priceEditingListIndex', $javascript);
         $this->assertStringContainsString('general_prices', $javascript);
         $this->assertStringContainsString('data-retail-clear-client', $javascript);
@@ -541,6 +554,9 @@ class WebViewsTest extends TestCase
             ->assertSee('data-retail-station="2"', false)
             ->assertSee('data-retail-api-base="/despacho-minorista-2"', false)
             ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Presentación del pollo"  hidden', false)
+            ->assertSee('id="retailOpenManualWeight"', false)
+            ->assertSee('Colocar peso manual')
+            ->assertSee('aria-controls="retailManualWeightModal"', false)
             ->assertDontSee('Seleccionar lista 1')
             ->assertDontSee('data-retail-add-list=', false)
             ->assertSee('Toca una columna para seleccionar la presentación.')

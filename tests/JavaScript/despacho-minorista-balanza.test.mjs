@@ -16,6 +16,10 @@ const retailViewSource = readFileSync(
   new URL("../../public/js/despacho-minorista.js", import.meta.url),
   "utf8"
 );
+const retailBladeSource = readFileSync(
+  new URL("../../resources/views/despacho-minorista.blade.php", import.meta.url),
+  "utf8"
+);
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -202,6 +206,38 @@ test("una lectura estable puede capturarse varias veces aunque su peso e identid
     assert.equal(firstCapture.isCaptureReady, true);
     assert.equal(secondCapture.isCaptureReady, true);
   }
+});
+
+test("el peso manual visible se agrega inmediatamente como pesada con el flujo normal", () => {
+  const applyStart = retailViewSource.indexOf("function applyMainManualWeight(event)");
+  const applyEnd = retailViewSource.indexOf("function normalizeCatalog", applyStart);
+  const applySource = retailViewSource.slice(applyStart, applyEnd);
+
+  assert.notEqual(applyStart, -1);
+  assert.notEqual(applyEnd, -1);
+  assert.match(applySource, /state\.scale\.setManualReading\(elements\.manualWeightEntry\.value\)/);
+  assert.match(applySource, /closeModal\(elements\.manualWeightModal\)/);
+  assert.match(applySource, /captureWeight\(\)/);
+  assert.ok(
+    applySource.indexOf("setManualReading") < applySource.indexOf("captureWeight()"),
+    "la lectura manual debe quedar fijada antes de agregar la pesada"
+  );
+  assert.match(
+    retailBladeSource,
+    /id="retailOpenManualWeight"[\s\S]*?Colocar peso manual/
+  );
+  assert.match(
+    retailBladeSource,
+    /la pesada se agregará de inmediato a la lista activa/
+  );
+  assert.match(
+    retailViewSource,
+    /elements\.manualWeightTrigger\.disabled = captureLocked/
+  );
+  assert.match(
+    retailViewSource,
+    /elements\.openManualWeight\.disabled = captureLocked/
+  );
 });
 
 test("movimiento real exige reconfirmar dos tramas US antes de crear otra pesada", () => {
@@ -452,6 +488,12 @@ test("watchdog físico no borra una lectura manual explícita", async () => {
   assert.equal(controller.getState().currentWeightKg, 6.25);
   assert.equal(controller.getState().readingSource, "manual");
   assert.equal(controller.getState().isCaptureReady, true);
+  assert.equal(controller.getState().status, "connected");
+  assert.equal(controller.getState().connectionMode, "serial");
+  controller.clearReading();
+  assert.equal(controller.getState().currentWeightKg, null);
+  assert.equal(controller.getState().status, "connected");
+  assert.equal(controller.getState().connectionMode, "serial");
   controller._stopConnectionTimers(connection);
 });
 

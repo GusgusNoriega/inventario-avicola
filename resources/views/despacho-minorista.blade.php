@@ -98,13 +98,17 @@
           </div>
 
           <input id="retailRawWeightInput" type="hidden" value="">
-          <button id="retailManualWeightTrigger" class="rd-scale-reading" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" aria-label="Peso directo de la balanza. Toca para ingresar peso manual">
+          <button id="retailManualWeightTrigger" class="rd-scale-reading" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" aria-label="Peso directo de la balanza. Toca para ingresar peso manual" disabled>
             <output id="retailAdjustedWeight">---</output>
             <span aria-hidden="true">kg</span>
           </button>
 
           <div class="rd-adjusted-reading">
             <span>Peso directo de la balanza</span>
+            <button id="retailOpenManualWeight" class="rd-manual-weight-button" type="button" aria-haspopup="dialog" aria-controls="retailManualWeightModal" disabled>
+              <span aria-hidden="true">&#9998;</span>
+              <span class="rd-manual-weight-label">Colocar peso manual</span>
+            </button>
           </div>
 
           <button id="retailCaptureWeight" class="rd-capture-button" type="button" disabled>
@@ -245,14 +249,14 @@
         </div>
         <button type="button" data-retail-close-modal="retailManualWeightModal" aria-label="Cerrar">×</button>
       </header>
-      <p class="rd-modal-copy">La pantalla principal mostrará este peso tal como fue ingresado; la merma seleccionada se conservará únicamente para los cálculos.</p>
+      <p class="rd-modal-copy">Este valor se tomará como el peso directo de la balanza. Al confirmar, la pesada se agregará de inmediato a la lista activa con las bandejas, aves, tipo de pollo y merma seleccionados.</p>
       <label class="rd-manual-weight-field">
         <span>Peso leído (kg)</span>
         <input id="retailManualWeightEntry" type="number" min="0.001" step="0.001" inputmode="none" readonly required autocomplete="off" placeholder="Ej. 12.500" data-retail-keyboard="decimal" data-retail-keyboard-label="Peso leído en kilogramos">
       </label>
       <div class="rd-modal-actions">
         <button type="button" class="rd-secondary-button" data-retail-close-modal="retailManualWeightModal">Cancelar</button>
-        <button class="rd-primary-button" type="submit">Aplicar peso</button>
+        <button class="rd-primary-button" type="submit">Agregar pesada manual</button>
       </div>
     </form>
   </div>
