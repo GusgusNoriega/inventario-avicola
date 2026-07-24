@@ -111,12 +111,15 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     : records.reduce((total, record) => total + record.amount, 0);
   const ticketCode = String(ticket?.code || "--");
   const destinationName = String(ticket?.destinationName || "Sin destino asignado");
+  const deliveryMode = String(ticket?.delivery?.mode || "");
   const deliveryVehicle = ticket?.delivery?.vehicle || null;
   const deliveryDriver = ticket?.delivery?.driver || null;
-  const deliveryHtml = deliveryVehicle || deliveryDriver
+  const customerPickup = deliveryMode === "CUSTOMER_PICKUP";
+  const deliveryHtml = customerPickup || deliveryVehicle || deliveryDriver
     ? `<section class="delivery">
-        ${deliveryVehicle ? `<p>CAMIÓN: ${escapeTicketHtml(deliveryVehicle.plate || "--")}</p>` : ""}
-        ${deliveryDriver ? `<p>CHOFER: ${escapeTicketHtml(deliveryDriver.name || "--")}</p>` : ""}
+        ${customerPickup ? "<p>TRANSPORTE: RETIRO DIRECTO POR EL CLIENTE</p>" : ""}
+        ${!customerPickup && deliveryVehicle ? `<p>CAMIÓN: ${escapeTicketHtml(deliveryVehicle.plate || "--")}</p>` : ""}
+        ${!customerPickup && deliveryDriver ? `<p>CHOFER: ${escapeTicketHtml(deliveryDriver.name || "--")}</p>` : ""}
       </section>`
     : "";
   const printedDate = safePrintDate.toLocaleDateString(TICKET_LOCALE, { timeZone: TICKET_TIME_ZONE });

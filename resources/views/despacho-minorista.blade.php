@@ -364,26 +364,38 @@
     <form id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate>
       <header class="rd-modal-head">
         <div>
-          <p>Trazabilidad de bandejas</p>
-          <h2 id="retailDeliveryModalTitle">Asignar transporte</h2>
+          <p>Salida y control de bandejas</p>
+          <h2 id="retailDeliveryModalTitle">¿Quién transportará el pedido?</h2>
         </div>
         <button type="button" data-retail-close-modal="retailDeliveryModal" aria-label="Cerrar">×</button>
       </header>
       <p id="retailDeliverySummary" class="rd-delivery-summary"></p>
-      <div class="rd-delivery-fields">
+      <section id="retailDeliveryModeOptions" class="rd-payment-mode-options rd-delivery-mode-options" aria-label="Modalidad de salida" role="radiogroup">
+        <button type="button" class="rd-payment-mode-option" data-retail-delivery-mode="CUSTOMER_PICKUP" role="radio" aria-checked="false">
+          <span aria-hidden="true">✓</span>
+          <strong>Cliente retira directamente</strong>
+          <small>Se lleva el pedido y las bandejas quedan registradas a su nombre, sin camión ni chofer.</small>
+        </button>
+        <button type="button" class="rd-payment-mode-option" data-retail-delivery-mode="COMPANY_TRUCK" role="radio" aria-checked="false">
+          <span aria-hidden="true">▣</span>
+          <strong>Entrega con camión de la empresa</strong>
+          <small>Permite seleccionar el camión y el chofer responsables de la entrega.</small>
+        </button>
+      </section>
+      <div id="retailDeliveryFields" class="rd-delivery-fields" hidden>
         <label>
           <span>Camión que llevará la mercancía</span>
-          <select id="retailDeliveryTruck" required></select>
+          <select id="retailDeliveryTruck" disabled required></select>
         </label>
         <label>
           <span>Chofer responsable</span>
-          <select id="retailDeliveryDriver" required></select>
+          <select id="retailDeliveryDriver" disabled required></select>
         </label>
       </div>
       <p id="retailDeliveryMessage" class="rd-settings-message" role="status" aria-live="polite"></p>
       <div class="rd-modal-actions">
         <button type="button" class="rd-secondary-button" data-retail-close-modal="retailDeliveryModal">Cancelar</button>
-        <button id="retailConfirmDelivery" class="rd-primary-button" type="submit">Guardar e imprimir / PDF</button>
+        <button id="retailConfirmDelivery" class="rd-primary-button" type="submit" disabled>Guardar e imprimir / PDF</button>
       </div>
     </form>
   </div>

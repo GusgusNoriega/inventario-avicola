@@ -679,6 +679,7 @@ class TicketWeighingManagementController extends Controller
         }
 
         return [
+            'mode' => $ticket->resolvedDeliveryMode(),
             'vehicle' => $ticket->vehiculoEntrega
                 ? [
                     'id' => $ticket->vehiculoEntrega->id,

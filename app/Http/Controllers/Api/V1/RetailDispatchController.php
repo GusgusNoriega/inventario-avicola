@@ -232,6 +232,7 @@ class RetailDispatchController extends Controller
                 : null,
             'delivery' => $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
                 ? [
+                    'mode' => $ticket->resolvedDeliveryMode(),
                     'vehicle' => $ticket->vehiculoEntrega
                         ? [
                             'id' => $ticket->vehiculoEntrega->id,

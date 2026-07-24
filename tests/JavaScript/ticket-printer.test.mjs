@@ -111,6 +111,25 @@ test("el ticket minorista imprime los pollos reales de una pesada sin bandejas",
   assert.doesNotMatch(html, /<td class="number">0<\/td>/);
 });
 
+test("el ticket minorista identifica el retiro directo sin inventar camión ni chofer", () => {
+  const html = buildWeightControlTicketHtml({
+    code: "T-20260723-005",
+    channel: "MINORISTA",
+    operationType: "DESPACHO",
+    destinationName: "Cliente que retira",
+    delivery: {
+      mode: "CUSTOMER_PICKUP",
+      vehicle: null,
+      driver: null
+    },
+    records: []
+  }, "2026-07-23T12:30:00-05:00");
+
+  assert.match(html, /TRANSPORTE: RETIRO DIRECTO POR EL CLIENTE/);
+  assert.doesNotMatch(html, /CAMIÓN:/);
+  assert.doesNotMatch(html, /CHOFER:/);
+});
+
 test("el bloque de transporte se omite cuando el despacho no lo requiere", () => {
   const html = buildWeightControlTicketHtml({
     code: "T-20260723-002",

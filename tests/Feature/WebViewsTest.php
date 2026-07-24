@@ -547,6 +547,40 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('[data-retail-station="2"] .rd-selection-bar', $stylesheet);
     }
 
+    public function test_both_retail_dispatch_views_offer_customer_pickup_before_company_fleet(): void
+    {
+        foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
+            $this->get($url)
+                ->assertOk()
+                ->assertSee('id="retailDeliveryModeOptions"', false)
+                ->assertSee('data-retail-delivery-mode="CUSTOMER_PICKUP"', false)
+                ->assertSee('data-retail-delivery-mode="COMPANY_TRUCK"', false)
+                ->assertSee('Cliente retira directamente')
+                ->assertSee('Entrega con camión de la empresa')
+                ->assertSee('las bandejas quedan registradas a su nombre')
+                ->assertSee('id="retailDeliveryFields" class="rd-delivery-fields" hidden', false)
+                ->assertSee('id="retailDeliveryTruck" disabled required', false)
+                ->assertSee('id="retailDeliveryDriver" disabled required', false)
+                ->assertSee('id="retailConfirmDelivery" class="rd-primary-button" type="submit" disabled', false);
+        }
+
+        $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
+        $deliveryModeJavascript = file_get_contents(public_path('js/retail-delivery-mode.js'));
+        $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('from "./retail-delivery-mode.js"', $javascript);
+        $this->assertStringContainsString('state.deliveryMode = null', $javascript);
+        $this->assertStringContainsString('elements.deliveryFields.hidden = !companyTruckSelected', $javascript);
+        $this->assertStringContainsString('fleetReady && vehicleSelected && driverSelected', $javascript);
+        $this->assertStringContainsString('void saveDispatch(delivery, state.pendingPayments)', $javascript);
+        $this->assertIsString($deliveryModeJavascript);
+        $this->assertStringContainsString('return { mode };', $deliveryModeJavascript);
+        $this->assertStringContainsString('vehicle_id: normalizedVehicleId', $deliveryModeJavascript);
+        $this->assertIsString($stylesheet);
+        $this->assertStringContainsString('.rd-delivery-fields[hidden]', $stylesheet);
+    }
+
     public function test_both_retail_dispatch_views_confirm_before_removing_a_weighing(): void
     {
         foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {

@@ -36,10 +36,19 @@ class StoreRetailDispatchRequest extends FormRequest
             'delivery' => [
                 Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
                 'nullable',
-                'array:vehicle_id,driver_id',
+                'array:mode,vehicle_id,driver_id',
+            ],
+            'delivery.mode' => [
+                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                'nullable',
+                Rule::in([
+                    TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP,
+                    TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK,
+                ]),
             ],
             'delivery.vehicle_id' => [
-                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                Rule::prohibitedIf(fn (): bool => $this->isCustomerPickup()),
+                Rule::requiredIf(fn (): bool => $this->requiresCompanyTruck()),
                 'required_with:delivery.driver_id',
                 'nullable',
                 'integer',
@@ -48,7 +57,8 @@ class StoreRetailDispatchRequest extends FormRequest
                     ->where('estado', 'ACTIVO')),
             ],
             'delivery.driver_id' => [
-                Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
+                Rule::prohibitedIf(fn (): bool => $this->isCustomerPickup()),
+                Rule::requiredIf(fn (): bool => $this->requiresCompanyTruck()),
                 'required_with:delivery.vehicle_id',
                 'nullable',
                 'integer',
@@ -212,6 +222,28 @@ class StoreRetailDispatchRequest extends FormRequest
                 ->all();
         }
 
+        $delivery = $this->input('delivery');
+        if (is_array($delivery)) {
+            $mode = filled($delivery['mode'] ?? null)
+                ? mb_strtoupper(trim((string) $delivery['mode']), 'UTF-8')
+                : null;
+
+            // Compatibilidad con pestañas abiertas antes de incorporar la
+            // selección explícita: dos identificadores ya indican camión.
+            if (
+                $mode === null
+                && filled($delivery['vehicle_id'] ?? null)
+                && filled($delivery['driver_id'] ?? null)
+            ) {
+                $mode = TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK;
+            }
+
+            $normalized['delivery'] = [
+                ...$delivery,
+                'mode' => $mode,
+            ];
+        }
+
         $this->merge($normalized);
     }
 
@@ -249,12 +281,16 @@ class StoreRetailDispatchRequest extends FormRequest
             'client_id.min' => 'El cliente seleccionado no es válido.',
             'operation_type.required' => 'Selecciona si el registro corresponde a una venta o una devolución.',
             'operation_type.in' => 'El tipo de operación seleccionado no es válido.',
-            'delivery.required' => 'Selecciona el camión y el chofer que realizarán la entrega.',
+            'delivery.required' => 'Selecciona si el cliente retira el pedido o si se entregará con un camión de la empresa.',
             'delivery.array' => 'Los datos de transporte no tienen un formato válido.',
+            'delivery.mode.required' => 'Selecciona si el cliente retira el pedido o si se entregará con un camión de la empresa.',
+            'delivery.mode.in' => 'La modalidad de salida seleccionada no es válida.',
+            'delivery.vehicle_id.prohibited' => 'No selecciones un camión cuando el cliente retira directamente el pedido.',
             'delivery.vehicle_id.required' => 'Selecciona un camión de la flota para la entrega.',
             'delivery.vehicle_id.required_with' => 'Selecciona un camión de la flota para la entrega.',
             'delivery.vehicle_id.integer' => 'El camión seleccionado no es válido.',
             'delivery.vehicle_id.exists' => 'El camión seleccionado no pertenece a la flota activa de la empresa.',
+            'delivery.driver_id.prohibited' => 'No selecciones un chofer cuando el cliente retira directamente el pedido.',
             'delivery.driver_id.required' => 'Selecciona un chofer de la flota para la entrega.',
             'delivery.driver_id.required_with' => 'Selecciona un chofer de la flota para la entrega.',
             'delivery.driver_id.integer' => 'El chofer seleccionado no es válido.',
@@ -346,6 +382,16 @@ class StoreRetailDispatchRequest extends FormRequest
             fn (mixed $weighing): bool => is_array($weighing)
                 && (int) ($weighing['tray_count'] ?? 0) > 0
         );
+    }
+
+    private function requiresCompanyTruck(): bool
+    {
+        return $this->input('delivery.mode') === TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK;
+    }
+
+    private function isCustomerPickup(): bool
+    {
+        return $this->input('delivery.mode') === TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP;
     }
 
     private function requiresImmediatePayment(): bool

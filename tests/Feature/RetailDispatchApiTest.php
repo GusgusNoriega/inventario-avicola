@@ -594,6 +594,7 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.channel', TicketDespacho::CHANNEL_RETAIL)
             ->assertJsonPath('data.operation_type', TicketDespacho::OPERATION_DISPATCH)
             ->assertJsonPath('data.client.id', $this->clientId)
+            ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK)
             ->assertJsonPath('data.delivery.vehicle.id', $this->deliveryVehicleId)
             ->assertJsonPath('data.delivery.vehicle.plate', 'MIN-001')
             ->assertJsonPath('data.delivery.driver.id', $this->deliveryDriverId)
@@ -768,7 +769,7 @@ class RetailDispatchApiTest extends TestCase
             ->assertJsonPath('data.weighings.0.presentation', 'CERRADO');
     }
 
-    public function test_registered_client_dispatch_with_trays_requires_delivery(): void
+    public function test_registered_client_dispatch_with_trays_requires_delivery_mode(): void
     {
         $payload = $this->payload();
         unset($payload['delivery']);
@@ -777,11 +778,134 @@ class RetailDispatchApiTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
                 'delivery',
+                'delivery.mode',
+            ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_customer_pickup_keeps_trays_on_the_client_without_fleet_at_both_retail_stations(): void
+    {
+        DB::table('vehiculos')->update(['estado' => 'INACTIVO']);
+        DB::table('conductores')->update(['estado' => 'INACTIVO']);
+
+        foreach ([
+            [
+                'endpoint' => '/api/v1/despacho-minorista/tickets',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            [
+                'endpoint' => '/api/v1/despacho-minorista-2/tickets',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station) {
+            $payload = $this->payload();
+            $payload['delivery'] = [
+                'mode' => TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP,
+            ];
+            $payload['weighings'][0]['weight_source'] = $station['weight_source'];
+
+            $response = $this->postJson($station['endpoint'], $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP)
+                ->assertJsonPath('data.delivery.vehicle', null)
+                ->assertJsonPath('data.delivery.driver', null)
+                ->assertJsonPath('data.totals.trays', 2);
+            $ticketId = (int) $response->json('data.id');
+
+            $this->assertDatabaseHas('tickets_despacho', [
+                'id' => $ticketId,
+                'cliente_destino_id' => $this->clientId,
+                'vehiculo_entrega_id' => null,
+                'conductor_entrega_id' => null,
+            ]);
+            $this->assertDatabaseHas('pesadas', [
+                'ticket_id' => $ticketId,
+                'cantidad_bandejas' => 2,
+                'cantidad_aves' => 10,
+            ]);
+            $this->assertDatabaseHas('movimientos_javas', [
+                'ticket_despacho_id' => $ticketId,
+                'cliente_id' => $this->clientId,
+                'tipo' => 'DESPACHO',
+                'cantidad_bandejas' => 2,
+                'vehiculo_id' => null,
+                'conductor_id' => null,
+            ]);
+
+            $this->postJson($station['endpoint'], $payload)
+                ->assertOk()
+                ->assertJsonPath('already_registered', true)
+                ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP);
+            $this->assertSame(
+                1,
+                DB::table('movimientos_javas')
+                    ->where('ticket_despacho_id', $ticketId)
+                    ->count()
+            );
+        }
+
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.summary.tray_total_pending', 4)
+            ->assertJsonPath('data.clients.0.id', $this->clientId)
+            ->assertJsonPath('data.clients.0.tray_balance', 4);
+    }
+
+    public function test_company_truck_mode_requires_vehicle_and_driver(): void
+    {
+        $payload = $this->payload();
+        $payload['delivery'] = [
+            'mode' => TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK,
+        ];
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
                 'delivery.vehicle_id',
                 'delivery.driver_id',
             ]);
 
         $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_customer_pickup_rejects_residual_vehicle_and_driver(): void
+    {
+        $payload = $this->payload();
+        $payload['delivery']['mode'] = TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP;
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'delivery.vehicle_id',
+                'delivery.driver_id',
+            ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_retail_dispatch_rejects_an_unknown_delivery_mode(): void
+    {
+        $payload = $this->payload();
+        $payload['delivery'] = ['mode' => 'MODO_DESCONOCIDO'];
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('delivery.mode');
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
+    public function test_legacy_company_truck_payload_without_mode_remains_compatible(): void
+    {
+        $payload = $this->payload();
+        unset($payload['delivery']['mode']);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK)
+            ->assertJsonPath('data.delivery.vehicle.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.delivery.driver.id', $this->deliveryDriverId);
     }
 
     public function test_retail_dispatch_rejects_inactive_or_non_company_fleet(): void
@@ -1750,6 +1874,7 @@ class RetailDispatchApiTest extends TestCase
             'client_id' => $this->clientId,
             'operation_type' => TicketDespacho::OPERATION_DISPATCH,
             'delivery' => [
+                'mode' => TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK,
                 'vehicle_id' => $this->deliveryVehicleId,
                 'driver_id' => $this->deliveryDriverId,
             ],

@@ -35,6 +35,10 @@ class TicketDespacho extends Model
 
     public const OPERATION_RETURN = 'DEVOLUCION';
 
+    public const DELIVERY_MODE_CUSTOMER_PICKUP = 'CUSTOMER_PICKUP';
+
+    public const DELIVERY_MODE_COMPANY_TRUCK = 'COMPANY_TRUCK';
+
     public const STATUS_OPEN = 'ABIERTO';
 
     public const STATUS_CLOSED = 'CERRADO';
@@ -103,6 +107,40 @@ class TicketDespacho extends Model
     public function movimientoJavas(): HasOne
     {
         return $this->hasOne(MovimientoJava::class, 'ticket_despacho_id');
+    }
+
+    public function resolvedDeliveryMode(): ?string
+    {
+        if (
+            $this->canal !== self::CHANNEL_RETAIL
+            || $this->tipo_operacion !== self::OPERATION_DISPATCH
+        ) {
+            return null;
+        }
+
+        if ($this->vehiculo_entrega_id || $this->conductor_entrega_id) {
+            return self::DELIVERY_MODE_COMPANY_TRUCK;
+        }
+
+        if (! $this->cliente_destino_id) {
+            return null;
+        }
+
+        $weighings = $this->relationLoaded('pesadas')
+            ? $this->pesadas
+            : $this->pesadas()
+                ->where('estado', Pesada::STATUS_ACTIVE)
+                ->get(['cantidad_bandejas', 'estado']);
+        $hasActiveTrays = $weighings->contains(
+            fn (Pesada $weighing): bool => $weighing->estado === Pesada::STATUS_ACTIVE
+                && (int) $weighing->cantidad_bandejas > 0
+        );
+
+        if (! $hasActiveTrays) {
+            return null;
+        }
+
+        return self::DELIVERY_MODE_CUSTOMER_PICKUP;
     }
 
     /**

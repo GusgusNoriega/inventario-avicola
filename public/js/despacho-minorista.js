@@ -14,6 +14,12 @@ import {
   RETAIL_PAYMENT_MODE_CREDIT,
   RETAIL_PAYMENT_MODE_NOW
 } from "./retail-payment-mode.js";
+import {
+  buildRetailDeliveryPayload,
+  resolveRetailDeliveryMode,
+  RETAIL_DELIVERY_MODE_COMPANY_TRUCK,
+  RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP
+} from "./retail-delivery-mode.js";
 import { calculateRetailWeightAdjustment } from "./retail-weight-calculation.js";
 import {
   buildRetailScaleStorageKey,
@@ -229,6 +235,8 @@ const elements = {
   deliveryModal: document.querySelector("#retailDeliveryModal"),
   deliveryForm: document.querySelector("#retailDeliveryForm"),
   deliverySummary: document.querySelector("#retailDeliverySummary"),
+  deliveryModeOptions: document.querySelector("#retailDeliveryModeOptions"),
+  deliveryFields: document.querySelector("#retailDeliveryFields"),
   deliveryTruck: document.querySelector("#retailDeliveryTruck"),
   deliveryDriver: document.querySelector("#retailDeliveryDriver"),
   deliveryMessage: document.querySelector("#retailDeliveryMessage"),
@@ -315,6 +323,7 @@ const state = {
   paymentRows: [],
   paymentContext: null,
   paymentMode: RETAIL_PAYMENT_MODE_NOW,
+  deliveryMode: null,
   pendingPrintTicket: null
 };
 let retailCustomerDisplayChannel = null;
@@ -2411,7 +2420,8 @@ function renderDeliveryOptions(list) {
   const client = clientFor(list);
   const totals = listTotals(list);
 
-  elements.deliverySummary.textContent = `${client?.name || "Cliente"} · ${trayQuantityLabel(totals.trays)}. Selecciona quién transportará la mercancía antes de imprimir.`;
+  state.deliveryMode = null;
+  elements.deliverySummary.textContent = `${client?.name || "Cliente"} · ${trayQuantityLabel(totals.trays)}. Elige cómo saldrá el pedido. Las bandejas permanecerán registradas a nombre del cliente en cualquiera de las dos opciones.`;
   elements.deliveryTruck.innerHTML = `
     <option value="">Selecciona un camión</option>
     ${trucks.map((truck) => {
@@ -2427,11 +2437,57 @@ function renderDeliveryOptions(list) {
     }).join("")}
   `;
 
+  renderDeliveryMode();
+}
+
+function renderDeliveryMode() {
+  const trucks = state.catalog.delivery_trucks || [];
+  const drivers = state.catalog.delivery_drivers || [];
+  const companyTruckSelected = state.deliveryMode === RETAIL_DELIVERY_MODE_COMPANY_TRUCK;
+  const customerPickupSelected = state.deliveryMode === RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP;
   const fleetReady = trucks.length > 0 && drivers.length > 0;
-  elements.confirmDelivery.disabled = !fleetReady;
-  setDeliveryMessage(fleetReady
-    ? "El camión y el chofer quedarán vinculados al ticket para consultar la trazabilidad de las bandejas."
-      : "Debes registrar al menos un camión y un chofer activos en Mi flota antes de completar este despacho.", !fleetReady);
+  const vehicleSelected = Number.isInteger(Number(elements.deliveryTruck.value))
+    && Number(elements.deliveryTruck.value) > 0;
+  const driverSelected = Number.isInteger(Number(elements.deliveryDriver.value))
+    && Number(elements.deliveryDriver.value) > 0;
+
+  elements.deliveryModeOptions.querySelectorAll("[data-retail-delivery-mode]").forEach((button) => {
+    const selected = button.dataset.retailDeliveryMode === state.deliveryMode;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  });
+  elements.deliveryFields.hidden = !companyTruckSelected;
+  elements.deliveryTruck.disabled = !companyTruckSelected;
+  elements.deliveryDriver.disabled = !companyTruckSelected;
+  elements.confirmDelivery.disabled = !customerPickupSelected
+    && !(companyTruckSelected && fleetReady && vehicleSelected && driverSelected);
+
+  if (customerPickupSelected) {
+    elements.deliveryTruck.value = "";
+    elements.deliveryDriver.value = "";
+    setDeliveryMessage("Se registrará el retiro directo. El cliente conservará el saldo de las bandejas, sin asignar camión ni chofer.");
+    return;
+  }
+
+  if (companyTruckSelected) {
+    setDeliveryMessage(fleetReady
+      ? "Selecciona el camión y el chofer. Ambos quedarán vinculados al ticket y al movimiento de bandejas."
+      : "No hay camión y chofer activos suficientes. Puedes elegir «Cliente retira directamente» o completar la flota antes de registrar.", !fleetReady);
+    return;
+  }
+
+  setDeliveryMessage("Selecciona una modalidad para continuar.");
+}
+
+function selectDeliveryMode(requestedMode) {
+  const mode = resolveRetailDeliveryMode(requestedMode);
+  if (!mode) return;
+  if (mode !== state.deliveryMode) {
+    elements.deliveryTruck.value = "";
+    elements.deliveryDriver.value = "";
+  }
+  state.deliveryMode = mode;
+  renderDeliveryMode();
 }
 
 function showMissingPricesError(list, missingTypes = missingPriceTypes(list)) {
@@ -2471,16 +2527,23 @@ function prepareDispatchRegistration() {
 
 function submitDelivery(event) {
   event.preventDefault();
-  const vehicleId = Number(elements.deliveryTruck.value);
-  const driverId = Number(elements.deliveryDriver.value);
+  if (!state.deliveryMode) {
+    setDeliveryMessage("Selecciona si el cliente retira directamente o si se entregará con un camión de la empresa.", true);
+    return;
+  }
 
-  if (!Number.isInteger(vehicleId) || vehicleId < 1 || !Number.isInteger(driverId) || driverId < 1) {
+  const delivery = buildRetailDeliveryPayload(
+    state.deliveryMode,
+    elements.deliveryTruck.value,
+    elements.deliveryDriver.value
+  );
+  if (!delivery) {
     setDeliveryMessage("Selecciona el camión y el chofer responsables de llevar las bandejas.", true);
     return;
   }
 
   closeModal(elements.deliveryModal);
-  void saveDispatch({ vehicle_id: vehicleId, driver_id: driverId }, state.pendingPayments);
+  void saveDispatch(delivery, state.pendingPayments);
 }
 
 function printedChickenTypeCode(code) {
@@ -2643,6 +2706,7 @@ async function saveDispatch(delivery = null, payments = []) {
     state.pendingPayments = [];
     state.paymentRows = [];
     state.paymentContext = null;
+    state.deliveryMode = null;
     setMessage(`${response.message || "Despacho minorista registrado correctamente."} Abriendo impresión; también puedes elegir Guardar como PDF.`);
     clearRegisteredList(listIndex, list.draftId, ticket);
     await printTicketAndReport(ticket);
@@ -3109,6 +3173,12 @@ elements.paymentModeOptions.addEventListener("click", (event) => {
 });
 elements.paymentRows.addEventListener("input", renderPaymentTotals);
 elements.paymentRows.addEventListener("change", renderPaymentTotals);
+elements.deliveryModeOptions.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-retail-delivery-mode]");
+  if (option) selectDeliveryMode(option.dataset.retailDeliveryMode);
+});
+elements.deliveryTruck.addEventListener("change", renderDeliveryMode);
+elements.deliveryDriver.addEventListener("change", renderDeliveryMode);
 elements.deliveryForm.addEventListener("submit", submitDelivery);
 elements.retryPrint.addEventListener("click", () => void retryPendingPrint());
 elements.openSettings.addEventListener("click", () => {

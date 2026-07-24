@@ -3,6 +3,7 @@ const FIELD_LABELS = {
   client_id: "Cliente",
   operation_type: "Tipo de operación",
   delivery: "Transporte",
+  "delivery.mode": "Modalidad de salida",
   "delivery.vehicle_id": "Camión de entrega",
   "delivery.driver_id": "Chofer de entrega",
   payments: "Pago",

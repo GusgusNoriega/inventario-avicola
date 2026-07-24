@@ -180,9 +180,11 @@ class RetailDispatchService
                 }
             }
 
+            $deliveryData = $data['delivery'] ?? [];
             $delivery = $data['operation_type'] === TicketDespacho::OPERATION_DISPATCH
-                ? ($data['delivery'] ?? [])
-                : [];
+                && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK
+                    ? $deliveryData
+                    : [];
 
             $ticket = TicketDespacho::query()->create([
                 'jornada_id' => $journey->id,

@@ -1903,6 +1903,10 @@ body.retail-dispatch-page {
   gap: 10px;
 }
 
+.rd-delivery-fields[hidden] {
+  display: none;
+}
+
 .rd-payment-rows {
   display: grid;
   gap: 10px;
