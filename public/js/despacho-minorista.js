@@ -21,10 +21,21 @@ import {
   migrateLegacyRetailScaleStorage,
   RETAIL_SCALE_SERIAL_DEFAULTS
 } from "./despacho-minorista-balanza.js";
+import {
+  buildRetailCustomerDisplayChannelName,
+  buildRetailCustomerDisplayPayload,
+  buildRetailCustomerDisplayStorageKey,
+  resolveRetailCustomerDisplayWeights,
+  RETAIL_CUSTOMER_DISPLAY_REQUEST_TYPE,
+  RETAIL_CUSTOMER_DISPLAY_RESET_TYPE
+} from "./retail-customer-display.js";
 
 const retailStationElement = document.querySelector("#retailStation");
 const RETAIL_STATION = String(retailStationElement?.dataset.retailStation || "1");
 const RETAIL_API_BASE = String(retailStationElement?.dataset.retailApiBase || "/despacho-minorista");
+const RETAIL_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY = `sistema-pollos-pantalla-cliente-minorista-${RETAIL_STATION}-productor-v1`;
+const RETAIL_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY = `sistema-pollos-pantalla-cliente-minorista-${RETAIL_STATION}-instancia-v1`;
+const RETAIL_CUSTOMER_DISPLAY_CHANNEL_NAME = buildRetailCustomerDisplayChannelName(RETAIL_STATION);
 const STORAGE_PREFIX = RETAIL_STATION === "1"
   ? "sistema-pollos-retail-dispatch-v2-branch"
   : `sistema-pollos-retail-dispatch-v2-station-${RETAIL_STATION}-branch`;
@@ -94,12 +105,54 @@ const TYPOGRAPHY_GROUPS = [
 ];
 const TYPOGRAPHY_CONTROLS = TYPOGRAPHY_GROUPS.flatMap((group) => group.controls);
 
+function getRetailCustomerDisplayProducerId() {
+  try {
+    const existingId = sessionStorage.getItem(RETAIL_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY);
+    if (existingId) {
+      return existingId;
+    }
+
+    const generatedId = globalThis.crypto?.randomUUID?.()
+      || `minorista-${RETAIL_STATION}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sessionStorage.setItem(RETAIL_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY, generatedId);
+    return generatedId;
+  } catch {
+    return globalThis.crypto?.randomUUID?.()
+      || `minorista-${RETAIL_STATION}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+function getRetailCustomerDisplayProducerInstance() {
+  const currentTimestamp = Date.now();
+
+  try {
+    const previousInstance = Number(
+      sessionStorage.getItem(RETAIL_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY)
+    );
+    const nextInstance = Number.isSafeInteger(previousInstance) && previousInstance > 0
+      ? Math.max(currentTimestamp, previousInstance + 1)
+      : currentTimestamp;
+    sessionStorage.setItem(RETAIL_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY, String(nextInstance));
+    return nextInstance;
+  } catch {
+    return currentTimestamp;
+  }
+}
+
+const RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID = getRetailCustomerDisplayProducerId();
+const RETAIL_CUSTOMER_DISPLAY_PRODUCER_INSTANCE = getRetailCustomerDisplayProducerInstance();
+const RETAIL_CUSTOMER_DISPLAY_STORAGE_KEY = buildRetailCustomerDisplayStorageKey(
+  RETAIL_STATION,
+  RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID
+);
+
 const elements = {
   station: document.querySelector("#retailStation"),
   form: document.querySelector("#retailWeighingForm"),
   branchName: document.querySelector("#retailBranchName"),
   clock: document.querySelector("#retailClock"),
   scaleTopStatus: document.querySelector("#retailScaleTopStatus"),
+  openCustomerDisplay: document.querySelector("#retailOpenCustomerDisplay"),
   openSettings: document.querySelector("#retailOpenSettings"),
   trayType: document.querySelector("#retailTrayType"),
   trayCount: document.querySelector("#retailTrayCount"),
@@ -263,6 +316,12 @@ const state = {
   paymentMode: RETAIL_PAYMENT_MODE_NOW,
   pendingPrintTicket: null
 };
+let retailCustomerDisplayChannel = null;
+let retailCustomerDisplayRevision = 0;
+let lastRetailCustomerDisplayStorageWrite = 0;
+let pendingRetailCustomerDisplayStoragePayload = null;
+let retailCustomerDisplayStorageTimer = null;
+let retailCustomerDisplayHeartbeatTimer = null;
 const modalFocusOrigins = new Map();
 const touchKeyboardState = {
   target: null,
@@ -736,6 +795,158 @@ function listTotals(list) {
   });
 }
 
+function buildCurrentRetailCustomerDisplayState() {
+  const list = activeList();
+  const totals = listTotals(list);
+  const availability = liveReadingAvailability();
+  const values = previewValues();
+  const customer = clientFor(list);
+  const fixedPresentation = station2AdjustmentForList(state.activeList);
+  const pricingComplete = missingPriceTypes(list).length === 0;
+  const displayWeights = resolveRetailCustomerDisplayWeights({
+    hasReading: values.hasReading,
+    readWeightKg: values.readWeight,
+    displayWeightKg: values.grossWeight,
+    isPhysical: availability.isPhysical,
+    isFresh: availability.scaleState.isFresh,
+    connectionMatches: availability.connectionMatches,
+    isExpired: availability.isExpired
+  });
+
+  return buildRetailCustomerDisplayPayload({
+    station: RETAIL_STATION,
+    producerId: RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID,
+    producerInstance: RETAIL_CUSTOMER_DISPLAY_PRODUCER_INSTANCE,
+    revision: ++retailCustomerDisplayRevision,
+    updatedAt: new Date().toISOString(),
+    customerName: customer?.name || "Venta sin cliente",
+    ticketLabel: `Lista ${state.activeList + 1}`,
+    listNumber: state.activeList + 1,
+    operationType: list.operationType,
+    presentation: fixedPresentation?.name || "",
+    totals,
+    pricingComplete,
+    readWeightKg: displayWeights.readWeightKg,
+    displayWeightKg: displayWeights.displayWeightKg,
+    weightSource: state.liveSource,
+    weightStatus: availability.isExpired ? "stale" : state.liveReadingStatus,
+    isStable: availability.scaleState.isStable,
+    isFresh: availability.scaleState.isFresh
+  });
+}
+
+function flushRetailCustomerDisplayStorage() {
+  if (!pendingRetailCustomerDisplayStoragePayload) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      RETAIL_CUSTOMER_DISPLAY_STORAGE_KEY,
+      JSON.stringify(pendingRetailCustomerDisplayStoragePayload)
+    );
+    lastRetailCustomerDisplayStorageWrite = Date.now();
+    pendingRetailCustomerDisplayStoragePayload = null;
+  } catch {
+    // BroadcastChannel mantiene la pantalla en vivo si localStorage no está disponible.
+  }
+}
+
+function persistRetailCustomerDisplayState(payload, forceStorage = false) {
+  pendingRetailCustomerDisplayStoragePayload = payload;
+  const remainingDelay = Math.max(
+    100 - (Date.now() - lastRetailCustomerDisplayStorageWrite),
+    0
+  );
+
+  if (forceStorage || remainingDelay === 0) {
+    if (retailCustomerDisplayStorageTimer) {
+      globalThis.clearTimeout(retailCustomerDisplayStorageTimer);
+      retailCustomerDisplayStorageTimer = null;
+    }
+    flushRetailCustomerDisplayStorage();
+    return;
+  }
+
+  if (!retailCustomerDisplayStorageTimer) {
+    retailCustomerDisplayStorageTimer = globalThis.setTimeout(() => {
+      retailCustomerDisplayStorageTimer = null;
+      flushRetailCustomerDisplayStorage();
+    }, remainingDelay);
+  }
+}
+
+function publishRetailCustomerDisplayState(forceStorage = false) {
+  const payload = buildCurrentRetailCustomerDisplayState();
+  retailCustomerDisplayChannel?.postMessage(payload);
+  persistRetailCustomerDisplayState(payload, forceStorage);
+}
+
+function initializeRetailCustomerDisplaySync() {
+  if (!("BroadcastChannel" in globalThis)) {
+    return;
+  }
+
+  retailCustomerDisplayChannel = new BroadcastChannel(RETAIL_CUSTOMER_DISPLAY_CHANNEL_NAME);
+  retailCustomerDisplayChannel.addEventListener("message", (event) => {
+    if (
+      event.data?.type === RETAIL_CUSTOMER_DISPLAY_REQUEST_TYPE
+      && String(event.data.station || "") === RETAIL_STATION
+      && event.data.producerId === RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID
+    ) {
+      publishRetailCustomerDisplayState(true);
+    }
+  });
+}
+
+function resetRetailCustomerDisplay() {
+  retailCustomerDisplayChannel?.postMessage({
+    type: RETAIL_CUSTOMER_DISPLAY_RESET_TYPE,
+    station: RETAIL_STATION,
+    producerId: RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID
+  });
+
+  try {
+    localStorage.removeItem(RETAIL_CUSTOMER_DISPLAY_STORAGE_KEY);
+  } catch {
+    // La ventana receptora también limpia la información al vencer su tiempo de vida.
+  }
+}
+
+function openRetailCustomerDisplay(event) {
+  event.preventDefault();
+  const displayHref = elements.openCustomerDisplay?.href;
+  if (!displayHref) {
+    return;
+  }
+
+  publishRetailCustomerDisplayState(true);
+  const displayUrl = new URL(displayHref, globalThis.location.href);
+  displayUrl.searchParams.set("source", RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID);
+  const windowName = `pantalla-cliente-minorista-${RETAIL_STATION}-${RETAIL_CUSTOMER_DISPLAY_PRODUCER_ID}`;
+  const displayWindow = globalThis.open(
+    displayUrl.toString(),
+    windowName,
+    "popup=yes,width=1280,height=800,resizable=yes,scrollbars=no"
+  );
+
+  if (displayWindow) {
+    displayWindow.focus();
+    return;
+  }
+
+  showLocalActionIssue({
+    caption: "Ventana bloqueada",
+    title: "No se pudo abrir la pantalla del cliente",
+    message: "El navegador bloqueó la nueva ventana y no se cambió ningún dato del ticket.",
+    details: [
+      { label: "Estación", value: `Despacho minorista ${RETAIL_STATION}` },
+      { label: "Acción necesaria", value: "Permite las ventanas emergentes para este sistema." }
+    ],
+    help: "Después de habilitar las ventanas emergentes, vuelve a presionar Pantalla cliente."
+  });
+}
+
 function trayQuantityLabel(value) {
   const quantity = Number(value || 0);
   if (quantity === 0) return "Sin bandejas";
@@ -929,6 +1140,7 @@ function renderWeightPreview() {
     button.classList.toggle("is-active", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  publishRetailCustomerDisplayState();
 }
 
 function renderChickenTypes() {
@@ -1889,6 +2101,7 @@ function applyPrices(event) {
 function clearPriceOverrides() {
   priceEditingList().priceOverrides = {};
   persistLists();
+  renderAll();
   renderPriceFields();
 }
 
@@ -2847,6 +3060,7 @@ state.scale = new RetailScaleController({
 
 elements.trayCount.addEventListener("input", renderWeightPreview);
 elements.birdsPerTray.addEventListener("input", renderWeightPreview);
+elements.openCustomerDisplay?.addEventListener("click", openRetailCustomerDisplay);
 elements.trayType.addEventListener("change", () => {
   const tray = selectedTray();
   if (tray?.bird_capacity) {
@@ -3143,6 +3357,16 @@ function teardownRetailStation(event) {
   teardownStarted = true;
   scaleRestoreReady = false;
   if (clockIntervalId) globalThis.clearInterval(clockIntervalId);
+  if (retailCustomerDisplayHeartbeatTimer) {
+    globalThis.clearInterval(retailCustomerDisplayHeartbeatTimer);
+    retailCustomerDisplayHeartbeatTimer = null;
+  }
+  resetRetailCustomerDisplay();
+  if (retailCustomerDisplayStorageTimer) {
+    globalThis.clearTimeout(retailCustomerDisplayStorageTimer);
+    retailCustomerDisplayStorageTimer = null;
+  }
+  retailCustomerDisplayChannel?.close();
   void state.scale.destroy();
 }
 
@@ -3154,6 +3378,11 @@ document.addEventListener("visibilitychange", handleRetailVisibilityChange);
 initializeTypography();
 updateClock();
 clockIntervalId = globalThis.setInterval(updateClock, 1000);
+initializeRetailCustomerDisplaySync();
 renderAll();
+retailCustomerDisplayHeartbeatTimer = globalThis.setInterval(
+  () => publishRetailCustomerDisplayState(),
+  2000
+);
 renderScaleStatus(state.scale.getState());
 loadCatalog();

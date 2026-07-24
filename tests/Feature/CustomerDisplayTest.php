@@ -30,10 +30,82 @@ class CustomerDisplayTest extends TestCase
             ->assertSee('target="pantalla-cliente"', false);
     }
 
+    public function test_each_retail_view_opens_its_own_customer_display(): void
+    {
+        foreach ([
+            1 => [
+                'view' => '/despacho-minorista',
+                'display_route' => 'despacho-minorista.pantalla-cliente',
+            ],
+            2 => [
+                'view' => '/despacho-minorista-2',
+                'display_route' => 'despacho-minorista-2.pantalla-cliente',
+            ],
+        ] as $station => $screen) {
+            $otherDisplayRoute = $station === 1
+                ? route('despacho-minorista-2.pantalla-cliente')
+                : route('despacho-minorista.pantalla-cliente');
+
+            $this->get($screen['view'])
+                ->assertOk()
+                ->assertSee('id="retailOpenCustomerDisplay"', false)
+                ->assertSee(route($screen['display_route']), false)
+                ->assertSee("target=\"pantalla-cliente-minorista-{$station}\"", false)
+                ->assertSee(
+                    "aria-label=\"Abrir la pantalla para el cliente de venta minorista {$station}\"",
+                    false
+                )
+                ->assertDontSee($otherDisplayRoute, false)
+                ->assertDontSee(route('operacion.pantalla-cliente'), false);
+        }
+    }
+
+    public function test_each_retail_customer_display_only_exposes_its_live_summary(): void
+    {
+        foreach ([
+            1 => '/despacho-minorista/pantalla-cliente',
+            2 => '/despacho-minorista-2/pantalla-cliente',
+        ] as $station => $url) {
+            $this->get($url)
+                ->assertOk()
+                ->assertSee('data-customer-display-mode="retail"', false)
+                ->assertSee("data-retail-station=\"{$station}\"", false)
+                ->assertSee('id="customerDisplayName"', false)
+                ->assertSee('id="customerDisplayTicket"', false)
+                ->assertSee('id="customerDisplayScaleCard1"', false)
+                ->assertSee('id="customerDisplayScaleStatus1"', false)
+                ->assertSee('id="customerDisplayScale1"', false)
+                ->assertSee('id="customerDisplayBirds"', false)
+                ->assertSee('id="customerDisplayRecords"', false)
+                ->assertSee('id="customerDisplayTrays"', false)
+                ->assertSee('id="customerDisplayNetWeight"', false)
+                ->assertSee('id="customerDisplayAmount"', false)
+                ->assertSee('id="customerDisplayAnnouncement"', false)
+                ->assertSee('Pollos / aves del ticket seleccionado')
+                ->assertSee('Peso actual')
+                ->assertSee('Pesadas')
+                ->assertSee('Bandejas')
+                ->assertSee('Peso neto')
+                ->assertSee('Total del ticket')
+                ->assertSee(asset('js/pantalla-cliente-minorista.js'), false)
+                ->assertDontSee('id="customerDisplayScale2"', false)
+                ->assertDontSee('id="customerDisplayCages"', false)
+                ->assertDontSee(asset('js/pantalla-cliente.js'), false)
+                ->assertDontSee('<form', false)
+                ->assertDontSee('id="retailWeighingForm"', false)
+                ->assertDontSee('id="retailPaymentForm"', false)
+                ->assertDontSee('id="retailSaveDispatch"', false)
+                ->assertDontSee('Cobro')
+                ->assertDontSee('Registrar')
+                ->assertDontSee('Grabar');
+        }
+    }
+
     public function test_customer_display_only_exposes_live_ticket_summary(): void
     {
         $this->get('/operacion/pantalla-cliente')
             ->assertOk()
+            ->assertSee('data-customer-display-mode="wholesale"', false)
             ->assertSee('id="customerDisplayName"', false)
             ->assertSee('id="customerDisplayTicket"', false)
             ->assertSee('id="customerDisplayScale1"', false)
@@ -48,8 +120,57 @@ class CustomerDisplayTest extends TestCase
             ->assertSee('id="customerDisplayChooseScreen"', false)
             ->assertSee('id="customerDisplayScreenDialog"', false)
             ->assertSee(asset('js/pantalla-cliente.js'), false)
+            ->assertDontSee(asset('js/pantalla-cliente-minorista.js'), false)
+            ->assertDontSee('data-retail-station=', false)
+            ->assertDontSee('id="customerDisplayTrays"', false)
+            ->assertDontSee('id="customerDisplayNetWeight"', false)
+            ->assertDontSee('id="customerDisplayAmount"', false)
             ->assertDontSee('Precio')
             ->assertDontSee('Registrar');
+    }
+
+    public function test_customer_displays_keep_their_current_authentication_boundary(): void
+    {
+        auth()->logout();
+
+        foreach ([
+            '/operacion/pantalla-cliente',
+            '/despacho-minorista/pantalla-cliente',
+            '/despacho-minorista-2/pantalla-cliente',
+        ] as $url) {
+            $this->get($url)->assertRedirect('/login');
+        }
+    }
+
+    public function test_retail_customer_display_permissions_are_isolated_by_station_module(): void
+    {
+        $stationOneUser = User::factory()->create();
+        $this->grantModules(
+            $stationOneUser,
+            ['MODULO_DESPACHO_MINORISTA_1'],
+            'PANTALLA_MINORISTA_1',
+            'Pantalla minorista 1',
+        );
+
+        $this->actingAs($stationOneUser);
+        $this->get('/despacho-minorista')->assertOk();
+        $this->get('/despacho-minorista/pantalla-cliente')->assertOk();
+        $this->get('/despacho-minorista-2')->assertForbidden();
+        $this->get('/despacho-minorista-2/pantalla-cliente')->assertForbidden();
+
+        $stationTwoUser = User::factory()->create();
+        $this->grantModules(
+            $stationTwoUser,
+            ['MODULO_DESPACHO_MINORISTA_2'],
+            'PANTALLA_MINORISTA_2',
+            'Pantalla minorista 2',
+        );
+
+        $this->actingAs($stationTwoUser);
+        $this->get('/despacho-minorista-2')->assertOk();
+        $this->get('/despacho-minorista-2/pantalla-cliente')->assertOk();
+        $this->get('/despacho-minorista')->assertForbidden();
+        $this->get('/despacho-minorista/pantalla-cliente')->assertForbidden();
     }
 
     public function test_customer_display_uses_realtime_channel_with_storage_fallback(): void

@@ -29,12 +29,24 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         Route::view('/despacho-minorista', 'despacho-minorista')
             ->middleware('module:MODULO_DESPACHO_MINORISTA_1')
             ->name('despacho-minorista');
+        Route::view('/despacho-minorista/pantalla-cliente', 'pantalla-cliente', [
+            'customerDisplayMode' => 'retail',
+            'customerDisplayTitle' => 'Despacho minorista 1 en vivo',
+            'retailStation' => 1,
+        ])->middleware('module:MODULO_DESPACHO_MINORISTA_1')
+            ->name('despacho-minorista.pantalla-cliente');
         Route::view('/despacho-minorista-2', 'despacho-minorista', [
             'retailStation' => 2,
             'retailTitle' => 'Despacho minorista 2',
             'retailApiBase' => '/despacho-minorista-2',
         ])->middleware('module:MODULO_DESPACHO_MINORISTA_2')
             ->name('despacho-minorista-2');
+        Route::view('/despacho-minorista-2/pantalla-cliente', 'pantalla-cliente', [
+            'customerDisplayMode' => 'retail',
+            'customerDisplayTitle' => 'Despacho minorista 2 en vivo',
+            'retailStation' => 2,
+        ])->middleware('module:MODULO_DESPACHO_MINORISTA_2')
+            ->name('despacho-minorista-2.pantalla-cliente');
         Route::view('/precios-jornada', 'precios-jornada')
             ->middleware('module:MODULO_DESPACHO_MINORISTA_1,MODULO_DESPACHO_MINORISTA_2')
             ->name('precios-jornada');

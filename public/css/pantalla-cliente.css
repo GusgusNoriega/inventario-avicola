@@ -450,6 +450,104 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.customer-display-page--retail .customer-display-shell {
+  grid-template-rows: auto minmax(180px, .92fr) minmax(210px, .72fr);
+}
+
+.customer-display-scales--retail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.customer-display-scale--retail {
+  border-top-color: #37d59a;
+  background:
+    radial-gradient(circle at 88% 82%, rgba(55, 213, 154, .14), transparent 32%),
+    linear-gradient(145deg, rgba(12, 31, 36, .98), rgba(5, 13, 18, .98));
+}
+
+.customer-display-scale--retail::after {
+  right: -4%;
+  bottom: -90%;
+  width: 42%;
+  background: rgba(55, 213, 154, .12);
+}
+
+.customer-display-scale--retail .customer-display-scale__reading strong {
+  color: #75f1c2;
+  font-size: clamp(86px, 14vw, 260px);
+  text-shadow: 0 0 42px rgba(55, 213, 154, .18);
+}
+
+.customer-display-scale--retail:not(.has-reading) .customer-display-scale__reading strong {
+  color: #627383;
+  text-shadow: none;
+}
+
+.customer-display-scale--retail.is-selected {
+  border-color: rgba(117, 241, 194, .72);
+  border-top-color: #37d59a;
+  box-shadow:
+    0 0 0 3px rgba(55, 213, 154, .13),
+    0 22px 70px rgba(0, 0, 0, .35);
+}
+
+.customer-display-ticket-summary--retail {
+  grid-template-columns: minmax(260px, 1.05fr) minmax(420px, 1.95fr);
+}
+
+.customer-display-ticket-summary--retail .customer-display-birds {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.customer-display-ticket-summary--retail .customer-display-birds > span {
+  font-size: clamp(14px, 1.4vw, 24px);
+}
+
+.customer-display-ticket-summary--retail .customer-display-birds strong {
+  font-size: clamp(62px, 7.5vw, 135px);
+}
+
+.customer-display-ticket-summary--retail .customer-display-birds small {
+  font-size: clamp(18px, 2vw, 34px);
+}
+
+.customer-display-ticket-meta--retail {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-display-ticket-meta--retail article {
+  padding: clamp(10px, 1.35vw, 24px);
+}
+
+.customer-display-ticket-meta--retail .customer-display-ticket-meta__weight strong,
+.customer-display-ticket-meta--retail .customer-display-ticket-meta__amount strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.customer-display-ticket-meta--retail .customer-display-ticket-meta__weight strong {
+  color: #bcecff;
+  font-size: clamp(30px, 3.2vw, 58px);
+}
+
+.customer-display-ticket-meta--retail .customer-display-ticket-meta__amount {
+  border-color: rgba(55, 213, 154, .45);
+  background:
+    linear-gradient(145deg, rgba(12, 49, 39, .98), rgba(5, 20, 18, .98));
+}
+
+.customer-display-ticket-meta--retail .customer-display-ticket-meta__amount strong {
+  color: #75f1c2;
+  font-size: clamp(30px, 3.45vw, 64px);
+}
+
+.customer-display-ticket-meta--retail .customer-display-ticket-meta__amount strong.is-pending {
+  color: #ffd978;
+  font-size: clamp(22px, 2.55vw, 46px);
+}
+
 @media (max-height: 820px) and (min-width: 701px) {
   .customer-display-shell {
     grid-template-rows: auto minmax(190px, 1fr) minmax(125px, .42fr);
@@ -464,6 +562,16 @@ body {
   .customer-display-birds { padding: clamp(12px, 1.5vw, 22px); }
   .customer-display-birds strong { font-size: clamp(58px, 8vw, 112px); }
   .customer-display-ticket-meta strong { font-size: clamp(42px, 5vw, 76px); }
+  .customer-display-page--retail .customer-display-shell {
+    grid-template-rows: auto minmax(180px, .8fr) minmax(170px, .65fr);
+  }
+  .customer-display-scale--retail .customer-display-scale__reading strong {
+    font-size: clamp(76px, 12vw, 180px);
+  }
+  .customer-display-ticket-meta--retail .customer-display-ticket-meta__weight strong,
+  .customer-display-ticket-meta--retail .customer-display-ticket-meta__amount strong {
+    font-size: clamp(28px, 3.2vw, 52px);
+  }
 }
 
 @media (max-height: 600px) {
@@ -482,6 +590,16 @@ body {
   .customer-display-birds strong { font-size: clamp(54px, 8vw, 100px); }
   .customer-display-ticket-meta strong { font-size: clamp(38px, 5vw, 70px); }
   #customerDisplayFullscreen { display: none; }
+  .customer-display-page--retail .customer-display-shell {
+    grid-template-rows: auto minmax(150px, .75fr) minmax(145px, .58fr);
+  }
+  .customer-display-scale--retail .customer-display-scale__reading strong {
+    font-size: clamp(64px, 10vw, 130px);
+  }
+  .customer-display-ticket-meta--retail .customer-display-ticket-meta__weight strong,
+  .customer-display-ticket-meta--retail .customer-display-ticket-meta__amount strong {
+    font-size: clamp(25px, 2.8vw, 42px);
+  }
 }
 
 @media (max-width: 700px) {
@@ -529,5 +647,17 @@ body {
   }
   .customer-display-birds > div { justify-content: center; }
   .customer-display-ticket-meta { min-height: 130px; }
+  .customer-display-ticket-summary--retail { grid-template-columns: 1fr; }
+  .customer-display-ticket-summary--retail .customer-display-birds {
+    grid-template-columns: 1fr;
+  }
+  .customer-display-ticket-meta--retail { min-height: 280px; }
+  .customer-display-scale--retail .customer-display-scale__reading strong {
+    font-size: clamp(64px, 22vw, 130px);
+  }
+  .customer-display-ticket-meta--retail .customer-display-ticket-meta__weight strong,
+  .customer-display-ticket-meta--retail .customer-display-ticket-meta__amount strong {
+    font-size: clamp(25px, 7vw, 44px);
+  }
   #customerDisplayFullscreen { display: none; }
 }

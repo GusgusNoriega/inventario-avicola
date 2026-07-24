@@ -2,6 +2,9 @@
   $retailStation = $retailStation ?? 1;
   $retailTitle = $retailTitle ?? 'Despacho minorista';
   $retailApiBase = $retailApiBase ?? '/despacho-minorista';
+  $retailCustomerDisplayRoute = (int) $retailStation === 2
+    ? route('despacho-minorista-2.pantalla-cliente')
+    : route('despacho-minorista.pantalla-cliente');
 @endphp
 <!doctype html>
 <html lang="es" class="retail-dispatch-root">
@@ -34,6 +37,19 @@
           <i aria-hidden="true"></i>
           <span>Balanza sin conectar</span>
         </span>
+        <a
+          id="retailOpenCustomerDisplay"
+          class="rd-menu-button rd-customer-display-button"
+          href="{{ $retailCustomerDisplayRoute }}"
+          target="pantalla-cliente-minorista-{{ $retailStation }}"
+          aria-label="Abrir la pantalla para el cliente de venta minorista {{ $retailStation }}"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="3" y="4" width="18" height="13" rx="2"></rect>
+            <path d="M8 21h8M12 17v4"></path>
+          </svg>
+          <span>Pantalla cliente</span>
+        </a>
         <button id="retailOpenSettings" class="rd-icon-button" type="button" aria-label="Configurar balanza y ajustes" aria-haspopup="dialog" aria-controls="retailSettingsModal">
           <span aria-hidden="true">&#9881;</span>
         </button>

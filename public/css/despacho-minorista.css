@@ -288,6 +288,26 @@ body.retail-dispatch-page {
   fill: currentColor;
 }
 
+.rd-customer-display-button {
+  min-width: 118px;
+  border-color: #2d7899;
+  color: #d8f5ff;
+  background: linear-gradient(145deg, #103449, #0b2433);
+}
+
+.rd-customer-display-button:hover {
+  border-color: #55c9f7;
+  background: linear-gradient(145deg, #164b67, #0d3043);
+}
+
+.rd-customer-display-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .rd-capture-form {
   min-width: 0;
   min-height: 0;
