@@ -3,7 +3,10 @@ import {
   getRetailDispatchErrorPresentation,
   getRetailLocalActionErrorPresentation
 } from "./retail-dispatch-errors.js";
-import { printWeightControlTicket } from "./ticket-printer.js";
+import {
+  buildRetailTicketPrintData,
+  printWeightControlTicket
+} from "./ticket-printer.js";
 import {
   normalizeRetailPaymentDefaultId,
   resolveRetailPaymentDefaults
@@ -2558,41 +2561,6 @@ function submitDelivery(event) {
 
   closeModal(elements.deliveryModal);
   void saveDispatch(delivery, state.pendingPayments);
-}
-
-function printedChickenTypeCode(code) {
-  return ({
-    POLLO_VIVO: "PV",
-    POLLO_PELADO: "PP",
-    POLLO_BENEFICIADO: "PB",
-    POLLO_MUERTO: "PM"
-  })[code] || code || "PV";
-}
-
-function buildRetailTicketPrintData(ticket) {
-  return {
-    code: ticket.code,
-    channel: ticket.channel,
-    operationType: ticket.operation_type,
-    destinationName: ticket.client?.name || "Venta externa",
-    customerKind: ticket.client?.id ? "CLIENTE_REGISTRADO" : "VENTA_EXTERNA",
-    operatingDate: ticket.operating_date,
-    emittedAt: ticket.registered_at,
-    totalAmount: roundMoney(ticket.totals?.amount),
-    delivery: ticket.delivery,
-    records: (ticket.weighings || []).map((weighing) => ({
-      typeCode: printedChickenTypeCode(weighing.chicken_type_code),
-      birds: Number(weighing.birds) || 0,
-      birdsPerCage: Number(weighing.birds_per_tray) || 0,
-      cages: Number(weighing.tray_count) || 0,
-      readWeight: Number(weighing.read_weight_kg) || 0,
-      grossWeight: Number(weighing.gross_weight_kg) || 0,
-      tareWeight: Number(weighing.tare_weight_kg) || 0,
-      netWeight: Number(weighing.net_weight_kg) || 0,
-      priceKg: roundMoney(weighing.price_kg),
-      amount: roundMoney(weighing.amount)
-    }))
-  };
 }
 
 function showRegisteredTicket(ticket) {

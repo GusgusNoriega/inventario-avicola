@@ -10,6 +10,54 @@ function escapeTicketHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function roundTicketMoney(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return 0;
+
+  return Math.round((numericValue + Number.EPSILON) * 100) / 100;
+}
+
+function retailChickenTypeCode(code) {
+  return ({
+    POLLO_VIVO: "PV",
+    POLLO_PELADO: "PP",
+    POLLO_BENEFICIADO: "PB",
+    POLLO_MUERTO: "PM"
+  })[code] || code || "PV";
+}
+
+/**
+ * Adapta la respuesta ya persistida del API minorista al contrato de impresión.
+ * El precio se toma de cada pesada devuelta por el servidor porque ese valor
+ * corresponde al precio congelado en ticket_precios, no a la tarifa vigente
+ * que todavía conserva el cliente en Directorio.
+ */
+export function buildRetailTicketPrintData(ticket) {
+  return {
+    code: ticket?.code,
+    channel: ticket?.channel,
+    operationType: ticket?.operation_type,
+    destinationName: ticket?.client?.name || "Venta externa",
+    customerKind: ticket?.client?.id ? "CLIENTE_REGISTRADO" : "VENTA_EXTERNA",
+    operatingDate: ticket?.operating_date,
+    emittedAt: ticket?.registered_at,
+    totalAmount: roundTicketMoney(ticket?.totals?.amount),
+    delivery: ticket?.delivery,
+    records: (ticket?.weighings || []).map((weighing) => ({
+      typeCode: retailChickenTypeCode(weighing.chicken_type_code),
+      birds: Number(weighing.birds) || 0,
+      birdsPerCage: Number(weighing.birds_per_tray) || 0,
+      cages: Number(weighing.tray_count) || 0,
+      readWeight: Number(weighing.read_weight_kg) || 0,
+      grossWeight: Number(weighing.gross_weight_kg) || 0,
+      tareWeight: Number(weighing.tare_weight_kg) || 0,
+      netWeight: Number(weighing.net_weight_kg) || 0,
+      priceKg: roundTicketMoney(weighing.price_kg),
+      amount: roundTicketMoney(weighing.amount)
+    }))
+  };
+}
+
 function normalizeTicketRecord(record) {
   const grossWeight = Number(record?.grossWeight) || 0;
   const tareWeight = Number(record?.tareWeight) || 0;

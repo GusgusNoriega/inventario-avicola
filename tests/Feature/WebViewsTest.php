@@ -1164,19 +1164,26 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('record?.priceKg', $printerJavascript);
         $this->assertStringContainsString('record?.amount', $printerJavascript);
 
-        foreach ([$retailJavascript, $managementJavascript] as $printDataJavascript) {
-            $this->assertStringContainsString('operatingDate: ticket.operating_date', $printDataJavascript);
-            $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $printDataJavascript);
-            $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $printDataJavascript);
-            $this->assertStringContainsString('grossWeight: Number(weighing.gross_weight_kg) || 0', $printDataJavascript);
-            $this->assertStringContainsString('tareWeight: Number(weighing.tare_weight_kg) || 0', $printDataJavascript);
-            $this->assertStringContainsString('netWeight: Number(weighing.net_weight_kg) || 0', $printDataJavascript);
-            $this->assertStringContainsString('delivery: ticket.delivery', $printDataJavascript);
-        }
+        $this->assertStringContainsString('buildRetailTicketPrintData,', $retailJavascript);
+        $this->assertStringContainsString('buildRetailTicketPrintData(ticket)', $retailJavascript);
+        $this->assertStringContainsString('operatingDate: ticket?.operating_date', $printerJavascript);
+        $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $printerJavascript);
+        $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $printerJavascript);
+        $this->assertStringContainsString('grossWeight: Number(weighing.gross_weight_kg) || 0', $printerJavascript);
+        $this->assertStringContainsString('tareWeight: Number(weighing.tare_weight_kg) || 0', $printerJavascript);
+        $this->assertStringContainsString('netWeight: Number(weighing.net_weight_kg) || 0', $printerJavascript);
+        $this->assertStringContainsString('delivery: ticket?.delivery', $printerJavascript);
+        $this->assertStringContainsString('cages: Number(weighing.tray_count) || 0', $printerJavascript);
+        $this->assertStringContainsString('priceKg: roundTicketMoney(weighing.price_kg)', $printerJavascript);
+        $this->assertStringContainsString('amount: roundTicketMoney(weighing.amount)', $printerJavascript);
 
-        $this->assertStringContainsString('cages: Number(weighing.tray_count) || 0', $retailJavascript);
-        $this->assertStringContainsString('priceKg: roundMoney(weighing.price_kg)', $retailJavascript);
-        $this->assertStringContainsString('amount: roundMoney(weighing.amount)', $retailJavascript);
+        $this->assertStringContainsString('operatingDate: ticket.operating_date', $managementJavascript);
+        $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $managementJavascript);
+        $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $managementJavascript);
+        $this->assertStringContainsString('grossWeight: Number(weighing.gross_weight_kg) || 0', $managementJavascript);
+        $this->assertStringContainsString('tareWeight: Number(weighing.tare_weight_kg) || 0', $managementJavascript);
+        $this->assertStringContainsString('netWeight: Number(weighing.net_weight_kg) || 0', $managementJavascript);
+        $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);
         $this->assertStringContainsString('cages: Number(retail ? weighing.trays : weighing.cages) || 0', $managementJavascript);
         $this->assertStringContainsString('priceKg: Number(weighing.price_kg) || 0', $managementJavascript);
         $this->assertStringContainsString('amount: Number(weighing.amount) || 0', $managementJavascript);

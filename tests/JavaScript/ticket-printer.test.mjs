@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildWeightControlTicketHtml } from "../../public/js/ticket-printer.js";
+import {
+  buildRetailTicketPrintData,
+  buildWeightControlTicketHtml
+} from "../../public/js/ticket-printer.js";
 
 function compactHtml(html) {
   return html.replace(/\s+/g, " ").trim();
@@ -163,6 +166,61 @@ test("el ticket minorista separa peso leido, tara, merma y peso neto cobrado", (
     html,
     /<tr><th>P\.NETO<\/th><th>PRE\.<\/th><th>SOLES<\/th><\/tr>.*<td>13\.50<\/td> <td class="">8\.50<\/td> <td>114\.75<\/td>/
   );
+});
+
+test("la impresion minorista usa el precio manual congelado y no el precio vigente del cliente", () => {
+  const apiTicket = {
+    code: "M-20260724-001",
+    channel: "MINORISTA",
+    operation_type: "DESPACHO",
+    operating_date: "2026-07-24",
+    registered_at: "2026-07-24T10:30:00-05:00",
+    client: {
+      id: 15,
+      name: "Cliente con tarifa propia",
+      prices: {
+        POLLO_PELADO: {
+          price_kg: 8.5,
+          source: "CLIENTE"
+        }
+      }
+    },
+    prices: {
+      POLLO_PELADO: {
+        price_kg: 10.25,
+        source: "MANUAL",
+        history_id: 30
+      }
+    },
+    totals: {
+      amount: 71.75
+    },
+    weighings: [
+      {
+        chicken_type_code: "POLLO_PELADO",
+        birds: 10,
+        birds_per_tray: 5,
+        tray_count: 2,
+        read_weight_kg: 12,
+        gross_weight_kg: 12,
+        tare_weight_kg: 5,
+        net_weight_kg: 7,
+        price_kg: 10.25,
+        price_origin: "MANUAL",
+        amount: 71.75
+      }
+    ]
+  };
+  const printData = buildRetailTicketPrintData(apiTicket);
+  const html = compactHtml(buildWeightControlTicketHtml(printData, apiTicket.registered_at));
+
+  assert.equal(printData.records[0].priceKg, 10.25);
+  assert.equal(printData.records[0].amount, 71.75);
+  assert.match(
+    html,
+    /<tr><th>P\.NETO<\/th><th>PRE\.<\/th><th>SOLES<\/th><\/tr>.*<td>7\.00<\/td> <td class="">10\.25<\/td> <td>71\.75<\/td>/
+  );
+  assert.doesNotMatch(html, /<td class="">8\.50<\/td>/);
 });
 
 test("el ticket minorista conserva pollos reales y bandejas incluso cuando son cero", () => {
