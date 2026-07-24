@@ -611,7 +611,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('PESO<br>TARA', $template);
         $this->assertStringContainsString('<p>OBSERV:</p>', $template);
         $this->assertStringContainsString('body.wholesale-ticket', $template);
-        $this->assertStringContainsString('font-size: 16px', $template);
+        $this->assertStringContainsString('font-size: 18px', $template);
         $this->assertStringContainsString('font-weight: 700', $template);
         $this->assertStringNotContainsString('CONTROL PESO', $template);
         $this->assertStringNotContainsString('P.NETO', $template);

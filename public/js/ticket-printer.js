@@ -308,46 +308,46 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     }
 
     body.wholesale-ticket {
-      padding-right: 1.5mm;
-      padding-left: 1.5mm;
-      font-size: 16px;
+      padding-right: 1mm;
+      padding-left: 1mm;
+      font-size: 18px;
     }
 
     .wholesale-ticket .business-name {
-      font-size: 20px;
+      font-size: 22px;
     }
 
     .wholesale-ticket .document-title {
-      font-size: 15px;
+      font-size: 15.5px;
     }
 
     .wholesale-ticket .destination {
-      font-size: 16.5px;
+      font-size: 18px;
     }
 
     .wholesale-ticket .delivery {
-      font-size: 15px;
+      font-size: 17px;
     }
 
     .wholesale-ticket th {
-      font-size: 13px;
+      font-size: 14px;
     }
 
     .wholesale-ticket td {
-      font-size: 15px;
+      font-size: 17px;
     }
 
     .wholesale-ticket .summary-title {
-      font-size: 17px;
+      font-size: 19px;
     }
 
     .wholesale-ticket .summary-table th,
     .wholesale-ticket .summary-table td {
-      font-size: 14px;
+      font-size: 15.5px;
     }
 
     .wholesale-ticket .form-fields {
-      font-size: 17px;
+      font-size: 19px;
     }
   </style>
 </head>
