@@ -855,6 +855,26 @@ body.retail-dispatch-page {
   background: linear-gradient(180deg, #31885b, #205d3d);
 }
 
+.rd-add-buttons button:nth-of-type(5) {
+  border-color: #b76428;
+  background: linear-gradient(180deg, #d77731, #8c451c);
+}
+
+.rd-add-buttons button:nth-of-type(6) {
+  border-color: #278c91;
+  background: linear-gradient(180deg, #31aeb4, #1f676b);
+}
+
+.rd-add-buttons button:nth-of-type(7) {
+  border-color: #a94373;
+  background: linear-gradient(180deg, #c95087, #7d2f53);
+}
+
+.rd-add-buttons button:nth-of-type(8) {
+  border-color: #718e2d;
+  background: linear-gradient(180deg, #8eaf3a, #526820);
+}
+
 .rd-add-buttons button:not(.is-active):not([aria-pressed="true"]) {
   filter: saturate(0.58) brightness(0.66);
 }
@@ -892,6 +912,54 @@ body.retail-dispatch-page {
   gap: 5px;
 }
 
+[data-retail-station="1"] .rd-lists-stage {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+  scrollbar-color: #66758b #111722;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+}
+
+[data-retail-station="1"] .rd-add-buttons,
+[data-retail-station="1"] .rd-lists-grid {
+  width: calc(200% + 5px);
+  min-width: calc(200% + 5px);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+[data-retail-station="1"] .rd-list-selection-hint {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: calc(50% - 2.5px);
+  justify-self: start;
+}
+
+[data-retail-station="1"] .rd-list-card {
+  scroll-snap-align: start;
+}
+
+[data-retail-station="1"] .rd-lists-stage::-webkit-scrollbar {
+  height: 14px;
+}
+
+[data-retail-station="1"] .rd-lists-stage::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #111722;
+}
+
+[data-retail-station="1"] .rd-lists-stage::-webkit-scrollbar-thumb {
+  border: 2px solid #111722;
+  border-radius: 999px;
+  background: #66758b;
+}
+
+[data-retail-station="1"] .rd-lists-stage::-webkit-scrollbar-thumb:hover {
+  background: #8797ad;
+}
+
 .rd-lists-grid {
   min-width: 0;
   min-height: 0;
@@ -921,6 +989,22 @@ body.retail-dispatch-page {
 
 .rd-list-card.is-list-4 {
   --rd-list-accent: #48d68b;
+}
+
+.rd-list-card.is-list-5 {
+  --rd-list-accent: #f29a52;
+}
+
+.rd-list-card.is-list-6 {
+  --rd-list-accent: #4bd5d8;
+}
+
+.rd-list-card.is-list-7 {
+  --rd-list-accent: #ed70aa;
+}
+
+.rd-list-card.is-list-8 {
+  --rd-list-accent: #b4dc52;
 }
 
 .rd-list-card.is-active {

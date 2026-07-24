@@ -313,11 +313,12 @@ class WebViewsTest extends TestCase
             ->assertSee('Agregar pesada manual')
             ->assertSee('class="rd-lists-stage"', false)
             ->assertSee('aria-label="Seleccionar lista de destino"', false)
-            ->assertSee('Selecciona una columna y captura; la pesada se agregará directamente.')
+            ->assertSee('Selecciona una columna y captura; desliza para ver las listas 5 a 8.')
             ->assertSee('class="is-active" data-retail-add-list="0" aria-pressed="true"', false)
             ->assertSee('Seleccionar lista 1')
+            ->assertSee('Seleccionar lista 8')
             ->assertDontSee('Agregar a lista 1')
-            ->assertSee('data-retail-add-list="3"', false)
+            ->assertSee('data-retail-add-list="7"', false)
             ->assertSee('id="retailSettingsModal"', false)
             ->assertSee('Balanza y ajustes minoristas')
             ->assertSee('id="retailDefaultPaymentMethod"', false)
@@ -374,6 +375,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('`${RETAIL_API_BASE}/catalogo`', $javascript);
         $this->assertStringContainsString('`${RETAIL_API_BASE}/configuracion`', $javascript);
         $this->assertStringContainsString('`${RETAIL_API_BASE}/tickets`', $javascript);
+        $this->assertStringContainsString('const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 4;', $javascript);
+        $this->assertStringContainsString('.slice(0, LIST_COUNT)', $javascript);
+        $this->assertStringContainsString('while (restoredLists.length < LIST_COUNT)', $javascript);
         $this->assertStringContainsString('from "./retail-dispatch-errors.js"', $javascript);
         $this->assertStringContainsString('from "./retail-payment-defaults.js"', $javascript);
         $this->assertStringContainsString('from "./retail-payment-mode.js"', $javascript);
@@ -527,6 +531,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.rd-payment-credit-panel', $stylesheet);
         $this->assertStringContainsString('.rd-modal-card.is-error', $stylesheet);
         $this->assertStringContainsString('.rd-error-details', $stylesheet);
+        $this->assertStringContainsString('[data-retail-station="1"] .rd-lists-stage', $stylesheet);
+        $this->assertStringContainsString('grid-template-columns: repeat(8, minmax(0, 1fr));', $stylesheet);
+        $this->assertStringContainsString('width: calc(200% + 5px);', $stylesheet);
         $this->assertDoesNotMatchRegularExpression('/font-size:\s*(?:\d|\.)/', $stylesheet);
     }
 

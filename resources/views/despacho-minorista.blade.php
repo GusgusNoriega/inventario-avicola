@@ -157,11 +157,10 @@
           @if($retailStation === 2)
             <p id="retailListSelectionHint" class="rd-list-selection-hint">Toca una columna para seleccionar la presentación.</p>
           @else
-            <p id="retailListSelectionHint" class="rd-list-selection-hint">Selecciona una columna y captura; la pesada se agregará directamente.</p>
-            <button type="button" class="is-active" data-retail-add-list="0" aria-pressed="true">Seleccionar lista 1</button>
-            <button type="button" data-retail-add-list="1" aria-pressed="false">Seleccionar lista 2</button>
-            <button type="button" data-retail-add-list="2" aria-pressed="false">Seleccionar lista 3</button>
-            <button type="button" data-retail-add-list="3" aria-pressed="false">Seleccionar lista 4</button>
+            <p id="retailListSelectionHint" class="rd-list-selection-hint">Selecciona una columna y captura; desliza para ver las listas 5 a 8.</p>
+            @for ($listNumber = 1; $listNumber <= 8; $listNumber++)
+              <button type="button" class="{{ $listNumber === 1 ? 'is-active' : '' }}" data-retail-add-list="{{ $listNumber - 1 }}" aria-pressed="{{ $listNumber === 1 ? 'true' : 'false' }}">Seleccionar lista {{ $listNumber }}</button>
+            @endfor
           @endif
         </div>
         <div id="retailListsGrid" class="rd-lists-grid"></div>

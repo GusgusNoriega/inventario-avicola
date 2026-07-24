@@ -55,7 +55,7 @@ const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
 const RETAIL_DRESSED_CHICKEN_CODE = "POLLO_PELADO";
-const LIST_COUNT = 4;
+const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 4;
 const MAX_RETAIL_BIRD_QUANTITY = 40;
 const STATION_2_LIST_ADJUSTMENT_CODES = [
   "MACHO_CERRADO",
@@ -66,7 +66,16 @@ const STATION_2_LIST_ADJUSTMENT_CODES = [
 const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
 const TICKET_PRICE_OVERRIDE_VERSION = 1;
-const LIST_CLASSES = ["is-list-1", "is-list-2", "is-list-3", "is-list-4"];
+const LIST_CLASSES = [
+  "is-list-1",
+  "is-list-2",
+  "is-list-3",
+  "is-list-4",
+  "is-list-5",
+  "is-list-6",
+  "is-list-7",
+  "is-list-8"
+];
 const RETAIL_CHICKEN_TYPE_CODES = new Set([
   RETAIL_DRESSED_CHICKEN_CODE,
   RETAIL_PROCESSED_CHICKEN_CODE
@@ -412,8 +421,16 @@ function restoreLists(branchId) {
 
   try {
     const stored = JSON.parse(localStorage.getItem(state.storageKey));
-    if (Array.isArray(stored) && stored.length === LIST_COUNT) {
-      state.lists = stored.map(normalizeList);
+    if (Array.isArray(stored)) {
+      const restoredLists = stored
+        .slice(0, LIST_COUNT)
+        .map(normalizeList);
+
+      while (restoredLists.length < LIST_COUNT) {
+        restoredLists.push(emptyList());
+      }
+
+      state.lists = restoredLists;
       return;
     }
   } catch {
