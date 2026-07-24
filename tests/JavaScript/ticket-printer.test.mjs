@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { buildWeightControlTicketHtml } from "../../public/js/ticket-printer.js";
 
-test("el ticket usa tipografia grande y muestra el camion y chofer seleccionados", () => {
+test("el ticket mayorista usa tipografia grande y muestra el camion y chofer seleccionados", () => {
   const html = buildWeightControlTicketHtml({
     code: "T-20260723-001",
     operationType: "DESPACHO",
@@ -30,10 +30,27 @@ test("el ticket usa tipografia grande y muestra el camion y chofer seleccionados
     ]
   }, "2026-07-23T12:30:00-05:00");
 
-  assert.match(html, /body \{[\s\S]*font-size: 13px;/);
-  assert.match(html, /\.delivery \{[\s\S]*font-size: 12\.5px;/);
+  assert.match(html, /<body class="wholesale-ticket">/);
+  assert.match(html, /body\.wholesale-ticket \{[\s\S]*font-size: 16px;/);
+  assert.match(html, /\.wholesale-ticket \.delivery \{[\s\S]*font-size: 15px;/);
+  assert.match(html, /\.wholesale-ticket td \{[\s\S]*font-size: 15px;/);
+  assert.match(html, /\.wholesale-ticket \.form-fields \{[\s\S]*font-size: 17px;/);
   assert.match(html, /CAMIÓN: ABC-123/);
   assert.match(html, /CHOFER: María &lt;Prueba&gt;/);
+});
+
+test("el aumento de tipografia no modifica el ticket minorista", () => {
+  const html = buildWeightControlTicketHtml({
+    code: "T-20260723-003",
+    channel: "MINORISTA",
+    operationType: "DESPACHO",
+    destinationName: "Venta minorista",
+    records: []
+  }, "2026-07-23T12:30:00-05:00");
+
+  assert.match(html, /<body class="retail-ticket">/);
+  assert.doesNotMatch(html, /<body class="wholesale-ticket">/);
+  assert.match(html, /body \{[\s\S]*font-size: 13px;/);
 });
 
 test("el bloque de transporte se omite cuando el despacho no lo requiere", () => {

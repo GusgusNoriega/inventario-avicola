@@ -306,9 +306,52 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       font-size: 16px;
       font-weight: 900;
     }
+
+    body.wholesale-ticket {
+      padding-right: 1.5mm;
+      padding-left: 1.5mm;
+      font-size: 16px;
+    }
+
+    .wholesale-ticket .business-name {
+      font-size: 20px;
+    }
+
+    .wholesale-ticket .document-title {
+      font-size: 15px;
+    }
+
+    .wholesale-ticket .destination {
+      font-size: 16.5px;
+    }
+
+    .wholesale-ticket .delivery {
+      font-size: 15px;
+    }
+
+    .wholesale-ticket th {
+      font-size: 13px;
+    }
+
+    .wholesale-ticket td {
+      font-size: 15px;
+    }
+
+    .wholesale-ticket .summary-title {
+      font-size: 17px;
+    }
+
+    .wholesale-ticket .summary-table th,
+    .wholesale-ticket .summary-table td {
+      font-size: 14px;
+    }
+
+    .wholesale-ticket .form-fields {
+      font-size: 17px;
+    }
   </style>
 </head>
-<body>
+<body class="${isRetail ? "retail-ticket" : "wholesale-ticket"}">
   <header class="center">
     <h1 class="business-name">DISTRIBUIDORA<br>DIEGO ALBERTO</h1>
   </header>
