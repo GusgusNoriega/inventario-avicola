@@ -780,6 +780,39 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
+    public function test_both_retail_stations_accept_transfer_payments_without_a_reference(): void
+    {
+        $this->createGeneralPrice(7.25);
+        $transferMethodId = (int) DB::table('metodos_pago')
+            ->where('codigo', 'TRANSFERENCIA')
+            ->value('id');
+
+        foreach ([
+            '/api/v1/despacho-minorista/tickets',
+            '/api/v1/despacho-minorista-2/tickets',
+        ] as $endpoint) {
+            $payload = $this->payload();
+            $payload['client_id'] = null;
+            unset($payload['delivery']);
+            $payload['weighings'][0]['weight_source'] = 'MANUAL';
+            $payload['payments'] = [[
+                ...$this->paymentPayload(50.75),
+                'metodo_pago_id' => $transferMethodId,
+                'referencia' => null,
+            ]];
+
+            $this->postJson($endpoint, $payload)
+                ->assertCreated();
+        }
+
+        $this->assertDatabaseCount('pagos', 2);
+        $this->assertDatabaseHas('pagos', [
+            'tipo' => 'COBRO_MINORISTA',
+            'metodo_pago_id' => $transferMethodId,
+            'referencia' => null,
+        ]);
+    }
+
     public function test_anonymous_retail_sale_requires_full_payment(): void
     {
         $this->createGeneralPrice(7.25);

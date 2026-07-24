@@ -366,25 +366,30 @@ class RetailDispatchService
 
         foreach ($payments as $payment) {
             $amount = FinancialMoney::normalize((string) $payment['importe']);
-            $this->financialMovements->register($companyId, $actor, [
-                'idempotency_key' => $payment['idempotency_key'],
-                'tipo' => 'COBRO_MINORISTA',
-                'fecha_hora' => $payment['fecha_hora'] ?? now()->toISOString(),
-                'cliente_id' => $ticket->cliente_destino_id,
-                'proveedor_id' => null,
-                'cuenta_origen_id' => null,
-                'cuenta_destino_id' => $payment['cuenta_destino_id'],
-                'metodo_pago_id' => $payment['metodo_pago_id'],
-                'moneda' => $payment['moneda'] ?? 'PEN',
-                'importe' => $amount,
-                'referencia' => $payment['referencia'] ?? null,
-                'observaciones' => $payment['observaciones'] ?? "Cobro del ticket {$ticket->codigo}",
-                'aplicaciones' => [[
-                    'lado' => 'CXC',
-                    'comprobante_id' => $saleDocumentId,
-                    'importe_aplicado' => $amount,
-                ]],
-            ]);
+            $this->financialMovements->register(
+                $companyId,
+                $actor,
+                [
+                    'idempotency_key' => $payment['idempotency_key'],
+                    'tipo' => 'COBRO_MINORISTA',
+                    'fecha_hora' => $payment['fecha_hora'] ?? now()->toISOString(),
+                    'cliente_id' => $ticket->cliente_destino_id,
+                    'proveedor_id' => null,
+                    'cuenta_origen_id' => null,
+                    'cuenta_destino_id' => $payment['cuenta_destino_id'],
+                    'metodo_pago_id' => $payment['metodo_pago_id'],
+                    'moneda' => $payment['moneda'] ?? 'PEN',
+                    'importe' => $amount,
+                    'referencia' => $payment['referencia'] ?? null,
+                    'observaciones' => $payment['observaciones'] ?? "Cobro del ticket {$ticket->codigo}",
+                    'aplicaciones' => [[
+                        'lado' => 'CXC',
+                        'comprobante_id' => $saleDocumentId,
+                        'importe_aplicado' => $amount,
+                    ]],
+                ],
+                allowMissingMethodReference: true,
+            );
         }
     }
 

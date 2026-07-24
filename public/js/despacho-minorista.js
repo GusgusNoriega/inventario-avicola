@@ -1677,8 +1677,8 @@ function renderPaymentRows() {
           <input data-payment-amount type="number" min="0.01" max="999999999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Importe de la forma de pago ${index + 1}" value="${escapeHtml(row.amount)}" required>
         </label>
         <label>
-          <span>Referencia</span>
-          <input data-payment-reference type="text" maxlength="100" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-label="Referencia de la forma de pago ${index + 1}" value="${escapeHtml(row.reference)}" placeholder="Número de operación">
+          <span>Referencia (opcional)</span>
+          <input data-payment-reference type="text" maxlength="100" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-label="Referencia opcional de la forma de pago ${index + 1}" value="${escapeHtml(row.reference)}" placeholder="Número de operación (opcional)">
         </label>
       </div>
     </article>
@@ -1778,17 +1778,6 @@ function submitPayment(event) {
   }
   if (!client && receivedCents !== saleTotalCents) {
     elements.paymentMessage.textContent = "La venta sin cliente debe quedar pagada completamente.";
-    elements.paymentMessage.classList.add("is-error");
-    return;
-  }
-
-  const methods = new Map((state.catalog.financial.methods || []).map((method) => [String(method.id), method]));
-  const missingReference = state.paymentRows.some((row) => {
-    const method = methods.get(String(row.methodId));
-    return method?.requires_reference && !String(row.reference || "").trim();
-  });
-  if (missingReference) {
-    elements.paymentMessage.textContent = "Ingresa la referencia de cada depósito o transferencia.";
     elements.paymentMessage.classList.add("is-error");
     return;
   }

@@ -31,13 +31,20 @@ class FinancialMovementService
         User $actor,
         array $data,
         ?string $ip = null,
+        bool $allowMissingMethodReference = false,
     ): array {
         $data = $this->normalizePayload($data);
         $this->assertActor($companyId, $actor, $data['tipo']);
 
         try {
             return DB::transaction(
-                fn (): array => $this->registerInTransaction($companyId, $actor, $data, $ip),
+                fn (): array => $this->registerInTransaction(
+                    $companyId,
+                    $actor,
+                    $data,
+                    $ip,
+                    $allowMissingMethodReference,
+                ),
                 3
             );
         } catch (QueryException $exception) {
@@ -531,8 +538,13 @@ class FinancialMovementService
      * @param  array<string, mixed>  $data
      * @return array{pago_id: int, idempotent: bool}
      */
-    private function registerInTransaction(int $companyId, User $actor, array $data, ?string $ip): array
-    {
+    private function registerInTransaction(
+        int $companyId,
+        User $actor,
+        array $data,
+        ?string $ip,
+        bool $allowMissingMethodReference,
+    ): array {
         $existing = DB::table('pagos')
             ->where('empresa_id', $companyId)
             ->where('idempotency_key', $data['idempotency_key'])
@@ -547,7 +559,7 @@ class FinancialMovementService
         $accounts = $this->lockedAccounts($companyId, $data);
         $method = $this->activeMethod($data['metodo_pago_id'] ?? null);
         $this->assertThirdParties($companyId, $data);
-        $this->assertFlow($companyId, $data, $accounts, $method);
+        $this->assertFlow($companyId, $data, $accounts, $method, $allowMissingMethodReference);
         $this->assertSufficientBalance($data, $accounts);
         $documents = $this->validateApplications($companyId, $data);
 
@@ -697,14 +709,23 @@ class FinancialMovementService
      * @param  array<string, mixed>  $data
      * @param  Collection<int, object>  $accounts
      */
-    private function assertFlow(int $companyId, array $data, Collection $accounts, ?object $method): void
-    {
+    private function assertFlow(
+        int $companyId,
+        array $data,
+        Collection $accounts,
+        ?object $method,
+        bool $allowMissingMethodReference,
+    ): void {
         $type = $data['tipo'];
         $origin = isset($data['cuenta_origen_id']) ? $accounts->get((int) $data['cuenta_origen_id']) : null;
         $destination = isset($data['cuenta_destino_id']) ? $accounts->get((int) $data['cuenta_destino_id']) : null;
         $hasApplications = $data['aplicaciones'] !== [];
 
-        if ($method?->requiere_referencia && empty($data['referencia'])) {
+        if (
+            ! $allowMissingMethodReference
+            && $method?->requiere_referencia
+            && empty($data['referencia'])
+        ) {
             throw ValidationException::withMessages(['referencia' => 'El metodo seleccionado requiere una referencia.']);
         }
 
