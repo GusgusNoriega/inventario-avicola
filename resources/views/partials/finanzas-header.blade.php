@@ -47,8 +47,12 @@
     <span aria-hidden="true">06</span>
     <strong>Gastos de empresa</strong>
   </a>
-  <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
+  <a class="fin-nav-link {{ ($active ?? '') === 'descuentos' ? 'is-active' : '' }}" href="{{ route('finanzas.descuentos-clientes') }}" @if (($active ?? '') === 'descuentos') aria-current="page" @endif>
     <span aria-hidden="true">07</span>
+    <strong>Descuentos a clientes</strong>
+  </a>
+  <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
+    <span aria-hidden="true">08</span>
     <strong>Reportes PDF</strong>
   </a>
 </nav>

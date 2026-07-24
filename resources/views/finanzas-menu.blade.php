@@ -144,6 +144,22 @@
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.descuentos-clientes') }}">
+          <span class="fin-module-icon is-movements" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="8" cy="8" r="2"></circle>
+              <circle cx="16" cy="16" r="2"></circle>
+              <path d="M18 6L6 18"></path>
+              <path d="M4 4h16v16H4z"></path>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Descuentos a clientes</strong>
+            <small>Descuenta deudas de clientes y conserva cualquier excedente como saldo a favor.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="fin-module-card fin-card" href="{{ route('finanzas.reportes') }}">
           <span class="fin-module-icon is-balances" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

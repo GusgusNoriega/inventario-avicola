@@ -19,6 +19,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'compras',
         'pago_aplicacion_operaciones',
         'pago_aplicaciones',
+        'gastos_empresa',
         'pagos',
         'comprobante_tickets',
         'comprobante_pesadas',

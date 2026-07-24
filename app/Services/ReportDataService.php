@@ -300,7 +300,10 @@ class ReportDataService
         if ($operation === Comprobante::OPERATION_SALE) {
             return match ($payment->tipo) {
                 Pago::TYPE_CUSTOMER_REFUND => abs((float) $payment->importe),
-                Pago::TYPE_CUSTOMER_COLLECTION, Pago::TYPE_RETAIL_COLLECTION, Pago::TYPE_DIRECT_PAYMENT => -abs((float) $payment->importe),
+                Pago::TYPE_CUSTOMER_COLLECTION,
+                Pago::TYPE_RETAIL_COLLECTION,
+                Pago::TYPE_DIRECT_PAYMENT,
+                Pago::TYPE_CUSTOMER_DISCOUNT => -abs((float) $payment->importe),
                 default => $this->flow($payment) === Pago::DIRECTION_INCOME
                     ? -abs((float) $payment->importe)
                     : abs((float) $payment->importe),
@@ -323,6 +326,10 @@ class ReportDataService
             Pago::TYPE_OPENING_BALANCE,
         ], true)) {
             return Pago::DIRECTION_INCOME;
+        }
+
+        if ($payment->tipo === Pago::TYPE_CUSTOMER_DISCOUNT) {
+            return Pago::DIRECTION_NO_FLOW;
         }
 
         if (in_array($payment->tipo, [

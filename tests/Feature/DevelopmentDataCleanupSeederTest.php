@@ -321,6 +321,19 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_by' => $user->id,
             'created_at' => $now,
         ]);
+        DB::table('gastos_empresa')->insert([
+            'empresa_id' => $companyId,
+            'pago_id' => $paymentId,
+            'codigo' => 'GAS-PRUEBA',
+            'idempotency_key' => (string) Str::uuid(),
+            'categoria' => 'OTRO',
+            'concepto' => 'Gasto de prueba',
+            'destino' => 'Destino de prueba',
+            'estado' => 'REGISTRADO',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         DB::table('pago_aplicaciones')->insert([
             'pago_id' => $paymentId,
             'comprobante_id' => $documentId,

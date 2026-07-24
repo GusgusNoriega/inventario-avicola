@@ -23,6 +23,7 @@ const MOVEMENT_LABELS = {
   SALDO_FAVOR_PROVEEDOR: "Saldo anterior con proveedor",
   COBRO_MINORISTA: "Cobro minorista",
   REEMBOLSO_CLIENTE: "Empresa → cliente",
+  DESCUENTO_CLIENTE: "Descuento a cliente",
   SALDO_INICIAL: "Saldo inicial",
   TRANSFERENCIA_INTERNA: "Transferencia interna",
   AJUSTE: "Ajuste de saldo",

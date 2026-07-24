@@ -19,7 +19,12 @@ class FinancialCounterpartySummaryService
             $companyId,
             'cliente_id',
             $customerId,
-            ['COBRO_CLIENTE', 'COBRO_MINORISTA', 'PAGO_DIRECTO'],
+            [
+                Pago::TYPE_CUSTOMER_COLLECTION,
+                Pago::TYPE_RETAIL_COLLECTION,
+                Pago::TYPE_DIRECT_PAYMENT,
+                Pago::TYPE_CUSTOMER_DISCOUNT,
+            ],
             'CXC',
             $currency,
         );

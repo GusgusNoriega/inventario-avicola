@@ -879,6 +879,17 @@ class FinancialMovementService
                 }
                 break;
 
+            case Pago::TYPE_CUSTOMER_DISCOUNT:
+                $this->required($data, ['cliente_id', 'observaciones']);
+                $this->assertEmpty($data, [
+                    'proveedor_id',
+                    'cuenta_origen_id',
+                    'cuenta_destino_id',
+                    'metodo_pago_id',
+                ]);
+                $this->assertOnlySides($data, ['CXC']);
+                break;
+
             case Pago::TYPE_COMPANY_EXPENSE:
                 $this->required($data, ['cuenta_origen_id', 'metodo_pago_id']);
                 $this->assertEmpty($data, [
@@ -1036,7 +1047,12 @@ class FinancialMovementService
     private function assertActor(int $companyId, User $actor, string $type): void
     {
         abort_unless((int) $actor->empresa_id === $companyId && $actor->isActive(), 403, 'Usuario no autorizado para esta empresa.');
-        if (in_array($type, ['SALDO_INICIAL', 'AJUSTE', Pago::TYPE_PROVIDER_CREDIT], true)) {
+        if (in_array($type, [
+            'SALDO_INICIAL',
+            'AJUSTE',
+            Pago::TYPE_PROVIDER_CREDIT,
+            Pago::TYPE_CUSTOMER_DISCOUNT,
+        ], true)) {
             abort_unless($actor->hasPermission('SALDOS_AJUSTAR'), 403, 'Se requiere el permiso SALDOS_AJUSTAR.');
         }
     }
@@ -1254,7 +1270,10 @@ class FinancialMovementService
     /** @param array<string, mixed> $data */
     private function direction(array $data): string
     {
-        if ($data['tipo'] === Pago::TYPE_PROVIDER_CREDIT) {
+        if (in_array($data['tipo'], [
+            Pago::TYPE_PROVIDER_CREDIT,
+            Pago::TYPE_CUSTOMER_DISCOUNT,
+        ], true)) {
             return Pago::DIRECTION_NO_FLOW;
         }
         if ($data['tipo'] === 'PAGO_DIRECTO') {

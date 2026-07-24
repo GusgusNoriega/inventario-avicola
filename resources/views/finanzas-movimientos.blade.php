@@ -67,6 +67,7 @@
             <option value="SALDO_FAVOR_PROVEEDOR">Saldo anterior con proveedor</option>
             <option value="COBRO_MINORISTA">Cobro minorista</option>
             <option value="REEMBOLSO_CLIENTE">Reembolso a cliente</option>
+            <option value="DESCUENTO_CLIENTE">Descuento a cliente</option>
             <option value="GASTO_EMPRESA">Gasto de empresa</option>
           </select>
         </label>

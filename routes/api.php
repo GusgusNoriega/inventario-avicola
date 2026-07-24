@@ -5,8 +5,9 @@ use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AdminRoleController;
 use App\Http\Controllers\Api\V1\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
-use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\CompanyExpenseController;
+use App\Http\Controllers\Api\V1\CustomerDiscountController;
+use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
@@ -59,6 +60,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/deudas-clientes', [ManualCustomerDebtController::class, 'index']);
             Route::get('/deudas-clientes/{deuda}', [ManualCustomerDebtController::class, 'show'])
                 ->whereNumber('deuda');
+            Route::get('/descuentos-clientes', [CustomerDiscountController::class, 'index']);
             Route::get('/clientes/{tercero}/resumen', [FinancialCounterpartyController::class, 'customer'])
                 ->whereNumber('tercero');
             Route::get('/proveedores/{tercero}/resumen', [FinancialCounterpartyController::class, 'provider'])
@@ -97,6 +99,14 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:SALDOS_AJUSTAR');
         Route::post('/deudas-clientes/{deuda}/anular', [ManualCustomerDebtController::class, 'void'])
             ->whereNumber('deuda')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::post('/descuentos-clientes', [CustomerDiscountController::class, 'store'])
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::put('/descuentos-clientes/{descuento}', [CustomerDiscountController::class, 'update'])
+            ->whereNumber('descuento')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::post('/descuentos-clientes/{descuento}/anular', [CustomerDiscountController::class, 'void'])
+            ->whereNumber('descuento')
             ->middleware('permission:SALDOS_AJUSTAR');
 
         Route::middleware('permission:FINANZAS_VER')->group(function (): void {
