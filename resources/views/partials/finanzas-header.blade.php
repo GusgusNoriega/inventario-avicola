@@ -51,8 +51,12 @@
     <span aria-hidden="true">07</span>
     <strong>Descuentos a clientes</strong>
   </a>
-  <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
+  <a class="fin-nav-link {{ ($active ?? '') === 'tickets' ? 'is-active' : '' }}" href="{{ route('finanzas.tickets') }}" @if (($active ?? '') === 'tickets') aria-current="page" @endif>
     <span aria-hidden="true">08</span>
+    <strong>Consultar tickets</strong>
+  </a>
+  <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
+    <span aria-hidden="true">09</span>
     <strong>Reportes PDF</strong>
   </a>
 </nav>

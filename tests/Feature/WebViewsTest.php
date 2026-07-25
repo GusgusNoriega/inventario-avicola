@@ -118,6 +118,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Gastos de empresa')
             ->assertSee(route('finanzas.descuentos-clientes'), false)
             ->assertSee('Descuentos a clientes')
+            ->assertSee(route('finanzas.tickets'), false)
+            ->assertSee('Consultar tickets')
             ->assertSee(route('finanzas.reportes'), false)
             ->assertSee('Reportes PDF')
             ->assertSee(route('menu'), false)
@@ -126,7 +128,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="financeAuthDialog"', false)
             ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
 
-        $this->assertSame(8, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+        $this->assertSame(9, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
 
         $this->get('/finanzas/saldos')
             ->assertOk()
@@ -215,6 +217,19 @@ class WebViewsTest extends TestCase
             ->assertSee('id="customerDiscountVoidDialog"', false)
             ->assertSee(asset('js/finanzas-descuentos-clientes.js'), false);
 
+        $this->get('/finanzas/tickets')
+            ->assertOk()
+            ->assertSee('Consulta y edición de tickets')
+            ->assertSee('Debes aplicar al menos un filtro')
+            ->assertSee('id="financeTicketFilters"', false)
+            ->assertSee('id="financeTicketRows"', false)
+            ->assertSee('id="financeTicketPriceDialog"', false)
+            ->assertSee('id="financeTicketClientDialog"', false)
+            ->assertSee('id="financeTicketBulkDialog"', false)
+            ->assertSee('data-bulk-operation="AUMENTAR"', false)
+            ->assertSee('data-bulk-operation="DISMINUIR"', false)
+            ->assertSee(asset('js/finanzas-tickets.js'), false);
+
         $financeStylesheet = file_get_contents(public_path('css/finanzas.css'));
         $dashboardJavascript = file_get_contents(public_path('js/finanzas-dashboard.js'));
         $entitiesJavascript = file_get_contents(public_path('js/finanzas-entidades.js'));
@@ -222,6 +237,7 @@ class WebViewsTest extends TestCase
         $managementJavascript = file_get_contents(public_path('js/finanzas-movimientos.js'));
         $expensesJavascript = file_get_contents(public_path('js/finanzas-gastos.js'));
         $discountsJavascript = file_get_contents(public_path('js/finanzas-descuentos-clientes.js'));
+        $ticketsJavascript = file_get_contents(public_path('js/finanzas-tickets.js'));
 
         $this->assertIsString($financeStylesheet);
         $this->assertIsString($dashboardJavascript);
@@ -230,6 +246,7 @@ class WebViewsTest extends TestCase
         $this->assertIsString($managementJavascript);
         $this->assertIsString($expensesJavascript);
         $this->assertIsString($discountsJavascript);
+        $this->assertIsString($ticketsJavascript);
         $this->assertMatchesRegularExpression(
             '/html\.fin-root,\s*body\.fin-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
             $financeStylesheet,
@@ -276,6 +293,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);
         $this->assertStringContainsString('data-edit-discount', $discountsJavascript);
         $this->assertStringContainsString('data-void-discount', $discountsJavascript);
+        $this->assertStringContainsString('/finanzas/tickets?', $ticketsJavascript);
+        $this->assertStringContainsString('/ajustar-precios', $ticketsJavascript);
+        $this->assertStringContainsString('tipo_pollo_id:', $ticketsJavascript);
+        $this->assertStringContainsString('state.appliedFilters', $ticketsJavascript);
+        $this->assertStringContainsString('máximo 30 por página', $ticketsJavascript);
     }
 
     public function test_purchase_views_are_available_without_database_queries(): void

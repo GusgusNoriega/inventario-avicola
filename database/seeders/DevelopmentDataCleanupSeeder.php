@@ -18,6 +18,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'compra_detalles',
         'compras',
         'pago_aplicacion_operaciones',
+        'ticket_precio_ajuste_operaciones',
         'pago_aplicaciones',
         'gastos_empresa',
         'pagos',

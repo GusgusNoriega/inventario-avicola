@@ -19,9 +19,18 @@ class FinancialObligationService
      *
      * @return array{sale_document_id: ?int, purchase_document_ids: array<int, int>, pending_purchase_costs: int}
      */
-    public function syncTicket(int $companyId, TicketDespacho $ticket, User $actor): array
-    {
-        return DB::transaction(function () use ($companyId, $ticket, $actor): array {
+    public function syncTicket(
+        int $companyId,
+        TicketDespacho $ticket,
+        User $actor,
+        bool $refreshCounterpartySnapshot = false,
+    ): array {
+        return DB::transaction(function () use (
+            $companyId,
+            $ticket,
+            $actor,
+            $refreshCounterpartySnapshot,
+        ): array {
             DB::table('tickets_despacho')->where('id', $ticket->id)->lockForUpdate()->firstOrFail();
             $ticket = TicketDespacho::query()->findOrFail($ticket->id);
             $ticket->load([
@@ -38,7 +47,12 @@ class FinancialObligationService
 
             abort_unless($belongsToCompany, 404);
 
-            $saleDocumentId = $this->syncSaleDocument($companyId, $ticket, $actor);
+            $saleDocumentId = $this->syncSaleDocument(
+                $companyId,
+                $ticket,
+                $actor,
+                $refreshCounterpartySnapshot,
+            );
 
             return [
                 'sale_document_id' => $saleDocumentId,
@@ -53,7 +67,8 @@ class FinancialObligationService
     private function syncSaleDocument(
         int $companyId,
         TicketDespacho $ticket,
-        User $actor
+        User $actor,
+        bool $refreshCounterpartySnapshot,
     ): ?int {
         $isAnonymousRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL
             && $ticket->cliente_destino_id === null;
@@ -150,7 +165,8 @@ class FinancialObligationService
                     ?? 'VENTA MINORISTA SIN CLIENTE',
                 'contraparte_direccion_snapshot' => $client?->direccion,
             ],
-            applicationSide: 'CXC'
+            applicationSide: 'CXC',
+            refreshCounterpartySnapshot: $refreshCounterpartySnapshot,
         );
 
         $this->syncDocumentDetails($documentId, $lines);
@@ -171,7 +187,8 @@ class FinancialObligationService
         User $actor,
         string $originKey,
         array $attributes,
-        string $applicationSide
+        string $applicationSide,
+        bool $refreshCounterpartySnapshot = false,
     ): int {
         $existing = DB::table('comprobantes')
             ->where('empresa_id', $companyId)
@@ -206,13 +223,15 @@ class FinancialObligationService
         ];
 
         if ($existing) {
-            foreach ([
-                'contraparte_tipo_documento_snapshot',
-                'contraparte_numero_documento_snapshot',
-                'contraparte_nombre_snapshot',
-                'contraparte_direccion_snapshot',
-            ] as $snapshotField) {
-                unset($values[$snapshotField]);
+            if (! $refreshCounterpartySnapshot) {
+                foreach ([
+                    'contraparte_tipo_documento_snapshot',
+                    'contraparte_numero_documento_snapshot',
+                    'contraparte_nombre_snapshot',
+                    'contraparte_direccion_snapshot',
+                ] as $snapshotField) {
+                    unset($values[$snapshotField]);
+                }
             }
             $values['anulada_por'] = null;
             $values['anulada_at'] = null;

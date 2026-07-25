@@ -638,6 +638,7 @@ body.fin-page {
 
 .fin-btn:disabled { opacity: .48; cursor: wait; }
 .fin-btn-primary { color: #06141b; border-color: var(--fin-blue); background: var(--fin-blue); }
+.fin-btn-accent { color: #171203; border-color: var(--fin-yellow); background: var(--fin-yellow); }
 .fin-btn-ghost { color: var(--fin-soft); border-color: var(--fin-border-strong); background: rgba(10, 16, 25, .72); }
 .fin-btn-danger { color: #ffdada; border-color: rgba(255, 116, 116, .48); background: rgba(255, 116, 116, .11); }
 .fin-btn-small { min-height: 38px; padding: 7px 11px; font-size: 11px; }
@@ -1682,7 +1683,268 @@ body.fin-page {
   .fin-expense-side { grid-template-columns: 1fr; }
   .fin-expense-form-footer { align-items: stretch; flex-direction: column; }
   .fin-expense-form-footer > div:last-child { justify-items: stretch; }
-  .fin-expense-form-footer .fin-btn { width: 100%; }
+.fin-expense-form-footer .fin-btn { width: 100%; }
+}
+
+/* Consulta y corrección de tickets */
+.fin-ticket-panel {
+  margin-top: 15px;
+  padding: 21px;
+}
+
+.fin-ticket-filters {
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+}
+
+.fin-ticket-table {
+  min-width: 1110px;
+}
+
+.fin-ticket-table th:nth-child(1) { width: 14%; }
+.fin-ticket-table th:nth-child(2) { width: 18%; }
+.fin-ticket-table th:nth-child(3) { width: 22%; }
+.fin-ticket-table th:nth-child(4) { width: 12%; }
+.fin-ticket-table th:nth-child(5) { width: 17%; }
+.fin-ticket-table th:nth-child(6) { width: 17%; }
+
+.fin-ticket-prices {
+  display: grid;
+  gap: 7px;
+}
+
+.fin-ticket-price-line {
+  display: grid;
+  padding-left: 9px;
+  border-left: 2px solid rgba(50, 202, 255, .45);
+}
+
+.fin-ticket-price-line + .fin-ticket-price-line {
+  padding-top: 7px;
+  border-top: 1px solid rgba(61, 80, 105, .5);
+}
+
+.fin-ticket-actions {
+  min-width: 176px;
+}
+
+.fin-table-amount.is-negative {
+  color: var(--fin-yellow) !important;
+}
+
+.fin-section-copy {
+  margin: 12px 0 0;
+  color: var(--fin-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.fin-ticket-price-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.fin-ticket-price-field {
+  padding: 13px;
+  border: 1px solid var(--fin-border);
+  border-radius: 10px;
+  background: rgba(5, 10, 17, .58);
+}
+
+.fin-ticket-price-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.fin-ticket-price-input small {
+  color: var(--fin-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.fin-ticket-client-options {
+  display: grid;
+  gap: 7px;
+  max-height: 360px;
+  margin-top: 12px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--fin-border);
+  border-radius: 10px;
+  background: rgba(4, 8, 14, .52);
+}
+
+.fin-ticket-client-option {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 13px;
+  color: var(--fin-soft);
+  border: 1px solid var(--fin-border);
+  border-radius: 9px;
+  outline: 0;
+  background: rgba(12, 18, 28, .9);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fin-ticket-client-option:hover,
+.fin-ticket-client-option:focus-visible,
+.fin-ticket-client-option:focus-within {
+  color: #fff;
+  border-color: var(--fin-blue);
+}
+
+.fin-ticket-client-option:focus-within {
+  box-shadow: 0 0 0 3px rgba(50, 202, 255, .1);
+}
+
+.fin-ticket-client-option.is-selected {
+  color: #fff;
+  border-color: var(--fin-green);
+  background: rgba(54, 216, 128, .1);
+  box-shadow: inset 3px 0 0 var(--fin-green);
+}
+
+.fin-ticket-client-option.is-selected:focus-within {
+  box-shadow:
+    inset 3px 0 0 var(--fin-green),
+    0 0 0 3px rgba(50, 202, 255, .1);
+}
+
+.fin-ticket-client-option strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.fin-ticket-client-option span,
+.fin-ticket-option-empty {
+  color: var(--fin-muted);
+  font-size: 11px;
+}
+
+.fin-ticket-option-empty {
+  margin: 0;
+  padding: 22px;
+  text-align: center;
+}
+
+.fin-ticket-selection {
+  min-height: 18px;
+  margin: 10px 0 0;
+  color: var(--fin-green);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fin-ticket-type-fieldset {
+  min-width: 0;
+  margin: 17px 0 13px;
+  padding: 0;
+  border: 0;
+}
+
+.fin-ticket-type-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--fin-soft);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.fin-ticket-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fin-ticket-type-option {
+  display: grid;
+  min-height: 70px;
+  padding: 12px;
+  align-content: center;
+  gap: 4px;
+  color: var(--fin-soft);
+  border: 1px solid var(--fin-border-strong);
+  border-radius: 10px;
+  outline: 0;
+  background: rgba(5, 10, 17, .7);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fin-ticket-type-option:hover,
+.fin-ticket-type-option:focus-visible,
+.fin-ticket-type-option:focus-within {
+  color: #fff;
+  border-color: var(--fin-blue);
+}
+
+.fin-ticket-type-option:focus-within {
+  box-shadow: 0 0 0 3px rgba(50, 202, 255, .1);
+}
+
+.fin-ticket-type-option.is-selected {
+  color: #06141b;
+  border-color: var(--fin-blue);
+  background: var(--fin-blue);
+}
+
+.fin-ticket-type-option strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.fin-ticket-type-option small {
+  color: inherit;
+  font-size: 10px;
+  opacity: .78;
+}
+
+.fin-ticket-bulk-warning {
+  margin: 13px 0 0;
+  padding: 11px 12px;
+  color: #ffe9a5;
+  border: 1px solid rgba(242, 194, 48, .32);
+  border-radius: 9px;
+  background: rgba(242, 194, 48, .07);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fin-ticket-bulk-card[aria-busy="true"] .fin-ticket-type-option {
+  opacity: .55;
+  cursor: wait;
+}
+
+.fin-ticket-bulk-card[aria-busy="true"] .fin-dialog-close {
+  opacity: .48;
+  cursor: wait;
+}
+
+@media (max-width: 860px) {
+  .fin-ticket-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fin-ticket-filters .fin-filter-search,
+  .fin-ticket-filters .fin-filter-actions {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 620px) {
+  .fin-ticket-panel { padding: 15px; }
+  .fin-ticket-filters,
+  .fin-ticket-price-fields,
+  .fin-ticket-type-options { grid-template-columns: 1fr; }
+  .fin-ticket-filters .fin-filter-search,
+  .fin-ticket-filters .fin-filter-actions { grid-column: span 1; }
+  .fin-ticket-client-options { max-height: 52vh; }
 }
 
 @media (max-width: 390px) {

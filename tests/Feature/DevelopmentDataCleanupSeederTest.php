@@ -356,6 +356,19 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_by' => $user->id,
             'created_at' => $now,
         ]);
+        DB::table('ticket_precio_ajuste_operaciones')->insert([
+            'empresa_id' => $companyId,
+            'idempotency_key' => (string) Str::uuid(),
+            'payload_hash' => hash('sha256', 'ajuste-ticket-prueba'),
+            'resultado' => json_encode([
+                'matched_tickets' => 1,
+                'updated_tickets' => 1,
+                'updated_prices' => 1,
+                'tickets_without_type' => 0,
+            ], JSON_THROW_ON_ERROR),
+            'created_by' => $user->id,
+            'created_at' => $now,
+        ]);
 
         $purchaseId = DB::table('compras')->insertGetId([
             'empresa_id' => $companyId,

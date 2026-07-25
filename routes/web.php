@@ -98,6 +98,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('finanzas.gastos');
             Route::view('/finanzas/descuentos-clientes', 'finanzas-descuentos-clientes')
                 ->name('finanzas.descuentos-clientes');
+            Route::view('/finanzas/tickets', 'finanzas-tickets')
+                ->name('finanzas.tickets');
             Route::view('/compras', 'compras')->name('compras.index');
             Route::view('/compras/nueva', 'compra-form')->name('compras.create');
             Route::get('/finanzas/reportes', [ReportController::class, 'index'])

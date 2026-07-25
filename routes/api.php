@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\FinancialCounterpartyController;
 use App\Http\Controllers\Api\V1\FinancialEntityController;
 use App\Http\Controllers\Api\V1\FinancialMovementController;
 use App\Http\Controllers\Api\V1\FinancialQueryController;
+use App\Http\Controllers\Api\V1\FinancialTicketController;
 use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JourneyPriceController;
@@ -61,6 +62,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/deudas-clientes/{deuda}', [ManualCustomerDebtController::class, 'show'])
                 ->whereNumber('deuda');
             Route::get('/descuentos-clientes', [CustomerDiscountController::class, 'index']);
+            Route::get('/tickets', [FinancialTicketController::class, 'index']);
             Route::get('/clientes/{tercero}/resumen', [FinancialCounterpartyController::class, 'customer'])
                 ->whereNumber('tercero');
             Route::get('/proveedores/{tercero}/resumen', [FinancialCounterpartyController::class, 'provider'])
@@ -107,6 +109,14 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:SALDOS_AJUSTAR');
         Route::post('/descuentos-clientes/{descuento}/anular', [CustomerDiscountController::class, 'void'])
             ->whereNumber('descuento')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::post('/tickets/ajustar-precios', [FinancialTicketController::class, 'bulkAdjust'])
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::put('/tickets/{ticket}/precios', [FinancialTicketController::class, 'updatePrices'])
+            ->whereNumber('ticket')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::put('/tickets/{ticket}/cliente', [FinancialTicketController::class, 'updateClient'])
+            ->whereNumber('ticket')
             ->middleware('permission:SALDOS_AJUSTAR');
 
         Route::middleware('permission:FINANZAS_VER')->group(function (): void {

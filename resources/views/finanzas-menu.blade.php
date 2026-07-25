@@ -160,6 +160,23 @@
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.tickets') }}">
+          <span class="fin-module-icon is-movements" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 4h14v16H5z"></path>
+              <path d="M8 8h8"></path>
+              <path d="M8 12h5"></path>
+              <path d="M15 15l4 4"></path>
+              <circle cx="13" cy="13" r="4"></circle>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Consultar tickets</strong>
+            <small>Filtra tickets, revisa sus montos y corrige el cliente o los precios por tipo de pollo.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="fin-module-card fin-card" href="{{ route('finanzas.reportes') }}">
           <span class="fin-module-icon is-balances" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
