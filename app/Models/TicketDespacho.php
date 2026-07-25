@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'almacen_destino_id',
     'vehiculo_entrega_id',
     'conductor_entrega_id',
+    'asignacion_transporte_posterior',
     'estado',
     'observaciones',
     'cerrado_por',
@@ -41,6 +42,8 @@ class TicketDespacho extends Model
     public const DELIVERY_MODE_CUSTOMER_PICKUP = 'CUSTOMER_PICKUP';
 
     public const DELIVERY_MODE_COMPANY_TRUCK = 'COMPANY_TRUCK';
+
+    public const DELIVERY_MODE_PENDING_ASSIGNMENT = 'PENDING_ASSIGNMENT';
 
     public const STATUS_OPEN = 'ABIERTO';
 
@@ -135,6 +138,10 @@ class TicketDespacho extends Model
             return self::DELIVERY_MODE_COMPANY_TRUCK;
         }
 
+        if ($this->asignacion_transporte_posterior) {
+            return self::DELIVERY_MODE_PENDING_ASSIGNMENT;
+        }
+
         if (! $this->cliente_destino_id) {
             return null;
         }
@@ -170,6 +177,7 @@ class TicketDespacho extends Model
         return [
             'cerrado_at' => 'datetime',
             'anulado_at' => 'datetime',
+            'asignacion_transporte_posterior' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

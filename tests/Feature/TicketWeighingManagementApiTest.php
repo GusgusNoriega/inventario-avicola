@@ -618,6 +618,98 @@ class TicketWeighingManagementApiTest extends TestCase
         )->assertStatus(409);
     }
 
+    public function test_deferred_retail_delivery_can_receive_fleet_without_unlocking_weighings(): void
+    {
+        $trayTypeId = (int) DB::table('tipos_bandeja')->orderBy('id')->value('id');
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update([
+                'canal' => TicketDespacho::CHANNEL_RETAIL,
+                'vehiculo_entrega_id' => null,
+                'conductor_entrega_id' => null,
+                'asignacion_transporte_posterior' => true,
+            ]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_java_id' => null,
+                'tipo_bandeja_id' => $trayTypeId,
+                'aves_por_java' => null,
+                'aves_por_bandeja' => 10,
+                'cantidad_javas' => null,
+                'cantidad_bandejas' => 2,
+                'peso_java_kg_snapshot' => null,
+                'peso_bandeja_kg_snapshot' => 2.5,
+                'origen_peso' => 'BALANZA_MINORISTA',
+            ]);
+
+        $this->getJson('/api/v1/operacion/gestion-pesadas?search=T-20260627-001')
+            ->assertOk()
+            ->assertJsonPath('data.tickets.0.editable', false)
+            ->assertJsonPath('data.tickets.0.delivery_editable', true)
+            ->assertJsonPath('data.tickets.0.delivery_assignment_deferred', true)
+            ->assertJsonPath(
+                'data.tickets.0.delivery_mode',
+                TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT
+            );
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertOk()
+            ->assertJsonPath('data.ticket.editable', false)
+            ->assertJsonPath('data.ticket.delivery_editable', true)
+            ->assertJsonPath('data.ticket.delivery_assignment_deferred', true)
+            ->assertJsonPath(
+                'data.ticket.edit_restriction',
+                'Las pesadas minoristas son de solo consulta; el camión y el chofer se gestionan por separado.'
+            )
+            ->assertJsonPath(
+                'data.ticket.delivery.mode',
+                TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT
+            )
+            ->assertJsonPath('data.ticket.delivery.vehicle', null)
+            ->assertJsonPath('data.ticket.delivery.driver', null);
+
+        $this->putJson("/api/v1/operacion/tickets/{$this->ticketId}/transporte", [
+            'vehicle_id' => $this->alternateDeliveryVehicleId,
+            'driver_id' => $this->alternateDeliveryDriverId,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.ticket.editable', false)
+            ->assertJsonPath('data.ticket.delivery_editable', true)
+            ->assertJsonPath(
+                'data.ticket.delivery.mode',
+                TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK
+            )
+            ->assertJsonPath('data.ticket.delivery.vehicle.id', $this->alternateDeliveryVehicleId)
+            ->assertJsonPath('data.ticket.delivery.driver.id', $this->alternateDeliveryDriverId);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $this->ticketId,
+            'vehiculo_entrega_id' => $this->alternateDeliveryVehicleId,
+            'conductor_entrega_id' => $this->alternateDeliveryDriverId,
+            'asignacion_transporte_posterior' => true,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $this->ticketId,
+            'cantidad_bandejas' => 2,
+            'vehiculo_id' => $this->alternateDeliveryVehicleId,
+            'conductor_id' => $this->alternateDeliveryDriverId,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $this->ticketId,
+            'accion' => 'ACTUALIZAR_TRANSPORTE',
+        ]);
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $this->updatePayload()
+        )->assertStatus(409);
+        $this->deleteJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}", [
+            'reason' => 'Las pesadas minoristas deben seguir bloqueadas',
+        ])->assertStatus(409);
+    }
+
     public function test_retail_tickets_can_be_searched_viewed_and_reprinted_but_not_modified(): void
     {
         DB::table('tickets_despacho')

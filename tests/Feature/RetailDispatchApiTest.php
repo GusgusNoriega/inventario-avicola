@@ -780,6 +780,127 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
+    public function test_first_retail_station_registers_a_deferred_delivery_without_fleet(): void
+    {
+        $payload = $this->payload();
+        $payload['delivery'] = [
+            'mode' => TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT,
+        ];
+
+        $response = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT)
+            ->assertJsonPath('data.delivery.vehicle', null)
+            ->assertJsonPath('data.delivery.driver', null)
+            ->assertJsonPath('data.totals.trays', 2);
+        $ticketId = (int) $response->json('data.id');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticketId,
+            'cliente_destino_id' => $this->clientId,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+            'asignacion_transporte_posterior' => true,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticketId,
+            'cliente_id' => $this->clientId,
+            'cantidad_bandejas' => 2,
+            'vehiculo_id' => null,
+            'conductor_id' => null,
+        ]);
+
+        $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true)
+            ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT);
+        $this->assertSame(
+            1,
+            DB::table('movimientos_javas')
+                ->where('ticket_despacho_id', $ticketId)
+                ->count()
+        );
+    }
+
+    public function test_second_retail_station_registers_a_deferred_delivery_without_fleet(): void
+    {
+        $payload = $this->payload();
+        $payload['delivery'] = [
+            'mode' => TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT,
+        ];
+        $payload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA_2';
+
+        $response = $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT)
+            ->assertJsonPath('data.delivery.vehicle', null)
+            ->assertJsonPath('data.delivery.driver', null)
+            ->assertJsonPath('data.totals.trays', 2);
+        $ticketId = (int) $response->json('data.id');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticketId,
+            'cliente_destino_id' => $this->clientId,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+            'asignacion_transporte_posterior' => true,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticketId,
+            'cliente_id' => $this->clientId,
+            'cantidad_bandejas' => 2,
+            'vehiculo_id' => null,
+            'conductor_id' => null,
+        ]);
+
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true)
+            ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT);
+        $this->assertSame(
+            1,
+            DB::table('movimientos_javas')
+                ->where('ticket_despacho_id', $ticketId)
+                ->count()
+        );
+    }
+
+    public function test_internal_client_from_both_retail_stations_is_not_marked_as_pending_transport(): void
+    {
+        DB::table('terceros')
+            ->where('id', $this->clientId)
+            ->update(['es_cliente_interno' => true]);
+
+        foreach ([
+            [
+                'endpoint' => '/api/v1/despacho-minorista/tickets',
+                'weight_source' => 'BALANZA_MINORISTA',
+            ],
+            [
+                'endpoint' => '/api/v1/despacho-minorista-2/tickets',
+                'weight_source' => 'BALANZA_MINORISTA_2',
+            ],
+        ] as $station) {
+            $payload = $this->payload();
+            $payload['delivery'] = [
+                'mode' => TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT,
+            ];
+            $payload['weighings'][0]['weight_source'] = $station['weight_source'];
+
+            $ticketId = $this->postJson($station['endpoint'], $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.delivery.mode', TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP)
+                ->json('data.id');
+
+            $this->assertDatabaseHas('tickets_despacho', [
+                'id' => $ticketId,
+                'asignacion_transporte_posterior' => false,
+                'vehiculo_entrega_id' => null,
+                'conductor_entrega_id' => null,
+            ]);
+        }
+    }
+
     public function test_dispatch_without_trays_rejects_transport_selection(): void
     {
         $payload = $this->payload();

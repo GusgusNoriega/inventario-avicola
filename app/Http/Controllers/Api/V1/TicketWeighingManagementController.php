@@ -71,6 +71,11 @@ class TicketWeighingManagementController extends Controller
                 'status' => $ticket->estado,
                 'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
                 'editable' => $this->isEditable($ticket, $currentOperatingDate),
+                'delivery_editable' => $this->isDeliveryEditable($ticket, $currentOperatingDate),
+                'delivery_mode' => $ticket->asignacion_transporte_posterior
+                    ? $ticket->resolvedDeliveryMode()
+                    : null,
+                'delivery_assignment_deferred' => (bool) $ticket->asignacion_transporte_posterior,
                 'can_void' => $isAdministrator
                     && $ticket->estado === TicketDespacho::STATUS_CLOSED,
                 'customer_type' => $this->customerType($ticket),
@@ -135,20 +140,10 @@ class TicketWeighingManagementController extends Controller
             $companyId,
             $branch->zona_horaria
         );
-        $this->assertEditable(
+        $this->assertDeliveryEditable(
             $selected,
             $currentOperatingDate,
             'Solo se puede modificar el transporte de tickets de la jornada operativa actual.'
-        );
-        abort_unless(
-            $selected->tipo_operacion === TicketDespacho::OPERATION_DISPATCH,
-            422,
-            'Las devoluciones no tienen camión ni chofer de entrega.'
-        );
-        abort_if(
-            (bool) $selected->clienteDestino?->es_cliente_interno,
-            422,
-            'Los clientes internos de la avícola no requieren camión ni chofer de entrega.'
         );
 
         $validated = $request->validate([
@@ -498,6 +493,7 @@ class TicketWeighingManagementController extends Controller
     ): array {
         $records = $ticket->pesadas->where('estado', Pesada::STATUS_ACTIVE)->values();
         $editable = $this->isEditable($ticket, $currentOperatingDate);
+        $deliveryEditable = $this->isDeliveryEditable($ticket, $currentOperatingDate);
         $isRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL;
         $pricesByType = $ticket->precios->keyBy('tipo_pollo_id');
         $amount = $records->sum(function (Pesada $record) use ($ticket, $pricesByType): float {
@@ -516,12 +512,16 @@ class TicketWeighingManagementController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
             'editable' => $editable,
+            'delivery_editable' => $deliveryEditable,
+            'delivery_assignment_deferred' => (bool) $ticket->asignacion_transporte_posterior,
             'can_void' => $isAdministrator
                 && $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'edit_restriction' => $editable
                 ? null
                 : ($isRetail
-                    ? 'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.'
+                    ? ($deliveryEditable
+                        ? 'Las pesadas minoristas son de solo consulta; el camión y el chofer se gestionan por separado.'
+                        : 'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.')
                     : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.'),
             'customer_type' => $this->customerType($ticket),
             'client' => $this->formatClient($ticket),
@@ -645,6 +645,54 @@ class TicketWeighingManagementController extends Controller
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
             && $ticket->estado !== TicketDespacho::STATUS_VOIDED
             && $this->isFromOperatingDate($ticket, $operatingDate);
+    }
+
+    private function isDeliveryEditable(TicketDespacho $ticket, string $operatingDate): bool
+    {
+        $usesDeferredRetailAssignment = $ticket->canal === TicketDespacho::CHANNEL_RETAIL
+            && (bool) $ticket->asignacion_transporte_posterior;
+
+        return ($ticket->canal === TicketDespacho::CHANNEL_WHOLESALE || $usesDeferredRetailAssignment)
+            && $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
+            && ! (bool) $ticket->clienteDestino?->es_cliente_interno
+            && $ticket->estado !== TicketDespacho::STATUS_VOIDED
+            && $this->isFromOperatingDate($ticket, $operatingDate);
+    }
+
+    private function assertDeliveryEditable(
+        TicketDespacho $ticket,
+        string $operatingDate,
+        string $message
+    ): void {
+        $ticket->loadMissing(['jornada', 'clienteDestino']);
+
+        abort_unless(
+            $ticket->estado !== TicketDespacho::STATUS_VOIDED,
+            409,
+            'Un ticket anulado es de solo consulta para administradores.'
+        );
+        abort_unless(
+            $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH,
+            422,
+            'Las devoluciones no tienen camión ni chofer de entrega.'
+        );
+        abort_if(
+            (bool) $ticket->clienteDestino?->es_cliente_interno,
+            422,
+            'Los clientes internos de la avícola no requieren camión ni chofer de entrega.'
+        );
+
+        $supportsDeliveryManagement = $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            || (
+                $ticket->canal === TicketDespacho::CHANNEL_RETAIL
+                && (bool) $ticket->asignacion_transporte_posterior
+            );
+        abort_unless(
+            $supportsDeliveryManagement,
+            409,
+            'Este ticket minorista no tiene transporte pendiente de asignación.'
+        );
+        abort_unless($this->isFromOperatingDate($ticket, $operatingDate), 409, $message);
     }
 
     private function assertEditable(

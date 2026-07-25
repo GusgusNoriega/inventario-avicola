@@ -11,7 +11,8 @@ import {
   buildRetailDeliveryPayload,
   resolveRetailDeliveryMode,
   RETAIL_DELIVERY_MODE_COMPANY_TRUCK,
-  RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP
+  RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP,
+  RETAIL_DELIVERY_MODE_PENDING_ASSIGNMENT
 } from "./retail-delivery-mode.js";
 import {
   calculateRetailWeightAdjustment,
@@ -2215,14 +2216,10 @@ function requiresDelivery(list) {
 
 function continueDispatchRegistration() {
   const list = activeList();
-
-  if (!requiresDelivery(list)) {
-    void saveDispatch();
-    return;
-  }
-
-  renderDeliveryOptions(list);
-  openModal(elements.deliveryModal);
+  const delivery = requiresDelivery(list)
+    ? buildRetailDeliveryPayload(RETAIL_DELIVERY_MODE_PENDING_ASSIGNMENT)
+    : null;
+  void saveDispatch(delivery);
 }
 
 function setDeliveryMessage(message = "", isError = false) {

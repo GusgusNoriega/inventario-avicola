@@ -188,6 +188,11 @@ class RetailDispatchService
                 && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK
                     ? $deliveryData
                     : [];
+            $deferredDeliveryAssignment = in_array($station, [1, 2], true)
+                && $data['operation_type'] === TicketDespacho::OPERATION_DISPATCH
+                && ! $client->es_cliente_interno
+                && $weighings->contains(fn (array $weighing): bool => (int) $weighing['tray_count'] > 0)
+                && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT;
 
             $ticket = TicketDespacho::query()->create([
                 'jornada_id' => $journey->id,
@@ -199,6 +204,7 @@ class RetailDispatchService
                 'almacen_destino_id' => null,
                 'vehiculo_entrega_id' => $delivery['vehicle_id'] ?? null,
                 'conductor_entrega_id' => $delivery['driver_id'] ?? null,
+                'asignacion_transporte_posterior' => $deferredDeliveryAssignment,
                 'estado' => TicketDespacho::STATUS_CLOSED,
                 'cerrado_por' => $actor->id,
                 'cerrado_at' => now(),

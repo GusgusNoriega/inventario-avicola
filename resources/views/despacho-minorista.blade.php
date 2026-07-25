@@ -186,7 +186,6 @@
         <button id="retailSaveDispatch" class="rd-save-button" type="button" disabled>
           <span aria-hidden="true">✓</span>
           <span>Grabar</span>
-          <small>A crédito · cobro en Finanzas</small>
         </button>
       </aside>
     </section>

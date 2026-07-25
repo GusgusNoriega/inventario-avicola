@@ -1,9 +1,11 @@
 export const RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP = "CUSTOMER_PICKUP";
 export const RETAIL_DELIVERY_MODE_COMPANY_TRUCK = "COMPANY_TRUCK";
+export const RETAIL_DELIVERY_MODE_PENDING_ASSIGNMENT = "PENDING_ASSIGNMENT";
 
 const RETAIL_DELIVERY_MODES = new Set([
   RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP,
-  RETAIL_DELIVERY_MODE_COMPANY_TRUCK
+  RETAIL_DELIVERY_MODE_COMPANY_TRUCK,
+  RETAIL_DELIVERY_MODE_PENDING_ASSIGNMENT
 ]);
 
 export function resolveRetailDeliveryMode(requestedMode) {
@@ -16,6 +18,10 @@ export function buildRetailDeliveryPayload(requestedMode, vehicleId = null, driv
   const mode = resolveRetailDeliveryMode(requestedMode);
 
   if (mode === RETAIL_DELIVERY_MODE_CUSTOMER_PICKUP) {
+    return { mode };
+  }
+
+  if (mode === RETAIL_DELIVERY_MODE_PENDING_ASSIGNMENT) {
     return { mode };
   }
 

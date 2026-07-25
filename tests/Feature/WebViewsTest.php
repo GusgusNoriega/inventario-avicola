@@ -397,7 +397,7 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailDeliveryDriver"', false)
             ->assertDontSee('id="retailPaymentForm"', false)
             ->assertDontSee('data-retail-payment-mode=', false)
-            ->assertSee('A crédito · cobro en Finanzas')
+            ->assertDontSee('A crédito · cobro en Finanzas')
             ->assertSee('id="retailDeliveryForm" class="rd-modal-card is-delivery" role="dialog" aria-modal="true" aria-labelledby="retailDeliveryModalTitle" novalidate', false)
             ->assertSee('id="retailErrorModal"', false)
             ->assertSee('id="retailErrorModalDetails"', false)
@@ -624,7 +624,8 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="retailDefaultPaymentAccount"', false)
             ->assertDontSee('id="retailPaymentModeOptions"', false)
             ->assertDontSee('data-retail-payment-mode=', false)
-            ->assertSee('A crédito · cobro en Finanzas')
+            ->assertSee('Grabar')
+            ->assertDontSee('A crédito · cobro en Finanzas')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false);
 
@@ -683,39 +684,32 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.rd-birds-per-tray-options', $stylesheet);
     }
 
-    public function test_both_retail_dispatch_views_offer_customer_pickup_before_company_fleet(): void
+    public function test_both_retail_dispatches_save_with_deferred_transport_without_opening_the_modal(): void
     {
         foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
             $this->get($url)
                 ->assertOk()
-                ->assertSee('id="retailDeliveryModeOptions"', false)
-                ->assertSee('data-retail-delivery-mode="CUSTOMER_PICKUP"', false)
-                ->assertSee('data-retail-delivery-mode="COMPANY_TRUCK"', false)
-                ->assertSee('Cliente retira directamente')
-                ->assertSee('Entrega con camión de la empresa')
-                ->assertSee('las bandejas quedan registradas a su nombre')
-                ->assertSee('id="retailDeliveryFields" class="rd-delivery-fields" hidden', false)
-                ->assertSee('id="retailDeliveryTruck" disabled required', false)
-                ->assertSee('id="retailDeliveryDriver" disabled required', false)
-                ->assertSee('id="retailConfirmDelivery" class="rd-primary-button" type="submit" disabled', false);
+                ->assertSee('Grabar')
+                ->assertDontSee('Grabar e imprimir')
+                ->assertDontSee('A crédito · cobro en Finanzas');
         }
 
         $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
-        $deliveryModeJavascript = file_get_contents(public_path('js/retail-delivery-mode.js'));
-        $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
 
         $this->assertIsString($javascript);
-        $this->assertStringContainsString('from "./retail-delivery-mode.js"', $javascript);
-        $this->assertStringContainsString('state.deliveryMode = null', $javascript);
-        $this->assertStringContainsString('elements.deliveryFields.hidden = !companyTruckSelected', $javascript);
-        $this->assertStringContainsString('fleetReady && vehicleSelected && driverSelected', $javascript);
-        $this->assertStringContainsString('void saveDispatch(delivery)', $javascript);
+        $this->assertStringContainsString(
+            'buildRetailDeliveryPayload(RETAIL_DELIVERY_MODE_PENDING_ASSIGNMENT)',
+            $javascript
+        );
+        $this->assertMatchesRegularExpression(
+            '/function continueDispatchRegistration\(\) \{[\s\S]+?const delivery = requiresDelivery\(list\)[\s\S]+?void saveDispatch\(delivery\);[\s\S]+?\}/',
+            $javascript
+        );
+        $this->assertMatchesRegularExpression(
+            '/response = await apiRequest\([\s\S]+?catch \(error\) \{[\s\S]+?showRetailError\(presentation\);[\s\S]+?return;[\s\S]+?const ticket = response\.data;[\s\S]+?await printTicketAndReport\(ticket\);/',
+            $javascript
+        );
         $this->assertStringNotContainsString('state.pendingPayments', $javascript);
-        $this->assertIsString($deliveryModeJavascript);
-        $this->assertStringContainsString('return { mode };', $deliveryModeJavascript);
-        $this->assertStringContainsString('vehicle_id: normalizedVehicleId', $deliveryModeJavascript);
-        $this->assertIsString($stylesheet);
-        $this->assertStringContainsString('.rd-delivery-fields[hidden]', $stylesheet);
     }
 
     public function test_both_retail_dispatch_views_confirm_before_removing_a_weighing(): void
@@ -1234,6 +1228,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./ticket-printer.js"', $managementJavascript);
         $this->assertStringContainsString('data-print-selected-ticket', $managementJavascript);
         $this->assertStringContainsString('data-edit-ticket-delivery', $managementJavascript);
+        $this->assertStringContainsString('ticket.delivery_editable', $managementJavascript);
+        $this->assertStringContainsString('delivery_assignment_deferred', $managementJavascript);
+        $this->assertStringContainsString('Pendiente de agregar camión y chofer', $managementJavascript);
+        $this->assertStringContainsString('Pendiente de agregar camión', $managementJavascript);
+        $this->assertStringContainsString('Pendiente de agregar chofer', $managementJavascript);
         $this->assertStringContainsString('ticket.can_void', $managementJavascript);
         $this->assertStringContainsString('data-void-selected-ticket', $managementJavascript);
         $this->assertStringContainsString('`/operacion/tickets/${ticketId}/anular`', $managementJavascript);

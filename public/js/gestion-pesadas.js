@@ -3,6 +3,7 @@ import { printWeightControlTicket } from "./ticket-printer.js";
 
 const root = document.querySelector("[data-weighing-management]");
 const RETAIL_CHANNEL = "MINORISTA";
+const PENDING_DELIVERY_MODE = "PENDING_ASSIGNMENT";
 
 const elements = {
   message: document.getElementById("weighingManagementMessage"),
@@ -143,6 +144,25 @@ function retailCustomerBadge(ticket) {
   return ticket?.client?.id
     ? '<span class="weighing-customer-badge">Cliente registrado</span>'
     : '<span class="weighing-customer-badge is-external">Venta externa</span>';
+}
+
+function hasDeferredDeliveryAssignment(ticket) {
+  return Boolean(ticket?.delivery_assignment_deferred);
+}
+
+function hasPendingDeliveryAssignment(ticket) {
+  const deliveryMode = ticket?.delivery?.mode || ticket?.delivery_mode;
+
+  return hasDeferredDeliveryAssignment(ticket)
+    && deliveryMode === PENDING_DELIVERY_MODE
+    && !ticket?.delivery?.vehicle
+    && !ticket?.delivery?.driver;
+}
+
+function pendingDeliveryBadge(ticket) {
+  return hasPendingDeliveryAssignment(ticket)
+    ? '<span class="weighing-delivery-pending-badge">Pendiente de agregar camión y chofer</span>'
+    : "";
 }
 
 function priceOriginLabel(value) {
@@ -302,6 +322,7 @@ function renderTicketResults() {
             <small>${escapeHtml(operationLabel(ticket.operation_type))}</small>
             ${retail ? '<span class="weighing-channel-badge">Despacho minorista</span>' : ""}
             ${retailCustomerBadge(ticket)}
+            ${pendingDeliveryBadge(ticket)}
             ${readOnly ? '<span class="weighing-readonly-badge">Solo lectura</span>' : ""}
           </span>
         </span>
@@ -360,6 +381,9 @@ function renderSelectedTicket() {
   const isDispatch = ticket.operation_type === "DESPACHO";
   const retail = isRetailTicket(ticket);
   const canEdit = ticket.editable && !retail;
+  const deliveryPending = hasPendingDeliveryAssignment(ticket);
+  const showDeliveryManagement = isDispatch
+    && (!retail || hasDeferredDeliveryAssignment(ticket));
   const rows = (ticket.weighings || []).map((weighing) => {
     const actions = canEdit
       ? `
@@ -411,6 +435,7 @@ function renderSelectedTicket() {
             <span class="customer-operation-tag ${ticket.operation_type === "DEVOLUCION" ? "customer-operation-return" : "customer-operation-dispatch"}">${escapeHtml(operationLabel(ticket.operation_type))}</span>
             ${retail ? '<span class="weighing-channel-badge">Despacho minorista</span>' : ""}
             ${retailCustomerBadge(ticket)}
+            ${pendingDeliveryBadge(ticket)}
             <span class="directory-record-tag">${escapeHtml(formatDate(ticket.operating_date))}</span>
             ${ticket.editable ? "" : '<span class="weighing-readonly-badge">Solo lectura</span>'}
           </div>
@@ -430,18 +455,22 @@ function renderSelectedTicket() {
             : "Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista."))}
         </div>
       `}
-      ${isDispatch && !retail ? `
+      ${showDeliveryManagement ? `
         <div class="weighing-ticket-delivery">
           <span>
             <small>Camión de entrega</small>
-            <strong>${escapeHtml(ticket.internal_client ? "No aplica - cliente interno" : (ticket.delivery?.vehicle?.plate || "Sin camión asignado"))}</strong>
+            <strong>${escapeHtml(ticket.internal_client
+              ? "No aplica - cliente interno"
+              : (ticket.delivery?.vehicle?.plate || (deliveryPending ? "Pendiente de agregar camión" : "Sin camión asignado")))}</strong>
           </span>
           <span>
             <small>Chofer de entrega</small>
-            <strong>${escapeHtml(ticket.internal_client ? "No aplica - cliente interno" : (ticket.delivery?.driver?.name || "Sin chofer asignado"))}</strong>
+            <strong>${escapeHtml(ticket.internal_client
+              ? "No aplica - cliente interno"
+              : (ticket.delivery?.driver?.name || (deliveryPending ? "Pendiente de agregar chofer" : "Sin chofer asignado")))}</strong>
           </span>
-          ${canEdit && !ticket.internal_client
-            ? '<button class="btn btn-secondary" type="button" data-edit-ticket-delivery>Editar transporte</button>'
+          ${ticket.delivery_editable && !ticket.internal_client
+            ? `<button class="btn btn-secondary" type="button" data-edit-ticket-delivery>${deliveryPending ? "Agregar camión y chofer" : "Editar transporte"}</button>`
             : ""}
         </div>
       ` : ""}
@@ -553,8 +582,8 @@ function openDeliveryModal() {
     return;
   }
 
-  if (ticket.editable === false) {
-    setMessage("Este ticket pertenece a una jornada anterior y solo puede consultarse.", true);
+  if (!ticket.delivery_editable) {
+    setMessage("El transporte de este ticket no puede modificarse en la jornada actual.", true);
     return;
   }
 

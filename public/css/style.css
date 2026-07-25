@@ -8563,7 +8563,8 @@ body.customer-history-page {
 }
 
 .weighing-channel-badge,
-.weighing-customer-badge {
+.weighing-customer-badge,
+.weighing-delivery-pending-badge {
   display: inline-flex;
   align-items: center;
   width: fit-content;
@@ -8589,6 +8590,12 @@ body.customer-history-page {
   border-color: rgba(255, 162, 43, 0.55);
   background: rgba(255, 162, 43, 0.1);
   color: #ffbd69;
+}
+
+.weighing-delivery-pending-badge {
+  border-color: rgba(255, 162, 43, 0.65);
+  background: rgba(255, 162, 43, 0.14);
+  color: #ffd09a;
 }
 
 .weighing-readonly-notice {

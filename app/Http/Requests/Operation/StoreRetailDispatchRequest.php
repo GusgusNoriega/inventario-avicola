@@ -42,13 +42,10 @@ class StoreRetailDispatchRequest extends FormRequest
             'delivery.mode' => [
                 Rule::requiredIf(fn (): bool => $this->requiresDelivery()),
                 'nullable',
-                Rule::in([
-                    TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP,
-                    TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK,
-                ]),
+                Rule::in($this->allowedDeliveryModes()),
             ],
             'delivery.vehicle_id' => [
-                Rule::prohibitedIf(fn (): bool => $this->isCustomerPickup()),
+                Rule::prohibitedIf(fn (): bool => $this->doesNotUseCompanyTruck()),
                 Rule::requiredIf(fn (): bool => $this->requiresCompanyTruck()),
                 'required_with:delivery.driver_id',
                 'nullable',
@@ -58,7 +55,7 @@ class StoreRetailDispatchRequest extends FormRequest
                     ->where('estado', 'ACTIVO')),
             ],
             'delivery.driver_id' => [
-                Rule::prohibitedIf(fn (): bool => $this->isCustomerPickup()),
+                Rule::prohibitedIf(fn (): bool => $this->doesNotUseCompanyTruck()),
                 Rule::requiredIf(fn (): bool => $this->requiresCompanyTruck()),
                 'required_with:delivery.vehicle_id',
                 'nullable',
@@ -229,17 +226,17 @@ class StoreRetailDispatchRequest extends FormRequest
             'client_id.required' => 'Selecciona un cliente antes de registrar el ticket.',
             'operation_type.required' => 'Selecciona si el registro corresponde a una venta o una devolución.',
             'operation_type.in' => 'El tipo de operación seleccionado no es válido.',
-            'delivery.required' => 'Selecciona si el cliente retira el pedido o si se entregará con un camión de la empresa.',
+            'delivery.required' => 'Indica cómo se gestionará el transporte de este pedido.',
             'delivery.prohibited' => 'No selecciones transporte cuando el ticket no lleva bandejas.',
             'delivery.array' => 'Los datos de transporte no tienen un formato válido.',
-            'delivery.mode.required' => 'Selecciona si el cliente retira el pedido o si se entregará con un camión de la empresa.',
+            'delivery.mode.required' => 'Indica cómo se gestionará el transporte de este pedido.',
             'delivery.mode.in' => 'La modalidad de salida seleccionada no es válida.',
-            'delivery.vehicle_id.prohibited' => 'No selecciones un camión cuando el cliente retira directamente el pedido.',
+            'delivery.vehicle_id.prohibited' => 'No selecciones un camión para una salida que se asignará posteriormente o que retira el cliente.',
             'delivery.vehicle_id.required' => 'Selecciona un camión de la flota para la entrega.',
             'delivery.vehicle_id.required_with' => 'Selecciona un camión de la flota para la entrega.',
             'delivery.vehicle_id.integer' => 'El camión seleccionado no es válido.',
             'delivery.vehicle_id.exists' => 'El camión seleccionado no pertenece a la flota activa de la empresa.',
-            'delivery.driver_id.prohibited' => 'No selecciones un chofer cuando el cliente retira directamente el pedido.',
+            'delivery.driver_id.prohibited' => 'No selecciones un chofer para una salida que se asignará posteriormente o que retira el cliente.',
             'delivery.driver_id.required' => 'Selecciona un chofer de la flota para la entrega.',
             'delivery.driver_id.required_with' => 'Selecciona un chofer de la flota para la entrega.',
             'delivery.driver_id.integer' => 'El chofer seleccionado no es válido.',
@@ -314,6 +311,26 @@ class StoreRetailDispatchRequest extends FormRequest
     private function isCustomerPickup(): bool
     {
         return $this->input('delivery.mode') === TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP;
+    }
+
+    private function isPendingAssignment(): bool
+    {
+        return $this->input('delivery.mode') === TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT;
+    }
+
+    private function doesNotUseCompanyTruck(): bool
+    {
+        return $this->isCustomerPickup() || $this->isPendingAssignment();
+    }
+
+    /** @return array<int, string> */
+    private function allowedDeliveryModes(): array
+    {
+        return [
+            TicketDespacho::DELIVERY_MODE_CUSTOMER_PICKUP,
+            TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK,
+            TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT,
+        ];
     }
 
     private function companyId(): int
