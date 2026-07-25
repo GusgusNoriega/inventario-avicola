@@ -222,6 +222,11 @@ class WebViewsTest extends TestCase
             ->assertSee('Consulta y edición de tickets')
             ->assertSee('Debes aplicar al menos un filtro')
             ->assertSee('id="financeTicketFilters"', false)
+            ->assertSee('id="financeTicketClient"', false)
+            ->assertSee('role="combobox"', false)
+            ->assertSee('aria-controls="financeTicketClientSuggestions"', false)
+            ->assertSee('id="financeTicketClientSuggestions"', false)
+            ->assertSee('role="listbox"', false)
             ->assertSee('id="financeTicketRows"', false)
             ->assertSee('id="financeTicketPriceDialog"', false)
             ->assertSee('id="financeTicketClientDialog"', false)
@@ -294,7 +299,12 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data-edit-discount', $discountsJavascript);
         $this->assertStringContainsString('data-void-discount', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/tickets?', $ticketsJavascript);
+        $this->assertStringContainsString('/finanzas/catalogo', $ticketsJavascript);
+        $this->assertStringContainsString('/finanzas/tickets/clientes?', $ticketsJavascript);
         $this->assertStringContainsString('/ajustar-precios', $ticketsJavascript);
+        $this->assertStringContainsString('filters.cliente_id', $ticketsJavascript);
+        $this->assertStringContainsString('FILTER_CLIENT_RESULT_LIMIT = 8', $ticketsJavascript);
+        $this->assertStringContainsString('aria-activedescendant', $ticketsJavascript);
         $this->assertStringContainsString('tipo_pollo_id:', $ticketsJavascript);
         $this->assertStringContainsString('state.appliedFilters', $ticketsJavascript);
         $this->assertStringContainsString('máximo 30 por página', $ticketsJavascript);

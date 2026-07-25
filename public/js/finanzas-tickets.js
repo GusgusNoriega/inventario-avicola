@@ -17,6 +17,8 @@ const elements = {
   filters: document.getElementById("financeTicketFilters"),
   ticket: document.getElementById("financeTicketNumber"),
   client: document.getElementById("financeTicketClient"),
+  clientCombobox: document.getElementById("financeTicketClientCombobox"),
+  clientSuggestions: document.getElementById("financeTicketClientSuggestions"),
   from: document.getElementById("financeTicketFrom"),
   until: document.getElementById("financeTicketUntil"),
   clear: document.getElementById("financeTicketClear"),
@@ -58,6 +60,17 @@ const state = {
   appliedFilters: null,
   priceTypes: [],
   clients: [],
+  clientsLoaded: false,
+  clientsPromise: null,
+  filterClientId: null,
+  filterClientMatches: [],
+  filterClientActiveIndex: -1,
+  filterClientOpenRequested: false,
+  filterClientPendingMove: 0,
+  filterClientRequestGeneration: 0,
+  filterClientRequestController: null,
+  filterClientDebounceTimer: null,
+  filterClientLoading: false,
   editingPriceTicketId: null,
   editingClientTicketId: null,
   selectedClientId: null,
@@ -74,6 +87,8 @@ const state = {
 };
 
 const canManage = document.body.dataset.canManageTickets === "1";
+const FILTER_CLIENT_RESULT_LIMIT = 8;
+const FILTER_CLIENT_DEBOUNCE_MS = 180;
 
 function normalizeSearch(value) {
   return String(value || "")
@@ -84,12 +99,19 @@ function normalizeSearch(value) {
 }
 
 function currentFilters() {
-  return {
+  const filters = {
     ticket: elements.ticket.value.trim(),
-    cliente: elements.client.value.trim(),
     desde: elements.from.value,
     hasta: elements.until.value
   };
+
+  if (state.filterClientId !== null) {
+    filters.cliente_id = String(state.filterClientId);
+  } else {
+    filters.cliente = elements.client.value.trim();
+  }
+
+  return filters;
 }
 
 function activeFilterEntries(filters) {
@@ -104,7 +126,7 @@ function validateFilters(filters) {
   if (filters.desde && filters.hasta && Date.parse(filters.hasta) < Date.parse(filters.desde)) {
     return "La fecha y hora final debe ser igual o posterior a la inicial.";
   }
-  if (!filters.ticket && !filters.cliente && !hasRangeValue) {
+  if (!filters.ticket && !filters.cliente && !filters.cliente_id && !hasRangeValue) {
     return "Debes filtrar por número de ticket, cliente o un rango de fecha y hora.";
   }
   return "";
@@ -112,7 +134,7 @@ function validateFilters(filters) {
 
 function filtersEqual(first, second) {
   if (!first || !second) return false;
-  return ["ticket", "cliente", "desde", "hasta"]
+  return ["ticket", "cliente", "cliente_id", "desde", "hasta"]
     .every((key) => String(first[key] || "") === String(second[key] || ""));
 }
 
@@ -132,12 +154,20 @@ function queryFor(filters, page) {
 }
 
 function filterSnapshot(filters) {
-  return {
+  const snapshot = {
     ticket: String(filters?.ticket || "").trim(),
-    cliente: String(filters?.cliente || "").trim(),
     desde: String(filters?.desde || ""),
     hasta: String(filters?.hasta || "")
   };
+
+  const clientId = String(filters?.cliente_id || "").trim();
+  if (clientId) {
+    snapshot.cliente_id = clientId;
+  } else {
+    snapshot.cliente = String(filters?.cliente || "").trim();
+  }
+
+  return snapshot;
 }
 
 function invalidateTicketRequests({ clearPending = true } = {}) {
@@ -357,6 +387,8 @@ async function refreshAfterMutation(successMessage) {
 
 function resetResults({ invalidateRequest = true } = {}) {
   if (invalidateRequest) invalidateTicketRequests();
+  state.filterClientId = null;
+  closeFilterClientSuggestions();
   state.page = 1;
   state.lastPage = 1;
   state.total = 0;
@@ -451,13 +483,230 @@ async function savePrices(event) {
 }
 
 async function loadClients() {
-  if (state.clients.length) return;
-  const response = await apiRequest("/finanzas/catalogo");
-  state.clients = responseCollection(response, ["clientes", "catalogo.clientes"]);
+  if (state.clientsLoaded) return state.clients;
+
+  if (!state.clientsPromise) {
+    state.clientsPromise = apiRequest("/finanzas/catalogo")
+      .then((response) => {
+        state.clients = responseCollection(response, ["clientes", "catalogo.clientes"]);
+        state.clientsLoaded = true;
+        return state.clients;
+      })
+      .finally(() => {
+        state.clientsPromise = null;
+      });
+  }
+
+  return state.clientsPromise;
 }
 
 function clientLabel(client) {
   return String(firstDefined(client, ["nombre", "nombre_razon_social", "name"], "Cliente"));
+}
+
+function clientDocument(client) {
+  return String(firstDefined(client, ["numero_documento", "document_number"], "") || "");
+}
+
+function clientStatus(client) {
+  return String(firstDefined(client, ["estado", "status"], "ACTIVO")).toUpperCase();
+}
+
+function invalidateFilterClientLookup() {
+  state.filterClientRequestGeneration += 1;
+  if (state.filterClientDebounceTimer !== null) {
+    window.clearTimeout(state.filterClientDebounceTimer);
+    state.filterClientDebounceTimer = null;
+  }
+  state.filterClientRequestController?.abort();
+  state.filterClientRequestController = null;
+  state.filterClientLoading = false;
+}
+
+function closeFilterClientSuggestions() {
+  invalidateFilterClientLookup();
+  state.filterClientOpenRequested = false;
+  state.filterClientActiveIndex = -1;
+  state.filterClientPendingMove = 0;
+  state.filterClientMatches = [];
+  elements.clientSuggestions.hidden = true;
+  elements.clientSuggestions.setAttribute("aria-busy", "false");
+  elements.client.setAttribute("aria-expanded", "false");
+  elements.client.removeAttribute("aria-activedescendant");
+}
+
+function filterClientRequestWasCancelled(error, requestId, controller) {
+  return requestId !== state.filterClientRequestGeneration
+    || controller.signal.aborted
+    || error?.name === "AbortError";
+}
+
+function syncFilterClientActiveOption() {
+  const options = [...elements.clientSuggestions.querySelectorAll("[data-filter-client-index]")];
+
+  options.forEach((option, index) => {
+    option.classList.toggle("is-active", index === state.filterClientActiveIndex);
+  });
+
+  const active = options[state.filterClientActiveIndex];
+  if (active) {
+    elements.client.setAttribute("aria-activedescendant", active.id);
+    active.scrollIntoView({ block: "nearest" });
+  } else {
+    elements.client.removeAttribute("aria-activedescendant");
+  }
+}
+
+function setFilterClientActiveIndex(index) {
+  if (!state.filterClientMatches.length) {
+    state.filterClientActiveIndex = -1;
+  } else {
+    state.filterClientActiveIndex = Math.max(
+      0,
+      Math.min(index, state.filterClientMatches.length - 1),
+    );
+  }
+  syncFilterClientActiveOption();
+}
+
+function renderFilterClientSuggestions({ resetActive = true } = {}) {
+  if (!state.filterClientOpenRequested) return;
+
+  if (resetActive) state.filterClientActiveIndex = -1;
+  if (state.filterClientActiveIndex >= state.filterClientMatches.length) {
+    state.filterClientActiveIndex = -1;
+  }
+
+  elements.clientSuggestions.innerHTML = state.filterClientMatches.length
+    ? state.filterClientMatches.map((client, index) => {
+      const selected = String(client.id) === String(state.filterClientId);
+      const inactiveBadge = clientStatus(client) === "ACTIVO"
+        ? ""
+        : '<span class="fin-ticket-client-suggestion-status">Inactivo</span>';
+      return `
+        <button
+          id="financeTicketClientSuggestion${index}"
+          class="fin-ticket-client-suggestion"
+          type="button"
+          role="option"
+          tabindex="-1"
+          data-filter-client-index="${index}"
+          aria-selected="${selected}"
+        >
+          <strong>${escapeHtml(clientLabel(client))}</strong>
+          <span class="fin-ticket-client-suggestion-meta">
+            <small>${escapeHtml(clientDocument(client) || "Sin documento")}</small>
+            ${inactiveBadge}
+          </span>
+        </button>
+      `;
+    }).join("")
+    : '<span class="fin-ticket-client-suggestion-empty" role="status">No hay clientes que coincidan.</span>';
+
+  elements.clientSuggestions.hidden = false;
+  elements.clientSuggestions.setAttribute("aria-busy", "false");
+  elements.client.setAttribute("aria-expanded", "true");
+
+  if (state.filterClientPendingMove !== 0 && state.filterClientMatches.length) {
+    const pendingMove = state.filterClientPendingMove;
+    state.filterClientPendingMove = 0;
+    setFilterClientActiveIndex(pendingMove > 0 ? 0 : state.filterClientMatches.length - 1);
+    return;
+  }
+
+  state.filterClientPendingMove = 0;
+  syncFilterClientActiveOption();
+}
+
+function renderFilterClientLoading(message = "Buscando clientes...") {
+  elements.clientSuggestions.innerHTML = `<span class="fin-ticket-client-suggestion-empty" role="status">${escapeHtml(message)}</span>`;
+  elements.clientSuggestions.hidden = false;
+  elements.clientSuggestions.setAttribute("aria-busy", "true");
+  elements.client.setAttribute("aria-expanded", "true");
+  elements.client.removeAttribute("aria-activedescendant");
+}
+
+async function fetchFilterClientSuggestions(query, requestId, resetActive) {
+  if (
+    requestId !== state.filterClientRequestGeneration
+    || !state.filterClientOpenRequested
+  ) return;
+
+  const controller = new AbortController();
+  state.filterClientRequestController = controller;
+  try {
+    const params = new URLSearchParams({ buscar: query });
+    const response = await apiRequest(`/finanzas/tickets/clientes?${params}`, {
+      signal: controller.signal
+    });
+    if (
+      requestId === state.filterClientRequestGeneration
+      && state.filterClientOpenRequested
+      && document.activeElement === elements.client
+    ) {
+      state.filterClientMatches = responseCollection(
+        response,
+        ["clientes", "items", "records"],
+      )
+        .filter((client) => client?.id !== undefined && client?.id !== null)
+        .slice(0, FILTER_CLIENT_RESULT_LIMIT);
+      state.filterClientLoading = false;
+      renderFilterClientSuggestions({ resetActive });
+    }
+  } catch (error) {
+    if (filterClientRequestWasCancelled(error, requestId, controller)) return;
+    if (
+      requestId !== state.filterClientRequestGeneration
+      || !state.filterClientOpenRequested
+    ) return;
+    state.filterClientMatches = [];
+    state.filterClientActiveIndex = -1;
+    elements.clientSuggestions.innerHTML = '<span class="fin-ticket-client-suggestion-empty is-error" role="status">No se pudieron buscar los clientes. Intenta nuevamente.</span>';
+    elements.clientSuggestions.setAttribute("aria-busy", "false");
+  } finally {
+    if (
+      requestId === state.filterClientRequestGeneration
+      && state.filterClientRequestController === controller
+    ) {
+      state.filterClientRequestController = null;
+      state.filterClientLoading = false;
+    }
+  }
+}
+
+function openFilterClientSuggestions({
+  resetActive = true,
+  debounce = false
+} = {}) {
+  invalidateFilterClientLookup();
+  const requestId = state.filterClientRequestGeneration;
+  const query = elements.client.value.trim();
+  state.filterClientOpenRequested = true;
+  state.filterClientLoading = true;
+  state.filterClientMatches = [];
+  if (resetActive) state.filterClientActiveIndex = -1;
+
+  renderFilterClientLoading(debounce ? "Buscando clientes..." : "Cargando clientes...");
+
+  if (debounce) {
+    state.filterClientDebounceTimer = window.setTimeout(() => {
+      state.filterClientDebounceTimer = null;
+      void fetchFilterClientSuggestions(query, requestId, resetActive);
+    }, FILTER_CLIENT_DEBOUNCE_MS);
+    return;
+  }
+
+  void fetchFilterClientSuggestions(query, requestId, resetActive);
+}
+
+function selectFilterClient(index) {
+  const client = state.filterClientMatches[index];
+  if (!client) return;
+
+  state.filterClientId = String(client.id);
+  elements.client.value = clientLabel(client);
+  closeFilterClientSuggestions();
+  updateBulkAvailability();
 }
 
 function selectedClient() {
@@ -467,7 +716,7 @@ function selectedClient() {
 function renderClientOptions() {
   const query = normalizeSearch(elements.clientSearch.value);
   const clients = state.clients.filter((client) => {
-    const haystack = normalizeSearch(`${clientLabel(client)} ${client.numero_documento || ""}`);
+    const haystack = normalizeSearch(`${clientLabel(client)} ${clientDocument(client)}`);
     return !query || haystack.includes(query);
   });
 
@@ -487,7 +736,7 @@ function renderClientOptions() {
             ${selected ? "checked" : ""}
           >
           <strong>${escapeHtml(clientLabel(client))}</strong>
-          <span>${escapeHtml(client.numero_documento || "Sin documento")}</span>
+          <span>${escapeHtml(clientDocument(client) || "Sin documento")}</span>
         </label>
       `;
     }).join("")
@@ -505,7 +754,7 @@ function syncClientOptionState() {
 function updateClientSelection() {
   const client = selectedClient();
   elements.clientSelection.textContent = client
-    ? `Seleccionado: ${clientLabel(client)} · ${client.numero_documento || "sin documento"}`
+    ? `Seleccionado: ${clientLabel(client)} · ${clientDocument(client) || "sin documento"}`
     : "Selecciona un cliente.";
   elements.clientSave.disabled = !client || state.saving;
 }
@@ -703,6 +952,7 @@ async function adjustBulkPrices(operation) {
 
 elements.filters.addEventListener("submit", (event) => {
   event.preventDefault();
+  closeFilterClientSuggestions();
   const filters = currentFilters();
   const validationMessage = validateFilters(filters);
   if (validationMessage) {
@@ -713,6 +963,74 @@ elements.filters.addEventListener("submit", (event) => {
 });
 
 elements.filters.addEventListener("input", updateBulkAvailability);
+elements.client.addEventListener("focus", () => {
+  void openFilterClientSuggestions();
+});
+elements.client.addEventListener("input", () => {
+  state.filterClientId = null;
+  state.filterClientPendingMove = 0;
+  openFilterClientSuggestions({ debounce: true });
+});
+elements.client.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+
+    if (elements.clientSuggestions.hidden) {
+      state.filterClientPendingMove = direction;
+      openFilterClientSuggestions({ resetActive: true });
+      return;
+    }
+
+    if (!state.filterClientMatches.length) {
+      state.filterClientPendingMove = direction;
+      if (!state.filterClientLoading) {
+        openFilterClientSuggestions({ resetActive: true });
+      }
+      return;
+    }
+
+    const nextIndex = state.filterClientActiveIndex < 0
+      ? (direction > 0 ? 0 : state.filterClientMatches.length - 1)
+      : state.filterClientActiveIndex + direction;
+    setFilterClientActiveIndex(nextIndex);
+    return;
+  }
+
+  if (event.key === "Enter" && state.filterClientActiveIndex >= 0) {
+    event.preventDefault();
+    selectFilterClient(state.filterClientActiveIndex);
+    return;
+  }
+
+  if (event.key === "Escape" && !elements.clientSuggestions.hidden) {
+    event.preventDefault();
+    closeFilterClientSuggestions();
+  }
+});
+elements.client.addEventListener("blur", () => {
+  window.setTimeout(() => {
+    if (!elements.clientCombobox.contains(document.activeElement)) {
+      closeFilterClientSuggestions();
+    }
+  }, 0);
+});
+elements.clientSuggestions.addEventListener("pointerdown", (event) => {
+  if (event.target.closest("[data-filter-client-index]")) event.preventDefault();
+});
+elements.clientSuggestions.addEventListener("pointermove", (event) => {
+  const option = event.target.closest("[data-filter-client-index]");
+  if (!option) return;
+  setFilterClientActiveIndex(Number(option.dataset.filterClientIndex));
+});
+elements.clientSuggestions.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-filter-client-index]");
+  if (!option) return;
+  selectFilterClient(Number(option.dataset.filterClientIndex));
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!elements.clientCombobox.contains(event.target)) closeFilterClientSuggestions();
+});
 elements.clear.addEventListener("click", () => {
   elements.filters.reset();
   resetResults();

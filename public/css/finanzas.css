@@ -1696,6 +1696,100 @@ body.fin-page {
   grid-template-columns: repeat(5, minmax(130px, 1fr));
 }
 
+.fin-ticket-filter-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.fin-ticket-client-suggestions {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 284px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--fin-border-strong);
+  border-radius: 10px;
+  background: #0c121c;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, .38);
+}
+
+.fin-ticket-client-suggestions[hidden] {
+  display: none;
+}
+
+.fin-ticket-client-suggestion {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 11px;
+  color: var(--fin-soft);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fin-ticket-client-suggestion:hover,
+.fin-ticket-client-suggestion.is-active {
+  color: #fff;
+  border-color: rgba(50, 202, 255, .48);
+  background: rgba(50, 202, 255, .1);
+}
+
+.fin-ticket-client-suggestion[aria-selected="true"] {
+  border-color: rgba(54, 216, 128, .5);
+  background: rgba(54, 216, 128, .1);
+}
+
+.fin-ticket-client-suggestion strong {
+  color: inherit;
+  font-size: 12px;
+}
+
+.fin-ticket-client-suggestion small {
+  color: var(--fin-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.fin-ticket-client-suggestion-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fin-ticket-client-suggestion-status {
+  padding: 2px 6px;
+  color: #ffd0d0;
+  border: 1px solid rgba(255, 106, 106, .32);
+  border-radius: 999px;
+  background: rgba(255, 106, 106, .09);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.fin-ticket-client-suggestion-empty {
+  padding: 12px;
+  color: var(--fin-muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.fin-ticket-client-suggestion-empty.is-error {
+  color: #ffb7b7;
+}
+
 .fin-ticket-table {
   min-width: 1110px;
 }

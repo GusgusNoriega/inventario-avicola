@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\BulkAdjustFinancialTicketPricesRequest;
 use App\Http\Requests\Finance\ListFinancialTicketsRequest;
+use App\Http\Requests\Finance\SearchFinancialTicketClientsRequest;
 use App\Http\Requests\Finance\UpdateFinancialTicketClientRequest;
 use App\Http\Requests\Finance\UpdateFinancialTicketPricesRequest;
 use App\Services\FinancialTicketService;
@@ -20,6 +21,16 @@ class FinancialTicketController extends Controller
             (int) $request->user()->empresa_id,
             $request->validated(),
         ));
+    }
+
+    public function clients(SearchFinancialTicketClientsRequest $request): JsonResponse
+    {
+        return response()->json([
+            'data' => $this->tickets->searchClients(
+                (int) $request->user()->empresa_id,
+                $request->validated('buscar'),
+            ),
+        ]);
     }
 
     public function updatePrices(

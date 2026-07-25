@@ -63,6 +63,7 @@ Route::prefix('v1')->group(function (): void {
                 ->whereNumber('deuda');
             Route::get('/descuentos-clientes', [CustomerDiscountController::class, 'index']);
             Route::get('/tickets', [FinancialTicketController::class, 'index']);
+            Route::get('/tickets/clientes', [FinancialTicketController::class, 'clients']);
             Route::get('/clientes/{tercero}/resumen', [FinancialCounterpartyController::class, 'customer'])
                 ->whereNumber('tercero');
             Route::get('/proveedores/{tercero}/resumen', [FinancialCounterpartyController::class, 'provider'])

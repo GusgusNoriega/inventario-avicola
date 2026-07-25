@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\MovimientoJava;
 use App\Models\Pesada;
+use App\Models\Tercero;
+use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TicketPrecio;
 use App\Models\User;
@@ -17,6 +19,8 @@ use Illuminate\Validation\ValidationException;
 class FinancialTicketService
 {
     public const PER_PAGE = 30;
+
+    private const CLIENT_SEARCH_LIMIT = 8;
 
     private const MAX_PRICE = '99999999.9999';
 
@@ -72,6 +76,57 @@ class FinancialTicketService
                 'timezone' => $timezone,
             ],
         ];
+    }
+
+    /**
+     * @return array<int, array{id: int, nombre: string, numero_documento: ?string, estado: string}>
+     */
+    public function searchClients(int $companyId, ?string $search): array
+    {
+        $search = trim((string) $search);
+
+        return DB::table('terceros as cliente')
+            ->join('tercero_roles as rol', 'rol.tercero_id', '=', 'cliente.id')
+            ->where('cliente.empresa_id', $companyId)
+            ->whereIn('cliente.estado', [
+                Tercero::STATUS_ACTIVE,
+                Tercero::STATUS_INACTIVE,
+            ])
+            ->where('rol.rol', TerceroRole::CLIENT)
+            ->when($search !== '', function ($query) use ($search): void {
+                $pattern = $this->escapedLikePattern($search);
+                $query->where(function ($query) use ($pattern): void {
+                    $query->whereRaw(
+                        "cliente.nombre_razon_social LIKE ? ESCAPE '!'",
+                        [$pattern],
+                    )->orWhereRaw(
+                        "cliente.numero_documento LIKE ? ESCAPE '!'",
+                        [$pattern],
+                    );
+                });
+            })
+            ->orderByRaw(
+                'CASE WHEN cliente.estado = ? THEN 0 ELSE 1 END',
+                [Tercero::STATUS_ACTIVE],
+            )
+            ->orderBy('cliente.nombre_razon_social')
+            ->orderBy('cliente.id')
+            ->limit(self::CLIENT_SEARCH_LIMIT)
+            ->get([
+                'cliente.id',
+                'cliente.nombre_razon_social',
+                'cliente.numero_documento',
+                'cliente.estado',
+            ])
+            ->map(fn (object $client): array => [
+                'id' => (int) $client->id,
+                'nombre' => (string) $client->nombre_razon_social,
+                'numero_documento' => $client->numero_documento === null
+                    ? null
+                    : (string) $client->numero_documento,
+                'estado' => (string) $client->estado,
+            ])
+            ->all();
     }
 
     /**
@@ -407,6 +462,7 @@ class FinancialTicketService
             ->where('tickets_despacho.estado', '!=', TicketDespacho::STATUS_VOIDED);
         $ticket = trim((string) ($filters['ticket'] ?? ''));
         $client = trim((string) ($filters['cliente'] ?? ''));
+        $clientId = (int) ($filters['cliente_id'] ?? 0);
         $companyTimezone = $this->companyTimezone($companyId);
 
         return $query
@@ -429,6 +485,13 @@ class FinancialTicketService
                     );
                 });
             })
+            ->when(
+                $clientId > 0,
+                fn (Builder $query) => $query->where(
+                    'tickets_despacho.cliente_destino_id',
+                    $clientId,
+                ),
+            )
             ->when(
                 $filters['desde'] ?? null,
                 fn (Builder $query, string $from) => $query->whereRaw(
@@ -856,6 +919,9 @@ class FinancialTicketService
             'tipo_pollo_id' => (int) $data['tipo_pollo_id'],
             'monto' => bcadd((string) $data['monto'], '0', 4),
         ];
+        if (isset($data['cliente_id'])) {
+            $payload['cliente_id'] = (int) $data['cliente_id'];
+        }
 
         return hash(
             'sha256',

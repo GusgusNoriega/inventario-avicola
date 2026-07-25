@@ -152,6 +152,293 @@ class FinancialTicketApiTest extends TestCase
             ->assertJsonPath('data.0.code', 'FILTRO-001');
     }
 
+    public function test_selected_client_filter_uses_the_exact_client_id(): void
+    {
+        $sameNameClientId = $this->createClient(
+            'Cliente origen tickets',
+            '20111111111',
+        );
+        $this->createTicket(
+            'CLIENTE-ID-ORIGEN',
+            CarbonImmutable::parse('2026-07-20 10:40:00'),
+            $this->sourceClientId,
+        );
+        $this->createTicket(
+            'CLIENTE-ID-HOMONIMO',
+            CarbonImmutable::parse('2026-07-20 10:41:00'),
+            $sameNameClientId,
+        );
+        $endpoint = '/api/v1/finanzas/tickets';
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'cliente' => 'Cliente origen tickets',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2);
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'cliente_id' => $this->sourceClientId,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.code', 'CLIENTE-ID-ORIGEN')
+            ->assertJsonPath('data.0.client.id', $this->sourceClientId);
+
+        $foreignUser = User::factory()->create();
+        $foreignClientId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $foreignUser->empresa_id,
+            'tipo_documento' => 'RUC',
+            'numero_documento' => '20888888888',
+            'nombre_razon_social' => 'Cliente de otra empresa',
+            'direccion' => 'Dirección externa',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $foreignClientId,
+            'rol' => TerceroRole::CLIENT,
+            'created_at' => now(),
+        ]);
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'cliente_id' => $foreignClientId,
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['cliente_id']);
+    }
+
+    public function test_client_lookup_searches_name_and_document_including_inactive_clients_and_escapes_like_wildcards(): void
+    {
+        $inactiveClientId = $this->createClient(
+            'Cliente Historico Especial',
+            '20555000123',
+        );
+        DB::table('terceros')
+            ->where('id', $inactiveClientId)
+            ->update(['estado' => 'INACTIVO']);
+        $literalWildcardClientId = $this->createClient(
+            'Cliente 100% Literal',
+            '20666000123',
+        );
+        $this->createClient(
+            'Cliente 100X Literal',
+            '20777000123',
+        );
+        $endpoint = '/api/v1/finanzas/tickets/clientes';
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'buscar' => '  Historico  ',
+        ]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $inactiveClientId)
+            ->assertJsonPath('data.0.nombre', 'Cliente Historico Especial')
+            ->assertJsonPath('data.0.numero_documento', '20555000123')
+            ->assertJsonPath('data.0.estado', 'INACTIVO');
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'buscar' => '5000123',
+        ]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $inactiveClientId);
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'buscar' => '100%',
+        ]))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $literalWildcardClientId);
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'buscar' => str_repeat('A', 121),
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['buscar']);
+    }
+
+    public function test_client_lookup_is_limited_to_eight_company_customers_and_orders_active_clients_first(): void
+    {
+        $expectedIds = [];
+
+        foreach (range(2, 8) as $sequence) {
+            $expectedIds[] = $this->createClient(
+                'Buscador '.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT),
+                '210000000'.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT),
+            );
+        }
+
+        $firstInactiveId = $this->createClient(
+            'Buscador 01',
+            '21100000001',
+        );
+        DB::table('terceros')->where('id', $firstInactiveId)->update([
+            'estado' => 'INACTIVO',
+        ]);
+        foreach ([9, 10] as $sequence) {
+            $inactiveId = $this->createClient(
+                'Buscador '.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT),
+                '211000000'.str_pad((string) $sequence, 2, '0', STR_PAD_LEFT),
+            );
+            DB::table('terceros')->where('id', $inactiveId)->update([
+                'estado' => 'INACTIVO',
+            ]);
+        }
+
+        $foreignUser = User::factory()->create();
+        $foreignClientId = $this->createThirdParty(
+            (int) $foreignUser->empresa_id,
+            'Buscador 00 Externo',
+            '21200000000',
+            'ACTIVO',
+            TerceroRole::CLIENT,
+        );
+        $providerId = $this->createThirdParty(
+            (int) $this->user->empresa_id,
+            'Buscador 00 Proveedor',
+            '21300000000',
+            'ACTIVO',
+            TerceroRole::PROVIDER,
+        );
+
+        $response = $this->getJson(
+            '/api/v1/finanzas/tickets/clientes?'.http_build_query([
+                'buscar' => 'Buscador',
+            ]),
+        )
+            ->assertOk()
+            ->assertJsonCount(8, 'data');
+        $clients = collect($response->json('data'));
+
+        $this->assertSame(
+            [
+                'Buscador 02',
+                'Buscador 03',
+                'Buscador 04',
+                'Buscador 05',
+                'Buscador 06',
+                'Buscador 07',
+                'Buscador 08',
+                'Buscador 01',
+            ],
+            $clients->pluck('nombre')->all(),
+        );
+        $this->assertSame(
+            [
+                'ACTIVO',
+                'ACTIVO',
+                'ACTIVO',
+                'ACTIVO',
+                'ACTIVO',
+                'ACTIVO',
+                'ACTIVO',
+                'INACTIVO',
+            ],
+            $clients->pluck('estado')->all(),
+        );
+        $this->assertEqualsCanonicalizing(
+            [...$expectedIds, $firstInactiveId],
+            $clients->pluck('id')->all(),
+        );
+        $this->assertNotContains($foreignClientId, $clients->pluck('id')->all());
+        $this->assertNotContains($providerId, $clients->pluck('id')->all());
+    }
+
+    public function test_exact_client_filter_accepts_an_inactive_historical_customer_and_rejects_ambiguous_or_non_customer_values(): void
+    {
+        $this->createTicket(
+            'CLIENTE-INACTIVO-001',
+            CarbonImmutable::parse('2026-07-20 10:42:00'),
+            $this->sourceClientId,
+        );
+        DB::table('terceros')
+            ->where('id', $this->sourceClientId)
+            ->update(['estado' => 'INACTIVO']);
+        $providerId = $this->createThirdParty(
+            (int) $this->user->empresa_id,
+            'Proveedor sin rol cliente',
+            '21400000000',
+            'ACTIVO',
+            TerceroRole::PROVIDER,
+        );
+        $endpoint = '/api/v1/finanzas/tickets';
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'cliente_id' => $this->sourceClientId,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.code', 'CLIENTE-INACTIVO-001')
+            ->assertJsonPath('data.0.client.id', $this->sourceClientId);
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'cliente_id' => $providerId,
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['cliente_id']);
+
+        $this->getJson($endpoint.'?'.http_build_query([
+            'cliente' => 'Cliente origen',
+            'cliente_id' => $this->sourceClientId,
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['cliente', 'cliente_id']);
+    }
+
+    public function test_bulk_adjustment_respects_the_selected_client_id(): void
+    {
+        $sameNameClientId = $this->createClient(
+            'Cliente origen tickets',
+            '20222222222',
+        );
+        $selectedTicket = $this->createTicket(
+            'CLIENTE-MASIVO-SELECCIONADO',
+            CarbonImmutable::parse('2026-07-20 10:45:00'),
+            $this->sourceClientId,
+        );
+        $otherTicket = $this->createTicket(
+            'CLIENTE-MASIVO-HOMONIMO',
+            CarbonImmutable::parse('2026-07-20 10:46:00'),
+            $sameNameClientId,
+        );
+        $idempotencyKey = (string) Str::uuid();
+        $payload = [
+            'cliente_id' => $this->sourceClientId,
+            'idempotency_key' => $idempotencyKey,
+            'operacion' => 'AUMENTAR',
+            'tipo_pollo_id' => $this->firstChickenTypeId,
+            'monto' => '1.00',
+        ];
+
+        $this->postJson('/api/v1/finanzas/tickets/ajustar-precios', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.matched_tickets', 1)
+            ->assertJsonPath('data.updated_tickets', 1);
+
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $selectedTicket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '9.5000',
+            4,
+        );
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $otherTicket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '8.5000',
+            4,
+        );
+
+        $this->postJson('/api/v1/finanzas/tickets/ajustar-precios', [
+            ...$payload,
+            'cliente_id' => $sameNameClientId,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['idempotency_key']);
+    }
+
     public function test_it_uses_a_fixed_page_size_of_thirty_tickets(): void
     {
         $registeredAt = CarbonImmutable::parse('2026-07-20 09:00:00');
@@ -768,6 +1055,32 @@ class FinancialTicketApiTest extends TestCase
         ]);
 
         return $clientId;
+    }
+
+    private function createThirdParty(
+        int $companyId,
+        string $name,
+        string $document,
+        string $status,
+        string $role,
+    ): int {
+        $thirdPartyId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $companyId,
+            'tipo_documento' => 'RUC',
+            'numero_documento' => $document,
+            'nombre_razon_social' => $name,
+            'direccion' => 'Av. Pruebas financieras 456',
+            'estado' => $status,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $thirdPartyId,
+            'rol' => $role,
+            'created_at' => now(),
+        ]);
+
+        return $thirdPartyId;
     }
 
     private function createChickenType(string $code, string $name): int

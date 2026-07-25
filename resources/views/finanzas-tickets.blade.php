@@ -49,10 +49,29 @@
           <span>Número de ticket</span>
           <input id="financeTicketNumber" type="search" maxlength="40" placeholder="Ej. T-20260725-001">
         </label>
-        <label class="fin-field fin-filter-search">
-          <span>Cliente</span>
-          <input id="financeTicketClient" type="search" maxlength="120" placeholder="Nombre o número de documento">
-        </label>
+        <div class="fin-field fin-filter-search">
+          <label for="financeTicketClient">Cliente</label>
+          <div id="financeTicketClientCombobox" class="fin-ticket-filter-combobox">
+            <input
+              id="financeTicketClient"
+              type="search"
+              maxlength="120"
+              autocomplete="off"
+              placeholder="Nombre o número de documento"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="financeTicketClientSuggestions"
+            >
+            <div
+              id="financeTicketClientSuggestions"
+              class="fin-ticket-client-suggestions"
+              role="listbox"
+              aria-label="Clientes encontrados"
+              hidden
+            ></div>
+          </div>
+        </div>
         <label class="fin-field">
           <span>Desde</span>
           <input id="financeTicketFrom" type="datetime-local">
