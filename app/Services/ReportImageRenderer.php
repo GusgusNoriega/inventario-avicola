@@ -30,15 +30,10 @@ class ReportImageRenderer
         }
 
         $landscape = in_array($payload['type'], ['ventas-clientes', 'responsable'], true);
-        [$columns, $rows] = $this->table($payload['type'], $payload['data']);
-        $firstCapacity = $landscape ? 20 : 34;
+        [$columns, $rows] = $this->table($payload['type'], $payload['data'], $payload['from']);
+        $firstCapacity = $landscape ? 20 : ($payload['type'] === 'estado-cliente' ? 37 : 34);
         $followingCapacity = $landscape ? 27 : 42;
-        $chunks = [];
-        $remaining = $rows;
-        $chunks[] = array_splice($remaining, 0, $firstCapacity);
-        while ($remaining !== []) {
-            $chunks[] = array_splice($remaining, 0, $followingCapacity);
-        }
+        $chunks = $this->chunkRows($rows, $firstCapacity, $followingCapacity);
 
         return array_map(
             fn (array $pageRows, int $index): string => $this->renderPage(
@@ -55,9 +50,32 @@ class ReportImageRenderer
     }
 
     /**
+     * @param  list<list<string>|array{kind: string, cells: list<string>, movement?: string}>  $rows
+     * @return list<list<list<string>|array{kind: string, cells: list<string>, movement?: string}>>
+     */
+    private function chunkRows(array $rows, int $firstCapacity, int $followingCapacity): array
+    {
+        $chunks = [];
+        $remaining = $rows;
+        $capacity = $firstCapacity;
+
+        do {
+            $chunk = array_splice($remaining, 0, $capacity);
+            $last = $chunk[array_key_last($chunk)] ?? null;
+            if ($remaining !== [] && is_array($last) && ($last['kind'] ?? null) === 'day') {
+                array_unshift($remaining, array_pop($chunk));
+            }
+            $chunks[] = $chunk;
+            $capacity = $followingCapacity;
+        } while ($remaining !== []);
+
+        return $chunks;
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @param  list<array{label: string, width: float, align?: string}>  $columns
-     * @param  list<list<string>>  $rows
+     * @param  list<list<string>|array{kind: string, cells: list<string>, movement?: string}>  $rows
      */
     private function renderPage(
         array $payload,
@@ -74,7 +92,10 @@ class ReportImageRenderer
         $muted = imagecolorallocate($image, 96, 108, 101);
         $green = imagecolorallocate($image, 184, 216, 195);
         $pale = imagecolorallocate($image, 245, 248, 246);
+        $dayBackground = imagecolorallocate($image, 231, 241, 234);
         $line = imagecolorallocate($image, 205, 215, 208);
+        $blue = imagecolorallocate($image, 23, 92, 211);
+        $red = imagecolorallocate($image, 180, 35, 24);
         imagefill($image, 0, 0, $white);
 
         $margin = 48;
@@ -102,7 +123,11 @@ class ReportImageRenderer
                 );
                 $cursorY += 42;
             }
-            $cursorY = $this->drawSummary($image, $payload, $cursorY, $margin, $width, $ink, $muted, $pale, $line);
+            if ($payload['type'] === 'estado-cliente') {
+                $cursorY += 10;
+            } else {
+                $cursorY = $this->drawSummary($image, $payload, $cursorY, $margin, $width, $ink, $muted, $pale, $line);
+            }
         } else {
             $this->centerText($image, mb_strtoupper($payload['title']).' - CONTINUACION', 20, $cursorY, $ink, true, $width);
             $cursorY += 55;
@@ -124,30 +149,117 @@ class ReportImageRenderer
             $this->drawCellText($image, 'No hay registros en el periodo seleccionado.', $margin, $cursorY, $tableWidth, 80, 16, $muted, false, 'center');
             $cursorY += 80;
         } else {
-            foreach ($rows as $rowIndex => $row) {
+            $dataRowIndex = 0;
+            foreach ($rows as $row) {
+                $kind = is_string($row['kind'] ?? null) ? $row['kind'] : 'data';
+                $cells = isset($row['cells']) && is_array($row['cells']) ? $row['cells'] : $row;
+
+                if ($kind === 'day') {
+                    $rowHeight = 42;
+                    imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $dayBackground);
+                    imagerectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $line);
+                    $this->drawCellText(
+                        $image,
+                        $cells[0] ?? '',
+                        $margin,
+                        $cursorY,
+                        $tableWidth,
+                        $rowHeight,
+                        11,
+                        $ink,
+                        true,
+                        'left',
+                    );
+                    $cursorY += $rowHeight;
+
+                    continue;
+                }
+
+                if ($kind === 'opening') {
+                    $rowHeight = 42;
+                    $balanceWidth = (int) round($tableWidth * $columns[array_key_last($columns)]['width']);
+                    $labelWidth = $tableWidth - $balanceWidth;
+                    imageline($image, $margin, $cursorY + $rowHeight, $margin + $tableWidth, $cursorY + $rowHeight, $line);
+                    $this->drawCellText(
+                        $image,
+                        $cells[0] ?? '',
+                        $margin,
+                        $cursorY,
+                        $labelWidth,
+                        $rowHeight,
+                        11,
+                        $muted,
+                        false,
+                        'left',
+                    );
+                    $this->drawCellText(
+                        $image,
+                        $cells[array_key_last($cells)] ?? '-',
+                        $margin + $labelWidth,
+                        $cursorY,
+                        $balanceWidth,
+                        $rowHeight,
+                        11,
+                        $ink,
+                        true,
+                        'right',
+                    );
+                    $cursorY += $rowHeight;
+
+                    continue;
+                }
+
+                if ($kind === 'empty') {
+                    $rowHeight = 80;
+                    $this->drawCellText(
+                        $image,
+                        $cells[0] ?? 'No hay registros en el periodo seleccionado.',
+                        $margin,
+                        $cursorY,
+                        $tableWidth,
+                        $rowHeight,
+                        16,
+                        $muted,
+                        false,
+                        'center',
+                    );
+                    $cursorY += $rowHeight;
+
+                    continue;
+                }
+
                 $rowHeight = 42;
-                if ($rowIndex % 2 === 1) {
+                if ($dataRowIndex % 2 === 1) {
                     imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $pale);
                 }
                 $x = $margin;
                 foreach ($columns as $index => $column) {
                     $columnWidth = (int) round($tableWidth * $column['width']);
                     imageline($image, $x, $cursorY + $rowHeight, $x + $columnWidth, $cursorY + $rowHeight, $line);
+                    $movement = is_string($row['movement'] ?? null) ? $row['movement'] : null;
+                    $cellColor = match (true) {
+                        $payload['type'] === 'estado-cliente' && $index === 6 && $movement === 'debit' => $blue,
+                        $payload['type'] === 'estado-cliente' && $index === 6 && $movement === 'credit' => $red,
+                        default => $ink,
+                    };
                     $this->drawCellText(
                         $image,
-                        $row[$index] ?? '-',
+                        $cells[$index] ?? '-',
                         $x,
                         $cursorY,
                         $columnWidth,
                         $rowHeight,
                         11,
-                        $ink,
-                        false,
+                        $cellColor,
+                        $payload['type'] === 'estado-cliente'
+                            && $index === 6
+                            && in_array($movement, ['debit', 'credit'], true),
                         $column['align'] ?? 'left',
                     );
                     $x += $columnWidth;
                 }
                 $cursorY += $rowHeight;
+                $dataRowIndex++;
             }
         }
 
@@ -225,11 +337,64 @@ class ReportImageRenderer
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{0: list<array{label: string, width: float, align?: string}>, 1: list<list<string>>}
+     * @return array{
+     *     0: list<array{label: string, width: float, align?: string}>,
+     *     1: list<list<string>|array{kind: string, cells: list<string>, movement?: string}>
+     * }
      */
-    private function table(string $type, array $data): array
+    private function table(string $type, array $data, string $from): array
     {
-        if (in_array($type, ['estado-cliente', 'estado-proveedor'], true)) {
+        if ($type === 'estado-cliente') {
+            $columns = [
+                ['label' => 'Fecha', 'width' => .10], ['label' => 'Codigo', 'width' => .15],
+                ['label' => 'Tipo', 'width' => .14], ['label' => 'Detalle', 'width' => .24],
+                ['label' => 'Kg', 'width' => .09, 'align' => 'right'], ['label' => 'Precio', 'width' => .08, 'align' => 'right'],
+                ['label' => 'Cargo / abono', 'width' => .10, 'align' => 'right'],
+                ['label' => 'Saldo', 'width' => .10, 'align' => 'right'],
+            ];
+            $rows = [[
+                'kind' => 'opening',
+                'cells' => [
+                    'Saldo anterior al '.CarbonImmutable::parse($from)->format('d/m/Y'),
+                    '', '', '', '', '', '',
+                    number_format($data['opening'], 2),
+                ],
+            ]];
+
+            if ($data['rows']->isEmpty()) {
+                $rows[] = [
+                    'kind' => 'empty',
+                    'cells' => ['No hay movimientos en el periodo seleccionado.'],
+                ];
+            } else {
+                foreach ($data['rows']->groupBy('date') as $date => $dayRows) {
+                    $rows[] = [
+                        'kind' => 'day',
+                        'cells' => ['Movimientos del '.CarbonImmutable::parse($date)->format('d/m/Y')],
+                    ];
+                    foreach ($dayRows as $row) {
+                        $rows[] = [
+                            'kind' => 'data',
+                            'movement' => $row['effect'] > 0 ? 'debit' : ($row['effect'] < 0 ? 'credit' : 'neutral'),
+                            'cells' => [
+                                CarbonImmutable::parse($row['date'])->format('d/m/Y'),
+                                $row['code'],
+                                $row['type'],
+                                $row['detail'] ?: '-',
+                                $row['weight'] !== null ? number_format($row['weight'], 3) : '-',
+                                $row['price'] !== null ? number_format($row['price'], 2) : '-',
+                                $row['effect'] != 0 ? number_format(abs($row['effect']), 2) : '-',
+                                number_format($row['balance'], 2),
+                            ],
+                        ];
+                    }
+                }
+            }
+
+            return [$columns, $rows];
+        }
+
+        if ($type === 'estado-proveedor') {
             $columns = [
                 ['label' => 'Fecha', 'width' => .10], ['label' => 'Codigo', 'width' => .14],
                 ['label' => 'Tipo', 'width' => .14], ['label' => 'Detalle', 'width' => .22],

@@ -29,6 +29,18 @@
     .debit { color: #175cd3; font-weight: bold; }
     .balance { color: #172b1e; font-weight: bold; }
     .empty { padding: 24px !important; color: #66706a; text-align: center; }
+    table.report tbody tr.day-separator td {
+      border-top: 1px solid #7eaa8c;
+      border-bottom: 1px solid #a9c8b3;
+      background: #e7f1ea;
+      color: #173c25;
+      padding: 5px 6px;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: .2px;
+      text-transform: uppercase;
+    }
+    .day-separator { page-break-after: avoid; }
     .section-title { margin: 12px 0 5px; border-left: 4px solid #2f7d4b; padding-left: 6px; color: #173c25; font-size: 11px; }
     .footer-note { margin-top: 9px; color: #707a74; font-size: 7px; }
   </style>
@@ -42,41 +54,74 @@
     <div class="subject">
       {{ $type === 'estado-cliente' ? 'Cliente' : 'Proveedor' }}:
       <strong>{{ $data['counterparty']->nombre_razon_social }}</strong>
-      @if($data['counterparty']->numero_documento)
+      @if($type === 'estado-proveedor' && $data['counterparty']->numero_documento)
         <span class="muted"> - {{ $data['counterparty']->tipo_documento }} {{ $data['counterparty']->numero_documento }}</span>
       @endif
     </div>
-    <table class="summary">
-      <tr>
-        <td><span>Saldo anterior</span><strong>S/ {{ number_format($data['opening'], 2) }}</strong></td>
-        <td><span>Cargos del periodo</span><strong>S/ {{ number_format($data['charges'], 2) }}</strong></td>
-        <td><span>Abonos del periodo</span><strong>S/ {{ number_format($data['credits'], 2) }}</strong></td>
-        <td><span>Saldo final</span><strong>S/ {{ number_format($data['balance'], 2) }}</strong></td>
-      </tr>
-    </table>
-    <table class="report">
-      <thead><tr>
-        <th style="width: 10%">Fecha</th><th style="width: 15%">Codigo</th><th style="width: 14%">Tipo</th>
-        <th style="width: 23%">Detalle</th><th style="width: 9%">Kg</th><th style="width: 9%">Precio</th>
-        <th style="width: 10%">Cargo</th><th style="width: 10%">Abono</th><th style="width: 11%">Saldo</th>
-      </tr></thead>
-      <tbody>
-        <tr><td colspan="8" class="muted">Saldo anterior al {{ \Carbon\CarbonImmutable::parse($from)->format('d/m/Y') }}</td><td class="num balance">{{ number_format($data['opening'], 2) }}</td></tr>
-        @forelse($data['rows'] as $row)
-          <tr>
-            <td>{{ \Carbon\CarbonImmutable::parse($row['date'])->format('d/m/Y') }}</td>
-            <td>{{ $row['code'] }}</td><td>{{ $row['type'] }}</td><td>{{ $row['detail'] ?: '-' }}</td>
-            <td class="num">{{ $row['weight'] !== null ? number_format($row['weight'], 3) : '-' }}</td>
-            <td class="num">{{ $row['price'] !== null ? number_format($row['price'], 2) : '-' }}</td>
-            <td class="num debit">{{ $row['debit'] > 0 ? number_format($row['debit'], 2) : '-' }}</td>
-            <td class="num credit">{{ $row['credit'] > 0 ? number_format($row['credit'], 2) : '-' }}</td>
-            <td class="num balance">{{ number_format($row['balance'], 2) }}</td>
-          </tr>
-        @empty
-          <tr><td colspan="9" class="empty">No hay movimientos en el periodo seleccionado.</td></tr>
-        @endforelse
-      </tbody>
-    </table>
+    @if($type === 'estado-cliente')
+      <table class="report">
+        <thead><tr>
+          <th style="width: 10%">Fecha</th><th style="width: 15%">Codigo</th><th style="width: 14%">Tipo</th>
+          <th style="width: 24%">Detalle</th><th style="width: 9%">Kg</th><th style="width: 8%">Precio</th>
+          <th style="width: 10%"><span class="debit">Cargo</span> / <span class="credit">Abono</span></th>
+          <th style="width: 10%">Saldo</th>
+        </tr></thead>
+        <tbody>
+          <tr><td colspan="7" class="muted">Saldo anterior al {{ \Carbon\CarbonImmutable::parse($from)->format('d/m/Y') }}</td><td class="num balance">{{ number_format($data['opening'], 2) }}</td></tr>
+          @forelse($data['rows']->groupBy('date') as $date => $rows)
+            <tr class="day-separator">
+              <td colspan="8">Movimientos del {{ \Carbon\CarbonImmutable::parse($date)->format('d/m/Y') }}</td>
+            </tr>
+            @foreach($rows as $row)
+              <tr>
+                <td>{{ \Carbon\CarbonImmutable::parse($row['date'])->format('d/m/Y') }}</td>
+                <td>{{ $row['code'] }}</td><td>{{ $row['type'] }}</td><td>{{ $row['detail'] ?: '-' }}</td>
+                <td class="num">{{ $row['weight'] !== null ? number_format($row['weight'], 3) : '-' }}</td>
+                <td class="num">{{ $row['price'] !== null ? number_format($row['price'], 2) : '-' }}</td>
+                <td class="num {{ $row['effect'] > 0 ? 'debit' : ($row['effect'] < 0 ? 'credit' : '') }}">
+                  {{ $row['effect'] != 0 ? number_format(abs($row['effect']), 2) : '-' }}
+                </td>
+                <td class="num balance">{{ number_format($row['balance'], 2) }}</td>
+              </tr>
+            @endforeach
+          @empty
+            <tr><td colspan="8" class="empty">No hay movimientos en el periodo seleccionado.</td></tr>
+          @endforelse
+        </tbody>
+      </table>
+    @else
+      <table class="summary">
+        <tr>
+          <td><span>Saldo anterior</span><strong>S/ {{ number_format($data['opening'], 2) }}</strong></td>
+          <td><span>Cargos del periodo</span><strong>S/ {{ number_format($data['charges'], 2) }}</strong></td>
+          <td><span>Abonos del periodo</span><strong>S/ {{ number_format($data['credits'], 2) }}</strong></td>
+          <td><span>Saldo final</span><strong>S/ {{ number_format($data['balance'], 2) }}</strong></td>
+        </tr>
+      </table>
+      <table class="report">
+        <thead><tr>
+          <th style="width: 10%">Fecha</th><th style="width: 15%">Codigo</th><th style="width: 14%">Tipo</th>
+          <th style="width: 23%">Detalle</th><th style="width: 9%">Kg</th><th style="width: 9%">Precio</th>
+          <th style="width: 10%">Cargo</th><th style="width: 10%">Abono</th><th style="width: 11%">Saldo</th>
+        </tr></thead>
+        <tbody>
+          <tr><td colspan="8" class="muted">Saldo anterior al {{ \Carbon\CarbonImmutable::parse($from)->format('d/m/Y') }}</td><td class="num balance">{{ number_format($data['opening'], 2) }}</td></tr>
+          @forelse($data['rows'] as $row)
+            <tr>
+              <td>{{ \Carbon\CarbonImmutable::parse($row['date'])->format('d/m/Y') }}</td>
+              <td>{{ $row['code'] }}</td><td>{{ $row['type'] }}</td><td>{{ $row['detail'] ?: '-' }}</td>
+              <td class="num">{{ $row['weight'] !== null ? number_format($row['weight'], 3) : '-' }}</td>
+              <td class="num">{{ $row['price'] !== null ? number_format($row['price'], 2) : '-' }}</td>
+              <td class="num debit">{{ $row['debit'] > 0 ? number_format($row['debit'], 2) : '-' }}</td>
+              <td class="num credit">{{ $row['credit'] > 0 ? number_format($row['credit'], 2) : '-' }}</td>
+              <td class="num balance">{{ number_format($row['balance'], 2) }}</td>
+            </tr>
+          @empty
+            <tr><td colspan="9" class="empty">No hay movimientos en el periodo seleccionado.</td></tr>
+          @endforelse
+        </tbody>
+      </table>
+    @endif
   @elseif($type === 'ventas-clientes')
     <table class="summary">
       <tr>

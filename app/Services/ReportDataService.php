@@ -7,6 +7,7 @@ use App\Models\Pago;
 use App\Models\Pesada;
 use App\Models\Tercero;
 use App\Models\TicketDespacho;
+use App\Models\TipoPollo;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,7 @@ class ReportDataService
             ->where('empresa_id', $companyId)
             ->findOrFail($customerId);
 
-        return $this->statement($companyId, $customer, 'VENTA', 'cliente_id', $from, $to);
+        return $this->statement($companyId, $customer, 'VENTA', 'cliente_id', $from, $to, true);
     }
 
     /** @return array<string, mixed> */
@@ -41,6 +42,7 @@ class ReportDataService
         string $paymentPartyColumn,
         string $from,
         string $to,
+        bool $abbreviateChickenTypes = false,
     ): array {
         $openingDocuments = Comprobante::query()
             ->where('empresa_id', $companyId)
@@ -67,12 +69,16 @@ class ReportDataService
             ->orderBy('fecha_emision')
             ->orderBy('id')
             ->get();
-        $details = DB::table('comprobante_detalles')
-            ->whereIn('comprobante_id', $documents->pluck('id'))
-            ->get()
+        $details = DB::table('comprobante_detalles as detalle')
+            ->leftJoin('tipos_pollo as tipo_pollo', 'tipo_pollo.id', '=', 'detalle.tipo_pollo_id')
+            ->whereIn('detalle.comprobante_id', $documents->pluck('id'))
+            ->get([
+                'detalle.*',
+                'tipo_pollo.codigo as tipo_pollo_codigo',
+            ])
             ->groupBy('comprobante_id');
 
-        $transactions = $documents->map(function (Comprobante $document) use ($details): array {
+        $transactions = $documents->map(function (Comprobante $document) use ($details, $abbreviateChickenTypes): array {
             $lines = $details->get($document->id, collect());
             $effect = $this->documentEffect($document);
 
@@ -81,7 +87,12 @@ class ReportDataService
                 'sort' => $document->fecha_emision->format('Y-m-d').' 00:00:00-D-'.$document->id,
                 'code' => $document->codigo,
                 'type' => $document->naturaleza === Comprobante::NATURE_CREDIT ? 'NOTA / DEVOLUCION' : $document->tipo_documento,
-                'detail' => $lines->pluck('descripcion')->unique()->implode(', '),
+                'detail' => $lines
+                    ->map(fn (object $line): string => $abbreviateChickenTypes
+                        ? $this->customerChickenTypeLabel($line->tipo_pollo_codigo, $line->descripcion)
+                        : $line->descripcion)
+                    ->unique()
+                    ->implode(', '),
                 'weight' => (float) $lines->sum('peso_neto_kg'),
                 'price' => $lines->count() === 1 ? (float) ($lines->first()->precio_kg ?? 0) : null,
                 'debit' => $effect > 0 ? abs($effect) : 0,
@@ -293,6 +304,17 @@ class ReportDataService
     {
         return (float) $document->total
             * ($document->naturaleza === Comprobante::NATURE_CREDIT ? -1 : 1);
+    }
+
+    private function customerChickenTypeLabel(?string $code, string $description): string
+    {
+        return match ($code) {
+            TipoPollo::CHICKEN_LIVE => 'PV',
+            TipoPollo::CHICKEN_DEAD => 'PM',
+            TipoPollo::CHICKEN_DRESSED => 'PP',
+            TipoPollo::CHICKEN_PROCESSED => 'PB',
+            default => $description,
+        };
     }
 
     private function paymentEffect(Pago $payment, string $operation): float
