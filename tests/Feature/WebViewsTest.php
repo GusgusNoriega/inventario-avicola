@@ -444,6 +444,7 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"', false)
             ->assertDontSee('id="retailChickenTypes"', false)
             ->assertSee('id="retailTouchKeyboard"', false)
+            ->assertSee('class="rd-touch-keyboard-card" role="dialog" aria-modal="true"', false)
             ->assertSee('data-retail-keyboard="text"', false)
             ->assertSee('data-retail-keyboard="decimal"', false)
             ->assertSee('data-retail-keyboard="integer"', false)
@@ -460,7 +461,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('`${RETAIL_API_BASE}/catalogo`', $javascript);
         $this->assertStringContainsString('`${RETAIL_API_BASE}/configuracion`', $javascript);
         $this->assertStringContainsString('`${RETAIL_API_BASE}/tickets`', $javascript);
-        $this->assertStringContainsString('const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 4;', $javascript);
+        $this->assertStringContainsString('const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 5;', $javascript);
         $this->assertStringContainsString('.slice(0, LIST_COUNT)', $javascript);
         $this->assertStringContainsString('while (restoredLists.length < LIST_COUNT)', $javascript);
         $this->assertStringContainsString('from "./retail-dispatch-errors.js"', $javascript);
@@ -496,7 +497,7 @@ class WebViewsTest extends TestCase
         );
         $this->assertStringContainsString('elements.manualWeightTrigger.disabled = captureLocked || Boolean(pendingCapture)', $javascript);
         $this->assertStringContainsString('elements.openManualWeight.disabled = captureLocked || Boolean(pendingCapture)', $javascript);
-        $this->assertStringContainsString('priceEditingListIndex', $javascript);
+        $this->assertStringContainsString('function openDirectPriceEditor()', $javascript);
         $this->assertStringContainsString('general_prices', $javascript);
         $this->assertStringNotContainsString('data-retail-clear-client', $javascript);
         $this->assertStringNotContainsString('Venta sin cliente', $javascript);
@@ -521,20 +522,20 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('elements.birdsPerTrayModal,', $javascript);
         $this->assertStringContainsString('["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"]', $javascript);
         $this->assertStringContainsString('["Á", "É", "Í", "Ó", "Ú", "Ü", "-", "/", "."]', $javascript);
-        $this->assertStringContainsString('function openTouchKeyboard(input)', $javascript);
+        $this->assertStringContainsString('function openTouchKeyboard(input, options = {})', $javascript);
         $this->assertStringContainsString('data-retail-keyboard-key=" ">Espacio', $javascript);
         $this->assertStringContainsString('const current = touchKeyboardState.buffer;', $javascript);
         $this->assertStringContainsString('const next = `${current}${key}`;', $javascript);
         $this->assertStringContainsString('setTouchKeyboardInputValue(current.slice(0, -1));', $javascript);
         $this->assertStringContainsString('target.dispatchEvent(new Event("input", { bubbles: true }))', $javascript);
         $this->assertStringNotContainsString('data-retail-keyboard="text"', $javascript);
-        $this->assertStringContainsString('data-retail-keyboard="decimal"', $javascript);
+        $this->assertStringContainsString('directPriceInput: document.querySelector("#retailDirectPriceInput")', $javascript);
         $this->assertStringContainsString('data-retail-keyboard="integer"', $javascript);
         $this->assertStringContainsString('const MONEY_DECIMALS = 2;', $javascript);
         $this->assertStringContainsString('function roundMoney(value)', $javascript);
         $this->assertStringContainsString('function moneyToCents(value)', $javascript);
         $this->assertStringContainsString('function lineAmount(list, item)', $javascript);
-        $this->assertStringContainsString('step="0.01"', $javascript);
+        $this->assertStringContainsString('function normalizedTouchKeyboardValue()', $javascript);
         $this->assertStringContainsString('acceptedKey = key.slice(0, remaining);', $javascript);
         $this->assertStringNotContainsString('importe: formatMoneyValue(row.amount)', $javascript);
         $this->assertStringContainsString('[code, formatMoneyValue(value)]', $javascript);
@@ -642,16 +643,20 @@ class WebViewsTest extends TestCase
             ->assertSee('Despacho minorista 2')
             ->assertSee('data-retail-station="2"', false)
             ->assertSee('data-retail-api-base="/despacho-minorista-2"', false)
-            ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"', false)
+            ->assertSee('id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Seleccionar la columna de producto y presentación"', false)
             ->assertDontSee('id="retailChickenTypes"', false)
-            ->assertSee('Pollo pelado por defecto')
-            ->assertSee('Elige beneficiado únicamente cuando el despacho sea sin merma.')
+            ->assertDontSee('Una columna para cada producto')
+            ->assertDontSee('Selecciona el botón ubicado sobre la columna donde registrarás la pesada.')
+            ->assertDontSee('id="retailListSelectionHint"', false)
+            ->assertDontSee('class="rd-selection-bar"', false)
+            ->assertSee('id="retailPriceCard"', false)
+            ->assertSee('Precio asignado')
+            ->assertSee('Toca para cambiar el precio del ticket')
             ->assertSee('id="retailOpenManualWeight"', false)
             ->assertSee('Colocar peso manual')
             ->assertSee('aria-controls="retailManualWeightModal"', false)
             ->assertDontSee('Seleccionar lista 1')
             ->assertDontSee('data-retail-add-list=', false)
-            ->assertSee('Toca una columna para seleccionar la presentación.')
             ->assertDontSee('id="retailDefaultPaymentMethod"', false)
             ->assertDontSee('id="retailDefaultPaymentAccount"', false)
             ->assertDontSee('id="retailPaymentModeOptions"', false)
@@ -672,10 +677,25 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('"MACHO_ABIERTO"', $javascript);
         $this->assertStringContainsString('"HEMBRA_CERRADA"', $javascript);
         $this->assertStringContainsString('"HEMBRA_ABIERTA"', $javascript);
+        $this->assertStringContainsString('const STATION_2_PROCESSED_LIST_INDEX = 0;', $javascript);
+        $this->assertStringContainsString('const STATION_2_LIST_LAYOUT_VERSION = "processed-first-v1";', $javascript);
+        $this->assertStringContainsString('data-retail-list-processed=', $javascript);
+        $this->assertStringContainsString('elements.priceCard?.addEventListener("click", openDirectPriceEditor)', $javascript);
+        $this->assertStringContainsString('"Precio cambiado para este ticket"', $javascript);
+        $this->assertStringContainsString('priceSource === "CLIENTE" && client', $javascript);
+        $this->assertStringContainsString('priceSource === "GENERAL"', $javascript);
+        $this->assertStringContainsString('`Precio general de ${chickenName}`', $javascript);
+        $this->assertStringContainsString('function priceChickenTypeForList(list = activeList())', $javascript);
+        $this->assertStringContainsString('listIndex: listIndex + 1', $javascript);
+        $this->assertStringContainsString('processedButton + adjustmentButtons', $javascript);
+        $this->assertStringContainsString('storedPayload?.layoutVersion !== STATION_2_LIST_LAYOUT_VERSION', $javascript);
+        $this->assertStringContainsString('syncStation2ChickenTypeWithActiveList()', $javascript);
+        $this->assertStringContainsString('selectList(listIndex);', $javascript);
+        $this->assertStringContainsString('if (state.activeList !== listIndex) return;', $javascript);
         $this->assertStringContainsString('syncStation2AdjustmentWithActiveList()', $javascript);
         $this->assertStringContainsString('state.adjustmentCode = "";', $javascript);
         $this->assertStringContainsString('data-retail-list-adjustment=', $javascript);
-        $this->assertStringContainsString('`Pollo beneficiado sin merma · destino: lista ${state.activeList + 1}.`', $javascript);
+        $this->assertStringContainsString('"Columna activa: Pollo beneficiado sin merma."', $javascript);
         $this->assertStringContainsString('`Pollo pelado · columna activa: ${activeFixedAdjustment.name}.`', $javascript);
         $this->assertStringContainsString('"Columna activa sin presentación disponible."', $javascript);
         $this->assertStringContainsString('"Peso directo de balanza · ajuste no disponible"', $javascript);
@@ -686,6 +706,10 @@ class WebViewsTest extends TestCase
         $this->assertIsString($stylesheet);
         $this->assertStringContainsString('.rd-product-selection', $stylesheet);
         $this->assertStringContainsString('grid-template-columns: repeat(5, minmax(0, 1fr));', $stylesheet);
+        $this->assertStringContainsString('[data-retail-station="2"] .rd-lists-stage', $stylesheet);
+        $this->assertStringContainsString('[data-retail-station="2"].rd-station', $stylesheet);
+        $this->assertStringContainsString('grid-template-rows: 52px 202px minmax(0, 1fr) 30px;', $stylesheet);
+        $this->assertStringContainsString('width: calc(125% + 2px);', $stylesheet);
         $this->assertStringContainsString('.rd-adjustment-buttons button.is-processed.is-active', $stylesheet);
     }
 
@@ -775,9 +799,10 @@ class WebViewsTest extends TestCase
                 ->assertOk()
                 ->assertSee('id="retailAssignPrice"', false)
                 ->assertSee('Cambiar precio')
-                ->assertSee('Precio puntual del ticket')
-                ->assertSee('solo en este ticket')
-                ->assertSee('sin modificar las tarifas de Directorio');
+                ->assertSee('aria-controls="retailTouchKeyboard"', false)
+                ->assertSee('id="retailDirectPriceInput"', false)
+                ->assertSee('Teclado táctil')
+                ->assertDontSee('id="retailPriceModal"', false);
         }
 
         $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
@@ -788,12 +813,23 @@ class WebViewsTest extends TestCase
             $javascript
         );
         $this->assertStringContainsString('return { value, source: "MANUAL" };', $javascript);
-        $this->assertStringContainsString('const current = hasOverride ? override : base?.value;', $javascript);
-        $this->assertStringContainsString('data-retail-base-price="${baseValue}"', $javascript);
-        $this->assertStringContainsString('if (!baseRaw) return;', $javascript);
-        $this->assertStringContainsString('moneyToCents(normalizedValue) === moneyToCents(baseRaw)', $javascript);
-        $this->assertStringContainsString('elements.clearPrices.disabled = false;', $javascript);
-        $this->assertStringContainsString('elements.priceForm.querySelector(\'[type="submit"]\').disabled = false;', $javascript);
+        $this->assertStringContainsString('function applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue)', $javascript);
+        $this->assertStringContainsString('function openDirectPriceEditor()', $javascript);
+        $this->assertStringContainsString('openTouchKeyboard(elements.directPriceInput, {', $javascript);
+        $this->assertStringContainsString('lockStation: true,', $javascript);
+        $this->assertStringContainsString('function trapTabWithin(container, event)', $javascript);
+        $this->assertStringContainsString('trapTabWithin(elements.touchKeyboard, event);', $javascript);
+        $this->assertStringContainsString(
+            '.querySelector(\'[data-retail-keyboard-action="cancel"]\')',
+            $javascript
+        );
+        $this->assertStringContainsString('knownCodes.length === 1', $javascript);
+        $this->assertStringContainsString('delete nextOverrides[chickenTypeCode];', $javascript);
+        $this->assertStringContainsString('nextOverrides[chickenTypeCode] = normalizedValue;', $javascript);
+        $this->assertStringContainsString('moneyToCents(normalizedValue) === moneyToCents(baseValue)', $javascript);
+        $this->assertStringContainsString('elements.assignPrice.addEventListener("click", openDirectPriceEditor)', $javascript);
+        $this->assertStringNotContainsString('function renderPriceFields()', $javascript);
+        $this->assertStringNotContainsString('elements.priceForm', $javascript);
         $this->assertStringContainsString('if (String(list.clientId) !== String(client.id)) {', $javascript);
         $this->assertStringContainsString('list.priceOverrides = {};', $javascript);
         $this->assertStringContainsString('const TICKET_PRICE_OVERRIDE_VERSION = 1;', $javascript);

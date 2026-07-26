@@ -107,7 +107,7 @@ test("la captura bloqueada explica el motivo en el modal compartido por ambas es
   assert.match(retailDispatchSource, /Faltan datos del catálogo minorista/);
   assert.match(retailDispatchSource, /La tara iguala o supera el peso/);
   assert.match(retailDispatchSource, /El peso manual no es válido/);
-  assert.match(retailDispatchSource, /Hay precios manuales no válidos/);
+  assert.match(retailDispatchSource, /El precio manual no es válido/);
   assert.match(
     retailDispatchSource,
     /if \(touchKeyboardState\.target && !elements\.touchKeyboard\?\.hidden\)/

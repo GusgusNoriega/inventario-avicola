@@ -118,11 +118,19 @@
         </article>
 
         <article class="rd-values-panel rd-panel">
-          <div class="rd-value-card is-price">
-            <span>Valor en tiempo real</span>
-            <strong id="retailPricePreview">S/ --</strong>
-            <small id="retailPriceSource">Asigna un precio a la lista</small>
-          </div>
+          @if($retailStation === 2)
+            <button id="retailPriceCard" class="rd-value-card is-price is-interactive" type="button" aria-haspopup="dialog" aria-controls="retailTouchKeyboard">
+              <span>Precio asignado</span>
+              <strong id="retailPricePreview">S/ -- por kg</strong>
+              <small id="retailPriceSource">Toca para cambiar el precio del ticket</small>
+            </button>
+          @else
+            <div class="rd-value-card is-price">
+              <span>Valor en tiempo real</span>
+              <strong id="retailPricePreview">S/ --</strong>
+              <small id="retailPriceSource">Asigna un precio a la lista</small>
+            </div>
+          @endif
           <div class="rd-value-card">
             <span>Peso bruto ajustado</span>
             <strong id="retailGrossPreview">--- kg</strong>
@@ -140,22 +148,24 @@
         </article>
       </section>
 
-      <section class="rd-selection-bar" aria-label="Producto y presentación de la pesada">
-        <div class="rd-product-selection">
-          <p class="rd-product-selection-copy">
-            <strong>Pollo pelado por defecto</strong>
-            <span>Elige beneficiado únicamente cuando el despacho sea sin merma.</span>
-          </p>
-          <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"></div>
-        </div>
-      </section>
+      @if($retailStation !== 2)
+        <section class="rd-selection-bar" aria-label="Producto y presentación de la pesada">
+          <div class="rd-product-selection">
+            <p class="rd-product-selection-copy">
+              <strong>Pollo pelado por defecto</strong>
+              <span>Elige beneficiado únicamente cuando el despacho sea sin merma.</span>
+            </p>
+            <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Producto y presentación; solo se puede elegir una opción"></div>
+          </div>
+        </section>
+      @endif
     </form>
 
     <section class="rd-workspace" aria-label="Listas de venta minorista">
       <div class="rd-lists-stage">
         <div class="rd-add-buttons" aria-label="Seleccionar lista de destino">
           @if($retailStation === 2)
-            <p id="retailListSelectionHint" class="rd-list-selection-hint">Toca una columna para seleccionar la presentación.</p>
+            <div id="retailAdjustments" class="rd-adjustment-buttons" role="group" aria-label="Seleccionar la columna de producto y presentación"></div>
           @else
             <p id="retailListSelectionHint" class="rd-list-selection-hint">Selecciona una columna y captura; desliza para ver las listas 5 a 8.</p>
             @for ($listNumber = 1; $listNumber <= 8; $listNumber++)
@@ -179,7 +189,7 @@
           <span aria-hidden="true">−</span>
           Quitar pesada
         </button>
-        <button id="retailAssignPrice" class="rd-rail-button is-price" type="button">
+        <button id="retailAssignPrice" class="rd-rail-button is-price" type="button" aria-haspopup="dialog" aria-controls="retailTouchKeyboard">
           <span aria-hidden="true">S/</span>
           Cambiar precio
         </button>
@@ -301,24 +311,6 @@
       </label>
       <div id="retailClientOptions" class="rd-client-options" role="listbox" aria-label="Clientes disponibles"></div>
     </section>
-  </div>
-
-  <div id="retailPriceModal" class="rd-modal" hidden>
-    <form id="retailPriceForm" class="rd-modal-card is-price" role="dialog" aria-modal="true" aria-labelledby="retailPriceModalTitle">
-      <header class="rd-modal-head">
-        <div>
-          <p>Precio puntual del ticket</p>
-          <h2 id="retailPriceModalTitle">Asignar precio por kilogramo</h2>
-        </div>
-        <button type="button" data-retail-close-modal="retailPriceModal" aria-label="Cerrar">×</button>
-      </header>
-      <p class="rd-modal-copy">Los precios vigentes se precargan para que puedas cambiarlos solo en este ticket, sin modificar las tarifas de Directorio.</p>
-      <div id="retailPriceFields" class="rd-price-fields"></div>
-      <div class="rd-modal-actions">
-        <button id="retailClearPrices" class="rd-secondary-button" type="button">Usar precios vigentes</button>
-        <button class="rd-primary-button" type="submit">Aplicar a la lista</button>
-      </div>
-    </form>
   </div>
 
   <div id="retailDeliveryModal" class="rd-modal" hidden>
@@ -499,8 +491,10 @@
     </footer>
   </aside>
 
+  <input id="retailDirectPriceInput" type="number" min="0.01" max="99999999.99" step="0.01" inputmode="none" readonly hidden tabindex="-1" aria-hidden="true" data-retail-keyboard="decimal">
+
   <aside id="retailTouchKeyboard" class="rd-touch-keyboard" hidden aria-hidden="true">
-    <section class="rd-touch-keyboard-card" role="dialog" aria-labelledby="retailTouchKeyboardTitle" aria-describedby="retailTouchKeyboardValue">
+    <section class="rd-touch-keyboard-card" role="dialog" aria-modal="true" aria-labelledby="retailTouchKeyboardTitle" aria-describedby="retailTouchKeyboardValue">
       <header class="rd-touch-keyboard-head">
         <div>
           <span>Teclado táctil</span>

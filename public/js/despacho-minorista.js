@@ -47,7 +47,6 @@ const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
 const SEX_MALE = "MACHO";
 const RETAIL_DRESSED_CHICKEN_CODE = "POLLO_PELADO";
-const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 4;
 const MAX_RETAIL_BIRD_QUANTITY = 40;
 const STATION_2_LIST_ADJUSTMENT_CODES = [
   "MACHO_CERRADO",
@@ -55,6 +54,9 @@ const STATION_2_LIST_ADJUSTMENT_CODES = [
   "HEMBRA_CERRADA",
   "HEMBRA_ABIERTA"
 ];
+const STATION_2_PROCESSED_LIST_INDEX = 0;
+const STATION_2_LIST_LAYOUT_VERSION = "processed-first-v1";
+const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 5;
 const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
 const TICKET_PRICE_OVERRIDE_VERSION = 1;
@@ -193,6 +195,7 @@ const elements = {
   weightSourceLabel: document.querySelector("#retailWeightSourceLabel"),
   captureState: document.querySelector("#retailCaptureState"),
   captureWeight: document.querySelector("#retailCaptureWeight"),
+  priceCard: document.querySelector("#retailPriceCard"),
   pricePreview: document.querySelector("#retailPricePreview"),
   priceSource: document.querySelector("#retailPriceSource"),
   grossPreview: document.querySelector("#retailGrossPreview"),
@@ -226,10 +229,7 @@ const elements = {
   clientModal: document.querySelector("#retailClientModal"),
   clientSearch: document.querySelector("#retailClientSearch"),
   clientOptions: document.querySelector("#retailClientOptions"),
-  priceModal: document.querySelector("#retailPriceModal"),
-  priceForm: document.querySelector("#retailPriceForm"),
-  priceFields: document.querySelector("#retailPriceFields"),
-  clearPrices: document.querySelector("#retailClearPrices"),
+  directPriceInput: document.querySelector("#retailDirectPriceInput"),
   deliveryModal: document.querySelector("#retailDeliveryModal"),
   deliveryForm: document.querySelector("#retailDeliveryForm"),
   deliverySummary: document.querySelector("#retailDeliverySummary"),
@@ -303,7 +303,6 @@ const state = {
   liveRaw: "",
   pendingCapture: null,
   selectedItem: null,
-  priceEditingListIndex: null,
   storageKey: null,
   lists: Array.from({ length: LIST_COUNT }, emptyList),
   scale: null,
@@ -328,7 +327,10 @@ const touchKeyboardState = {
   decimalPlaces: null,
   uppercase: true,
   replaceOnNextKey: false,
-  suppressOpen: false
+  suppressOpen: false,
+  acceptHandler: null,
+  lockStation: false,
+  focusOrigin: null
 };
 
 function createDraftId() {
@@ -387,11 +389,27 @@ function restoreLists(branchId) {
   state.storageKey = `${STORAGE_PREFIX}-${branchId}`;
 
   try {
-    const stored = JSON.parse(localStorage.getItem(state.storageKey));
-    if (Array.isArray(stored)) {
-      const restoredLists = stored
+    const storedPayload = JSON.parse(localStorage.getItem(state.storageKey));
+    const storedLists = Array.isArray(storedPayload)
+      ? storedPayload
+      : storedPayload?.lists;
+    if (Array.isArray(storedLists)) {
+      let restoredLists = storedLists
         .slice(0, LIST_COUNT)
         .map(normalizeList);
+
+      if (
+        RETAIL_STATION === "2"
+        && storedPayload?.layoutVersion !== STATION_2_LIST_LAYOUT_VERSION
+      ) {
+        const processedList = restoredLists.length >= LIST_COUNT
+          ? restoredLists[LIST_COUNT - 1]
+          : emptyList();
+        restoredLists = [
+          processedList,
+          ...restoredLists.slice(0, STATION_2_LIST_ADJUSTMENT_CODES.length)
+        ];
+      }
 
       while (restoredLists.length < LIST_COUNT) {
         restoredLists.push(emptyList());
@@ -420,7 +438,13 @@ function persistLists() {
   }));
 
   try {
-    localStorage.setItem(state.storageKey, JSON.stringify(serializable));
+    const payload = RETAIL_STATION === "2"
+      ? {
+          layoutVersion: STATION_2_LIST_LAYOUT_VERSION,
+          lists: serializable
+        }
+      : serializable;
+    localStorage.setItem(state.storageKey, JSON.stringify(payload));
   } catch {
     // La venta continúa aunque el navegador no permita almacenamiento local.
   }
@@ -727,14 +751,37 @@ function selectedAdjustment() {
   return state.catalog.adjustments.find((adjustment) => adjustment.code === state.adjustmentCode) || null;
 }
 
+function isStation2ProcessedList(listIndex = state.activeList) {
+  return RETAIL_STATION === "2"
+    && Number(listIndex) === STATION_2_PROCESSED_LIST_INDEX;
+}
+
 function station2AdjustmentForList(listIndex) {
   if (RETAIL_STATION !== "2") return null;
-  const code = STATION_2_LIST_ADJUSTMENT_CODES[Number(listIndex)];
+  const code = STATION_2_LIST_ADJUSTMENT_CODES[Number(listIndex) - 1];
   return state.catalog.adjustments.find((adjustment) => adjustment.code === code) || null;
+}
+
+function syncStation2ChickenTypeWithActiveList() {
+  if (RETAIL_STATION !== "2") return;
+  if (isStation2ProcessedList()) {
+    if (!selectChickenType(RETAIL_PROCESSED_CHICKEN_CODE)) {
+      state.chickenType = null;
+    }
+    return;
+  }
+  ensureDressedChickenTypeSelection();
 }
 
 function syncStation2AdjustmentWithActiveList() {
   if (RETAIL_STATION !== "2") return;
+  if (isStation2ProcessedList()) {
+    const baseAdjustment = state.catalog.adjustments.find((adjustment) => adjustment.is_default)
+      || state.catalog.adjustments[0];
+    state.adjustmentCode = baseAdjustment?.code || "";
+    state.sex = baseAdjustment?.sex || SEX_MALE;
+    return;
+  }
   const adjustment = station2AdjustmentForList(state.activeList);
   if (!adjustment) {
     state.adjustmentCode = "";
@@ -747,13 +794,6 @@ function syncStation2AdjustmentWithActiveList() {
 
 function clientFor(list = activeList()) {
   return state.catalog.clients.find((client) => String(client.id) === String(list.clientId)) || null;
-}
-
-function priceEditingList() {
-  const index = state.priceEditingListIndex;
-  return Number.isInteger(index) && index >= 0 && index < LIST_COUNT
-    ? state.lists[index]
-    : activeList();
 }
 
 function normalizePriceRecord(record) {
@@ -1079,6 +1119,7 @@ function liveReadingAvailability() {
     && Number.isFinite(freshnessMs)
     && Date.now() - readingAtMs > freshnessMs;
   const fixedAdjustmentAvailable = RETAIL_STATION !== "2"
+    || isStation2ProcessedList()
     || Boolean(station2AdjustmentForList(state.activeList));
   const ready = Number.isFinite(weight)
     && weight > 0
@@ -1181,13 +1222,42 @@ function renderWeightPreview() {
       ? `Registrar el peso capturado en la lista ${state.activeList + 1}`
       : `Capturar el peso actual en la lista ${state.activeList + 1}`
   );
-  const liveAmount = calculationsAvailable && price && values.netWeight > 0
-    ? roundMoney(values.netWeight * price.value)
-    : null;
-  elements.pricePreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
-  elements.priceSource.textContent = price
-    ? `S/ ${formatMoneyValue(price.value)} por kg · ${price.source === "MANUAL" ? "puntual" : price.source.toLowerCase()}`
-    : (clientFor() ? "Precio del cliente no configurado" : "Asigna un precio a la lista");
+  if (RETAIL_STATION === "2") {
+    const client = clientFor();
+    const chickenType = selectedChickenType();
+    const chickenName = chickenType?.name || "este producto";
+    const priceSource = String(price?.source || "").toUpperCase();
+    const priceDescription = priceSource === "MANUAL"
+      ? "Precio cambiado para este ticket"
+      : priceSource === "CLIENTE" && client
+        ? `Precio vigente de ${client.name}`
+        : priceSource === "GENERAL"
+          ? `Precio general de ${chickenName}`
+          : "Precio vigente";
+    elements.pricePreview.textContent = price
+      ? `S/ ${formatMoneyValue(price.value)} por kg`
+      : "S/ -- por kg";
+    elements.priceSource.textContent = price
+      ? `Toca para cambiar · ${priceDescription}`
+      : `${client
+        ? `Toca para configurar · ${client.name} no tiene precio de ${chickenName}`
+        : `Toca para configurar · precio general de ${chickenName} no configurado`}`;
+    elements.priceCard.disabled = state.loading || state.lists.some((list) => list.saving);
+    elements.priceCard.setAttribute(
+      "aria-label",
+      price
+        ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Toca para cambiar el precio del ticket`
+        : `Esta columna no tiene precio de ${chickenName}. Toca para revisar el precio del ticket`
+    );
+  } else {
+    const liveAmount = calculationsAvailable && price && values.netWeight > 0
+      ? roundMoney(values.netWeight * price.value)
+      : null;
+    elements.pricePreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
+    elements.priceSource.textContent = price
+      ? `S/ ${formatMoneyValue(price.value)} por kg · ${price.source === "MANUAL" ? "puntual" : price.source.toLowerCase()}`
+      : (clientFor() ? "Precio del cliente no configurado" : "Asigna un precio a la lista");
+  }
   elements.trayCountValue.textContent = values.trayCount;
   elements.trayCountLabel.textContent = values.trayCount === 0
     ? "sin bandejas"
@@ -1252,7 +1322,7 @@ function renderAdjustments() {
     ? STATION_2_LIST_ADJUSTMENT_CODES
       .map((code, listIndex) => ({
         adjustment: state.catalog.adjustments.find((entry) => entry.code === code),
-        listIndex
+        listIndex: listIndex + 1
       }))
       .filter(({ adjustment }) => Boolean(adjustment))
     : state.catalog.adjustments.map((adjustment) => ({ adjustment, listIndex: null }));
@@ -1270,14 +1340,16 @@ function renderAdjustments() {
   const processedType = chickenTypeByCode(RETAIL_PROCESSED_CHICKEN_CODE);
   const processedButton = processedType
     ? `
-      <button type="button" data-retail-processed="${escapeHtml(processedType.code)}" class="is-processed ${processed ? "is-active" : ""}" aria-pressed="${processed}">
+      <button type="button" data-retail-processed="${escapeHtml(processedType.code)}"${RETAIL_STATION === "2" ? ` data-retail-list-processed="${STATION_2_PROCESSED_LIST_INDEX}"` : ""} class="is-processed ${processed ? "is-active" : ""}" aria-pressed="${processed}">
         ${escapeHtml(processedType.name)}
         <small>Sin merma</small>
       </button>
     `
     : "";
 
-  elements.adjustments.innerHTML = adjustmentButtons + processedButton;
+  elements.adjustments.innerHTML = RETAIL_STATION === "2"
+    ? processedButton + adjustmentButtons
+    : adjustmentButtons + processedButton;
 }
 
 function renderLists() {
@@ -1287,10 +1359,16 @@ function renderLists() {
   elements.listsGrid.innerHTML = state.lists.map((list, listIndex) => {
     const client = clientFor(list);
     const fixedAdjustment = station2AdjustmentForList(listIndex);
+    const processedColumn = isStation2ProcessedList(listIndex);
+    const processedType = processedColumn
+      ? chickenTypeByCode(RETAIL_PROCESSED_CHICKEN_CODE)
+      : null;
     const totals = listTotals(list);
     const operationLabel = list.operationType === OPERATION_RETURN ? "Devolución" : "Venta";
-    const headerTitle = fixedAdjustment?.name || client?.name || "Cliente pendiente";
-    const headerSubtitle = fixedAdjustment
+    const headerTitle = processedType?.name || fixedAdjustment?.name || client?.name || "Cliente pendiente";
+    const headerSubtitle = processedColumn
+      ? `${client?.name || "Cliente pendiente"} · sin merma · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
+      : fixedAdjustment
       ? `${client?.name || "Cliente pendiente"} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
       : `${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${trayQuantityLabel(totals.trays)}`;
     const rows = list.items.length
@@ -1365,8 +1443,8 @@ function renderLists() {
 
   const activeFixedAdjustment = station2AdjustmentForList(state.activeList);
   if (RETAIL_STATION === "2" && elements.listSelectionHint) {
-    elements.listSelectionHint.textContent = isProcessedChickenType()
-      ? `Pollo beneficiado sin merma · destino: lista ${state.activeList + 1}.`
+    elements.listSelectionHint.textContent = isStation2ProcessedList()
+      ? "Columna activa: Pollo beneficiado sin merma."
       : activeFixedAdjustment
         ? `Pollo pelado · columna activa: ${activeFixedAdjustment.name}.`
       : "Columna activa sin presentación disponible.";
@@ -1374,31 +1452,32 @@ function renderLists() {
 }
 
 function renderAll() {
+  syncStation2ChickenTypeWithActiveList();
   syncStation2AdjustmentWithActiveList();
   renderAdjustments();
   renderWeightPreview();
   renderLists();
 }
 
-function selectList(index, { selectDressed = RETAIL_STATION === "2" } = {}) {
+function selectList(index) {
   const nextIndex = Number(index);
   if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= LIST_COUNT) return;
   if (state.lists.some((list) => list.saving)) return;
 
-  if (selectDressed) {
-    ensureDressedChickenTypeSelection();
-  }
   if (nextIndex !== state.activeList) {
     state.pendingCapture = null;
   }
   state.activeList = nextIndex;
+  syncStation2ChickenTypeWithActiveList();
   syncStation2AdjustmentWithActiveList();
   state.selectedItem = null;
   renderAll();
   const fixedAdjustment = station2AdjustmentForList(nextIndex);
-  setMessage(fixedAdjustment
-    ? `Pollo pelado · ${fixedAdjustment.name} activo; se aplicará la merma configurada.`
-    : `Lista ${nextIndex + 1} activa.`);
+  setMessage(isStation2ProcessedList(nextIndex)
+    ? "Pollo beneficiado activo en su columna; no se aplicará merma."
+    : fixedAdjustment
+      ? `Pollo pelado · ${fixedAdjustment.name} activo; se aplicará la merma configurada.`
+      : `Lista ${nextIndex + 1} activa.`);
 }
 
 function captureWeight() {
@@ -1410,7 +1489,7 @@ function captureWeight() {
 
   const availability = liveReadingAvailability();
   if (!availability.fixedAdjustmentAvailable) {
-    const expectedCode = STATION_2_LIST_ADJUSTMENT_CODES[state.activeList] || "NO DEFINIDA";
+    const expectedCode = STATION_2_LIST_ADJUSTMENT_CODES[state.activeList - 1] || "NO DEFINIDA";
     return showCaptureIssue({
       title: "La presentación fija no está disponible",
       message: "No se agregó la pesada porque falta la presentación asignada a esta columna.",
@@ -1647,7 +1726,6 @@ function retailModals() {
     elements.manualWeightModal,
     elements.removeWeighingModal,
     elements.clientModal,
-    elements.priceModal,
     elements.deliveryModal,
     elements.settingsModal
   ].filter(Boolean);
@@ -1739,17 +1817,37 @@ function renderTouchKeyboard() {
   `;
 }
 
-function openTouchKeyboard(input) {
+function normalizedTouchKeyboardValue() {
+  let normalized = touchKeyboardState.buffer.endsWith(".")
+    ? touchKeyboardState.buffer.slice(0, -1)
+    : touchKeyboardState.buffer;
+  if (
+    normalized !== ""
+    && touchKeyboardState.mode === "decimal"
+    && Number.isInteger(touchKeyboardState.decimalPlaces)
+    && Number.isFinite(Number(normalized))
+  ) {
+    normalized = Number(normalized).toFixed(touchKeyboardState.decimalPlaces);
+  }
+  return normalized;
+}
+
+function openTouchKeyboard(input, options = {}) {
   if (!input || input.disabled || touchKeyboardState.suppressOpen || !elements.touchKeyboard) return;
 
   const mode = input.dataset.retailKeyboard;
   if (!['text', 'decimal', 'integer'].includes(mode)) return;
 
   touchKeyboardState.target?.setAttribute("aria-expanded", "false");
+  touchKeyboardState.focusOrigin = input.hidden ? document.activeElement : input;
   touchKeyboardState.target = input;
   touchKeyboardState.initialValue = input.value;
   touchKeyboardState.buffer = input.value;
   touchKeyboardState.mode = mode;
+  touchKeyboardState.acceptHandler = typeof options.acceptHandler === "function"
+    ? options.acceptHandler
+    : null;
+  touchKeyboardState.lockStation = Boolean(options.lockStation);
   const step = String(input.getAttribute("step") || "");
   const stepMatch = /^\d+\.(\d+)$/.exec(step);
   touchKeyboardState.decimalPlaces = mode === "decimal" && stepMatch
@@ -1765,11 +1863,20 @@ function openTouchKeyboard(input) {
   elements.touchKeyboard.hidden = false;
   elements.touchKeyboard.setAttribute("aria-hidden", "false");
   document.body.classList.add("has-retail-touch-keyboard");
+  if (touchKeyboardState.lockStation && !hasOpenRetailModal()) {
+    elements.station.inert = true;
+    elements.station.setAttribute("aria-hidden", "true");
+  }
+  elements.touchKeyboard
+    .querySelector('[data-retail-keyboard-action="cancel"]')
+    ?.focus({ preventScroll: true });
 }
 
 function closeTouchKeyboard(commit = true) {
   if (!elements.touchKeyboard || elements.touchKeyboard.hidden) return;
   const target = touchKeyboardState.target;
+  const focusOrigin = touchKeyboardState.focusOrigin;
+  const unlockStation = touchKeyboardState.lockStation;
 
   if (!commit && target) {
     target.value = touchKeyboardState.initialValue;
@@ -1777,18 +1884,7 @@ function closeTouchKeyboard(commit = true) {
   }
   if (commit && target) {
     if (touchKeyboardState.mode !== "text") {
-      let normalized = touchKeyboardState.buffer.endsWith(".")
-        ? touchKeyboardState.buffer.slice(0, -1)
-        : touchKeyboardState.buffer;
-      if (
-        normalized !== ""
-        && touchKeyboardState.mode === "decimal"
-        && Number.isInteger(touchKeyboardState.decimalPlaces)
-        && Number.isFinite(Number(normalized))
-      ) {
-        normalized = Number(normalized).toFixed(touchKeyboardState.decimalPlaces);
-      }
-      target.value = normalized;
+      target.value = normalizedTouchKeyboardValue();
       target.dispatchEvent(new Event("input", { bubbles: true }));
     }
     target.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1803,11 +1899,49 @@ function closeTouchKeyboard(commit = true) {
   touchKeyboardState.buffer = "";
   touchKeyboardState.decimalPlaces = null;
   touchKeyboardState.replaceOnNextKey = false;
+  touchKeyboardState.acceptHandler = null;
+  touchKeyboardState.lockStation = false;
+  touchKeyboardState.focusOrigin = null;
   touchKeyboardState.suppressOpen = true;
-  target?.focus({ preventScroll: true });
+  if (unlockStation && !hasOpenRetailModal()) {
+    elements.station.inert = false;
+    elements.station.removeAttribute("aria-hidden");
+  }
+  focusOrigin?.focus?.({ preventScroll: true });
   queueMicrotask(() => {
     touchKeyboardState.suppressOpen = false;
   });
+}
+
+function trapTabWithin(container, event) {
+  if (!container) return false;
+
+  const focusable = [...container.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter((element) => !element.hidden);
+  if (!focusable.length) return false;
+
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (!container.contains(document.activeElement)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+    return true;
+  }
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+
+  if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+
+  return false;
 }
 
 function setTouchKeyboardInputValue(value) {
@@ -1870,7 +2004,11 @@ function backspaceTouchKeyboardInput() {
 }
 
 function handleTouchKeyboardAction(action) {
-  if (action === "accept") return closeTouchKeyboard(true);
+  if (action === "accept") {
+    const accepted = touchKeyboardState.acceptHandler?.(normalizedTouchKeyboardValue());
+    if (accepted === false) return;
+    return closeTouchKeyboard(true);
+  }
   if (action === "cancel") return closeTouchKeyboard(false);
   if (action === "clear") {
     touchKeyboardState.replaceOnNextKey = false;
@@ -2103,109 +2241,112 @@ function assignClient(clientId) {
   setMessage(`${client.name} asignado a la lista ${state.activeList + 1}.`);
 }
 
-function renderPriceFields() {
-  const list = priceEditingList();
-  const client = clientFor(list);
-  elements.priceFields.innerHTML = state.catalog.chicken_types.map((type) => {
-    const base = client
-      ? currentClientPrice(list, type.code)
-      : currentGeneralPrice(type.code);
-    const override = list.priceOverrides?.[type.code];
-    const hasOverride = override !== undefined && override !== null && override !== "";
-    const current = hasOverride ? override : base?.value;
-    const hasCurrent = current !== undefined && current !== null && current !== "";
-    const baseValue = base ? formatMoneyValue(base.value) : "";
-    const baseLabel = client ? "Precio vigente del cliente" : "Precio general vigente";
-    const help = !base
-      ? (client
-        ? "Este cliente no tiene un precio base vigente configurado en Directorio"
-        : "Configura primero el precio general base vigente en Directorio")
-      : (hasOverride
-        ? `Precio personalizado de este ticket: S/ ${formatMoneyValue(override)} · Base vigente: S/ ${baseValue}`
-        : `${baseLabel}: S/ ${baseValue} · ${escapeHtml(base.source)}`);
-    return `
-      <label class="rd-price-field">
-        <span>${escapeHtml(type.name)}</span>
-        <input type="number" min="0.01" max="99999999.99" step="0.01" inputmode="none" readonly data-retail-keyboard="decimal" data-retail-keyboard-label="Precio de ${escapeHtml(type.name)} por kilogramo" data-retail-price-code="${escapeHtml(type.code)}" data-retail-base-price="${baseValue}" value="${hasCurrent ? formatMoneyValue(current) : ""}" placeholder="${baseValue || "Sin precio base"}" ${!base ? "disabled" : ""}>
-        <small>${help}</small>
-      </label>
-    `;
-  }).join("");
+function priceChickenTypeForList(list = activeList()) {
+  if (RETAIL_STATION === "2") return selectedChickenType();
 
-  elements.priceForm.querySelector(".rd-modal-copy").textContent = client
-    ? `Los precios vigentes de ${client.name} están precargados. Puedes cambiarlos solo para este ticket; no se modificará Directorio.`
-    : `Los precios generales vigentes están precargados para la lista ${state.priceEditingListIndex + 1}. Puedes cambiarlos solo para este ticket; no se modificará Directorio.`;
-  elements.clearPrices.disabled = false;
-  elements.priceForm.querySelector('[type="submit"]').disabled = false;
+  const knownCodes = [...new Set(
+    list.items
+      .map((item) => chickenTypeByCode(item.chickenTypeCode)?.code)
+      .filter(Boolean)
+  )];
+  return knownCodes.length === 1
+    ? chickenTypeByCode(knownCodes[0])
+    : selectedChickenType();
 }
 
-function openPriceModal() {
-  state.priceEditingListIndex = state.activeList;
-  renderPriceFields();
-  openModal(elements.priceModal);
-  const firstInput = elements.priceFields.querySelector("input");
-  firstInput?.focus();
-  if (firstInput && !firstInput.disabled) openTouchKeyboard(firstInput);
-}
+function applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue) {
+  const list = state.lists[listIndex];
+  const chickenType = chickenTypeByCode(chickenTypeCode);
+  if (!list || !chickenType) return false;
 
-function applyPrices(event) {
-  event.preventDefault();
-  const listIndex = state.priceEditingListIndex;
-  const list = priceEditingList();
-  const prices = {};
-  const invalidPrices = [];
-
-  elements.priceFields.querySelectorAll("[data-retail-price-code]").forEach((input) => {
-    const baseRaw = String(input.dataset.retailBasePrice || "").trim();
-    if (!baseRaw) return;
-
-    const raw = input.value.trim();
-    if (!raw) return;
-    const value = Number(raw);
-    if (
+  const raw = String(rawValue ?? "").trim();
+  const value = Number(raw);
+  if (
+    raw !== ""
+    && (
       !hasAtMostMoneyDecimals(raw)
       || !Number.isFinite(value)
       || value < 0.01
       || value > 99999999.99
-    ) {
-      const type = state.catalog.chicken_types.find(
-        (item) => item.code === input.dataset.retailPriceCode
-      );
-      invalidPrices.push({
-        label: type?.name || input.dataset.retailPriceCode || "Tipo de pollo",
-        value: `Valor ingresado: ${raw || "vacío"}`
-      });
-      return;
-    }
-    const normalizedValue = roundMoney(value);
-    if (moneyToCents(normalizedValue) === moneyToCents(baseRaw)) return;
-    prices[input.dataset.retailPriceCode] = normalizedValue;
-  });
-
-  if (invalidPrices.length) {
-    return showLocalActionIssue({
+    )
+  ) {
+    showLocalActionIssue({
       caption: "Precio no aplicado",
-      title: "Hay precios manuales no válidos",
-      message: "No se modificaron los precios de la lista. Corrige los valores indicados.",
-      details: invalidPrices,
-      help: "Cada precio debe estar entre S/ 0.01 y S/ 99,999,999.99 y usar como máximo dos decimales."
+      title: "El precio manual no es válido",
+      message: `No se modificó el precio de ${chickenType.name} en la lista ${listIndex + 1}.`,
+      details: [{ label: "Valor ingresado", value: raw || "Vacío" }],
+      help: "El precio debe estar entre S/ 0.01 y S/ 99,999,999.99 y usar como máximo dos decimales."
     });
+    return false;
   }
 
-  list.priceOverrides = prices;
+  const nextOverrides = { ...(list.priceOverrides || {}) };
+  delete nextOverrides[chickenTypeCode];
+  const normalizedValue = raw === "" ? null : roundMoney(value);
+  const usesBasePrice = normalizedValue === null
+    || moneyToCents(normalizedValue) === moneyToCents(baseValue);
+  if (!usesBasePrice) {
+    nextOverrides[chickenTypeCode] = normalizedValue;
+  }
+
+  list.priceOverrides = nextOverrides;
   persistLists();
-  closeModal(elements.priceModal);
   renderAll();
-  setMessage(Object.keys(prices).length
-    ? `Precios personalizados aplicados a la lista ${listIndex + 1}.`
-    : `La lista ${listIndex + 1} quedó sin precios personalizados.`);
+  setMessage(usesBasePrice
+    ? `Se restauró el precio vigente de ${chickenType.name} en la lista ${listIndex + 1}.`
+    : `Precio de ${chickenType.name} cambiado a ${formatMoney(normalizedValue)} para este ticket.`);
+  return true;
 }
 
-function clearPriceOverrides() {
-  priceEditingList().priceOverrides = {};
-  persistLists();
-  renderAll();
-  renderPriceFields();
+function openDirectPriceEditor() {
+  const listIndex = state.activeList;
+  const list = state.lists[listIndex];
+  const chickenType = list ? priceChickenTypeForList(list) : null;
+  const client = clientFor(list);
+  const base = chickenType
+    ? (client
+      ? currentClientPrice(list, chickenType.code)
+      : currentGeneralPrice(chickenType.code))
+    : null;
+
+  if (!list || !chickenType || !base || !elements.directPriceInput) {
+    showLocalActionIssue({
+      caption: "Precio no disponible",
+      title: chickenType
+        ? `Falta el precio base de ${chickenType.name}`
+        : "No hay un producto activo en esta columna",
+      message: "No se abrió el teclado porque primero debe existir un precio vigente para esta columna.",
+      details: [
+        { label: "Lista activa", value: `Lista ${listIndex + 1}` },
+        {
+          label: "Precio requerido",
+          value: client
+            ? `Tarifa vigente de ${client.name}`
+            : "Precio general vigente"
+        }
+      ],
+      help: client
+        ? "Configura el precio de este producto para el cliente en Directorio y vuelve a intentarlo."
+        : "Configura el precio general de este producto en Directorio y vuelve a intentarlo."
+    });
+    return;
+  }
+
+  const price = effectivePrice(list, chickenType.code) || base;
+  elements.directPriceInput.value = formatMoneyValue(price.value);
+  elements.directPriceInput.placeholder = formatMoneyValue(base.value);
+  elements.directPriceInput.dataset.retailKeyboardLabel =
+    `Precio de ${chickenType.name} por kilogramo`;
+  elements.directPriceInput.dataset.retailPriceCode = chickenType.code;
+  openTouchKeyboard(elements.directPriceInput, {
+    lockStation: true,
+    acceptHandler: (value) => applyDirectTicketPrice(
+      listIndex,
+      chickenType.code,
+      base.value,
+      value
+    )
+  });
 }
 
 function requiresDelivery(list) {
@@ -2879,11 +3020,10 @@ elements.captureWeight.addEventListener("click", captureWeight);
 elements.assignClient.addEventListener("click", openClientModal);
 elements.removeWeighing.addEventListener("click", openRemoveWeighingModal);
 elements.confirmRemoveWeighing.addEventListener("click", confirmRemoveSelectedWeighing);
-elements.assignPrice.addEventListener("click", openPriceModal);
+elements.assignPrice.addEventListener("click", openDirectPriceEditor);
+elements.priceCard?.addEventListener("click", openDirectPriceEditor);
 elements.saveDispatch.addEventListener("click", prepareDispatchRegistration);
 elements.clientSearch.addEventListener("input", () => renderClientOptions(elements.clientSearch.value));
-elements.priceForm.addEventListener("submit", applyPrices);
-elements.clearPrices.addEventListener("click", clearPriceOverrides);
 elements.deliveryModeOptions.addEventListener("click", (event) => {
   const option = event.target.closest("[data-retail-delivery-mode]");
   if (option) selectDeliveryMode(option.dataset.retailDeliveryMode);
@@ -2968,6 +3108,15 @@ document.addEventListener("click", (event) => {
 
   const processedButton = event.target.closest("[data-retail-processed]");
   if (processedButton) {
+    const station2ListIndex = Number(processedButton.dataset.retailListProcessed);
+    if (
+      RETAIL_STATION === "2"
+      && Number.isInteger(station2ListIndex)
+      && station2ListIndex >= 0
+    ) {
+      selectList(station2ListIndex);
+      return;
+    }
     selectChickenType(processedButton.dataset.retailProcessed);
     renderAdjustments();
     renderWeightPreview();
@@ -3008,9 +3157,10 @@ document.addEventListener("click", (event) => {
     const separator = itemRow.dataset.retailItem.indexOf(":");
     const listIndex = Number(itemRow.dataset.retailItem.slice(0, separator));
     const itemId = itemRow.dataset.retailItem.slice(separator + 1);
-    state.activeList = listIndex;
+    selectList(listIndex);
+    if (state.activeList !== listIndex) return;
     state.selectedItem = { listIndex, id: itemId };
-    renderAll();
+    renderLists();
     return;
   }
 
@@ -3060,23 +3210,13 @@ document.addEventListener("keydown", (event) => {
   }
 
   if (event.key === "Tab") {
-    const openModalElement = retailModals().find((modal) => !modal.hidden);
-    if (openModalElement) {
-      const focusable = [...openModalElement.querySelectorAll(
-        'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      )].filter((element) => !element.hidden);
-      if (focusable.length) {
-        const first = focusable[0];
-        const last = focusable.at(-1);
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
+    if (elements.touchKeyboard && !elements.touchKeyboard.hidden) {
+      trapTabWithin(elements.touchKeyboard, event);
+      return;
     }
+
+    const openModalElement = retailModals().find((modal) => !modal.hidden);
+    if (openModalElement) trapTabWithin(openModalElement, event);
   }
 
   if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-retail-item]")) {
