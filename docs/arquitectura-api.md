@@ -174,13 +174,16 @@ idempotencia para que un reintento idéntico no duplique la operación.
   `CARGO`; el total queda como CXP pendiente.
 - Una compra `CONTADO` crea además un `PAGO_PROVEEDOR` totalmente aplicado al
   mismo comprobante; la CXP queda pagada y disminuye la cuenta propia elegida.
-- Un `PAGO_DIRECTO` de un cliente al proveedor aplica exactamente el mismo
-  importe al conjunto de CXC y al conjunto de CXP seleccionadas, reduciendo
-  ambas obligaciones sin afectar una cuenta propia.
+- Un `PAGO_DIRECTO` de un cliente al proveedor puede registrarse sin
+  aplicaciones cuando todavía no existe cartera histórica. Las aplicaciones
+  CXC y CXP conocidas son opcionales y el movimiento no afecta una cuenta
+  propia.
 - Un `COBRO_CLIENTE` depositado a la avícola reduce la CXC y aumenta el saldo
   propio, pero no reduce la CXP.
 - Un `PAGO_PROVEEDOR` sin aplicación inmediata descuenta la cuenta propia una
   sola vez y deja el remanente como saldo a nuestro favor con el proveedor.
+- Los egresos pueden dejar temporalmente una cuenta propia en negativo para
+  permitir una puesta en marcha sin saldos iniciales cargados.
 - Un `SALDO_FAVOR_PROVEEDOR` registra crédito histórico sin cuenta ni método de
   pago; requiere `SALDOS_AJUSTAR` y después puede aplicarse a CXP del mismo
   proveedor y moneda mediante `/finanzas/movimientos/{id}/aplicaciones`.

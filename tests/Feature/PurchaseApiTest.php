@@ -268,7 +268,7 @@ class PurchaseApiTest extends TestCase
         $this->assertDatabaseCount('pagos', 3);
     }
 
-    public function test_cash_purchase_with_insufficient_balance_rolls_back_every_purchase_record(): void
+    public function test_cash_purchase_can_leave_a_negative_balance_during_initial_setup(): void
     {
         $provider = $this->provider('PROVEEDOR SIN SALDO', '20100000005');
         $type = $this->chickenType();
@@ -287,14 +287,19 @@ class PurchaseApiTest extends TestCase
                 'cuenta_destino_id' => $providerAccount,
                 'metodo_pago_id' => $method,
             ],
-        ))->assertUnprocessable()
-            ->assertJsonValidationErrors('importe');
+        ))->assertCreated()
+            ->assertJsonPath('data.estado', 'PAGADO')
+            ->assertJsonPath('data.saldo_pendiente', '0.00')
+            ->assertJsonPath('data.pago_inicial.importe', '118.00');
 
-        $this->assertDatabaseCount('compras', 0);
-        $this->assertDatabaseCount('compra_detalles', 0);
-        $this->assertDatabaseCount('comprobantes', 0);
-        $this->assertDatabaseCount('pago_aplicaciones', 0);
-        $this->assertDatabaseCount('pagos', 1);
+        $this->assertDatabaseCount('compras', 1);
+        $this->assertDatabaseCount('compra_detalles', 1);
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseCount('pago_aplicaciones', 1);
+        $this->assertDatabaseCount('pagos', 2);
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.saldo', '-68.00');
     }
 
     public function test_direct_customer_payment_reduces_a_purchase_payable_and_receivable_without_touching_own_cash(): void

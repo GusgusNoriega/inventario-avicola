@@ -161,7 +161,7 @@ function updateCreateSummary() {
   elements.currencyPrefix.textContent = prefix;
   elements.total.textContent = formatMoney(Number(elements.amount.value || 0), currency);
   elements.accountHelp.textContent = account
-    ? `Saldo disponible: ${formatMoney(account.saldo, account.moneda)}`
+    ? `Saldo actual: ${formatMoney(account.saldo, account.moneda)}. Puedes registrar el gasto antes de cargar la apertura.`
     : "Selecciona de dónde sale el dinero.";
 }
 

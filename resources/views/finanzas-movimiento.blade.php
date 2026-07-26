@@ -34,7 +34,7 @@
           <label class="fin-mode-option">
             <input type="radio" name="financeMovementType" value="PAGO_DIRECTO">
             <span class="fin-mode-number">02</span>
-            <span><strong>Cliente → proveedor</strong><small>Reduce al mismo tiempo la deuda del cliente y la deuda al proveedor.</small></span>
+            <span><strong>Cliente → proveedor</strong><small>Registra el pago aunque las deudas todavía no estén cargadas; puedes conciliarlas si ya existen.</small></span>
           </label>
           <label class="fin-mode-option">
             <input type="radio" name="financeMovementType" value="PAGO_PROVEEDOR">
@@ -88,6 +88,7 @@
             <label id="financeMovementOriginField" class="fin-field" hidden>
               <span>Cuenta propia de origen <b>*</b></span>
               <select id="financeMovementOrigin"><option value="">Selecciona una cuenta</option></select>
+              <small>El movimiento puede registrarse aunque el saldo inicial de la cuenta todavía no esté cargado.</small>
             </label>
             <label id="financeMovementDestinationField" class="fin-field">
               <span id="financeMovementDestinationLabel">Cuenta propia receptora <b>*</b></span>
@@ -168,7 +169,7 @@
           <div>
             <p class="fin-eyebrow">Paso 3</p>
             <h2 id="financeApplicationsTitle">Aplicar a documentos pendientes</h2>
-            <p id="financeApplicationsInstructions">Primero ingresa el importe del movimiento. Luego marca las ventas o compras que cancela; los abonos parciales son válidos.</p>
+            <p id="financeApplicationsInstructions">Primero ingresa el importe del movimiento. Luego, si los documentos ya existen, marca las ventas o compras que cancela.</p>
           </div>
           <button id="financeApplicationsRefresh" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Actualizar cartera</button>
         </div>

@@ -45,7 +45,7 @@ const MODES = {
     cxp: true,
     destinationLabel: "Cuenta externa del proveedor",
     destinationHelp: "El dinero no ingresará a nuestro saldo: quedará trazado como pago directo.",
-    hint: "En un pago directo el importe puede aplicarse una vez a CXC y una vez a CXP; ambos lados se validan por separado."
+    hint: "Puedes registrarlo aunque todavía no hayas cargado las deudas. Las aplicaciones a CXC y CXP son opcionales y se controlan por separado."
   },
   PAGO_PROVEEDOR: {
     badge: "Salida propia",
@@ -539,7 +539,9 @@ function updateMode() {
     ? "Quedará a favor"
     : modeKey === "DEUDA_ANTERIOR_CLIENTE"
       ? "Saldo pendiente"
-      : PROVIDER_CREDIT_TYPES.has(modeKey) ? "Quedará a nuestro favor" : "Sin aplicar";
+      : modeKey === "PAGO_DIRECTO"
+        ? "Pendiente de conciliar"
+        : PROVIDER_CREDIT_TYPES.has(modeKey) ? "Quedará a nuestro favor" : "Sin aplicar";
   elements.save.textContent = useCredit
     ? "Aplicar saldo a favor"
     : modeKey === "DEUDA_ANTERIOR_CLIENTE"
@@ -663,15 +665,19 @@ function renderDebt(side) {
 
 function updateSummary() {
   const mode = currentMode();
+  const modeKey = currentModeKey();
   const useCredit = usesProviderCredit();
   const amount = movementAmount();
   const cxc = appliedTotal("CXC");
   const cxp = appliedTotal("CXP");
-  const consumed = Math.max(mode.cxc ? cxc : 0, mode.cxp ? cxp : 0);
+  const appliedMaximum = Math.max(mode.cxc ? cxc : 0, mode.cxp ? cxp : 0);
+  const reconciled = modeKey === "PAGO_DIRECTO"
+    ? Math.min(cxc, cxp)
+    : appliedMaximum;
   const creditAvailable = selectedProviderCreditAvailable();
   const unapplied = useCredit
     ? Math.max(0, creditAvailable - cxp)
-    : Math.max(0, amount - consumed);
+    : Math.max(0, amount - reconciled);
   const currency = elements.currency.value;
 
   elements.providerCreditAvailable.textContent = formatMoney(creditAvailable, currency);
@@ -679,12 +685,14 @@ function updateSummary() {
   elements.cxcApplied.textContent = formatMoney(cxc, currency);
   elements.cxpApplied.textContent = formatMoney(cxp, currency);
   elements.unapplied.textContent = formatMoney(unapplied, currency);
-  elements.unapplied.classList.toggle("is-error", consumed > amount || (useCredit && amount > creditAvailable));
+  elements.unapplied.classList.toggle("is-error", appliedMaximum > amount || (useCredit && amount > creditAvailable));
   elements.applicationsPanel.classList.toggle("is-amount-required", amount <= 0);
   elements.applicationsInstructions.textContent = amount > 0
     ? useCredit
       ? "Marca las compras que deseas cancelar con esta fuente. El total aplicado debe coincidir con el importe a usar."
-      : "Marca las ventas o compras que cancela este movimiento. Los abonos parciales son válidos."
+      : modeKey === "PAGO_DIRECTO"
+        ? "Opcional: marca las ventas o compras conocidas. Si todavía no cargaste las deudas, registra el pago sin seleccionar documentos."
+        : "Marca las ventas o compras que cancela este movimiento. Los abonos parciales son válidos."
     : "Primero ingresa un importe mayor a cero para poder seleccionar las deudas. Luego podrás registrar abonos parciales.";
 }
 
@@ -769,7 +777,9 @@ async function loadPortfolio(side) {
     renderDebt(side);
     setMessage(refs.message, state.debts[side].length
       ? `${state.debts[side].length} documento${state.debts[side].length === 1 ? "" : "s"} pendiente${state.debts[side].length === 1 ? "" : "s"}`
-      : `Este ${partyLabel} no tiene documentos pendientes.`);
+      : currentModeKey() === "PAGO_DIRECTO"
+        ? `Este ${partyLabel} no tiene documentos pendientes. Puedes registrar el pago igualmente.`
+        : `Este ${partyLabel} no tiene documentos pendientes.`);
     updateSummary();
     markFinanceAccessReady();
   } catch (error) {
@@ -898,9 +908,6 @@ function movementPayload() {
   validateApplications("CXP");
   if (mode.cxc && cxc > amount + .001) throw new Error("Lo aplicado a cuentas por cobrar supera el importe del movimiento.");
   if (mode.cxp && cxp > amount + .001) throw new Error("Lo aplicado a cuentas por pagar supera el importe del movimiento.");
-  if (modeKey === "PAGO_DIRECTO" && (cxc <= 0 || cxp <= 0)) {
-    throw new Error("Un pago directo debe aplicarse al menos a una deuda del cliente y a una deuda del proveedor.");
-  }
   if (modeKey === "REEMBOLSO_CLIENTE" && (cxc <= 0 || Math.abs(cxc - amount) > .001)) {
     throw new Error("El reembolso debe aplicarse completamente a uno o mas abonos del cliente.");
   }

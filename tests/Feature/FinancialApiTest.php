@@ -309,7 +309,7 @@ class FinancialApiTest extends TestCase
         $this->assertDatabaseCount('pagos', 1);
     }
 
-    public function test_an_outflow_is_rejected_when_the_own_account_has_insufficient_balance(): void
+    public function test_an_outflow_can_be_registered_before_the_opening_balance_is_loaded(): void
     {
         $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR SIN SALDO', '20666666666');
         [, $account] = $this->ownAccount();
@@ -331,16 +331,30 @@ class FinancialApiTest extends TestCase
                 'comprobante_id' => $payable,
                 'importe_aplicado' => '10.00',
             ]],
-        ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('importe');
+        ])->assertCreated()
+            ->assertJsonPath('data.importe', '10.00');
 
-        $this->assertDatabaseCount('pagos', 0);
         $this->assertDatabaseHas('comprobantes', [
             'id' => $payable,
-            'saldo_pendiente' => 80,
-            'estado' => 'PENDIENTE',
+            'saldo_pendiente' => 70,
+            'estado' => 'PARCIAL',
         ]);
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.saldo', '-10.00');
+
+        $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_INICIAL',
+            'cuenta_destino_id' => $account,
+            'moneda' => 'PEN',
+            'importe' => '50.00',
+            'aplicaciones' => [],
+        ])->assertCreated();
+
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.saldo', '40.00');
     }
 
     public function test_an_unapplied_provider_payment_can_be_applied_later_without_moving_cash_again(): void
@@ -1086,13 +1100,53 @@ class FinancialApiTest extends TestCase
             ->assertJsonPath('pagos_proveedores.directos_clientes', '50.00');
     }
 
-    public function test_direct_customer_payment_requires_the_full_amount_on_both_portfolios(): void
+    public function test_direct_customer_payment_can_be_registered_without_existing_debts(): void
     {
-        $client = $this->thirdParty('CLIENTE', 'CLIENTE DIRECTO DESIGUAL', '10222223');
-        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR DIRECTO DESIGUAL', '20222222223');
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE DIRECTO SIN DEUDA', '10222223');
+        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR DIRECTO SIN DEUDA', '20222222223');
         [, $externalAccount] = $this->externalAccount($provider);
-        $receivable = $this->document('VENTA', $client, '100.00', 'CXC-DIRECTO-DESIGUAL');
-        $payable = $this->document('COMPRA', $provider, '100.00', 'CXP-DIRECTO-DESIGUAL');
+        $method = DB::table('metodos_pago')->where('codigo', 'DEPOSITO')->value('id');
+        $payload = [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'PAGO_DIRECTO',
+            'cliente_id' => $client,
+            'proveedor_id' => $provider,
+            'cuenta_destino_id' => $externalAccount,
+            'metodo_pago_id' => $method,
+            'moneda' => 'PEN',
+            'importe' => '50.00',
+            'referencia' => 'OP-SIN-DEUDAS',
+            'aplicaciones' => [],
+        ];
+
+        $this->postJson('/api/v1/finanzas/movimientos', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.tipo', 'PAGO_DIRECTO')
+            ->assertJsonPath('data.direccion', 'DIRECTO')
+            ->assertJsonCount(0, 'data.aplicaciones');
+        $this->postJson('/api/v1/finanzas/movimientos', $payload)
+            ->assertOk()
+            ->assertJsonPath('meta.idempotent', true);
+
+        $this->assertDatabaseCount('pagos', 1);
+        $this->assertDatabaseCount('pago_aplicaciones', 0);
+        $this->getJson("/api/v1/finanzas/clientes/{$client}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.payments', '50.00')
+            ->assertJsonPath('data.unapplied', '50.00');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.paid_directly_by_clients', '50.00')
+            ->assertJsonPath('data.unapplied', '50.00');
+    }
+
+    public function test_direct_customer_payment_can_apply_each_known_portfolio_independently(): void
+    {
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE DIRECTO PARCIAL', '10222224');
+        $provider = $this->thirdParty('PROVEEDOR', 'PROVEEDOR DIRECTO PARCIAL', '20222222224');
+        [, $externalAccount] = $this->externalAccount($provider);
+        $receivable = $this->document('VENTA', $client, '100.00', 'CXC-DIRECTO-PARCIAL');
+        $payable = $this->document('COMPRA', $provider, '100.00', 'CXP-DIRECTO-PARCIAL');
         $method = DB::table('metodos_pago')->where('codigo', 'DEPOSITO')->value('id');
 
         $this->postJson('/api/v1/finanzas/movimientos', [
@@ -1104,17 +1158,21 @@ class FinancialApiTest extends TestCase
             'metodo_pago_id' => $method,
             'moneda' => 'PEN',
             'importe' => '50.00',
-            'referencia' => 'OP-DESIGUAL',
+            'referencia' => 'OP-PARCIAL',
             'aplicaciones' => [
                 ['lado' => 'CXC', 'comprobante_id' => $receivable, 'importe_aplicado' => '50.00'],
                 ['lado' => 'CXP', 'comprobante_id' => $payable, 'importe_aplicado' => '40.00'],
             ],
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors('aplicaciones');
+        ])->assertCreated();
 
-        $this->assertDatabaseCount('pagos', 0);
-        $this->assertDatabaseHas('comprobantes', ['id' => $receivable, 'saldo_pendiente' => '100']);
-        $this->assertDatabaseHas('comprobantes', ['id' => $payable, 'saldo_pendiente' => '100']);
+        $this->assertDatabaseHas('comprobantes', ['id' => $receivable, 'saldo_pendiente' => '50']);
+        $this->assertDatabaseHas('comprobantes', ['id' => $payable, 'saldo_pendiente' => '60']);
+        $this->getJson("/api/v1/finanzas/clientes/{$client}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.unapplied', '0.00');
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.unapplied', '10.00');
     }
 
     public function test_void_creates_reversal_restores_payable_and_nets_own_balance(): void

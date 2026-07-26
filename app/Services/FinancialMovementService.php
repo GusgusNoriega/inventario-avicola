@@ -626,7 +626,6 @@ class FinancialMovementService
         $method = $this->activeMethod($data['metodo_pago_id'] ?? null);
         $this->assertThirdParties($companyId, $data);
         $this->assertFlow($companyId, $data, $accounts, $method, $allowMissingMethodReference);
-        $this->assertSufficientBalance($data, $accounts);
         $documents = $this->validateApplications($companyId, $data);
 
         $now = now();
@@ -808,29 +807,6 @@ class FinancialMovementService
                 $this->assertEmpty($data, ['cuenta_origen_id']);
                 $this->assertExternalForProvider($destination, (int) $data['proveedor_id'], 'cuenta_destino_id');
                 $this->assertOnlySides($data, ['CXC', 'CXP']);
-                if (! $hasApplications
-                    || ! collect($data['aplicaciones'])->contains('lado', 'CXC')
-                    || ! collect($data['aplicaciones'])->contains('lado', 'CXP')) {
-                    throw ValidationException::withMessages([
-                        'aplicaciones' => 'Un pago directo debe aplicar al menos una cuenta por cobrar y una cuenta por pagar.',
-                    ]);
-                }
-                foreach (['CXC', 'CXP'] as $side) {
-                    $applied = collect($data['aplicaciones'])
-                        ->where('lado', $side)
-                        ->reduce(
-                            fn (string $sum, array $application): string => FinancialMoney::add(
-                                $sum,
-                                $application['importe_aplicado']
-                            ),
-                            '0.00'
-                        );
-                    if (FinancialMoney::compare($applied, $data['importe']) !== 0) {
-                        throw ValidationException::withMessages([
-                            'aplicaciones' => "Un pago directo debe aplicar el importe completo tanto en {$side} como en la otra cartera.",
-                        ]);
-                    }
-                }
                 break;
 
             case Pago::TYPE_PROVIDER_PAYMENT:
@@ -941,27 +917,6 @@ class FinancialMovementService
                     ]);
                 }
                 break;
-        }
-    }
-
-    /** @param array<string, mixed> $data @param Collection<int, object> $accounts */
-    private function assertSufficientBalance(array $data, Collection $accounts): void
-    {
-        $originId = $data['cuenta_origen_id'] ?? null;
-        if ($originId === null) {
-            return;
-        }
-
-        $origin = $accounts->get((int) $originId);
-        if (! $origin || $origin->entidad_tipo !== 'PROPIA') {
-            return;
-        }
-
-        $available = $this->balances->forAccount((int) $originId)['saldo'];
-        if (FinancialMoney::compare($available, $data['importe']) < 0) {
-            throw ValidationException::withMessages([
-                'importe' => "Saldo insuficiente en la cuenta origen. Disponible: {$available} {$data['moneda']}.",
-            ]);
         }
     }
 

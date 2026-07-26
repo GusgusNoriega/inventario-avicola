@@ -80,9 +80,14 @@ original y resolverse como un ajuste auditado.
 | Compra a crédito | No cambia | No cambia | Aumenta |
 | Compra al contado | No cambia | Disminuye | Se crea y cancela en la misma transacción |
 
-Un pago directo debe aplicarse por el mismo importe tanto a CXC como a CXP. De
-esta manera nunca se reduce la deuda del cliente y la del proveedor por valores
-distintos.
+Un pago directo puede registrarse sin aplicaciones cuando las deudas todavía
+no fueron cargadas. Si ya existen documentos, cada aplicación CXC o CXP puede
+registrarse de forma parcial; el remanente se conserva como importe no aplicado
+en el resumen de la contraparte correspondiente.
+
+Las compras al contado pueden registrarse antes de cargar el saldo inicial de
+la cuenta propia. El saldo quedará temporalmente negativo hasta que se incorpore
+la apertura o el ajuste que corresponda.
 
 ## API y permisos
 

@@ -299,7 +299,7 @@ function validateHeader() {
   }
 }
 
-function validateCashPayment(total) {
+function validateCashPayment() {
   if (!isCashPurchase()) return;
   if (!elements.origin.value) {
     elements.origin.focus();
@@ -321,12 +321,6 @@ function validateCashPayment(total) {
     elements.reference.focus();
     throw new Error("Ingresa la referencia requerida por el método de pago.");
   }
-  const account = state.accounts.find((item) => String(item.id) === String(elements.origin.value));
-  const balance = firstDefined(account || {}, ["saldo", "saldo_actual", "balance"], null);
-  if (balance !== null && total > numericValue(balance) + .001) {
-    elements.origin.focus();
-    throw new Error("La cuenta propia seleccionada no tiene saldo suficiente para esta compra.");
-  }
 }
 
 function purchasePayload() {
@@ -334,7 +328,7 @@ function purchasePayload() {
   validateLines();
   const values = totals();
   if (values.total <= 0) throw new Error("El total de la compra debe ser mayor a cero.");
-  validateCashPayment(values.total);
+  validateCashPayment();
 
   const payload = {
     idempotency_key: state.idempotencyKey,

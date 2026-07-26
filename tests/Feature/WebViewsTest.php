@@ -284,6 +284,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('providerCreditSource', $movementJavascript);
         $this->assertStringContainsString('/aplicaciones', $movementJavascript);
         $this->assertStringContainsString('importe_aplicado:', $movementJavascript);
+        $this->assertStringContainsString('Las aplicaciones a CXC y CXP son opcionales', $movementJavascript);
+        $this->assertStringNotContainsString('Un pago directo debe aplicarse al menos', $movementJavascript);
         $this->assertStringContainsString('idempotency_key:', $movementJavascript);
         $this->assertStringContainsString('queryParameters.get("tipo")', $movementJavascript);
         $this->assertStringContainsString('queryParameters.get("cliente_id")', $movementJavascript);
@@ -371,6 +373,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('peso_kg:', $purchaseFormJavascript);
         $this->assertStringContainsString('function roundMoney(value)', $purchaseFormJavascript);
         $this->assertStringContainsString('idempotency_key:', $purchaseFormJavascript);
+        $this->assertStringNotContainsString('no tiene saldo suficiente para esta compra', $purchaseFormJavascript);
         $this->assertStringContainsString('.fin-purchase-form-columns', $financeStylesheet);
         $this->assertStringContainsString('.fin-purchase-dialog', $financeStylesheet);
         $this->assertStringContainsString('.fin-purchase-condition-tag.is-legacy', $financeStylesheet);

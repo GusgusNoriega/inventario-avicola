@@ -188,13 +188,18 @@ class CompanyExpenseApiTest extends TestCase
             ->assertJsonPath('meta.idempotent', true);
     }
 
-    public function test_expense_rejects_insufficient_balance_and_external_accounts(): void
+    public function test_expense_allows_a_negative_balance_but_still_rejects_external_accounts(): void
     {
+        $overdraftPayload = $this->payload((string) Str::uuid(), '501.00');
+        $overdraftPayload['numero_documento'] = 'F001-OVERDRAFT';
         $this->postJson(
             '/api/v1/finanzas/gastos',
-            $this->payload((string) Str::uuid(), '501.00'),
-        )->assertUnprocessable()
-            ->assertJsonValidationErrors('importe');
+            $overdraftPayload,
+        )->assertCreated()
+            ->assertJsonPath('data.importe', '501.00');
+        $this->getJson('/api/v1/finanzas/saldos')
+            ->assertOk()
+            ->assertJsonPath('data.0.saldo', '-1.00');
 
         $providerId = DB::table('terceros')->insertGetId([
             'empresa_id' => $this->user->empresa_id,
@@ -228,6 +233,7 @@ class CompanyExpenseApiTest extends TestCase
         ]);
         $payload = $this->payload((string) Str::uuid(), '10.00');
         $payload['cuenta_origen_id'] = $externalAccount;
+        $payload['numero_documento'] = 'F001-EXTERNAL';
 
         $this->postJson('/api/v1/finanzas/gastos', $payload)
             ->assertUnprocessable()

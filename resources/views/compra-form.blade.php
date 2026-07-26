@@ -114,7 +114,7 @@
               <label class="fin-field">
                 <span>Cuenta propia de origen <b>*</b></span>
                 <select id="purchaseOriginAccount"><option value="">Selecciona una cuenta propia</option></select>
-                <small id="purchaseOriginHelp">El total se descontará de esta cuenta.</small>
+                <small id="purchaseOriginHelp">El total se descontará de esta cuenta; si aún no cargaste la apertura, el saldo puede quedar negativo.</small>
               </label>
               <label class="fin-field">
                 <span>Cuenta receptora del proveedor <b>*</b></span>

@@ -371,9 +371,10 @@ vigente y soporta la unicidad por empresa, proveedor y tipo de documento. Al
 anular, queda nulo: así se mantiene la captura anulada y se permite registrar
 una corrección con el mismo número sin admitir dos compras activas duplicadas.
 
-Cuando un cliente deposita directamente al proveedor, `PAGO_DIRECTO` aplica el
-mismo importe al conjunto de CXC y al conjunto de CXP seleccionadas. Cuando
-deposita a la avícola,
+Cuando un cliente deposita directamente al proveedor, `PAGO_DIRECTO` conserva
+el importe total y permite aplicar de forma opcional las CXC o CXP que ya estén
+registradas. El remanente no aplicado sigue formando parte del saldo global de
+cada contraparte. Cuando deposita a la avícola,
 `COBRO_CLIENTE` reduce la CXC y aumenta el saldo propio, mientras la CXP
 permanece sin cambios.
 

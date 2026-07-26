@@ -48,7 +48,7 @@ ni anularse hasta anular primero esos movimientos financieros.
 | Tipo | Origen | Destino | Aplicación |
 | --- | --- | --- | --- |
 | `COBRO_CLIENTE` | Cliente | Cuenta propia | CXC |
-| `PAGO_DIRECTO` | Cliente | Cuenta externa del proveedor | CXC y CXP |
+| `PAGO_DIRECTO` | Cliente | Cuenta externa del proveedor | CXC y CXP opcionales |
 | `PAGO_PROVEEDOR` | Cuenta propia | Cuenta externa del proveedor | CXP |
 | `SALDO_FAVOR_PROVEEDOR` | Registro manual histórico | Proveedor | CXP posterior |
 | `COBRO_MINORISTA` | Comprador, identificado o anónimo | Cuenta/caja propia | CXC |
@@ -77,16 +77,19 @@ de los movimientos activos elegibles menos sus aplicaciones CXP. Por eso una
 anulación restaura las deudas aplicadas y elimina el crédito sin dejar saldos
 huérfanos.
 
-Para `PAGO_DIRECTO`, el importe aplicado a CXC debe ser igual al importe
-aplicado a CXP. Así, un depósito del cliente al proveedor disminuye por el mismo
-valor la deuda del cliente con la avícola y la deuda de la avícola con ese
-proveedor. Si el cliente deposita a una cuenta propia, se registra un
-`COBRO_CLIENTE`: disminuye la CXC y aumenta el saldo propio, pero la CXP no
-cambia.
+`PAGO_DIRECTO` puede registrarse aunque todavía no se hayan cargado las CXC o
+CXP históricas. Las aplicaciones conocidas son opcionales e independientes; lo
+no aplicado queda identificado en los resúmenes de cliente y proveedor para que
+el saldo global siga considerando el pago. Si el cliente deposita a una cuenta
+propia, se registra un `COBRO_CLIENTE`: disminuye la CXC y aumenta el saldo
+propio, pero la CXP no cambia.
 
-No se permiten sobregiros en egresos ordinarios ni al anular un ingreso cuyos
-fondos ya fueron utilizados. Los importes se calculan con BCMath y cada
-petición de alta requiere una clave UUID de idempotencia.
+Los egresos ordinarios también pueden registrarse antes de cargar el saldo
+inicial. En ese caso la cuenta propia mostrará temporalmente un saldo negativo,
+que puede regularizarse después con `SALDO_INICIAL` o `AJUSTE`. La anulación de
+un ingreso cuyos fondos ya fueron utilizados conserva su control específico.
+Los importes se calculan con BCMath y cada petición de alta requiere una clave
+UUID de idempotencia.
 
 ## Vistas
 
