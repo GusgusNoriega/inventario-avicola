@@ -35,6 +35,8 @@ class TicketDespacho extends Model
 
     public const CHANNEL_RETAIL = 'MINORISTA';
 
+    public const PUBLIC_SALE_LABEL = 'Venta público';
+
     public const OPERATION_DISPATCH = 'DESPACHO';
 
     public const OPERATION_RETURN = 'DEVOLUCION';

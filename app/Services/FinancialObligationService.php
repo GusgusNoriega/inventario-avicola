@@ -162,6 +162,7 @@ class FinancialObligationService
                 'contraparte_tipo_documento_snapshot' => $client?->tipo_documento,
                 'contraparte_numero_documento_snapshot' => $client?->numero_documento,
                 'contraparte_nombre_snapshot' => $client?->nombre_razon_social
+                    ?? $ticket->observaciones
                     ?? 'VENTA MINORISTA SIN CLIENTE',
                 'contraparte_direccion_snapshot' => $client?->direccion,
             ],

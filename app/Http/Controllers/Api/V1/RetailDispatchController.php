@@ -154,16 +154,18 @@ class RetailDispatchController extends Controller
                 ? 'El despacho ya estaba registrado.'
                 : 'Despacho minorista registrado correctamente.',
             'already_registered' => $result['already_registered'],
-            'data' => $this->formatTicket($result['ticket']),
+            'data' => $this->formatTicket($result['ticket'], $station),
         ], $result['already_registered'] ? 200 : 201);
     }
 
     /** @return array<string, mixed> */
-    private function formatTicket(TicketDespacho $ticket): array
+    private function formatTicket(TicketDespacho $ticket, int $station): array
     {
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
         $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
         $deliveryMode = $ticket->resolvedDeliveryMode();
+        $customerLabel = $ticket->clienteDestino?->nombre_razon_social
+            ?? ($station === 2 ? TicketDespacho::PUBLIC_SALE_LABEL : null);
         $totalAmount = $ticket->pesadas->sum(function ($weighing) use ($prices, $sign): float {
             $price = round(
                 (float) ($prices->get($weighing->tipo_pollo_id)?->precio_kg ?? 0),
@@ -183,6 +185,8 @@ class RetailDispatchController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
+            'customer_type' => $ticket->clienteDestino ? 'CLIENTE_REGISTRADO' : 'VENTA_PUBLICO',
+            'customer_label' => $customerLabel,
             'client' => $ticket->clienteDestino
                 ? [
                     'id' => $ticket->clienteDestino->id,

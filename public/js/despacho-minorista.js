@@ -45,6 +45,7 @@ const STORAGE_PREFIX = RETAIL_STATION === "1"
   : `sistema-pollos-retail-dispatch-v2-station-${RETAIL_STATION}-branch`;
 const OPERATION_SALE = "DESPACHO";
 const OPERATION_RETURN = "DEVOLUCION";
+const PUBLIC_SALE_LABEL = "Venta público";
 const SEX_MALE = "MACHO";
 const RETAIL_DRESSED_CHICKEN_CODE = "POLLO_PELADO";
 const MAX_RETAIL_BIRD_QUANTITY = 40;
@@ -797,6 +798,16 @@ function clientFor(list = activeList()) {
   return state.catalog.clients.find((client) => String(client.id) === String(list.clientId)) || null;
 }
 
+function isPublicSale(list = activeList()) {
+  return RETAIL_STATION === "2"
+    && list.operationType === OPERATION_SALE
+    && !list.clientId;
+}
+
+function customerLabelFor(list = activeList()) {
+  return clientFor(list)?.name || (isPublicSale(list) ? PUBLIC_SALE_LABEL : "Cliente pendiente");
+}
+
 function normalizePriceRecord(record) {
   if (record === null || record === undefined || record === "") return null;
   if (typeof record === "object") {
@@ -893,7 +904,6 @@ function buildCurrentRetailCustomerDisplayState() {
   const availability = liveReadingAvailability();
   const pendingCapture = activePendingCapture();
   const values = previewValues(pendingCapture?.reading?.readWeight);
-  const customer = clientFor(list);
   const fixedPresentation = station2AdjustmentForList(state.activeList);
   const selectedPresentation = isProcessedChickenType()
     ? "Pollo beneficiado · sin merma"
@@ -922,7 +932,7 @@ function buildCurrentRetailCustomerDisplayState() {
     producerInstance: RETAIL_CUSTOMER_DISPLAY_PRODUCER_INSTANCE,
     revision: ++retailCustomerDisplayRevision,
     updatedAt: new Date().toISOString(),
-    customerName: customer?.name || "Cliente pendiente",
+    customerName: customerLabelFor(list),
     ticketLabel: `Lista ${state.activeList + 1}`,
     listNumber: state.activeList + 1,
     operationType: list.operationType,
@@ -1363,7 +1373,6 @@ function renderLists() {
   const currentTotals = listTotals(current);
 
   elements.listsGrid.innerHTML = state.lists.map((list, listIndex) => {
-    const client = clientFor(list);
     const fixedAdjustment = station2AdjustmentForList(listIndex);
     const processedColumn = isStation2ProcessedList(listIndex);
     const processedType = processedColumn
@@ -1371,11 +1380,12 @@ function renderLists() {
       : null;
     const totals = listTotals(list);
     const operationLabel = list.operationType === OPERATION_RETURN ? "Devolución" : "Venta";
-    const headerTitle = processedType?.name || fixedAdjustment?.name || client?.name || "Cliente pendiente";
+    const customerLabel = customerLabelFor(list);
+    const headerTitle = processedType?.name || fixedAdjustment?.name || customerLabel;
     const headerSubtitle = processedColumn
-      ? `${client?.name || "Cliente pendiente"} · sin merma · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
+      ? `${customerLabel} · sin merma · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
       : fixedAdjustment
-      ? `${client?.name || "Cliente pendiente"} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
+      ? `${customerLabel} · ${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"}`
       : `${totals.weighings} pesada${totals.weighings === 1 ? "" : "s"} · ${trayQuantityLabel(totals.trays)}`;
     const rows = list.items.length
       ? newestRecordsFirst(list.items).map((item) => {
@@ -1421,15 +1431,18 @@ function renderLists() {
   elements.totalNet.textContent = formatWeight(currentTotals.net);
   elements.totalAmount.textContent = formatMoney(currentTotals.amount);
   const missingPrices = missingPriceTypes(current);
+  const publicSale = isPublicSale(current);
   elements.saveDispatch.disabled = state.loading
     || current.saving
     || !current.items.length
-    || !current.clientId;
-  elements.saveDispatch.title = !current.clientId
+    || (!current.clientId && !publicSale);
+  elements.saveDispatch.title = !current.clientId && !publicSale
     ? "Asigna un cliente antes de grabar."
     : (missingPrices.length
-      ? "Configura en Directorio un precio base vigente del cliente antes de grabar."
-      : "Grabar la lista activa");
+      ? (publicSale
+        ? "Configura un precio general vigente antes de grabar."
+        : "Configura en Directorio un precio base vigente del cliente antes de grabar.")
+      : (publicSale ? `Grabar como ${PUBLIC_SALE_LABEL}` : "Grabar la lista activa"));
   elements.removeWeighing.disabled = current.saving
     || !state.selectedItem
     || state.selectedItem.listIndex !== state.activeList;
@@ -2471,7 +2484,7 @@ function showMissingPricesError(list, missingTypes = missingPriceTypes(list)) {
 function prepareDispatchRegistration() {
   const list = activeList();
   if (!list || list.saving || !list.items.length) return;
-  if (!clientFor(list)) {
+  if (!clientFor(list) && !isPublicSale(list)) {
     showLocalActionIssue({
       caption: "Cliente requerido",
       title: "Asigna un cliente al ticket",
@@ -2512,9 +2525,10 @@ function submitDelivery(event) {
 
 function showRegisteredTicket(ticket) {
   const operationLabel = ticket.operation_type === OPERATION_RETURN ? "Devolución" : "Venta";
+  const customerLabel = ticket.client?.name || ticket.customer_label || "Cliente no disponible";
   elements.lastTicket.hidden = false;
   elements.lastTicket.innerHTML = `
-    <span><strong>${escapeHtml(operationLabel)} ${escapeHtml(ticket.code)}</strong><br>${escapeHtml(ticket.client?.name || "Cliente no disponible")}</span>
+    <span><strong>${escapeHtml(operationLabel)} ${escapeHtml(ticket.code)}</strong><br>${escapeHtml(customerLabel)}</span>
     <span>${trayQuantityLabel(ticket.totals?.trays)} · ${formatWeight(ticket.totals?.net_weight_kg || 0)} · <strong>${formatMoney(ticket.totals?.amount || 0)}</strong></span>
   `;
   globalThis.setTimeout(() => {
@@ -2611,7 +2625,7 @@ async function saveDispatch(delivery = null) {
         body: JSON.stringify({
           draft_id: list.draftId,
           operation_type: list.operationType,
-          client_id: Number(list.clientId),
+          client_id: list.clientId ? Number(list.clientId) : null,
           delivery,
           price_overrides: priceOverrides,
           weighings: list.items.map((item, index) => ({

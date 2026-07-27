@@ -101,14 +101,21 @@ class RetailDispatchService
 
             $this->configuration->ensureDefaults($companyId, (int) $branch->id, $station);
 
-            $clientId = (int) ($data['client_id'] ?? 0);
-            $client = Tercero::query()
-                ->where('empresa_id', $companyId)
-                ->where('estado', Tercero::STATUS_ACTIVE)
-                ->conRol(TerceroRole::CLIENT)
-                ->find($clientId);
+            $clientId = filled($data['client_id'] ?? null)
+                ? (int) $data['client_id']
+                : null;
+            $client = $clientId
+                ? Tercero::query()
+                    ->where('empresa_id', $companyId)
+                    ->where('estado', Tercero::STATUS_ACTIVE)
+                    ->conRol(TerceroRole::CLIENT)
+                    ->find($clientId)
+                : null;
+            $publicSale = $station === 2
+                && $data['operation_type'] === TicketDespacho::OPERATION_DISPATCH
+                && $clientId === null;
 
-            if (! $client) {
+            if (! $client && ! $publicSale) {
                 throw ValidationException::withMessages([
                     'client_id' => 'El cliente seleccionado no esta disponible.',
                 ]);
@@ -190,6 +197,7 @@ class RetailDispatchService
                     : [];
             $deferredDeliveryAssignment = in_array($station, [1, 2], true)
                 && $data['operation_type'] === TicketDespacho::OPERATION_DISPATCH
+                && $client !== null
                 && ! $client->es_cliente_interno
                 && $weighings->contains(fn (array $weighing): bool => (int) $weighing['tray_count'] > 0)
                 && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT;
@@ -206,6 +214,7 @@ class RetailDispatchService
                 'conductor_entrega_id' => $delivery['driver_id'] ?? null,
                 'asignacion_transporte_posterior' => $deferredDeliveryAssignment,
                 'estado' => TicketDespacho::STATUS_CLOSED,
+                'observaciones' => $publicSale ? TicketDespacho::PUBLIC_SALE_LABEL : null,
                 'cerrado_por' => $actor->id,
                 'cerrado_at' => now(),
                 'created_by' => $actor->id,

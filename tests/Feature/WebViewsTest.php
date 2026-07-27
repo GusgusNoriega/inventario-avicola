@@ -504,9 +504,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('general_prices', $javascript);
         $this->assertStringNotContainsString('data-retail-clear-client', $javascript);
         $this->assertStringNotContainsString('Venta sin cliente', $javascript);
-        $this->assertStringContainsString('|| !current.clientId;', $javascript);
+        $this->assertStringContainsString('const PUBLIC_SALE_LABEL = "Venta público";', $javascript);
+        $this->assertStringContainsString('function isPublicSale(list = activeList())', $javascript);
+        $this->assertStringContainsString('|| (!current.clientId && !publicSale);', $javascript);
         $this->assertStringContainsString('Asigna un cliente antes de grabar.', $javascript);
-        $this->assertStringContainsString('client_id: Number(list.clientId)', $javascript);
+        $this->assertStringContainsString('client_id: list.clientId ? Number(list.clientId) : null', $javascript);
         $this->assertStringContainsString('const base = client', $javascript);
         $this->assertStringContainsString('sistema-pollos-retail-typography-v1', $javascript);
         $this->assertStringContainsString('data-typography-step', $javascript);

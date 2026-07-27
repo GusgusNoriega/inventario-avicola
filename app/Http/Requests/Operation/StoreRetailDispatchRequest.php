@@ -28,7 +28,12 @@ class StoreRetailDispatchRequest extends FormRequest
 
         return [
             'draft_id' => ['required', 'uuid'],
-            'client_id' => ['required', 'integer', 'min:1'],
+            'client_id' => [
+                Rule::requiredIf(fn (): bool => ! $this->allowsPublicSale()),
+                'nullable',
+                'integer',
+                'min:1',
+            ],
             'operation_type' => ['required', Rule::in([
                 TicketDespacho::OPERATION_DISPATCH,
                 TicketDespacho::OPERATION_RETURN,
@@ -293,6 +298,7 @@ class StoreRetailDispatchRequest extends FormRequest
     {
         if (
             $this->input('operation_type') !== TicketDespacho::OPERATION_DISPATCH
+            || ! filled($this->input('client_id'))
         ) {
             return false;
         }
@@ -301,6 +307,12 @@ class StoreRetailDispatchRequest extends FormRequest
             fn (mixed $weighing): bool => is_array($weighing)
                 && (int) ($weighing['tray_count'] ?? 0) > 0
         );
+    }
+
+    private function allowsPublicSale(): bool
+    {
+        return $this->retailStation() === 2
+            && $this->input('operation_type') === TicketDespacho::OPERATION_DISPATCH;
     }
 
     private function requiresCompanyTruck(): bool

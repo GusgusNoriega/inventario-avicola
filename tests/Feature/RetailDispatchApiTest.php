@@ -1417,27 +1417,53 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('pago_aplicaciones', 0);
     }
 
-    public function test_both_retail_stations_require_a_client(): void
+    public function test_only_second_retail_station_can_register_a_public_sale_without_a_client(): void
     {
-        foreach ([
-            '/api/v1/despacho-minorista/tickets',
-            '/api/v1/despacho-minorista-2/tickets',
-        ] as $endpoint) {
-            $payload = $this->payload();
-            unset($payload['client_id']);
-            $payload['weighings'][0]['weight_source'] = 'MANUAL';
+        $firstStationPayload = $this->payload();
+        unset($firstStationPayload['client_id']);
+        $firstStationPayload['weighings'][0]['weight_source'] = 'MANUAL';
 
-            $this->postJson($endpoint, $payload)
-                ->assertUnprocessable()
-                ->assertJsonValidationErrors('client_id')
-                ->assertJsonPath(
-                    'errors.client_id.0',
-                    'Selecciona un cliente antes de registrar el ticket.'
-                );
-        }
+        $this->postJson('/api/v1/despacho-minorista/tickets', $firstStationPayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('client_id')
+            ->assertJsonPath(
+                'errors.client_id.0',
+                'Selecciona un cliente antes de registrar el ticket.'
+            );
 
-        $this->assertDatabaseCount('tickets_despacho', 0);
-        $this->assertDatabaseCount('comprobantes', 0);
+        $generalPriceHistoryId = $this->createGeneralPrice(8);
+        $secondStationPayload = $this->payload();
+        unset($secondStationPayload['client_id'], $secondStationPayload['delivery']);
+        $secondStationPayload['weighings'][0]['weight_source'] = 'MANUAL';
+
+        $ticketId = $this->postJson('/api/v1/despacho-minorista-2/tickets', $secondStationPayload)
+            ->assertCreated()
+            ->assertJsonPath('data.client', null)
+            ->assertJsonPath('data.customer_type', 'VENTA_PUBLICO')
+            ->assertJsonPath('data.customer_label', TicketDespacho::PUBLIC_SALE_LABEL)
+            ->assertJsonPath('data.delivery', null)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'GENERAL')
+            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $generalPriceHistoryId)
+            ->json('data.id');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticketId,
+            'cliente_destino_id' => null,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+            'asignacion_transporte_posterior' => false,
+            'observaciones' => TicketDespacho::PUBLIC_SALE_LABEL,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'tercero_id' => null,
+            'contraparte_nombre_snapshot' => TicketDespacho::PUBLIC_SALE_LABEL,
+            'operacion' => 'VENTA',
+            'naturaleza' => 'CARGO',
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseCount('movimientos_javas', 0);
         $this->assertDatabaseCount('pagos', 0);
         $this->assertDatabaseCount('pago_aplicaciones', 0);
     }

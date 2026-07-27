@@ -223,6 +223,42 @@ test("la impresion minorista usa el precio manual congelado y no el precio vigen
   assert.doesNotMatch(html, /<td class="">8\.50<\/td>/);
 });
 
+test("la venta pública de Minorista 2 queda identificada en la impresión", () => {
+  const apiTicket = {
+    code: "M-20260724-002",
+    channel: "MINORISTA",
+    operation_type: "DESPACHO",
+    operating_date: "2026-07-24",
+    registered_at: "2026-07-24T10:35:00-05:00",
+    customer_type: "VENTA_PUBLICO",
+    customer_label: "Venta público",
+    client: null,
+    totals: {
+      amount: 80
+    },
+    weighings: [{
+      chicken_type_code: "POLLO_PELADO",
+      birds: 5,
+      birds_per_tray: 5,
+      tray_count: 1,
+      read_weight_kg: 12.5,
+      gross_weight_kg: 12.5,
+      tare_weight_kg: 2.5,
+      net_weight_kg: 10,
+      price_kg: 8,
+      price_origin: "GENERAL",
+      amount: 80
+    }]
+  };
+
+  const printData = buildRetailTicketPrintData(apiTicket);
+  const html = compactHtml(buildWeightControlTicketHtml(printData, apiTicket.registered_at));
+
+  assert.equal(printData.destinationName, "Venta público");
+  assert.equal(printData.customerKind, "VENTA_PUBLICO");
+  assert.match(html, /VENTA PÚBLICO/);
+});
+
 test("el ticket minorista conserva pollos reales y bandejas incluso cuando son cero", () => {
   const html = compactHtml(buildWeightControlTicketHtml({
     code: "T-20260723-005",
