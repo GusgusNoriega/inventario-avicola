@@ -739,6 +739,41 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.rd-adjustment-buttons button.is-processed.is-active', $stylesheet);
     }
 
+    public function test_both_retail_dispatch_views_offer_direct_buttons_for_one_to_eight_trays(): void
+    {
+        foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
+            $response = $this->get($url)
+                ->assertOk()
+                ->assertSee('data-retail-quick-tray-option="1"', false)
+                ->assertSee('data-retail-quick-tray-option="8"', false)
+                ->assertDontSee('data-retail-quick-tray-option="9"', false)
+                ->assertDontSee('<span>Cantidad de bandejas</span>', false)
+                ->assertDontSee('Toca el número para cambiar');
+
+            $this->assertSame(
+                8,
+                preg_match_all(
+                    '/data-retail-quick-tray-option="[1-8]"/',
+                    (string) $response->getContent()
+                )
+            );
+        }
+
+        $javascript = (string) file_get_contents(public_path('js/despacho-minorista.js'));
+        $stylesheet = (string) file_get_contents(public_path('css/despacho-minorista.css'));
+
+        $this->assertStringContainsString(
+            'const quickTrayOption = event.target.closest("[data-retail-quick-tray-option]");',
+            $javascript
+        );
+        $this->assertStringContainsString(
+            'elements.trayCount.value = quickTrayOption.dataset.retailQuickTrayOption;',
+            $javascript
+        );
+        $this->assertStringContainsString('.rd-tray-quick-options', $stylesheet);
+        $this->assertStringContainsString('.rd-tray-quick-option.is-active', $stylesheet);
+    }
+
     public function test_both_retail_dispatch_views_allow_selecting_up_to_forty_birds(): void
     {
         foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {

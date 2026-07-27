@@ -1306,6 +1306,11 @@ function renderWeightPreview() {
     button.classList.toggle("is-active", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  document.querySelectorAll("[data-retail-quick-tray-option]").forEach((button) => {
+    const selected = Number(button.dataset.retailQuickTrayOption) === values.trayCount;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
   document.querySelectorAll("[data-retail-birds-per-tray-option]").forEach((button) => {
     const selected = Number(button.dataset.retailBirdsPerTrayOption) === values.birdsPerTray;
     button.classList.toggle("is-active", selected);
@@ -3114,6 +3119,13 @@ document.addEventListener("click", (event) => {
   if (trayOption) {
     elements.trayCount.value = trayOption.dataset.retailTrayOption;
     closeModal(elements.trayCountModal);
+    renderWeightPreview();
+    return;
+  }
+
+  const quickTrayOption = event.target.closest("[data-retail-quick-tray-option]");
+  if (quickTrayOption) {
+    elements.trayCount.value = quickTrayOption.dataset.retailQuickTrayOption;
     renderWeightPreview();
     return;
   }

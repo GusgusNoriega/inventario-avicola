@@ -64,9 +64,16 @@
       <section class="rd-capture-deck" aria-label="Captura de la pesada">
         <article class="rd-tray-panel rd-panel">
           <div class="rd-panel-heading rd-tray-quantity-heading">
-            <div>
-              <span>Cantidad de bandejas</span>
-              <strong>Toca el número para cambiar</strong>
+            <div class="rd-tray-quick-options" role="group" aria-label="Seleccionar rápidamente de 1 a 8 bandejas">
+              @for ($quantity = 1; $quantity <= 8; $quantity++)
+                <button
+                  class="rd-tray-quick-option {{ $quantity === 1 ? 'is-active' : '' }}"
+                  type="button"
+                  data-retail-quick-tray-option="{{ $quantity }}"
+                  aria-pressed="{{ $quantity === 1 ? 'true' : 'false' }}"
+                  aria-label="{{ $quantity }} {{ $quantity === 1 ? 'bandeja' : 'bandejas' }}"
+                >{{ $quantity }}</button>
+              @endfor
             </div>
             <input id="retailTrayCount" type="hidden" value="1">
             <button id="retailTrayCountTrigger" class="rd-number-trigger rd-tray-count-trigger" type="button" aria-haspopup="dialog" aria-controls="retailTrayCountModal">
