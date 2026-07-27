@@ -142,7 +142,7 @@
               <small id="retailBirdTotalPreview">5 aves</small>
             </div>
             <div class="rd-value-card is-total">
-              <span>Total de la pesada</span>
+              <span>Total</span>
               <strong id="retailWeighingTotalPreview">S/ --</strong>
               <small>Peso neto × precio asignado</small>
             </div>
