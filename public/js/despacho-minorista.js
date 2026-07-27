@@ -202,6 +202,7 @@ const elements = {
   tarePreview: document.querySelector("#retailTarePreview"),
   tareDetail: document.querySelector("#retailTareDetail"),
   netPreview: document.querySelector("#retailNetPreview"),
+  weighingTotalPreview: document.querySelector("#retailWeighingTotalPreview"),
   birdTotalPreview: document.querySelector("#retailBirdTotalPreview"),
   adjustments: document.querySelector("#retailAdjustments"),
   listSelectionHint: document.querySelector("#retailListSelectionHint"),
@@ -1162,8 +1163,12 @@ function renderWeightPreview() {
   elements.grossPreview.textContent = values.hasReading && calculationsAvailable
     ? formatWeight(values.grossWeight)
     : "--- kg";
-  elements.tarePreview.textContent = formatWeight(values.tareWeight);
-  elements.tareDetail.textContent = `${values.trayCount} × ${Number(values.tray?.weight_kg || 0).toFixed(3)} kg por bandeja`;
+  if (elements.tarePreview) {
+    elements.tarePreview.textContent = formatWeight(values.tareWeight);
+  }
+  if (elements.tareDetail) {
+    elements.tareDetail.textContent = `${values.trayCount} × ${Number(values.tray?.weight_kg || 0).toFixed(3)} kg por bandeja`;
+  }
   elements.netPreview.textContent = values.hasReading && calculationsAvailable
     ? formatWeight(Math.max(values.netWeight, 0))
     : "--- kg";
@@ -1222,6 +1227,9 @@ function renderWeightPreview() {
       ? `Registrar el peso capturado en la lista ${state.activeList + 1}`
       : `Capturar el peso actual en la lista ${state.activeList + 1}`
   );
+  const liveAmount = calculationsAvailable && price && values.netWeight > 0
+    ? roundMoney(values.netWeight * price.value)
+    : null;
   if (RETAIL_STATION === "2") {
     const client = clientFor();
     const chickenType = selectedChickenType();
@@ -1249,10 +1257,8 @@ function renderWeightPreview() {
         ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Toca para cambiar el precio del ticket`
         : `Esta columna no tiene precio de ${chickenName}. Toca para revisar el precio del ticket`
     );
+    elements.weighingTotalPreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
   } else {
-    const liveAmount = calculationsAvailable && price && values.netWeight > 0
-      ? roundMoney(values.netWeight * price.value)
-      : null;
     elements.pricePreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
     elements.priceSource.textContent = price
       ? `S/ ${formatMoneyValue(price.value)} por kg · ${price.source === "MANUAL" ? "puntual" : price.source.toLowerCase()}`

@@ -135,16 +135,29 @@
             <span>Peso bruto ajustado</span>
             <strong id="retailGrossPreview">--- kg</strong>
           </div>
-          <div class="rd-value-card">
-            <span>Tara de bandejas</span>
-            <strong id="retailTarePreview">0.000 kg</strong>
-            <small id="retailTareDetail">0 × 2.500 kg por bandeja</small>
-          </div>
-          <div class="rd-value-card is-net">
-            <span>Peso neto</span>
-            <strong id="retailNetPreview">--- kg</strong>
-            <small id="retailBirdTotalPreview">5 aves</small>
-          </div>
+          @if($retailStation === 2)
+            <div class="rd-value-card is-net">
+              <span>Peso neto</span>
+              <strong id="retailNetPreview">--- kg</strong>
+              <small id="retailBirdTotalPreview">5 aves</small>
+            </div>
+            <div class="rd-value-card is-total">
+              <span>Total de la pesada</span>
+              <strong id="retailWeighingTotalPreview">S/ --</strong>
+              <small>Peso neto × precio asignado</small>
+            </div>
+          @else
+            <div class="rd-value-card">
+              <span>Tara de bandejas</span>
+              <strong id="retailTarePreview">0.000 kg</strong>
+              <small id="retailTareDetail">0 × 2.500 kg por bandeja</small>
+            </div>
+            <div class="rd-value-card is-net">
+              <span>Peso neto</span>
+              <strong id="retailNetPreview">--- kg</strong>
+              <small id="retailBirdTotalPreview">5 aves</small>
+            </div>
+          @endif
         </article>
       </section>
 

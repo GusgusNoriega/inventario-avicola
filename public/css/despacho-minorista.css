@@ -709,6 +709,16 @@ button.rd-value-card {
   font-size: calc(var(--rd-font-panel-value) * 1.12);
 }
 
+.rd-value-card.is-total {
+  border-color: #9f8423;
+  background: linear-gradient(150deg, rgba(151, 119, 15, 0.28), #111008);
+}
+
+.rd-value-card.is-total strong {
+  color: #ffe457;
+  font-size: calc(var(--rd-font-panel-value) * 1.12);
+}
+
 .rd-value-card strong.is-invalid {
   color: #ff858c;
 }

@@ -641,7 +641,7 @@ class WebViewsTest extends TestCase
 
     public function test_second_retail_dispatch_view_uses_an_independent_station_namespace(): void
     {
-        $this->get('/despacho-minorista-2')
+        $response = $this->get('/despacho-minorista-2')
             ->assertOk()
             ->assertSee('Despacho minorista 2')
             ->assertSee('data-retail-station="2"', false)
@@ -655,6 +655,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailPriceCard"', false)
             ->assertSee('Precio asignado')
             ->assertSee('Toca para cambiar el precio del ticket')
+            ->assertSee('id="retailGrossPreview"', false)
+            ->assertSee('id="retailNetPreview"', false)
+            ->assertSee('id="retailWeighingTotalPreview"', false)
+            ->assertSee('Total de la pesada')
+            ->assertDontSee('id="retailTarePreview"', false)
+            ->assertDontSee('id="retailTareDetail"', false)
             ->assertSee('id="retailOpenManualWeight"', false)
             ->assertSee('Colocar peso manual')
             ->assertSee('aria-controls="retailManualWeightModal"', false)
@@ -668,6 +674,19 @@ class WebViewsTest extends TestCase
             ->assertDontSee('A crédito · cobro en Finanzas')
             ->assertSee(asset('js/despacho-minorista.js'), false)
             ->assertSee(asset('css/despacho-minorista.css'), false);
+
+        $stationTwoHtml = (string) $response->getContent();
+        $this->assertMatchesRegularExpression(
+            '/id="retailPriceCard"[\s\S]*id="retailGrossPreview"[\s\S]*id="retailNetPreview"[\s\S]*id="retailWeighingTotalPreview"/',
+            $stationTwoHtml
+        );
+
+        $this->get('/despacho-minorista')
+            ->assertOk()
+            ->assertSee('id="retailTarePreview"', false)
+            ->assertSee('id="retailTareDetail"', false)
+            ->assertDontSee('id="retailWeighingTotalPreview"', false)
+            ->assertDontSee('Total de la pesada');
 
         $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
 
@@ -703,6 +722,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('"Columna activa sin presentación disponible."', $javascript);
         $this->assertStringContainsString('"Peso directo de balanza · ajuste no disponible"', $javascript);
         $this->assertStringContainsString('calculationsAvailable && price && values.netWeight > 0', $javascript);
+        $this->assertStringContainsString('elements.weighingTotalPreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);', $javascript);
         $this->assertStringNotContainsString('fixedAdjustment.additional_grams', $javascript);
 
         $stylesheet = file_get_contents(public_path('css/despacho-minorista.css'));
