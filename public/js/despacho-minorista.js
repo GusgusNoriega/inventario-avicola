@@ -32,6 +32,7 @@ import {
   RETAIL_CUSTOMER_DISPLAY_REQUEST_TYPE,
   RETAIL_CUSTOMER_DISPLAY_RESET_TYPE
 } from "./retail-customer-display.js";
+import { filterAndRankRetailClients } from "./retail-client-search.js";
 import { newestRecordsFirst } from "./record-order.js";
 
 const retailStationElement = document.querySelector("#retailStation");
@@ -2228,11 +2229,7 @@ function initializeTypography() {
 }
 
 function renderClientOptions(search = "") {
-  const normalized = String(search || "").trim().toLocaleLowerCase("es");
-  const clients = state.catalog.clients.filter((client) => {
-    if (!normalized) return true;
-    return `${client.name || ""} ${client.document || ""}`.toLocaleLowerCase("es").includes(normalized);
-  });
+  const clients = filterAndRankRetailClients(state.catalog.clients, search);
 
   elements.clientOptions.innerHTML = clients.length
     ? clients.map((client) => {

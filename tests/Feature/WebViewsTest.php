@@ -474,6 +474,8 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('from "./retail-payment-defaults.js"', $javascript);
         $this->assertStringNotContainsString('from "./retail-payment-mode.js"', $javascript);
         $this->assertStringContainsString('from "./record-order.js"', $javascript);
+        $this->assertStringContainsString('from "./retail-client-search.js"', $javascript);
+        $this->assertStringContainsString('filterAndRankRetailClients(state.catalog.clients, search)', $javascript);
         $this->assertStringContainsString('newestRecordsFirst(list.items).map((item) => {', $javascript);
         $this->assertStringContainsString('showRetailError(presentation)', $javascript);
         $this->assertStringContainsString('continueDispatchRegistration();', $javascript);
