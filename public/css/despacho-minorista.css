@@ -1582,6 +1582,14 @@ button.rd-value-card {
   white-space: nowrap;
 }
 
+.rd-touch-keyboard.is-numeric-entry .rd-touch-keyboard-head output {
+  border-color: #f4c93d;
+  background: linear-gradient(180deg, #171406, #070704);
+  color: #ffd83d;
+  font-size: calc(var(--rd-font-modal-field) * 2.15);
+  text-shadow: 0 0 14px rgb(255 216 61 / 28%);
+}
+
 .rd-touch-keyboard-head > button,
 .rd-touch-keyboard-keys button,
 .rd-touch-keyboard-actions button {
@@ -1624,8 +1632,8 @@ button.rd-value-card {
 
 .rd-touch-keyboard-keys.is-numeric button {
   max-width: none;
-  min-height: 52px;
-  font-size: calc(var(--rd-font-modal-button) * 1.92);
+  min-height: 58px;
+  font-size: calc(var(--rd-font-modal-button) * 2.18);
 }
 
 .rd-touch-keyboard-row button.is-shift {

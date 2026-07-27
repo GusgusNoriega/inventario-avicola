@@ -403,9 +403,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="retailAdjustedWeight"', false)
             ->assertSee('id="retailOpenManualWeight"', false)
             ->assertSee('Colocar peso manual')
-            ->assertSee('aria-controls="retailManualWeightModal"', false)
-            ->assertSee('Al confirmar quedará capturado; luego presiona Registrar')
-            ->assertSee('Capturar peso manual')
+            ->assertDontSee('id="retailManualWeightModal"', false)
+            ->assertDontSee('id="retailManualWeightForm"', false)
+            ->assertDontSee('retailManualWeightModal', false)
+            ->assertSee('id="retailOpenManualWeight" class="rd-manual-weight-button" type="button" aria-haspopup="dialog" aria-controls="retailTouchKeyboard"', false)
+            ->assertSee('id="retailManualWeightEntry"', false)
+            ->assertSee('data-retail-keyboard-label="Peso manual en kilogramos"', false)
             ->assertSee('class="rd-lists-stage"', false)
             ->assertSee('aria-label="Seleccionar lista de destino"', false)
             ->assertSee('Selecciona una columna y captura; desliza para ver las listas 5 a 8.')
@@ -491,9 +494,12 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('calculateRetailWeightAdjustment({', $javascript);
         $this->assertStringContainsString('readWeight + totalAdjustmentGrams / 1000', $javascript);
         $this->assertMatchesRegularExpression(
-            '/function applyMainManualWeight\\(event\\)[\\s\\S]+?setManualReading\\(elements\\.manualWeightEntry\\.value\\)[\\s\\S]+?captureWeight\\(\\)/',
+            '/function applyMainManualWeight\\(value\\)[\\s\\S]+?setManualReading\\(value\\)[\\s\\S]+?captureWeight\\(\\{ addImmediately: true \\}\\)/',
             $javascript
         );
+        $this->assertStringContainsString('acceptHandler: applyMainManualWeight', $javascript);
+        $this->assertStringContainsString('const addImmediately = options?.addImmediately === true;', $javascript);
+        $this->assertStringContainsString('addWeighingToList(state.activeList, capturedReading);', $javascript);
         $this->assertStringContainsString(
             'elements.openManualWeight.addEventListener("click", openManualWeightModal)',
             $javascript
@@ -599,6 +605,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('--rd-font-base:', $stylesheet);
         $this->assertStringContainsString('--rd-font-chicken-type:', $stylesheet);
         $this->assertStringContainsString('.rd-touch-keyboard-card', $stylesheet);
+        $this->assertStringContainsString('.rd-touch-keyboard.is-numeric-entry .rd-touch-keyboard-head output', $stylesheet);
         $this->assertStringContainsString('--rd-font-presentation:', $stylesheet);
         $this->assertStringContainsString('--rd-font-table-cell:', $stylesheet);
         $this->assertStringContainsString('.rd-typography-drawer', $stylesheet);
@@ -666,7 +673,8 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="retailTareDetail"', false)
             ->assertSee('id="retailOpenManualWeight"', false)
             ->assertSee('Colocar peso manual')
-            ->assertSee('aria-controls="retailManualWeightModal"', false)
+            ->assertSee('aria-controls="retailTouchKeyboard"', false)
+            ->assertDontSee('retailManualWeightModal', false)
             ->assertDontSee('Seleccionar lista 1')
             ->assertDontSee('data-retail-add-list=', false)
             ->assertDontSee('id="retailDefaultPaymentMethod"', false)

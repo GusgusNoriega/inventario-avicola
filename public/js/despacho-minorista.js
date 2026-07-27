@@ -222,8 +222,6 @@ const elements = {
   lastTicket: document.querySelector("#retailLastTicket"),
   trayCountModal: document.querySelector("#retailTrayCountModal"),
   birdsPerTrayModal: document.querySelector("#retailBirdsPerTrayModal"),
-  manualWeightModal: document.querySelector("#retailManualWeightModal"),
-  manualWeightForm: document.querySelector("#retailManualWeightForm"),
   manualWeightEntry: document.querySelector("#retailManualWeightEntry"),
   removeWeighingModal: document.querySelector("#retailRemoveWeighingModal"),
   removeWeighingPreview: document.querySelector("#retailRemoveWeighingPreview"),
@@ -1504,7 +1502,8 @@ function selectList(index) {
       : `Lista ${nextIndex + 1} activa.`);
 }
 
-function captureWeight() {
+function captureWeight(options = {}) {
+  const addImmediately = options?.addImmediately === true;
   const pendingCapture = activePendingCapture();
   if (pendingCapture) {
     addWeighingToList(pendingCapture.listIndex, pendingCapture.reading);
@@ -1553,6 +1552,11 @@ function captureWeight() {
         }
       : null
   };
+
+  if (addImmediately) {
+    addWeighingToList(state.activeList, capturedReading);
+    return;
+  }
 
   state.pendingCapture = {
     listIndex: state.activeList,
@@ -1747,7 +1751,6 @@ function retailModals() {
     elements.errorModal,
     elements.trayCountModal,
     elements.birdsPerTrayModal,
-    elements.manualWeightModal,
     elements.removeWeighingModal,
     elements.clientModal,
     elements.deliveryModal,
@@ -1886,6 +1889,7 @@ function openTouchKeyboard(input, options = {}) {
   updateTouchKeyboardValue();
   elements.touchKeyboard.hidden = false;
   elements.touchKeyboard.setAttribute("aria-hidden", "false");
+  elements.touchKeyboard.classList.toggle("is-numeric-entry", mode !== "text");
   document.body.classList.add("has-retail-touch-keyboard");
   if (touchKeyboardState.lockStation && !hasOpenRetailModal()) {
     elements.station.inert = true;
@@ -1916,6 +1920,7 @@ function closeTouchKeyboard(commit = true) {
 
   elements.touchKeyboard.hidden = true;
   elements.touchKeyboard.setAttribute("aria-hidden", "true");
+  elements.touchKeyboard.classList.remove("is-numeric-entry");
   document.body.classList.remove("has-retail-touch-keyboard");
   target?.setAttribute("aria-expanded", "false");
   touchKeyboardState.target = null;
@@ -2843,17 +2848,17 @@ function applyManualScaleReading() {
 
 function openManualWeightModal() {
   elements.manualWeightEntry.value = state.liveWeight > 0 ? state.liveWeight.toFixed(3) : "";
-  openModal(elements.manualWeightModal);
-  elements.manualWeightEntry.focus();
-  openTouchKeyboard(elements.manualWeightEntry);
+  openTouchKeyboard(elements.manualWeightEntry, {
+    lockStation: true,
+    acceptHandler: applyMainManualWeight
+  });
 }
 
-function applyMainManualWeight(event) {
-  event.preventDefault();
+function applyMainManualWeight(value) {
   try {
-    state.scale.setManualReading(elements.manualWeightEntry.value);
-    closeModal(elements.manualWeightModal);
-    captureWeight();
+    state.scale.setManualReading(value);
+    captureWeight({ addImmediately: true });
+    return true;
   } catch (error) {
     showLocalActionIssue({
       caption: "Peso manual rechazado",
@@ -2866,8 +2871,9 @@ function applyMainManualWeight(event) {
           value: String(elements.manualWeightEntry.value || "").trim() || "Campo vacío"
         }
       ],
-      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Capturar peso manual."
+      help: "Cierra este aviso, ingresa un peso mayor que cero con hasta tres decimales y vuelve a presionar Aceptar."
     });
+    return false;
   }
 }
 
@@ -3040,7 +3046,6 @@ elements.trayCountTrigger.addEventListener("click", () => openModal(elements.tra
 elements.birdsPerTrayTrigger.addEventListener("click", () => openModal(elements.birdsPerTrayModal));
 elements.manualWeightTrigger.addEventListener("click", openManualWeightModal);
 elements.openManualWeight.addEventListener("click", openManualWeightModal);
-elements.manualWeightForm.addEventListener("submit", applyMainManualWeight);
 elements.captureWeight.addEventListener("click", captureWeight);
 elements.assignClient.addEventListener("click", openClientModal);
 elements.removeWeighing.addEventListener("click", openRemoveWeighingModal);

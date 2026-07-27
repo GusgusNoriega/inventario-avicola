@@ -175,7 +175,7 @@ test("Minorista 1 y Minorista 2 publican una trama US tras dos muestras coincide
 });
 
 test("una lectura estable se congela y el segundo clic la registra sin releer la balanza", () => {
-  const captureStart = retailViewSource.indexOf("function captureWeight()");
+  const captureStart = retailViewSource.indexOf("function captureWeight(options = {})");
   const captureEnd = retailViewSource.indexOf("function addWeighingToList", captureStart);
   const captureSource = retailViewSource.slice(captureStart, captureEnd);
 
@@ -184,6 +184,7 @@ test("una lectura estable se congela y el segundo clic la registra sin releer la
   assert.doesNotMatch(retailViewSource, /lastCapturedReadingId|alreadyCaptured/);
   assert.doesNotMatch(captureSource, /Esta lectura ya fue capturada|duplicar el mismo peso/);
   assert.match(captureSource, /const pendingCapture = activePendingCapture\(\)/);
+  assert.match(captureSource, /const addImmediately = options\?\.addImmediately === true/);
   assert.match(captureSource, /addWeighingToList\(pendingCapture\.listIndex,\s*pendingCapture\.reading\)/);
   assert.match(captureSource, /if \(!availability\.ready\)/);
   assert.match(captureSource, /state\.pendingCapture\s*=\s*\{[\s\S]*listIndex:\s*state\.activeList,[\s\S]*reading:\s*capturedReading/);
@@ -212,29 +213,29 @@ test("una lectura estable se congela y el segundo clic la registra sin releer la
   }
 });
 
-test("el peso manual visible queda capturado y espera el clic de registro", () => {
-  const applyStart = retailViewSource.indexOf("function applyMainManualWeight(event)");
+test("aceptar el peso manual lo agrega directamente desde el teclado numérico", () => {
+  const applyStart = retailViewSource.indexOf("function applyMainManualWeight(value)");
   const applyEnd = retailViewSource.indexOf("function normalizeCatalog", applyStart);
   const applySource = retailViewSource.slice(applyStart, applyEnd);
 
   assert.notEqual(applyStart, -1);
   assert.notEqual(applyEnd, -1);
-  assert.match(applySource, /state\.scale\.setManualReading\(elements\.manualWeightEntry\.value\)/);
-  assert.match(applySource, /closeModal\(elements\.manualWeightModal\)/);
-  assert.match(applySource, /captureWeight\(\)/);
+  assert.match(applySource, /state\.scale\.setManualReading\(value\)/);
+  assert.match(applySource, /captureWeight\(\{ addImmediately: true \}\)/);
   assert.ok(
-    applySource.indexOf("setManualReading") < applySource.indexOf("captureWeight()"),
-    "la lectura manual debe quedar fijada antes de capturar la pesada"
+    applySource.indexOf("setManualReading") < applySource.indexOf("captureWeight({ addImmediately: true })"),
+    "la lectura manual debe quedar fijada antes de agregar la pesada"
   );
   assert.match(
     retailBladeSource,
     /id="retailOpenManualWeight"[\s\S]*?Colocar peso manual/
   );
-  assert.match(
-    retailBladeSource,
-    /Al confirmar quedará capturado; luego presiona Registrar/
-  );
-  assert.match(retailBladeSource, /Capturar peso manual/);
+  assert.doesNotMatch(retailBladeSource, /id="retailManualWeightModal"/);
+  assert.doesNotMatch(retailBladeSource, /id="retailManualWeightForm"/);
+  assert.match(retailBladeSource, /id="retailManualWeightEntry"[\s\S]*?hidden[\s\S]*?data-retail-keyboard="decimal"/);
+  assert.match(retailViewSource, /acceptHandler: applyMainManualWeight/);
+  assert.match(retailViewSource, /const addImmediately = options\?\.addImmediately === true/);
+  assert.match(retailViewSource, /if \(addImmediately\) \{\s*addWeighingToList\(state\.activeList, capturedReading\)/);
   assert.match(
     retailViewSource,
     /elements\.manualWeightTrigger\.disabled = captureLocked \|\| Boolean\(pendingCapture\)/
