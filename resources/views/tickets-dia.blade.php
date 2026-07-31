@@ -9,11 +9,12 @@
 </head>
 <body class="customer-history-page daily-tickets-page">
   <main class="customer-history-view daily-tickets-view" data-daily-tickets>
-    <section class="customer-history-section" aria-labelledby="dailyClientTotalsTitle">
-      <div class="customer-history-section-head">
+    <section class="customer-history-section daily-summary-section" aria-labelledby="dailyJourneyTitle">
+      <div class="customer-history-section-head daily-summary-screen-head">
         <div>
           <p class="eyebrow">Movimientos netos</p>
-          <h2 id="dailyClientTotalsTitle">Resumen por cliente</h2>
+          <h1 id="dailyJourneyTitle">Resumen de la jornada</h1>
+          <p id="dailyJourneyMeta" class="daily-summary-meta">Consultando la jornada operativa actual.</p>
         </div>
         <a class="menu-return-btn" href="{{ route('menu') }}">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -25,8 +26,21 @@
           <span>Menú</span>
         </a>
       </div>
-      <div class="customer-history-table-wrap card">
+
+      <form id="dailyJourneyFilter" class="daily-journey-filter card">
+        <label>
+          Jornada a consultar
+          <input id="dailyJourneyDate" name="date" type="date" required>
+        </label>
+        <div class="daily-journey-filter-actions">
+          <button id="dailyJourneySubmit" class="btn btn-primary" type="submit">Ver jornada</button>
+          <button id="dailyJourneyPrint" class="btn btn-success" type="button" disabled>Imprimir jornada</button>
+        </div>
+      </form>
+
+      <div class="customer-history-table-wrap daily-summary-table-wrap card">
         <table class="customer-history-table daily-client-table">
+          <caption class="sr-only">Tabla del resumen de la jornada por cliente</caption>
           <thead>
             <tr>
               <th>Cliente</th>
@@ -55,10 +69,6 @@
 
       <form id="dailyTicketFilters" class="daily-ticket-filters card">
         <label>
-          Fecha operativa
-          <input id="dailyTicketDate" name="date" type="date">
-        </label>
-        <label>
           Código de ticket
           <input id="dailyTicketSearch" name="ticket" type="search" maxlength="40" placeholder="Ej: T-20260724-001">
         </label>
@@ -70,7 +80,7 @@
             <option value="ANULADO">Anulados</option>
           </select>
         </label>
-        <button class="btn btn-primary" type="submit">Consultar</button>
+        <button class="btn btn-primary" type="submit">Filtrar</button>
       </form>
 
       <p id="dailyTicketFeedback" class="daily-ticket-feedback" role="status" aria-live="polite"></p>

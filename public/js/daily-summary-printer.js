@@ -1,0 +1,179 @@
+function escapePrintHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function buildDailySummaryPrintHtml({ dateLabel, tableHtml }) {
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumen de la jornada</title>
+  <style>
+    @page {
+      size: landscape;
+      margin: 10mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #000;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 18px;
+    }
+
+    header {
+      margin: 0 0 14px;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 5px;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    p {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    thead {
+      display: table-header-group;
+    }
+
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    th,
+    td {
+      padding: 7px 6px;
+      border: 1px solid #000;
+      background: #fff;
+      color: #000;
+      vertical-align: middle;
+    }
+
+    th {
+      font-weight: 800;
+    }
+
+    th:not(:first-child),
+    td:not(:first-child) {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:nth-child(2),
+    td:nth-child(2) {
+      text-align: left;
+    }
+
+    td:first-child {
+      overflow-wrap: anywhere;
+    }
+
+    .daily-client-types {
+      white-space: normal;
+    }
+
+    .daily-client-type {
+      display: inline;
+      font-size: 18px;
+    }
+
+    .daily-client-type + .daily-client-type::before {
+      content: ", ";
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Resumen de la jornada</h1>
+    <p>Fecha: <strong>${escapePrintHtml(dateLabel)}</strong></p>
+  </header>
+  ${tableHtml}
+</body>
+</html>`;
+}
+
+export function printDailySummary({ dateLabel, table, onError } = {}) {
+  if (!table?.outerHTML) {
+    onError?.();
+    return;
+  }
+
+  const printFrame = document.createElement("iframe");
+  let cleanupTimer = null;
+
+  printFrame.className = "ticket-print-frame";
+  printFrame.title = "Impresión del resumen de la jornada";
+  printFrame.setAttribute("aria-hidden", "true");
+  printFrame.addEventListener("load", () => {
+    const printWindow = printFrame.contentWindow;
+
+    if (!printWindow) {
+      printFrame.remove();
+      onError?.();
+      return;
+    }
+
+    const cleanup = () => {
+      if (cleanupTimer) window.clearTimeout(cleanupTimer);
+      printFrame.remove();
+    };
+
+    printWindow.addEventListener("afterprint", cleanup, { once: true });
+    cleanupTimer = window.setTimeout(cleanup, 60000);
+
+    window.setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch {
+        cleanup();
+        onError?.();
+      }
+    }, 150);
+  }, { once: true });
+
+  printFrame.srcdoc = buildDailySummaryPrintHtml({
+    dateLabel,
+    tableHtml: table.outerHTML
+  });
+  document.body.appendChild(printFrame);
+}

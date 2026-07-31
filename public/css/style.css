@@ -3817,7 +3817,53 @@ body[data-fleet-view="choferes"] .fleet-tab.is-active {
   background: linear-gradient(180deg, #ff8484, #be2222);
 }
 
-/* Administración y anulación de tickets */
+/* Resumen de jornada, impresión y administración de tickets */
+.daily-summary-screen-head {
+  align-items: center;
+}
+
+.daily-summary-screen-head h1 {
+  margin: 3px 0 0;
+}
+
+.daily-summary-meta {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+}
+
+.daily-journey-filter {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.daily-journey-filter label {
+  display: grid;
+  gap: 7px;
+  color: #c8d7e9;
+  font-size: .84rem;
+  font-weight: 800;
+}
+
+.daily-journey-filter input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #415979;
+  border-radius: 9px;
+  background: #080d16;
+  color: #fff;
+  padding: 10px 12px;
+}
+
+.daily-journey-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .daily-ticket-admin-copy {
   max-width: 820px;
   margin: 7px 0 0;
@@ -3826,7 +3872,7 @@ body[data-fleet-view="choferes"] .fleet-tab.is-active {
 
 .daily-ticket-filters {
   display: grid;
-  grid-template-columns: minmax(170px, .7fr) minmax(230px, 1.3fr) minmax(160px, .7fr) auto;
+  grid-template-columns: minmax(230px, 1.3fr) minmax(160px, .7fr) auto;
   gap: 12px;
   align-items: end;
   padding: 16px;
@@ -3988,6 +4034,29 @@ body.daily-ticket-modal-open {
 }
 
 @media (max-width: 820px) {
+  .daily-summary-screen-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .daily-summary-screen-head .menu-return-btn {
+    width: 100%;
+  }
+
+  .daily-journey-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-journey-filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .daily-journey-filter-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
   .daily-ticket-filters {
     grid-template-columns: 1fr;
   }
@@ -4008,6 +4077,12 @@ body.daily-ticket-modal-open {
 
   .daily-ticket-void-actions {
     flex-direction: column-reverse;
+  }
+}
+
+@media (max-width: 520px) {
+  .daily-journey-filter-actions {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -1,10 +1,16 @@
 import { apiRequest } from "./api-client.js";
+import { printDailySummary } from "./daily-summary-printer.js";
 
 const root = document.querySelector("[data-daily-tickets]");
 const clientTotals = document.getElementById("dailyClientTotals");
+const clientTable = document.querySelector(".daily-client-table");
+const journeyFilter = document.getElementById("dailyJourneyFilter");
+const journeyDate = document.getElementById("dailyJourneyDate");
+const journeySubmit = document.getElementById("dailyJourneySubmit");
+const journeyPrint = document.getElementById("dailyJourneyPrint");
+const journeyMeta = document.getElementById("dailyJourneyMeta");
 const adminSection = document.getElementById("dailyTicketAdmin");
 const ticketFilters = document.getElementById("dailyTicketFilters");
-const ticketDate = document.getElementById("dailyTicketDate");
 const ticketSearch = document.getElementById("dailyTicketSearch");
 const ticketStatus = document.getElementById("dailyTicketStatus");
 const ticketRows = document.getElementById("dailyTicketRows");
@@ -25,6 +31,7 @@ const CHICKEN_TYPE_SHORT_LABELS = {
 };
 let tickets = [];
 let selectedTicket = null;
+let loadedJourneyDate = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -50,6 +57,19 @@ function formatDate(value) {
   return Number.isNaN(date.getTime())
     ? escapeHtml(value)
     : new Intl.DateTimeFormat("es-PE").format(date);
+}
+
+function journeyDateLabel(value) {
+  if (!value) return "--";
+
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : new Intl.DateTimeFormat("es-PE", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric"
+    }).format(date);
 }
 
 function normalizeCode(value) {
@@ -113,7 +133,13 @@ function renderTicketRows() {
   if (!ticketRows) return;
 
   const selectedStatus = String(ticketStatus?.value || "");
-  const items = tickets.filter((ticket) => !selectedStatus || ticket.status === selectedStatus);
+  const search = normalizeCode(ticketSearch?.value);
+  const items = tickets.filter((ticket) => {
+    const matchesStatus = !selectedStatus || ticket.status === selectedStatus;
+    const matchesSearch = !search || normalizeCode(ticket.code).includes(search);
+
+    return matchesStatus && matchesSearch;
+  });
 
   if (!items.length) {
     ticketRows.innerHTML = `
@@ -121,6 +147,9 @@ function renderTicketRows() {
         <td colspan="8" class="customer-history-empty-cell">No hay tickets que coincidan con la consulta.</td>
       </tr>
     `;
+    if (ticketFeedback) {
+      ticketFeedback.textContent = `0 de ${tickets.length} ticket(s) coinciden con el filtro.`;
+    }
     return;
   }
 
@@ -150,6 +179,11 @@ function renderTicketRows() {
       </tr>
     `;
   }).join("");
+
+  if (ticketFeedback) {
+    const voided = items.filter((ticket) => ticket.status === "ANULADO").length;
+    ticketFeedback.textContent = `${items.length} de ${tickets.length} ticket(s) · ${voided} anulado(s).`;
+  }
 }
 
 function renderAdminTickets(data) {
@@ -162,16 +196,38 @@ function renderAdminTickets(data) {
 
   adminSection.hidden = false;
   tickets = Array.isArray(data.tickets) ? data.tickets : [];
-  if (ticketDate && !ticketDate.value) ticketDate.value = data.operating_date || "";
   renderTicketRows();
 }
 
 function ticketEndpoint() {
   const params = new URLSearchParams({ include_voided: "1" });
-  if (ticketDate?.value) params.set("date", ticketDate.value);
-  if (ticketSearch?.value.trim()) params.set("ticket", ticketSearch.value.trim());
+  if (journeyDate?.value) params.set("date", journeyDate.value);
 
   return `/operacion/tickets-dia?${params.toString()}`;
+}
+
+function updateJourneyContext(data) {
+  const operatingDate = String(data?.operating_date || journeyDate?.value || "");
+  const label = journeyDateLabel(operatingDate);
+
+  loadedJourneyDate = operatingDate;
+  if (journeyDate) journeyDate.value = operatingDate;
+  if (journeyMeta) journeyMeta.textContent = `Jornada operativa del ${label}.`;
+
+  if (operatingDate && window.history?.replaceState) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("date", operatingDate);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+}
+
+function setJourneyLoading(loading) {
+  if (journeyDate) journeyDate.disabled = loading;
+  if (journeySubmit) {
+    journeySubmit.disabled = loading;
+    journeySubmit.textContent = loading ? "Consultando..." : "Ver jornada";
+  }
+  if (journeyPrint) journeyPrint.disabled = loading || !loadedJourneyDate;
 }
 
 function errorMessage(error) {
@@ -201,31 +257,56 @@ function closeVoidModal() {
 }
 
 async function loadDailyClientTotals() {
+  loadedJourneyDate = "";
   renderMessage("Cargando resultados del día...");
   if (ticketFeedback) ticketFeedback.textContent = "Cargando tickets...";
+  setJourneyLoading(true);
 
   try {
     const response = await apiRequest(ticketEndpoint());
     const data = response.data || {};
+    updateJourneyContext(data);
     renderClientTotals(data.summary?.by_client || []);
     renderAdminTickets(data);
-    if (ticketFeedback && data.access?.is_administrator) {
-      const voided = tickets.filter((ticket) => ticket.status === "ANULADO").length;
-      ticketFeedback.textContent = `${tickets.length} ticket(s) encontrados · ${voided} anulado(s).`;
-    }
+    return true;
   } catch (error) {
     renderMessage(error?.message || "No se pudo cargar el resumen por cliente.");
     if (ticketFeedback) ticketFeedback.textContent = errorMessage(error);
+    return false;
+  } finally {
+    setJourneyLoading(false);
   }
 }
 
 if (root && clientTotals) {
+  const requestedDate = new URLSearchParams(window.location.search).get("date");
+  if (journeyDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate || "")) {
+    journeyDate.value = requestedDate;
+  }
   loadDailyClientTotals();
 }
 
-ticketFilters?.addEventListener("submit", (event) => {
+journeyFilter?.addEventListener("submit", (event) => {
   event.preventDefault();
   loadDailyClientTotals();
+});
+
+journeyPrint?.addEventListener("click", async () => {
+  if (!loadedJourneyDate || journeyDate?.value !== loadedJourneyDate) {
+    const loaded = await loadDailyClientTotals();
+    if (!loaded) return;
+  }
+
+  printDailySummary({
+    dateLabel: journeyDateLabel(loadedJourneyDate),
+    table: clientTable,
+    onError: () => renderMessage("No se pudo preparar la impresión de la jornada.")
+  });
+});
+
+ticketFilters?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  renderTicketRows();
 });
 
 ticketStatus?.addEventListener("change", renderTicketRows);

@@ -1327,16 +1327,29 @@ class WebViewsTest extends TestCase
         $this->get('/tickets-dia')
             ->assertOk()
             ->assertSee('Resumen de la jornada')
+            ->assertSee('id="dailyJourneyFilter"', false)
+            ->assertSee('id="dailyJourneyDate"', false)
+            ->assertSee('Jornada a consultar')
+            ->assertSee('id="dailyJourneyPrint"', false)
+            ->assertSee('Imprimir jornada')
             ->assertSee('dailyClientTotals', false)
             ->assertSee(route('menu'), false)
             ->assertSee('Menú')
             ->assertSee(asset('js/tickets-dia.js'), false)
+            ->assertDontSee('id="dailyTicketDate"', false)
             ->assertDontSee('dailyOperationSummary', false)
             ->assertDontSee('dailyTicketsFilters', false)
             ->assertDontSee('dailyTypeTotals', false)
             ->assertDontSee('dailyTicketList', false)
             ->assertDontSee('Importe')
             ->assertDontSee('Precio/kg');
+
+        $javascript = file_get_contents(public_path('js/tickets-dia.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('from "./daily-summary-printer.js"', $javascript);
+        $this->assertStringContainsString('params.set("date", journeyDate.value)', $javascript);
+        $this->assertStringContainsString('journeyDate?.value !== loadedJourneyDate', $javascript);
     }
 
     public function test_journey_configuration_view_is_available_without_database_queries(): void
