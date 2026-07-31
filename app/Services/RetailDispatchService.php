@@ -42,6 +42,12 @@ class RetailDispatchService
         $station = $station === 2 ? 2 : 1;
         $expectedScaleCode = $this->configuration->scaleCode($station);
 
+        if ($station === 2 && collect($data['price_overrides'] ?? [])->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'price_overrides' => 'Despacho minorista 2 usa el precio vigente de la jornada y no admite precios manuales por ticket.',
+            ]);
+        }
+
         foreach ($data['weighings'] as $index => $weighing) {
             if ($weighing['weight_source'] !== 'MANUAL' && $weighing['weight_source'] !== $expectedScaleCode) {
                 throw ValidationException::withMessages([
@@ -202,6 +208,17 @@ class RetailDispatchService
                 && $weighings->contains(fn (array $weighing): bool => (int) $weighing['tray_count'] > 0)
                 && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT;
 
+            $prices = $this->freezePrices(
+                $companyId,
+                $client?->id,
+                $types,
+                collect($data['price_overrides'] ?? []),
+                $station === 2
+            );
+            if ($station === 2 && array_key_exists('expected_prices', $data)) {
+                $this->ensureExpectedPrices($types, $prices, $data['expected_prices']);
+            }
+
             $ticket = TicketDespacho::query()->create([
                 'jornada_id' => $journey->id,
                 'codigo' => $this->nextTicketCode($journey, $operatingDate),
@@ -219,13 +236,6 @@ class RetailDispatchService
                 'cerrado_at' => now(),
                 'created_by' => $actor->id,
             ]);
-
-            $prices = $this->freezePrices(
-                $companyId,
-                $client?->id,
-                $types,
-                collect($data['price_overrides'] ?? [])
-            );
 
             foreach ($prices as $typeId => $price) {
                 TicketPrecio::query()->create([
@@ -409,7 +419,8 @@ class RetailDispatchService
         int $companyId,
         ?int $clientId,
         Collection $types,
-        Collection $overrides
+        Collection $overrides,
+        bool $reportMissingAsExpectedPrice = false
     ): array {
         $sourceIds = $types->map(fn (TipoPollo $type): int => $type->priceSourceTypeId())->unique()->values();
         $specificListId = $clientId
@@ -445,6 +456,12 @@ class RetailDispatchService
             $history = $specificPrice ?: $general->get($sourceId);
 
             if (! $history) {
+                if ($reportMissingAsExpectedPrice) {
+                    throw ValidationException::withMessages([
+                        "expected_prices.{$type->codigo}" => "El precio de {$type->nombre} ya no está vigente. Revisa los precios antes de grabar.",
+                    ]);
+                }
+
                 throw ValidationException::withMessages([
                     ($clientId ? 'client_id' : 'price_overrides') => $clientId
                         ? "Falta configurar el precio de {$type->nombre} para este cliente."
@@ -465,6 +482,35 @@ class RetailDispatchService
         }
 
         return $result;
+    }
+
+    /**
+     * @param  Collection<string, TipoPollo>  $types
+     * @param  array<int, array{history: PrecioHistorial, source: string, price_kg: float}>  $prices
+     * @param  array<string, float|int|string>  $expectedPrices
+     */
+    private function ensureExpectedPrices(
+        Collection $types,
+        array $prices,
+        array $expectedPrices
+    ): void {
+        $expectedCodes = collect(array_keys($expectedPrices));
+        if ($expectedCodes->diff($types->keys())->isNotEmpty() || $types->keys()->diff($expectedCodes)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'expected_prices' => 'Los precios revisados deben corresponder a todos los productos del ticket.',
+            ]);
+        }
+
+        foreach ($types as $code => $type) {
+            $expectedPrice = round((float) $expectedPrices[$code], 2, PHP_ROUND_HALF_UP);
+            $currentPrice = round((float) $prices[$type->id]['price_kg'], 2, PHP_ROUND_HALF_UP);
+
+            if ($expectedPrice !== $currentPrice) {
+                throw ValidationException::withMessages([
+                    "expected_prices.{$code}" => "El precio de {$type->nombre} cambió en otra estación. Revisa el nuevo total antes de grabar.",
+                ]);
+            }
+        }
     }
 
     private function existingRetailStation(TicketDespacho $ticket): ?int

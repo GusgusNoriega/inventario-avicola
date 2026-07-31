@@ -199,6 +199,7 @@ class JourneyPlanApiTest extends TestCase
 
         $this->putJson('/api/v1/operacion/precios-jornada', [
             'global_prices' => $prices,
+            'expected_prices' => array_fill_keys(array_keys($prices), null),
         ])
             ->assertOk()
             ->assertJsonPath('data.global_prices.POLLO_VIVO', 7.75)
@@ -212,6 +213,203 @@ class JourneyPlanApiTest extends TestCase
             'codigo' => 'GENERAL-VENTA',
         ]);
         $this->assertDatabaseCount('precios_historial', 6);
+    }
+
+    public function test_journey_price_update_requires_the_prices_seen_by_the_operator(): void
+    {
+        $listCount = DB::table('listas_precios')->count();
+        $historyCount = DB::table('precios_historial')->count();
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 8.75,
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('expected_prices');
+
+        $this->assertSame($listCount, DB::table('listas_precios')->count());
+        $this->assertSame($historyCount, DB::table('precios_historial')->count());
+    }
+
+    public function test_only_processed_chicken_journey_price_can_be_updated_without_closing_other_prices(): void
+    {
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_LIVE => 7.75,
+                TipoPollo::CHICKEN_DRESSED => 8.75,
+                TipoPollo::CHICKEN_PROCESSED => 9.75,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_LIVE => null,
+                TipoPollo::CHICKEN_DRESSED => null,
+                TipoPollo::CHICKEN_PROCESSED => null,
+            ],
+        ])->assertOk();
+
+        $listId = DB::table('listas_precios')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->whereNull('tercero_id')
+            ->where('operacion', 'VENTA')
+            ->value('id');
+        $currentPrices = DB::table('precios_historial as price')
+            ->join('tipos_pollo as type', 'type.id', '=', 'price.tipo_pollo_id')
+            ->where('price.lista_precio_id', $listId)
+            ->whereNull('price.vigente_hasta')
+            ->get(['price.id', 'type.codigo'])
+            ->keyBy('codigo');
+        $historyCount = DB::table('precios_historial')->count();
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 10.25,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 9.75,
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.global_prices.POLLO_VIVO', 7.75)
+            ->assertJsonPath('data.global_prices.POLLO_PELADO', 8.75)
+            ->assertJsonPath('data.global_prices.POLLO_BENEFICIADO', 10.25);
+
+        $this->assertNull(DB::table('precios_historial')
+            ->where('id', $currentPrices->get(TipoPollo::CHICKEN_LIVE)->id)
+            ->value('vigente_hasta'));
+        $this->assertNull(DB::table('precios_historial')
+            ->where('id', $currentPrices->get(TipoPollo::CHICKEN_DRESSED)->id)
+            ->value('vigente_hasta'));
+        $this->assertNotNull(DB::table('precios_historial')
+            ->where('id', $currentPrices->get(TipoPollo::CHICKEN_PROCESSED)->id)
+            ->value('vigente_hasta'));
+        $this->assertDatabaseHas('precios_historial', [
+            'lista_precio_id' => $listId,
+            'tipo_pollo_id' => DB::table('tipos_pollo')
+                ->where('codigo', TipoPollo::CHICKEN_PROCESSED)
+                ->value('id'),
+            'precio_kg' => 10.25,
+            'vigente_hasta' => null,
+            'reemplaza_precio_id' => $currentPrices->get(TipoPollo::CHICKEN_PROCESSED)->id,
+            'registrado_por' => $this->user->id,
+        ]);
+        $this->assertSame($historyCount + 1, DB::table('precios_historial')->count());
+    }
+
+    public function test_journey_price_update_rejects_a_stale_expected_price(): void
+    {
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_LIVE => 7.75,
+                TipoPollo::CHICKEN_DRESSED => 8.75,
+                TipoPollo::CHICKEN_PROCESSED => 9.75,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_LIVE => null,
+                TipoPollo::CHICKEN_DRESSED => null,
+                TipoPollo::CHICKEN_PROCESSED => null,
+            ],
+        ])->assertOk();
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 10,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 9.75,
+            ],
+        ])->assertOk();
+        $historyCount = DB::table('precios_historial')->count();
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 10.25,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 9.75,
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('expected_prices.'.TipoPollo::CHICKEN_PROCESSED);
+
+        $this->getJson('/api/v1/operacion/precios-jornada')
+            ->assertOk()
+            ->assertJsonPath('data.global_prices.POLLO_BENEFICIADO', 10);
+        $this->assertSame($historyCount, DB::table('precios_historial')->count());
+    }
+
+    public function test_journey_price_contract_uses_two_decimals_for_legacy_values(): void
+    {
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 8.57,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_DRESSED => null,
+            ],
+        ])->assertOk();
+
+        $listId = DB::table('listas_precios')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->whereNull('tercero_id')
+            ->where('operacion', 'VENTA')
+            ->value('id');
+        $typeId = DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::CHICKEN_DRESSED)
+            ->value('id');
+        DB::table('precios_historial')
+            ->where('lista_precio_id', $listId)
+            ->where('tipo_pollo_id', $typeId)
+            ->whereNull('vigente_hasta')
+            ->update(['precio_kg' => 8.5678]);
+
+        $this->getJson('/api/v1/operacion/precios-jornada')
+            ->assertOk()
+            ->assertJsonPath('data.global_prices.POLLO_PELADO', 8.57);
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 9,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 8.57,
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.global_prices.POLLO_PELADO', 9);
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 9.125,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 9,
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('global_prices.'.TipoPollo::CHICKEN_DRESSED);
+    }
+
+    public function test_partial_journey_price_update_rejects_empty_or_unknown_prices(): void
+    {
+        $listCount = DB::table('listas_precios')->count();
+        $historyCount = DB::table('precios_historial')->count();
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('global_prices');
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                'POLLO_DESCONOCIDO' => 10.25,
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('global_prices');
+
+        $this->assertSame($listCount, DB::table('listas_precios')->count());
+        $this->assertSame($historyCount, DB::table('precios_historial')->count());
     }
 
     public function test_inactive_company_vehicle_is_not_available_for_journey_selection(): void

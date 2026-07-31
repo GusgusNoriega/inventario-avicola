@@ -42,15 +42,15 @@
       <div class="journey-global-price-grid">
         <label class="field">
           Pollo vivo (kg)
-          <input id="journeyPriceLive" type="number" min="0.01" max="99999999.9999" step="0.01" inputmode="decimal" placeholder="0.00">
+          <input id="journeyPriceLive" type="number" min="0.01" max="99999999.99" step="0.01" inputmode="decimal" placeholder="0.00">
         </label>
         <label class="field">
           Pollo pelado (kg)
-          <input id="journeyPriceDressed" type="number" min="0.01" max="99999999.9999" step="0.01" inputmode="decimal" placeholder="0.00">
+          <input id="journeyPriceDressed" type="number" min="0.01" max="99999999.99" step="0.01" inputmode="decimal" placeholder="0.00">
         </label>
         <label class="field">
           Pollo beneficiado (kg)
-          <input id="journeyPriceProcessed" type="number" min="0.01" max="99999999.9999" step="0.01" inputmode="decimal" placeholder="0.00">
+          <input id="journeyPriceProcessed" type="number" min="0.01" max="99999999.99" step="0.01" inputmode="decimal" placeholder="0.00">
         </label>
       </div>
       <div class="journey-price-actions">

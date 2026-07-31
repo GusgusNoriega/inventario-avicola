@@ -70,6 +70,7 @@ class StoreRetailDispatchRequest extends FormRequest
                     ->where('estado', 'ACTIVO')),
             ],
             'price_overrides' => [
+                Rule::prohibitedIf(fn (): bool => $this->retailStation() === 2),
                 'sometimes',
                 'array:'.implode(',', [
                     TipoPollo::CHICKEN_DRESSED,
@@ -77,6 +78,15 @@ class StoreRetailDispatchRequest extends FormRequest
                 ]),
             ],
             'price_overrides.*' => ['numeric', 'decimal:0,2', 'gt:0', 'max:99999999.99'],
+            'expected_prices' => [
+                Rule::requiredIf(fn (): bool => $this->retailStation() === 2),
+                'array:'.implode(',', [
+                    TipoPollo::CHICKEN_DRESSED,
+                    TipoPollo::CHICKEN_PROCESSED,
+                ]),
+                'min:1',
+            ],
+            'expected_prices.*' => ['numeric', 'decimal:0,2', 'gt:0', 'max:99999999.99'],
             'payments' => ['prohibited'],
             'weighings' => ['required', 'array', 'min:1', 'max:100'],
             'weighings.*' => [
@@ -158,6 +168,15 @@ class StoreRetailDispatchRequest extends FormRequest
                 ])
                 ->all();
         }
+        $expectedPrices = $this->input('expected_prices');
+
+        if (is_array($expectedPrices)) {
+            $expectedPrices = collect($expectedPrices)
+                ->mapWithKeys(fn (mixed $price, mixed $code): array => [
+                    mb_strtoupper(trim((string) $code), 'UTF-8') => $price,
+                ])
+                ->all();
+        }
 
         $normalized = [
             'operation_type' => mb_strtoupper(
@@ -169,6 +188,9 @@ class StoreRetailDispatchRequest extends FormRequest
 
         if ($this->exists('price_overrides')) {
             $normalized['price_overrides'] = $priceOverrides;
+        }
+        if ($this->exists('expected_prices')) {
+            $normalized['expected_prices'] = $expectedPrices;
         }
 
         $delivery = $this->input('delivery');
@@ -246,10 +268,18 @@ class StoreRetailDispatchRequest extends FormRequest
             'delivery.driver_id.required_with' => 'Selecciona un chofer de la flota para la entrega.',
             'delivery.driver_id.integer' => 'El chofer seleccionado no es válido.',
             'delivery.driver_id.exists' => 'El chofer seleccionado no pertenece a la empresa o está inactivo.',
+            'price_overrides.prohibited' => 'Despacho minorista 2 usa el precio vigente de la jornada y no admite precios manuales por ticket.',
             'price_overrides.array' => 'Los precios asignados a la lista no tienen un formato válido.',
             'price_overrides.*.numeric' => 'Cada precio manual debe ser un número válido.',
             'price_overrides.*.gt' => 'Cada precio manual debe ser mayor que cero.',
             'price_overrides.*.max' => 'Uno de los precios manuales supera el máximo permitido.',
+            'expected_prices.array' => 'Los precios revisados no tienen un formato válido.',
+            'expected_prices.required' => 'Los precios de la pantalla están desactualizados. Recarga Despacho minorista 2 antes de grabar.',
+            'expected_prices.min' => 'Debes enviar al menos un precio revisado.',
+            'expected_prices.*.numeric' => 'Cada precio revisado debe ser un número válido.',
+            'expected_prices.*.gt' => 'Cada precio revisado debe ser mayor que cero.',
+            'expected_prices.*.max' => 'Uno de los precios revisados supera el máximo permitido.',
+            'expected_prices.*.decimal' => 'Los precios revisados solo pueden usar hasta dos decimales.',
             'weighings.required' => 'Agrega al menos una pesada a la lista.',
             'weighings.array' => 'Las pesadas no tienen un formato válido.',
             'weighings.min' => 'Agrega al menos una pesada a la lista.',

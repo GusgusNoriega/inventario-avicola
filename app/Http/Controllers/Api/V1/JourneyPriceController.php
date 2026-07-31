@@ -35,7 +35,8 @@ class JourneyPriceController extends Controller
         DB::transaction(fn () => $this->prices->save(
             $companyId,
             (int) $actor->id,
-            $request->validated('global_prices')
+            $request->validated('global_prices'),
+            $request->validated('expected_prices')
         ), 3);
 
         return response()->json([

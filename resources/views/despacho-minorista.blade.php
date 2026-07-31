@@ -129,7 +129,7 @@
             <button id="retailPriceCard" class="rd-value-card is-price is-interactive" type="button" aria-haspopup="dialog" aria-controls="retailTouchKeyboard">
               <span>Precio asignado</span>
               <strong id="retailPricePreview">S/ -- por kg</strong>
-              <small id="retailPriceSource">Toca para cambiar el precio del ticket</small>
+              <small id="retailPriceSource">Toca para cambiar el precio de la jornada</small>
             </button>
           @else
             <div class="rd-value-card is-price">

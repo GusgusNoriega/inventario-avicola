@@ -62,6 +62,7 @@ const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 5;
 const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
 const TICKET_PRICE_OVERRIDE_VERSION = 1;
+const JOURNEY_PRICE_REFRESH_INTERVAL_MS = 15000;
 const LIST_CLASSES = [
   "is-list-1",
   "is-list-2",
@@ -309,6 +310,7 @@ const state = {
   scale: null,
   scaleState: null,
   loading: true,
+  savingJourneyPrice: false,
   typography: {},
   deliveryMode: null,
   pendingPrintTicket: null
@@ -319,6 +321,8 @@ let lastRetailCustomerDisplayStorageWrite = 0;
 let pendingRetailCustomerDisplayStoragePayload = null;
 let retailCustomerDisplayStorageTimer = null;
 let retailCustomerDisplayHeartbeatTimer = null;
+let journeyPriceRefreshPromise = null;
+let journeyPriceRevision = 0;
 const modalFocusOrigins = new Map();
 const touchKeyboardState = {
   target: null,
@@ -330,6 +334,7 @@ const touchKeyboardState = {
   replaceOnNextKey: false,
   suppressOpen: false,
   acceptHandler: null,
+  accepting: false,
   lockStation: false,
   focusOrigin: null
 };
@@ -376,7 +381,9 @@ function normalizeList(list) {
     clientId,
     operationType: source.operationType === OPERATION_RETURN ? OPERATION_RETURN : OPERATION_SALE,
     ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
-    priceOverrides: clientId && !supportsClientOverrides ? {} : normalizedPriceOverrides,
+    priceOverrides: RETAIL_STATION === "2"
+      ? {}
+      : (clientId && !supportsClientOverrides ? {} : normalizedPriceOverrides),
     items: Array.isArray(source.items)
       ? source.items
         .filter((item) => item && item.adjustmentCode && Number(item.readWeight) > 0)
@@ -434,7 +441,7 @@ function persistLists() {
     clientId: list.clientId,
     operationType: list.operationType,
     ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
-    priceOverrides: list.priceOverrides,
+    priceOverrides: RETAIL_STATION === "2" ? {} : list.priceOverrides,
     items: list.items
   }));
 
@@ -457,12 +464,14 @@ function recalculateDraftItems() {
   );
 
   state.lists.forEach((list, listIndex) => {
-    list.priceOverrides = Object.fromEntries(
-      Object.entries(list.priceOverrides || {})
-        .filter(([code]) => availableChickenTypeCodes.has(code))
-        .map(([code, value]) => [code, roundMoney(value)])
-        .filter(([, value]) => value > 0)
-    );
+    list.priceOverrides = RETAIL_STATION === "2"
+      ? {}
+      : Object.fromEntries(
+        Object.entries(list.priceOverrides || {})
+          .filter(([code]) => availableChickenTypeCodes.has(code))
+          .map(([code, value]) => [code, roundMoney(value)])
+          .filter(([, value]) => value > 0)
+      );
     list.items = list.items
       .filter((item) => availableChickenTypeCodes.has(item.chickenTypeCode))
       .map((item) => {
@@ -1244,27 +1253,34 @@ function renderWeightPreview() {
     const chickenType = selectedChickenType();
     const chickenName = chickenType?.name || "este producto";
     const priceSource = String(price?.source || "").toUpperCase();
+    const usesClientPrice = priceSource === "CLIENTE" && Boolean(client);
     const priceDescription = priceSource === "MANUAL"
-      ? "Precio cambiado para este ticket"
-      : priceSource === "CLIENTE" && client
-        ? `Precio vigente de ${client.name}`
+      ? "Precio puntual del ticket"
+      : usesClientPrice
+        ? `Tarifa propia de ${client.name}`
         : priceSource === "GENERAL"
-          ? `Precio general de ${chickenName}`
+          ? `Precio de la jornada de ${chickenName}`
           : "Precio vigente";
     elements.pricePreview.textContent = price
       ? `S/ ${formatMoneyValue(price.value)} por kg`
       : "S/ -- por kg";
     elements.priceSource.textContent = price
-      ? `Toca para cambiar · ${priceDescription}`
+      ? (usesClientPrice
+        ? `${priceDescription} · toca para cambiar la jornada`
+        : `Toca para cambiar · ${priceDescription}`)
       : `${client
         ? `Toca para configurar · ${client.name} no tiene precio de ${chickenName}`
-        : `Toca para configurar · precio general de ${chickenName} no configurado`}`;
-    elements.priceCard.disabled = state.loading || state.lists.some((list) => list.saving);
+        : `Toca para configurar · precio de la jornada de ${chickenName} no configurado`}`;
+    elements.priceCard.disabled = state.loading
+      || state.savingJourneyPrice
+      || state.lists.some((list) => list.saving);
     elements.priceCard.setAttribute(
       "aria-label",
       price
-        ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Toca para cambiar el precio del ticket`
-        : `Esta columna no tiene precio de ${chickenName}. Toca para revisar el precio del ticket`
+        ? (usesClientPrice
+          ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Es una tarifa propia del cliente; toca para cambiar el precio de la jornada`
+          : `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Toca para cambiar el precio de la jornada`)
+        : `Esta columna no tiene precio de ${chickenName}. Toca para configurar el precio de la jornada`
     );
     elements.weighingTotalPreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
   } else {
@@ -1447,6 +1463,9 @@ function renderLists() {
         ? "Configura un precio general vigente antes de grabar."
         : "Configura en Directorio un precio base vigente del cliente antes de grabar.")
       : (publicSale ? `Grabar como ${PUBLIC_SALE_LABEL}` : "Grabar la lista activa"));
+  elements.assignPrice.disabled = state.loading
+    || state.savingJourneyPrice
+    || current.saving;
   elements.removeWeighing.disabled = current.saving
     || !state.selectedItem
     || state.selectedItem.listIndex !== state.activeList;
@@ -1887,6 +1906,7 @@ function openTouchKeyboard(input, options = {}) {
   input.setAttribute("aria-controls", "retailTouchKeyboard");
   elements.touchKeyboardTitle.textContent = input.dataset.retailKeyboardLabel || "Ingresar valor";
   renderTouchKeyboard();
+  setTouchKeyboardBusy(false);
   updateTouchKeyboardValue();
   elements.touchKeyboard.hidden = false;
   elements.touchKeyboard.setAttribute("aria-hidden", "false");
@@ -1919,6 +1939,7 @@ function closeTouchKeyboard(commit = true) {
     target.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  setTouchKeyboardBusy(false);
   elements.touchKeyboard.hidden = true;
   elements.touchKeyboard.setAttribute("aria-hidden", "true");
   elements.touchKeyboard.classList.remove("is-numeric-entry");
@@ -1940,6 +1961,13 @@ function closeTouchKeyboard(commit = true) {
   focusOrigin?.focus?.({ preventScroll: true });
   queueMicrotask(() => {
     touchKeyboardState.suppressOpen = false;
+  });
+}
+
+function setTouchKeyboardBusy(isBusy) {
+  touchKeyboardState.accepting = Boolean(isBusy);
+  elements.touchKeyboard?.querySelectorAll("button").forEach((button) => {
+    button.disabled = touchKeyboardState.accepting || button.classList.contains("is-disabled");
   });
 }
 
@@ -2033,11 +2061,24 @@ function backspaceTouchKeyboardInput() {
   setTouchKeyboardInputValue(current.slice(0, -1));
 }
 
-function handleTouchKeyboardAction(action) {
+async function handleTouchKeyboardAction(action) {
+  if (touchKeyboardState.accepting) return;
+
   if (action === "accept") {
-    const accepted = touchKeyboardState.acceptHandler?.(normalizedTouchKeyboardValue());
-    if (accepted === false) return;
-    return closeTouchKeyboard(true);
+    const target = touchKeyboardState.target;
+    const acceptHandler = touchKeyboardState.acceptHandler;
+    const value = normalizedTouchKeyboardValue();
+    setTouchKeyboardBusy(true);
+    try {
+      const accepted = await acceptHandler?.(value);
+      if (accepted === false) return;
+      if (touchKeyboardState.target !== target || elements.touchKeyboard?.hidden) return;
+      return closeTouchKeyboard(true);
+    } finally {
+      if (touchKeyboardState.target === target && !elements.touchKeyboard?.hidden) {
+        setTouchKeyboardBusy(false);
+      }
+    }
   }
   if (action === "cancel") return closeTouchKeyboard(false);
   if (action === "clear") {
@@ -2324,6 +2365,250 @@ function applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue)
   return true;
 }
 
+function syncJourneyPrice(chickenTypeCode, value) {
+  const normalizedValue = Number(value);
+  const price = Number.isFinite(normalizedValue) && normalizedValue > 0
+    ? {
+        price_kg: roundMoney(normalizedValue),
+        source: "GENERAL",
+        history_id: null
+      }
+    : null;
+
+  if (price) {
+    state.catalog.general_prices[chickenTypeCode] = price;
+  } else {
+    delete state.catalog.general_prices[chickenTypeCode];
+  }
+  state.catalog.clients.forEach((client) => {
+    const clientPrices = client.prices;
+    if (!clientPrices || typeof clientPrices !== "object") return;
+
+    const current = clientPrices[chickenTypeCode];
+    const source = String(current?.source || "").toUpperCase();
+    if (source !== "CLIENTE") {
+      if (price) {
+        clientPrices[chickenTypeCode] = { ...price };
+      } else {
+        delete clientPrices[chickenTypeCode];
+      }
+    }
+  });
+
+  state.lists.forEach((list) => {
+    if (!list.priceOverrides || typeof list.priceOverrides !== "object") return;
+    delete list.priceOverrides[chickenTypeCode];
+  });
+}
+
+function syncJourneyPriceSnapshot(globalPrices) {
+  if (!globalPrices || typeof globalPrices !== "object") {
+    throw new Error("El servidor no devolvió los precios vigentes de la jornada.");
+  }
+
+  let changed = false;
+  RETAIL_CHICKEN_TYPE_CODES.forEach((chickenTypeCode) => {
+    const currentValue = currentGeneralPrice(chickenTypeCode)?.value ?? null;
+    const rawValue = Number(globalPrices[chickenTypeCode]);
+    const nextValue = Number.isFinite(rawValue) && rawValue > 0
+      ? roundMoney(rawValue)
+      : null;
+    const sameValue = currentValue === null && nextValue === null
+      || (currentValue !== null
+        && nextValue !== null
+        && moneyToCents(currentValue) === moneyToCents(nextValue));
+    if (sameValue) return;
+
+    syncJourneyPrice(chickenTypeCode, nextValue);
+    changed = true;
+  });
+
+  return changed;
+}
+
+async function refreshJourneyPrices(options = {}) {
+  const force = Boolean(options.force);
+  const allowWhileSaving = Boolean(options.allowWhileSaving);
+  if (
+    RETAIL_STATION !== "2"
+    || state.loading
+    || (state.savingJourneyPrice && !allowWhileSaving)
+  ) return false;
+  if (journeyPriceRefreshPromise) {
+    if (!force) return journeyPriceRefreshPromise;
+    const pendingRefresh = journeyPriceRefreshPromise;
+    try {
+      await pendingRefresh;
+    } catch {
+      // La lectura forzada siguiente será la fuente de verdad.
+    }
+    if (journeyPriceRefreshPromise && journeyPriceRefreshPromise !== pendingRefresh) {
+      return journeyPriceRefreshPromise;
+    }
+  }
+
+  const requestedRevision = journeyPriceRevision;
+  const request = apiRequest("/operacion/precios-jornada")
+    .then((response) => {
+      if (requestedRevision !== journeyPriceRevision) return false;
+      const changed = syncJourneyPriceSnapshot(response.data?.global_prices);
+      if (changed) {
+        persistLists();
+        renderAll();
+      }
+      return changed;
+    });
+  const trackedRequest = request.finally(() => {
+    if (journeyPriceRefreshPromise === trackedRequest) {
+      journeyPriceRefreshPromise = null;
+    }
+  });
+  journeyPriceRefreshPromise = trackedRequest;
+  return trackedRequest;
+}
+
+async function refreshRetailCatalogPrices() {
+  const response = await apiRequest(`${RETAIL_API_BASE}/catalogo`);
+  const data = response.data;
+  if (
+    !data
+    || !Array.isArray(data.clients)
+    || !data.general_prices
+    || typeof data.general_prices !== "object"
+  ) {
+    throw new Error("El servidor no devolvió el catálogo vigente de precios minoristas.");
+  }
+
+  state.catalog.clients = data.clients;
+  state.catalog.general_prices = { ...data.general_prices };
+  state.lists.forEach((list) => {
+    list.priceOverrides = {};
+  });
+  persistLists();
+  renderAll();
+}
+
+function listPriceSnapshot(list) {
+  return Object.fromEntries(
+    [...new Set(list.items.map((item) => item.chickenTypeCode))]
+      .map((chickenTypeCode) => [
+        chickenTypeCode,
+        effectivePrice(list, chickenTypeCode)?.value ?? null
+      ])
+  );
+}
+
+function changedListPrices(before, after) {
+  return Object.keys({ ...before, ...after }).filter((chickenTypeCode) => {
+    const previous = before[chickenTypeCode] ?? null;
+    const current = after[chickenTypeCode] ?? null;
+    if (previous === null || current === null) return previous !== current;
+    return moneyToCents(previous) !== moneyToCents(current);
+  });
+}
+
+async function applyDirectJourneyPrice(
+  listIndex,
+  chickenTypeCode,
+  rawValue,
+  expectedJourneyPrice
+) {
+  const chickenType = chickenTypeByCode(chickenTypeCode);
+  const raw = String(rawValue ?? "").trim();
+  const value = Number(raw);
+  if (
+    !chickenType
+    || raw === ""
+    || !hasAtMostMoneyDecimals(raw)
+    || !Number.isFinite(value)
+    || value < 0.01
+    || value > 99999999.99
+  ) {
+    showLocalActionIssue({
+      caption: "Precio de jornada no aplicado",
+      title: "El precio de la jornada no es válido",
+      message: `No se modificó el precio de ${chickenType?.name || "la columna activa"}.`,
+      details: [{ label: "Valor ingresado", value: raw || "Vacío" }],
+      help: "El precio debe estar entre S/ 0.01 y S/ 99,999,999.99 y usar como máximo dos decimales."
+    });
+    return false;
+  }
+
+  const normalizedValue = roundMoney(value);
+  const previousJourneyPrice = currentGeneralPrice(chickenTypeCode)?.value ?? null;
+  journeyPriceRevision += 1;
+  state.savingJourneyPrice = true;
+  renderAll();
+  setMessage(`Guardando ${formatMoney(normalizedValue)} como precio de la jornada de ${chickenType.name}...`);
+
+  try {
+    const response = await apiRequest("/operacion/precios-jornada", {
+      method: "PUT",
+      body: JSON.stringify({
+        global_prices: {
+          [chickenTypeCode]: formatMoneyValue(normalizedValue)
+        },
+        expected_prices: {
+          [chickenTypeCode]: expectedJourneyPrice === null
+            ? null
+            : formatMoneyValue(expectedJourneyPrice)
+        }
+      })
+    });
+    const savedValue = Number(response.data?.global_prices?.[chickenTypeCode]);
+    if (!Number.isFinite(savedValue) || savedValue <= 0) {
+      throw new Error("El servidor guardó el precio, pero no devolvió el valor vigente.");
+    }
+
+    syncJourneyPrice(chickenTypeCode, savedValue);
+    persistLists();
+    setMessage(
+      `Precio de la jornada de ${chickenType.name} actualizado a ${formatMoney(savedValue)} desde la columna ${listIndex + 1}.`
+    );
+    return true;
+  } catch (error) {
+    const validationMessage = Object.values(error.data?.errors || {})[0]?.[0];
+    const journeyChanged = Object.keys(error.data?.errors || {})
+      .some((field) => field.startsWith("expected_prices"));
+    if (journeyChanged) {
+      try {
+        await refreshJourneyPrices({ force: true, allowWhileSaving: true });
+      } catch {
+        // El rechazo del servidor conserva el precio anterior en pantalla.
+      }
+    }
+    const currentJourneyPrice = currentGeneralPrice(chickenTypeCode)?.value ?? null;
+    showLocalActionIssue({
+      caption: "Precio de jornada no guardado",
+      title: `No se actualizó el precio de ${chickenType.name}`,
+      message: validationMessage || error.message || "No se pudo guardar el nuevo precio.",
+      details: [{
+        label: journeyChanged ? "Precio vigente ahora" : "Precio de jornada anterior",
+        value: (journeyChanged ? currentJourneyPrice : previousJourneyPrice) === null
+          ? "No configurado"
+          : formatMoney(journeyChanged ? currentJourneyPrice : previousJourneyPrice)
+      }],
+      help: "El precio anterior se conserva. Revisa la conexión e inténtalo nuevamente."
+    });
+    return false;
+  } finally {
+    state.savingJourneyPrice = false;
+    renderAll();
+  }
+}
+
+function applyDirectPrice(
+  listIndex,
+  chickenTypeCode,
+  baseValue,
+  rawValue,
+  expectedJourneyPrice = null
+) {
+  return RETAIL_STATION === "2"
+    ? applyDirectJourneyPrice(listIndex, chickenTypeCode, rawValue, expectedJourneyPrice)
+    : applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue);
+}
+
 function openDirectPriceEditor() {
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
@@ -2335,12 +2620,28 @@ function openDirectPriceEditor() {
       : currentGeneralPrice(chickenType.code))
     : null;
 
-  if (!list || !chickenType || !base || !elements.directPriceInput) {
+  if (state.savingJourneyPrice || !list || !chickenType || !elements.directPriceInput) {
     showLocalActionIssue({
       caption: "Precio no disponible",
-      title: chickenType
-        ? `Falta el precio base de ${chickenType.name}`
-        : "No hay un producto activo en esta columna",
+      title: "No hay un producto activo en esta columna",
+      message: "No se abrió el teclado porque no se pudo identificar el producto de la columna activa.",
+      details: [{ label: "Lista activa", value: `Lista ${listIndex + 1}` }],
+      help: "Selecciona nuevamente la columna e inténtalo otra vez."
+    });
+    return;
+  }
+
+  const price = effectivePrice(list, chickenType.code) || base;
+  const journeyPrice = RETAIL_STATION === "2"
+    ? currentGeneralPrice(chickenType.code)
+    : null;
+  const expectedJourneyPrice = journeyPrice?.value ?? null;
+  const editorPrice = RETAIL_STATION === "2" ? journeyPrice : price;
+
+  if (RETAIL_STATION !== "2" && !base) {
+    showLocalActionIssue({
+      caption: "Precio no disponible",
+      title: `Falta el precio base de ${chickenType.name}`,
       message: "No se abrió el teclado porque primero debe existir un precio vigente para esta columna.",
       details: [
         { label: "Lista activa", value: `Lista ${listIndex + 1}` },
@@ -2358,19 +2659,26 @@ function openDirectPriceEditor() {
     return;
   }
 
-  const price = effectivePrice(list, chickenType.code) || base;
-  elements.directPriceInput.value = formatMoneyValue(price.value);
-  elements.directPriceInput.placeholder = formatMoneyValue(base.value);
+  elements.directPriceInput.value = editorPrice ? formatMoneyValue(editorPrice.value) : "";
+  elements.directPriceInput.placeholder = editorPrice ? formatMoneyValue(editorPrice.value) : "0.00";
   elements.directPriceInput.dataset.retailKeyboardLabel =
-    `Precio de ${chickenType.name} por kilogramo`;
+    RETAIL_STATION === "2"
+      ? `Precio de la jornada de ${chickenType.name} por kilogramo`
+      : `Precio de ${chickenType.name} por kilogramo`;
   elements.directPriceInput.dataset.retailPriceCode = chickenType.code;
+  if (RETAIL_STATION === "2" && String(price?.source || "").toUpperCase() === "CLIENTE") {
+    setMessage(
+      `La columna muestra la tarifa propia de ${client?.name || "este cliente"}; el teclado edita el precio general de la jornada de ${chickenType.name}.`
+    );
+  }
   openTouchKeyboard(elements.directPriceInput, {
     lockStation: true,
-    acceptHandler: (value) => applyDirectTicketPrice(
+    acceptHandler: (value) => applyDirectPrice(
       listIndex,
       chickenType.code,
-      base.value,
-      value
+      base?.value ?? null,
+      value,
+      expectedJourneyPrice
     )
   });
 }
@@ -2608,23 +2916,82 @@ async function saveDispatch(delivery = null) {
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
   if (!list || list.saving || !list.items.length) return;
-  const missingPrices = missingPriceTypes(list);
-  if (missingPrices.length) {
-    showMissingPricesError(list, missingPrices);
-    return;
+  const pricesBeforeRefresh = RETAIL_STATION === "2" ? listPriceSnapshot(list) : null;
+
+  if (RETAIL_STATION !== "2") {
+    const missingPrices = missingPriceTypes(list);
+    if (missingPrices.length) {
+      showMissingPricesError(list, missingPrices);
+      return;
+    }
   }
 
   list.saving = true;
   elements.station.inert = true;
   renderLists();
-  setMessage(`Grabando ${list.operationType === OPERATION_RETURN ? "devolución" : "venta"} de la lista ${listIndex + 1}...`);
+  setMessage(RETAIL_STATION === "2"
+    ? `Verificando los precios vigentes antes de grabar la lista ${listIndex + 1}...`
+    : `Grabando ${list.operationType === OPERATION_RETURN ? "devolución" : "venta"} de la lista ${listIndex + 1}...`);
 
   try {
-    const priceOverrides = Object.fromEntries(
-      Object.entries(list.priceOverrides || {})
-        .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
-        .map(([code, value]) => [code, formatMoneyValue(value)])
-    );
+    let expectedPrices = {};
+    if (RETAIL_STATION === "2") {
+      try {
+        await refreshJourneyPrices({ force: true });
+      } catch (error) {
+        const presentation = getRetailDispatchErrorPresentation(error);
+        setMessage("No se pudieron verificar los precios vigentes de la jornada.", true);
+        showRetailError({
+          ...presentation,
+          caption: "Precios no verificados",
+          title: "No se grabó el ticket",
+          message: "No fue posible confirmar el precio vigente antes de registrar el despacho.",
+          help: "Revisa la conexión y vuelve a presionar Grabar. La lista permanece intacta."
+        });
+        return;
+      }
+
+      const pricesAfterRefresh = listPriceSnapshot(list);
+      const changedPriceCodes = changedListPrices(pricesBeforeRefresh, pricesAfterRefresh);
+      if (changedPriceCodes.length) {
+        showLocalActionIssue({
+          caption: "Precio de jornada actualizado",
+          title: "Revisa el nuevo total antes de grabar",
+          message: "Otra estación cambió un precio de la jornada y esta lista fue recalculada.",
+          details: changedPriceCodes.map((chickenTypeCode) => ({
+            label: chickenTypeByCode(chickenTypeCode)?.name || chickenTypeCode,
+            value: `${pricesBeforeRefresh[chickenTypeCode] === null
+              ? "Sin precio"
+              : formatMoney(pricesBeforeRefresh[chickenTypeCode])} → ${pricesAfterRefresh[chickenTypeCode] === null
+              ? "Sin precio"
+              : formatMoney(pricesAfterRefresh[chickenTypeCode])}`
+          })),
+          help: "Cierra este aviso, revisa el precio y el total actualizados, y vuelve a presionar Grabar."
+        });
+        return;
+      }
+
+      const missingPrices = missingPriceTypes(list);
+      if (missingPrices.length) {
+        showMissingPricesError(list, missingPrices);
+        return;
+      }
+
+      expectedPrices = Object.fromEntries(
+        Object.entries(pricesAfterRefresh)
+          .map(([chickenTypeCode, price]) => [chickenTypeCode, formatMoneyValue(price)])
+      );
+
+      setMessage(`Grabando ${list.operationType === OPERATION_RETURN ? "devolución" : "venta"} de la lista ${listIndex + 1}...`);
+    }
+
+    const priceOverrides = RETAIL_STATION === "2"
+      ? {}
+      : Object.fromEntries(
+        Object.entries(list.priceOverrides || {})
+          .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
+          .map(([code, value]) => [code, formatMoneyValue(value)])
+      );
     let response;
     try {
       response = await apiRequest(`${RETAIL_API_BASE}/tickets`, {
@@ -2634,7 +3001,9 @@ async function saveDispatch(delivery = null) {
           operation_type: list.operationType,
           client_id: list.clientId ? Number(list.clientId) : null,
           delivery,
-          price_overrides: priceOverrides,
+          ...(RETAIL_STATION === "2"
+            ? { expected_prices: expectedPrices }
+            : { price_overrides: priceOverrides }),
           weighings: list.items.map((item, index) => ({
             local_id: index + 1,
             chicken_type_code: item.chickenTypeCode,
@@ -2650,6 +3019,25 @@ async function saveDispatch(delivery = null) {
         })
       });
     } catch (error) {
+      const priceChanged = RETAIL_STATION === "2"
+        && Object.keys(error.data?.errors || {})
+          .some((field) => field.startsWith("expected_prices"));
+      if (priceChanged) {
+        try {
+          await refreshRetailCatalogPrices();
+        } catch {
+          // El servidor ya rechazó el ticket; la lista permanece intacta.
+        }
+        showLocalActionIssue({
+          caption: "Precio actualizado durante la grabación",
+          title: "No se guardó el ticket",
+          message: Object.values(error.data?.errors || {})[0]?.[0]
+            || "El precio cambió antes de terminar el registro.",
+          help: "Revisa el precio y el total vigentes, y vuelve a presionar Grabar."
+        });
+        return;
+      }
+
       const presentation = getRetailDispatchErrorPresentation(error);
       setMessage(presentation.summary, true);
       showRetailError(presentation);
@@ -3234,6 +3622,10 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (elements.touchKeyboard && !elements.touchKeyboard.hidden) {
+      if (touchKeyboardState.accepting) {
+        event.preventDefault();
+        return;
+      }
       closeTouchKeyboard(false);
       return;
     }
@@ -3265,6 +3657,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 let clockIntervalId = null;
+let journeyPriceRefreshIntervalId = null;
 let scaleRestoreReady = false;
 let scaleRestorePromise = null;
 let scaleRestoreSuppressed = false;
@@ -3302,6 +3695,17 @@ function restoreRememberedScale(reason = "reactivación") {
   return trackedRestorePromise;
 }
 
+function refreshJourneyPricesInBackground() {
+  if (RETAIL_STATION !== "2" || state.lists.some((list) => list.saving)) return;
+  void refreshJourneyPrices()
+    .then((changed) => {
+      if (changed) setMessage("Los precios de la jornada se sincronizaron con la última actualización.");
+    })
+    .catch(() => {
+      // La verificación obligatoria se repetirá antes de grabar el ticket.
+    });
+}
+
 function handleRetailPageShow(event) {
   // El controlador se destruye siempre al salir para liberar GATT/Serial. Si
   // el navegador conservó el documento en BFCache, se recarga una vez para
@@ -3311,10 +3715,12 @@ function handleRetailPageShow(event) {
     return;
   }
   void restoreRememberedScale("el regreso a la vista");
+  refreshJourneyPricesInBackground();
 }
 
 function handleRetailWindowFocus() {
   void restoreRememberedScale("la reactivación de la ventana");
+  refreshJourneyPricesInBackground();
 }
 
 function handleRetailVisibilityChange() {
@@ -3323,6 +3729,7 @@ function handleRetailVisibilityChange() {
     return;
   }
   void restoreRememberedScale("la reactivación de la pestaña");
+  refreshJourneyPricesInBackground();
 }
 
 function teardownRetailStation(event) {
@@ -3332,6 +3739,10 @@ function teardownRetailStation(event) {
   teardownStarted = true;
   scaleRestoreReady = false;
   if (clockIntervalId) globalThis.clearInterval(clockIntervalId);
+  if (journeyPriceRefreshIntervalId) {
+    globalThis.clearInterval(journeyPriceRefreshIntervalId);
+    journeyPriceRefreshIntervalId = null;
+  }
   if (retailCustomerDisplayHeartbeatTimer) {
     globalThis.clearInterval(retailCustomerDisplayHeartbeatTimer);
     retailCustomerDisplayHeartbeatTimer = null;
@@ -3353,6 +3764,12 @@ document.addEventListener("visibilitychange", handleRetailVisibilityChange);
 initializeTypography();
 updateClock();
 clockIntervalId = globalThis.setInterval(updateClock, 1000);
+if (RETAIL_STATION === "2") {
+  journeyPriceRefreshIntervalId = globalThis.setInterval(
+    refreshJourneyPricesInBackground,
+    JOURNEY_PRICE_REFRESH_INTERVAL_MS
+  );
+}
 initializeRetailCustomerDisplaySync();
 renderAll();
 retailCustomerDisplayHeartbeatTimer = globalThis.setInterval(

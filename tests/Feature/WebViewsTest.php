@@ -665,7 +665,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('class="rd-selection-bar"', false)
             ->assertSee('id="retailPriceCard"', false)
             ->assertSee('Precio asignado')
-            ->assertSee('Toca para cambiar el precio del ticket')
+            ->assertSee('Toca para cambiar el precio de la jornada')
             ->assertSee('id="retailGrossPreview"', false)
             ->assertSee('id="retailNetPreview"', false)
             ->assertSee('id="retailWeighingTotalPreview"', false)
@@ -716,10 +716,21 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('const STATION_2_LIST_LAYOUT_VERSION = "processed-first-v1";', $javascript);
         $this->assertStringContainsString('data-retail-list-processed=', $javascript);
         $this->assertStringContainsString('elements.priceCard?.addEventListener("click", openDirectPriceEditor)', $javascript);
-        $this->assertStringContainsString('"Precio cambiado para este ticket"', $javascript);
-        $this->assertStringContainsString('priceSource === "CLIENTE" && client', $javascript);
+        $this->assertStringContainsString('async function applyDirectJourneyPrice(', $javascript);
+        $this->assertStringContainsString('apiRequest("/operacion/precios-jornada", {', $javascript);
+        $this->assertStringContainsString('[chickenTypeCode]: formatMoneyValue(normalizedValue)', $javascript);
+        $this->assertStringContainsString('[chickenTypeCode]: expectedJourneyPrice === null', $javascript);
+        $this->assertStringContainsString('syncJourneyPrice(chickenTypeCode, savedValue);', $javascript);
+        $this->assertStringContainsString('const usesClientPrice = priceSource === "CLIENTE" && Boolean(client);', $javascript);
         $this->assertStringContainsString('priceSource === "GENERAL"', $javascript);
-        $this->assertStringContainsString('`Precio general de ${chickenName}`', $javascript);
+        $this->assertStringContainsString('`Precio de la jornada de ${chickenName}`', $javascript);
+        $this->assertStringContainsString('const editorPrice = RETAIL_STATION === "2" ? journeyPrice : price;', $javascript);
+        $this->assertStringContainsString('elements.directPriceInput.value = editorPrice ? formatMoneyValue(editorPrice.value) : "";', $javascript);
+        $this->assertStringContainsString('async function refreshJourneyPrices(options = {})', $javascript);
+        $this->assertStringContainsString('await refreshJourneyPrices({ force: true });', $javascript);
+        $this->assertStringContainsString('async function refreshRetailCatalogPrices()', $javascript);
+        $this->assertStringContainsString('await refreshRetailCatalogPrices();', $javascript);
+        $this->assertStringContainsString('"Revisa el nuevo total antes de grabar"', $javascript);
         $this->assertStringContainsString('function priceChickenTypeForList(list = activeList())', $javascript);
         $this->assertStringContainsString('listIndex: listIndex + 1', $javascript);
         $this->assertStringContainsString('processedButton + adjustmentButtons', $javascript);
@@ -863,7 +874,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('<dt>Importe</dt>', $javascript);
     }
 
-    public function test_both_retail_dispatch_views_allow_ticket_scoped_price_changes(): void
+    public function test_retail_dispatch_views_share_one_editor_with_station_specific_price_scope(): void
     {
         foreach (['/despacho-minorista', '/despacho-minorista-2'] as $url) {
             $this->get($url)
@@ -885,9 +896,17 @@ class WebViewsTest extends TestCase
         );
         $this->assertStringContainsString('return { value, source: "MANUAL" };', $javascript);
         $this->assertStringContainsString('function applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue)', $javascript);
+        $this->assertStringContainsString('function applyDirectPrice(', $javascript);
+        $this->assertStringContainsString('return RETAIL_STATION === "2"', $javascript);
+        $this->assertStringContainsString('? applyDirectJourneyPrice(listIndex, chickenTypeCode, rawValue, expectedJourneyPrice)', $javascript);
         $this->assertStringContainsString('function openDirectPriceEditor()', $javascript);
         $this->assertStringContainsString('openTouchKeyboard(elements.directPriceInput, {', $javascript);
         $this->assertStringContainsString('lockStation: true,', $javascript);
+        $this->assertStringContainsString('async function handleTouchKeyboardAction(action)', $javascript);
+        $this->assertStringContainsString('const accepted = await acceptHandler?.(value);', $javascript);
+        $this->assertStringContainsString('if (touchKeyboardState.target !== target || elements.touchKeyboard?.hidden) return;', $javascript);
+        $this->assertStringContainsString('if (touchKeyboardState.accepting) {', $javascript);
+        $this->assertStringContainsString('button.disabled = touchKeyboardState.accepting || button.classList.contains("is-disabled");', $javascript);
         $this->assertStringContainsString('function trapTabWithin(container, event)', $javascript);
         $this->assertStringContainsString('trapTabWithin(elements.touchKeyboard, event);', $javascript);
         $this->assertStringContainsString(
@@ -905,15 +924,17 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('list.priceOverrides = {};', $javascript);
         $this->assertStringContainsString('const TICKET_PRICE_OVERRIDE_VERSION = 1;', $javascript);
         $this->assertStringContainsString(
-            'priceOverrides: clientId && !supportsClientOverrides ? {} : normalizedPriceOverrides',
+            'priceOverrides: RETAIL_STATION === "2"',
             $javascript
         );
+        $this->assertStringContainsString('? {}', $javascript);
         $this->assertStringContainsString(
             'ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION',
             $javascript
         );
-        $this->assertStringContainsString('const priceOverrides = Object.fromEntries(', $javascript);
-        $this->assertStringContainsString('price_overrides: priceOverrides,', $javascript);
+        $this->assertStringContainsString('const priceOverrides = RETAIL_STATION === "2"', $javascript);
+        $this->assertStringContainsString('? { expected_prices: expectedPrices }', $javascript);
+        $this->assertStringContainsString(': { price_overrides: priceOverrides })', $javascript);
         $this->assertStringNotContainsString('const priceOverrides = list.clientId', $javascript);
         $this->assertStringNotContainsString('El precio del cliente no se puede reemplazar', $javascript);
     }
@@ -1337,6 +1358,14 @@ class WebViewsTest extends TestCase
             ->assertSee(asset('js/precios-jornada.js'), false)
             ->assertDontSee('journeyRows', false)
             ->assertDontSee('journeySelectAll', false);
+
+        $javascript = file_get_contents(public_path('js/precios-jornada.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('let currentPrices = {};', $javascript);
+        $this->assertStringContainsString('expected_prices: Object.fromEntries(', $javascript);
+        $this->assertStringContainsString('field.startsWith("expected_prices")', $javascript);
+        $this->assertStringContainsString('Se cargaron los valores vigentes para que los revises.', $javascript);
     }
 
     public function test_weighing_management_view_is_available_without_database_queries(): void

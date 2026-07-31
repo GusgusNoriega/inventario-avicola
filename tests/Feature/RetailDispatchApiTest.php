@@ -1122,71 +1122,55 @@ class RetailDispatchApiTest extends TestCase
         ]);
     }
 
-    public function test_manual_ticket_price_prevails_for_registered_clients_at_both_retail_stations_without_changing_client_price(): void
+    public function test_manual_ticket_price_remains_available_only_at_the_first_retail_station(): void
     {
         $priceListCount = DB::table('listas_precios')->count();
         $priceHistoryCount = DB::table('precios_historial')->count();
-        $stations = [
-            [
-                'endpoint' => '/api/v1/despacho-minorista/tickets',
-                'catalog' => '/api/v1/despacho-minorista/catalogo',
-                'scale_code' => Balanza::CODE_RETAIL_1,
-            ],
-            [
-                'endpoint' => '/api/v1/despacho-minorista-2/tickets',
-                'catalog' => '/api/v1/despacho-minorista-2/catalogo',
-                'scale_code' => Balanza::CODE_RETAIL_2,
-            ],
-        ];
+        $manualPayload = $this->payload();
+        $manualPayload['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
 
-        foreach ($stations as $station) {
-            $manualPayload = $this->payload();
-            $manualPayload['weighings'][0]['weight_source'] = $station['scale_code'];
-            $manualPayload['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
+        $manualResponse = $this->postJson('/api/v1/despacho-minorista/tickets', $manualPayload)
+            ->assertCreated()
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 10.25)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'MANUAL')
+            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId)
+            ->assertJsonPath('data.weighings.0.price_kg', 10.25)
+            ->assertJsonPath('data.weighings.0.price_origin', 'MANUAL')
+            ->assertJsonPath('data.weighings.0.tare_weight_kg', 5)
+            ->assertJsonPath('data.weighings.0.net_weight_kg', 7)
+            ->assertJsonPath('data.totals.amount', 71.75);
 
-            $manualResponse = $this->postJson($station['endpoint'], $manualPayload)
-                ->assertCreated()
-                ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 10.25)
-                ->assertJsonPath('data.prices.POLLO_PELADO.source', 'MANUAL')
-                ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId)
-                ->assertJsonPath('data.weighings.0.price_kg', 10.25)
-                ->assertJsonPath('data.weighings.0.price_origin', 'MANUAL')
-                ->assertJsonPath('data.weighings.0.tare_weight_kg', 5)
-                ->assertJsonPath('data.weighings.0.net_weight_kg', 7)
-                ->assertJsonPath('data.totals.amount', 71.75);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $manualResponse->json('data.id'),
+            'tipo_pollo_id' => $this->typeId,
+            'precio_historial_id' => $this->priceHistoryId,
+            'precio_kg' => 10.25,
+            'origen_precio' => 'MANUAL',
+        ]);
 
-            $this->assertDatabaseHas('ticket_precios', [
-                'ticket_id' => $manualResponse->json('data.id'),
-                'tipo_pollo_id' => $this->typeId,
-                'precio_historial_id' => $this->priceHistoryId,
-                'precio_kg' => 10.25,
-                'origen_precio' => 'MANUAL',
-            ]);
+        $configuredResponse = $this->postJson(
+            '/api/v1/despacho-minorista/tickets',
+            $this->payload()
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 8.5)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'CLIENTE')
+            ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId)
+            ->assertJsonPath('data.weighings.0.price_origin', 'CLIENTE')
+            ->assertJsonPath('data.totals.amount', 59.5);
 
-            $configuredPayload = $this->payload();
-            $configuredPayload['weighings'][0]['weight_source'] = $station['scale_code'];
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $configuredResponse->json('data.id'),
+            'tipo_pollo_id' => $this->typeId,
+            'precio_historial_id' => $this->priceHistoryId,
+            'precio_kg' => 8.5,
+            'origen_precio' => 'CLIENTE',
+        ]);
 
-            $configuredResponse = $this->postJson($station['endpoint'], $configuredPayload)
-                ->assertCreated()
-                ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 8.5)
-                ->assertJsonPath('data.prices.POLLO_PELADO.source', 'CLIENTE')
-                ->assertJsonPath('data.prices.POLLO_PELADO.history_id', $this->priceHistoryId)
-                ->assertJsonPath('data.weighings.0.price_origin', 'CLIENTE')
-                ->assertJsonPath('data.totals.amount', 59.5);
-
-            $this->assertDatabaseHas('ticket_precios', [
-                'ticket_id' => $configuredResponse->json('data.id'),
-                'tipo_pollo_id' => $this->typeId,
-                'precio_historial_id' => $this->priceHistoryId,
-                'precio_kg' => 8.5,
-                'origen_precio' => 'CLIENTE',
-            ]);
-
-            $this->getJson($station['catalog'])
-                ->assertOk()
-                ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.5)
-                ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.source', 'CLIENTE');
-        }
+        $this->getJson('/api/v1/despacho-minorista/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.5)
+            ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.source', 'CLIENTE');
 
         $this->assertSame($priceListCount, DB::table('listas_precios')->count());
         $this->assertSame($priceHistoryCount, DB::table('precios_historial')->count());
@@ -1196,6 +1180,42 @@ class RetailDispatchApiTest extends TestCase
                 ->where('id', $this->priceHistoryId)
                 ->value('precio_kg')
         );
+    }
+
+    public function test_second_retail_station_rejects_legacy_manual_ticket_prices(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['weight_source'] = Balanza::CODE_RETAIL_2;
+        $payload['price_overrides'] = [TipoPollo::CHICKEN_DRESSED => 10.25];
+
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('price_overrides')
+            ->assertJsonPath(
+                'errors.price_overrides.0',
+                'Despacho minorista 2 usa el precio vigente de la jornada y no admite precios manuales por ticket.'
+            );
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('ticket_precios', 0);
+    }
+
+    public function test_second_retail_station_requires_the_prices_reviewed_on_screen(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['weight_source'] = Balanza::CODE_RETAIL_2;
+        unset($payload['expected_prices']);
+
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('expected_prices')
+            ->assertJsonPath(
+                'errors.expected_prices.0',
+                'Los precios de la pantalla están desactualizados. Recarga Despacho minorista 2 antes de grabar.'
+            );
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('ticket_precios', 0);
     }
 
     public function test_manual_ticket_price_is_not_revalued_when_the_client_price_changes(): void
@@ -1435,6 +1455,7 @@ class RetailDispatchApiTest extends TestCase
         $secondStationPayload = $this->payload();
         unset($secondStationPayload['client_id'], $secondStationPayload['delivery']);
         $secondStationPayload['weighings'][0]['weight_source'] = 'MANUAL';
+        $secondStationPayload['expected_prices'][TipoPollo::CHICKEN_DRESSED] = 8;
 
         $ticketId = $this->postJson('/api/v1/despacho-minorista-2/tickets', $secondStationPayload)
             ->assertCreated()
@@ -1466,6 +1487,127 @@ class RetailDispatchApiTest extends TestCase
         $this->assertDatabaseCount('movimientos_javas', 0);
         $this->assertDatabaseCount('pagos', 0);
         $this->assertDatabaseCount('pago_aplicaciones', 0);
+    }
+
+    public function test_second_retail_station_uses_the_updated_journey_price_for_processed_chicken(): void
+    {
+        $processedTypeId = DB::table('tipos_pollo')->insertGetId([
+            'codigo' => TipoPollo::CHICKEN_PROCESSED,
+            'nombre' => 'Pollo beneficiado',
+            'permite_despacho' => true,
+            'estado' => TipoPollo::STATUS_ACTIVE,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => 11.25,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_PROCESSED => null,
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.global_prices.POLLO_BENEFICIADO', 11.25);
+
+        $catalogPriceHistoryId = $this->getJson('/api/v1/despacho-minorista-2/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.general_prices.POLLO_BENEFICIADO.price_kg', 11.25)
+            ->assertJsonPath('data.general_prices.POLLO_BENEFICIADO.source', 'GENERAL')
+            ->json('data.general_prices.POLLO_BENEFICIADO.history_id');
+
+        $payload = $this->payload();
+        unset($payload['client_id'], $payload['delivery']);
+        $payload['weighings'][0]['chicken_type_code'] = TipoPollo::CHICKEN_PROCESSED;
+        $payload['weighings'][0]['weight_source'] = 'MANUAL';
+        $payload['expected_prices'] = [TipoPollo::CHICKEN_PROCESSED => 11.25];
+
+        $ticketId = $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.prices.POLLO_BENEFICIADO.price_kg', 11.25)
+            ->assertJsonPath('data.prices.POLLO_BENEFICIADO.source', 'GENERAL')
+            ->assertJsonPath('data.prices.POLLO_BENEFICIADO.history_id', $catalogPriceHistoryId)
+            ->assertJsonPath('data.weighings.0.chicken_type_code', TipoPollo::CHICKEN_PROCESSED)
+            ->assertJsonPath('data.weighings.0.adjustment.additional_grams', 0)
+            ->assertJsonPath('data.weighings.0.price_kg', 11.25)
+            ->assertJsonPath('data.weighings.0.price_origin', 'GENERAL')
+            ->assertJsonPath('data.weighings.0.amount', 78.75)
+            ->assertJsonPath('data.totals.amount', 78.75)
+            ->json('data.id');
+
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $processedTypeId,
+            'precio_historial_id' => $catalogPriceHistoryId,
+            'precio_kg' => 11.25,
+            'origen_precio' => 'GENERAL',
+        ]);
+        $this->assertDatabaseMissing('ticket_precios', [
+            'ticket_id' => $ticketId,
+            'origen_precio' => 'MANUAL',
+        ]);
+    }
+
+    public function test_second_retail_station_rejects_a_ticket_when_the_reviewed_price_changed(): void
+    {
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 9,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_DRESSED => null,
+            ],
+        ])->assertOk();
+
+        $payload = $this->payload();
+        unset($payload['client_id'], $payload['delivery']);
+        $payload['weighings'][0]['weight_source'] = 'MANUAL';
+        $payload['expected_prices'] = [TipoPollo::CHICKEN_DRESSED => 9];
+
+        $this->putJson('/api/v1/operacion/precios-jornada', [
+            'global_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 9.5,
+            ],
+            'expected_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 9,
+            ],
+        ])->assertOk();
+
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('expected_prices.'.TipoPollo::CHICKEN_DRESSED)
+            ->assertJsonFragment([
+                'El precio de Pollo pelado cambió en otra estación. Revisa el nuevo total antes de grabar.',
+            ]);
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('ticket_precios', 0);
+
+        $payload['expected_prices'][TipoPollo::CHICKEN_DRESSED] = 9.5;
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.prices.POLLO_PELADO.price_kg', 9.5)
+            ->assertJsonPath('data.prices.POLLO_PELADO.source', 'GENERAL');
+    }
+
+    public function test_second_retail_station_reports_a_removed_client_price_as_a_price_conflict(): void
+    {
+        $payload = $this->payload();
+        $payload['weighings'][0]['weight_source'] = 'MANUAL';
+
+        DB::table('precios_historial')
+            ->where('id', $this->priceHistoryId)
+            ->update(['vigente_hasta' => now()]);
+
+        $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('expected_prices.'.TipoPollo::CHICKEN_DRESSED)
+            ->assertJsonFragment([
+                'El precio de Pollo pelado ya no está vigente. Revisa los precios antes de grabar.',
+            ]);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('ticket_precios', 0);
     }
 
     public function test_dispatch_payment_rejection_is_atomic(): void
@@ -1687,6 +1829,7 @@ class RetailDispatchApiTest extends TestCase
             $payload = $this->payload();
             $payload['weighings'][0]['chicken_type_code'] = TipoPollo::CHICKEN_PROCESSED;
             $payload['weighings'][0]['weight_source'] = $stationData['weight_source'];
+            $payload['expected_prices'] = [TipoPollo::CHICKEN_PROCESSED => 10];
 
             $response = $this->postJson("{$stationData['base_url']}/tickets", $payload)
                 ->assertCreated()
@@ -1972,6 +2115,9 @@ class RetailDispatchApiTest extends TestCase
             'draft_id' => (string) Str::uuid(),
             'client_id' => $this->clientId,
             'operation_type' => TicketDespacho::OPERATION_DISPATCH,
+            'expected_prices' => [
+                TipoPollo::CHICKEN_DRESSED => 8.5,
+            ],
             'delivery' => [
                 'mode' => TicketDespacho::DELIVERY_MODE_COMPANY_TRUCK,
                 'vehicle_id' => $this->deliveryVehicleId,

@@ -34,21 +34,34 @@ class GlobalPriceService
 
         return $types->mapWithKeys(fn (TipoPollo $type) => [
             $type->codigo => $prices->has($type->id)
-                ? (float) $prices->get($type->id)->precio_kg
+                ? round((float) $prices->get($type->id)->precio_kg, 2, PHP_ROUND_HALF_UP)
                 : null,
         ])->all();
     }
 
     /**
      * @param  array<string, float|int|string>  $prices
+     * @param  array<string, float|int|string|null>  $expectedPrices
      */
-    public function save(int $companyId, int $actorId, array $prices): void
-    {
+    public function save(
+        int $companyId,
+        int $actorId,
+        array $prices,
+        array $expectedPrices
+    ): void {
         $types = $this->types()->keyBy('codigo');
+        $priceCodes = collect(array_keys($prices));
 
-        if ($types->count() !== count($prices)) {
+        if ($priceCodes->isEmpty() || $priceCodes->diff($types->keys())->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'global_prices' => 'Debes configurar los tres precios globales.',
+                'global_prices' => 'Debes enviar entre uno y tres precios globales activos.',
+            ]);
+        }
+
+        $expectedCodes = collect(array_keys($expectedPrices));
+        if ($expectedCodes->diff($priceCodes)->isNotEmpty() || $priceCodes->diff($expectedCodes)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'expected_prices' => 'Los precios esperados deben corresponder a los precios que deseas actualizar.',
             ]);
         }
 
@@ -68,7 +81,7 @@ class GlobalPriceService
 
         foreach ($prices as $code => $value) {
             $type = $types->get($code);
-            $newPrice = round((float) $value, 4);
+            $newPrice = round((float) $value, 2, PHP_ROUND_HALF_UP);
             $current = PrecioHistorial::query()
                 ->where('lista_precio_id', $list->id)
                 ->where('tipo_pollo_id', $type->id)
@@ -76,7 +89,21 @@ class GlobalPriceService
                 ->lockForUpdate()
                 ->first();
 
-            if ($current && (float) $current->precio_kg === $newPrice) {
+            $expectedPrice = $expectedPrices[$code];
+            $currentPrice = $current
+                ? round((float) $current->precio_kg, 2, PHP_ROUND_HALF_UP)
+                : null;
+            $normalizedExpectedPrice = $expectedPrice === null
+                ? null
+                : round((float) $expectedPrice, 2, PHP_ROUND_HALF_UP);
+
+            if ($currentPrice !== $normalizedExpectedPrice) {
+                throw ValidationException::withMessages([
+                    "expected_prices.{$code}" => 'El precio de la jornada cambió en otra estación. Revisa el valor vigente e inténtalo nuevamente.',
+                ]);
+            }
+
+            if ($currentPrice === $newPrice) {
                 continue;
             }
 
