@@ -20,7 +20,7 @@ test("prioriza nombres y apellidos que empiezan con la búsqueda", () => {
   );
 });
 
-test("prioriza el inicio del documento antes de coincidencias internas", () => {
+test("la búsqueda por nombre no mezcla coincidencias del documento", () => {
   const clients = [
     { id: 1, name: "María Espinoza", document: "70990011" },
     { id: 2, name: "Ana Torres", document: "PI-2040" },
@@ -29,7 +29,7 @@ test("prioriza el inicio del documento antes de coincidencias internas", () => {
 
   assert.deepEqual(
     filterAndRankRetailClients(clients, "pi").map((client) => client.id),
-    [2, 1, 3]
+    [1, 3]
   );
 });
 

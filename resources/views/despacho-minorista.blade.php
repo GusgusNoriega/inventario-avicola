@@ -305,8 +305,8 @@
         <button type="button" data-retail-close-modal="retailClientModal" aria-label="Cerrar">×</button>
       </header>
       <label class="rd-search-field">
-        <span>Buscar por nombre o documento</span>
-        <input id="retailClientSearch" type="search" placeholder="Toca para buscar..." autocomplete="off" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-label="Buscar cliente por nombre o documento">
+        <span>Buscar por nombre</span>
+        <input id="retailClientSearch" type="search" placeholder="Toca para buscar..." autocomplete="off" inputmode="none" readonly data-retail-keyboard="text" data-retail-keyboard-layout="letters" data-retail-keyboard-label="Buscar cliente por nombre">
       </label>
       <div id="retailClientOptions" class="rd-client-options" role="listbox" aria-label="Clientes disponibles"></div>
     </section>

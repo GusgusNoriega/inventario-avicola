@@ -42,12 +42,6 @@ class RetailDispatchService
         $station = $station === 2 ? 2 : 1;
         $expectedScaleCode = $this->configuration->scaleCode($station);
 
-        if ($station === 2 && collect($data['price_overrides'] ?? [])->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'price_overrides' => 'Despacho minorista 2 usa el precio vigente de la jornada y no admite precios manuales por ticket.',
-            ]);
-        }
-
         foreach ($data['weighings'] as $index => $weighing) {
             if ($weighing['weight_source'] !== 'MANUAL' && $weighing['weight_source'] !== $expectedScaleCode) {
                 throw ValidationException::withMessages([
@@ -208,15 +202,28 @@ class RetailDispatchService
                 && $weighings->contains(fn (array $weighing): bool => (int) $weighing['tray_count'] > 0)
                 && ($deliveryData['mode'] ?? null) === TicketDespacho::DELIVERY_MODE_PENDING_ASSIGNMENT;
 
+            $overrides = collect($data['price_overrides'] ?? []);
+            if ($overrides->keys()->diff($types->keys())->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'price_overrides' => 'Los precios cambiados deben corresponder a productos incluidos en el ticket.',
+                ]);
+            }
+
             $prices = $this->freezePrices(
                 $companyId,
                 $client?->id,
                 $types,
-                collect($data['price_overrides'] ?? []),
+                $overrides,
                 $station === 2
             );
-            if ($station === 2 && array_key_exists('expected_prices', $data)) {
-                $this->ensureExpectedPrices($types, $prices, $data['expected_prices']);
+            if ($station === 2) {
+                $expectedPrices = $data['expected_prices'] ?? null;
+                if (! is_array($expectedPrices)) {
+                    throw ValidationException::withMessages([
+                        'expected_prices' => 'Debes confirmar los precios efectivos antes de grabar el ticket.',
+                    ]);
+                }
+                $this->ensureExpectedPrices($types, $prices, $expectedPrices);
             }
 
             $ticket = TicketDespacho::query()->create([

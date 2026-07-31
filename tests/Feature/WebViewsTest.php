@@ -517,7 +517,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('|| (!current.clientId && !publicSale);', $javascript);
         $this->assertStringContainsString('Asigna un cliente antes de grabar.', $javascript);
         $this->assertStringContainsString('client_id: list.clientId ? Number(list.clientId) : null', $javascript);
-        $this->assertStringContainsString('const base = client', $javascript);
+        $this->assertStringContainsString('function basePrice(list, chickenTypeCode)', $javascript);
         $this->assertStringContainsString('sistema-pollos-retail-typography-v1', $javascript);
         $this->assertStringContainsString('data-typography-step', $javascript);
         $this->assertStringContainsString('document.documentElement.style.setProperty', $javascript);
@@ -724,7 +724,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('const usesClientPrice = priceSource === "CLIENTE" && Boolean(client);', $javascript);
         $this->assertStringContainsString('priceSource === "GENERAL"', $javascript);
         $this->assertStringContainsString('`Precio de la jornada de ${chickenName}`', $javascript);
-        $this->assertStringContainsString('const editorPrice = RETAIL_STATION === "2" ? journeyPrice : price;', $javascript);
+        $this->assertStringContainsString('const editorPrice = price || journeyPrice;', $javascript);
         $this->assertStringContainsString('elements.directPriceInput.value = editorPrice ? formatMoneyValue(editorPrice.value) : "";', $javascript);
         $this->assertStringContainsString('async function refreshJourneyPrices(options = {})', $javascript);
         $this->assertStringContainsString('await refreshJourneyPrices({ force: true });', $javascript);
@@ -890,16 +890,20 @@ class WebViewsTest extends TestCase
         $javascript = file_get_contents(public_path('js/despacho-minorista.js'));
 
         $this->assertIsString($javascript);
+        $this->assertStringContainsString('function basePrice(list, chickenTypeCode)', $javascript);
+        $this->assertStringContainsString('return clientPrice || currentGeneralPrice(chickenTypeCode);', $javascript);
         $this->assertMatchesRegularExpression(
-            '/const base = client[\s\S]+?if \(!base\) return null;[\s\S]+?const override = list\.priceOverrides/',
+            '/function effectivePrice[\s\S]+?const override = list\.priceOverrides[\s\S]+?return basePrice\(list, chickenTypeCode\);/',
             $javascript
         );
         $this->assertStringContainsString('return { value, source: "MANUAL" };', $javascript);
         $this->assertStringContainsString('function applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue)', $javascript);
-        $this->assertStringContainsString('function applyDirectPrice(', $javascript);
-        $this->assertStringContainsString('return RETAIL_STATION === "2"', $javascript);
-        $this->assertStringContainsString('? applyDirectJourneyPrice(listIndex, chickenTypeCode, rawValue, expectedJourneyPrice)', $javascript);
+        $this->assertStringNotContainsString('function applyDirectPrice(', $javascript);
         $this->assertStringContainsString('function openDirectPriceEditor()', $javascript);
+        $this->assertStringContainsString('function openTicketPriceEditor()', $javascript);
+        $this->assertStringContainsString('const editorPrice = price || journeyPrice;', $javascript);
+        $this->assertStringContainsString('acceptHandler: (value) => applyDirectJourneyPrice(', $javascript);
+        $this->assertStringContainsString('acceptHandler: (value) => applyDirectTicketPrice(', $javascript);
         $this->assertStringContainsString('openTouchKeyboard(elements.directPriceInput, {', $javascript);
         $this->assertStringContainsString('lockStation: true,', $javascript);
         $this->assertStringContainsString('async function handleTouchKeyboardAction(action)', $javascript);
@@ -917,24 +921,28 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('delete nextOverrides[chickenTypeCode];', $javascript);
         $this->assertStringContainsString('nextOverrides[chickenTypeCode] = normalizedValue;', $javascript);
         $this->assertStringContainsString('moneyToCents(normalizedValue) === moneyToCents(baseValue)', $javascript);
-        $this->assertStringContainsString('elements.assignPrice.addEventListener("click", openDirectPriceEditor)', $javascript);
+        $this->assertStringContainsString('elements.assignPrice.addEventListener("click", openTicketPriceEditor)', $javascript);
+        $this->assertStringContainsString('elements.priceCard?.addEventListener("click", openDirectPriceEditor)', $javascript);
         $this->assertStringNotContainsString('function renderPriceFields()', $javascript);
         $this->assertStringNotContainsString('elements.priceForm', $javascript);
         $this->assertStringContainsString('if (String(list.clientId) !== String(client.id)) {', $javascript);
-        $this->assertStringContainsString('list.priceOverrides = {};', $javascript);
-        $this->assertStringContainsString('const TICKET_PRICE_OVERRIDE_VERSION = 1;', $javascript);
+        $this->assertStringNotContainsString('list.priceOverrides = {};', $javascript);
         $this->assertStringContainsString(
-            'priceOverrides: RETAIL_STATION === "2"',
+            'const TICKET_PRICE_OVERRIDE_VERSION = RETAIL_STATION === "2" ? 2 : 1;',
             $javascript
         );
-        $this->assertStringContainsString('? {}', $javascript);
+        $this->assertStringContainsString(
+            'priceOverrides: supportsTicketOverrides ? normalizedPriceOverrides : {}',
+            $javascript
+        );
         $this->assertStringContainsString(
             'ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION',
             $javascript
         );
-        $this->assertStringContainsString('const priceOverrides = RETAIL_STATION === "2"', $javascript);
-        $this->assertStringContainsString('? { expected_prices: expectedPrices }', $javascript);
-        $this->assertStringContainsString(': { price_overrides: priceOverrides })', $javascript);
+        $this->assertStringContainsString('priceOverrides: list.priceOverrides,', $javascript);
+        $this->assertStringContainsString('price_overrides: priceOverrides,', $javascript);
+        $this->assertStringContainsString('...(RETAIL_STATION === "2" ? { expected_prices: expectedPrices } : {}),', $javascript);
+        $this->assertStringContainsString('state.lists[listIndex] = emptyList();', $javascript);
         $this->assertStringNotContainsString('const priceOverrides = list.clientId', $javascript);
         $this->assertStringNotContainsString('El precio del cliente no se puede reemplazar', $javascript);
     }

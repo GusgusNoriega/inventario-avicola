@@ -17,6 +17,10 @@ function sourceBetween(startMarker, endMarker) {
   return retailDispatchSource.slice(start, end);
 }
 
+const normalizeListSource = sourceBetween(
+  "function normalizeList",
+  "function restoreLists"
+);
 const keyboardBusySource = sourceBetween(
   "function setTouchKeyboardBusy",
   "function trapTabWithin"
@@ -25,13 +29,25 @@ const keyboardActionSource = sourceBetween(
   "async function handleTouchKeyboardAction",
   "function defaultTypographyValues"
 );
-const journeyPriceSource = sourceBetween(
-  "function syncJourneyPrice",
+const effectivePriceSource = sourceBetween(
+  "function normalizePriceRecord",
+  "function missingPriceTypes"
+);
+const priceEditorSource = sourceBetween(
+  "function priceChickenTypeForList",
   "function requiresDelivery"
+);
+const clearRegisteredListSource = sourceBetween(
+  "function clearRegisteredList",
+  "function printRegisteredTicket"
 );
 const saveDispatchSource = sourceBetween(
   "async function saveDispatch",
   "function serialOptionsFromForm"
+);
+const priceEventSource = sourceBetween(
+  'elements.assignPrice.addEventListener("click"',
+  'elements.saveDispatch.addEventListener("click"'
 );
 
 function deferred() {
@@ -45,19 +61,27 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function normalizedPrice(record) {
-  if (!record || !Number.isFinite(Number(record.price_kg))) return null;
-
-  return {
-    value: Number(record.price_kg),
-    source: String(record.source || "VIGENTE")
-  };
+function normalizeStoredList(list, overrideVersion = 2) {
+  return new Function(
+    "roundMoney",
+    "createDraftId",
+    "OPERATION_RETURN",
+    "OPERATION_SALE",
+    "TICKET_PRICE_OVERRIDE_VERSION",
+    `${normalizeListSource}\nreturn normalizeList;`
+  )(
+    (value) => Math.round(Number(value) * 100) / 100,
+    () => "new-draft",
+    "DEVOLUCION",
+    "VENTA",
+    overrideVersion
+  )(list);
 }
 
-function createRuntime() {
-  const chickenType = { code: "POLLO_PELADO", name: "Pollo pelado" };
+function createRuntime(options = {}) {
+  const chickenType = options.chickenType || { code: "POLLO_PELADO", name: "Pollo pelado" };
   const clientPrice = {
-    price_kg: 8.5,
+    price_kg: options.clientPrice ?? 8.5,
     source: "CLIENTE",
     history_id: 101
   };
@@ -65,14 +89,16 @@ function createRuntime() {
     id: 7,
     name: "Cliente con tarifa propia",
     prices: {
-      POLLO_PELADO: clientPrice
+      [chickenType.code]: clientPrice
     }
   };
   const list = {
     draftId: "draft-1",
-    clientId: String(client.id),
+    clientId: options.withClient === false ? "" : String(client.id),
     operationType: "VENTA",
-    priceOverrides: {},
+    priceOverrides: options.override === undefined
+      ? {}
+      : { [chickenType.code]: options.override },
     saving: false,
     items: []
   };
@@ -82,14 +108,17 @@ function createRuntime() {
     catalog: {
       clients: [client],
       general_prices: {
-        POLLO_PELADO: {
-          price_kg: 9,
+        [chickenType.code]: {
+          price_kg: options.journeyPrice ?? 9,
           source: "GENERAL",
           history_id: 202
         }
       }
     },
-    lists: [list]
+    lists: [list],
+    pendingCapture: null,
+    selectedItem: null,
+    deliveryMode: null
   };
   const keyboardButtons = Array.from({ length: 4 }, () => ({
     disabled: false,
@@ -131,6 +160,9 @@ function createRuntime() {
   let renderCalls = 0;
   let renderListCalls = 0;
   let persistCalls = 0;
+  let draftSequence = 1;
+  let shownTicket = null;
+  let printedTicket = null;
 
   function closeTouchKeyboard() {
     if (elements.touchKeyboard.hidden) return;
@@ -164,8 +196,28 @@ function createRuntime() {
     return response.promise;
   }
 
-  function catalogClient() {
-    return state.catalog.clients.find((candidate) => Number(candidate.id) === Number(client.id)) || null;
+  function activeList() {
+    return state.lists[state.activeList];
+  }
+
+  function catalogClient(candidateList = activeList()) {
+    return state.catalog.clients.find(
+      (candidate) => String(candidate.id) === String(candidateList?.clientId)
+    ) || null;
+  }
+
+  function emptyList() {
+    draftSequence += 1;
+
+    return {
+      draftId: `draft-${draftSequence}`,
+      clientId: "",
+      operationType: "VENTA",
+      ticketPriceOverrideVersion: 2,
+      priceOverrides: {},
+      saving: false,
+      items: []
+    };
   }
 
   const runtimeFactory = new Function(
@@ -179,11 +231,9 @@ function createRuntime() {
     "touchKeyboardState",
     "elements",
     "chickenTypeByCode",
-    "priceChickenTypeForList",
+    "selectedChickenType",
+    "activeList",
     "clientFor",
-    "currentClientPrice",
-    "currentGeneralPrice",
-    "effectivePrice",
     "showLocalActionIssue",
     "formatMoney",
     "formatMoneyValue",
@@ -196,26 +246,36 @@ function createRuntime() {
     "apiRequest",
     "persistLists",
     "openTouchKeyboard",
-    "applyDirectTicketPrice",
     "normalizedTouchKeyboardValue",
     "closeTouchKeyboard",
     "missingPriceTypes",
     "showMissingPricesError",
     "getRetailDispatchErrorPresentation",
     "showRetailError",
-    "clearRegisteredList",
+    "emptyList",
+    "showRegisteredTicket",
     "printTicketAndReport",
     "hasOpenRetailModal",
     `
+      ${effectivePriceSource}
       ${keyboardBusySource}
       ${keyboardActionSource}
-      ${journeyPriceSource}
+      ${priceEditorSource}
+      ${clearRegisteredListSource}
       ${saveDispatchSource}
 
       return {
+        applyDirectTicketPrice,
         applyDirectJourneyPrice,
+        clearRegisteredList,
+        currentClientPrice,
+        currentGeneralPrice,
+        effectivePrice,
         handleTouchKeyboardAction,
         openDirectPriceEditor,
+        openTicketPriceEditor: typeof openTicketPriceEditor === "function"
+          ? openTicketPriceEditor
+          : null,
         refreshJourneyPrices,
         saveDispatch,
         syncJourneyPrice,
@@ -236,11 +296,8 @@ function createRuntime() {
     elements,
     (code) => code === chickenType.code ? chickenType : null,
     () => chickenType,
-    () => catalogClient(),
-    (_activeList, code) => normalizedPrice(catalogClient()?.prices?.[code]),
-    (code) => normalizedPrice(state.catalog.general_prices[code]),
-    (_activeList, code) => normalizedPrice(catalogClient()?.prices?.[code])
-      || normalizedPrice(state.catalog.general_prices[code]),
+    activeList,
+    (candidateList) => catalogClient(candidateList),
     showLocalActionIssue,
     (value) => `S/ ${Number(value).toFixed(2)}`,
     (value) => Number(value).toFixed(2),
@@ -261,17 +318,20 @@ function createRuntime() {
       persistCalls += 1;
     },
     openTouchKeyboard,
-    () => {
-      throw new Error("Minorista 2 no debe aplicar precios manuales por ticket.");
-    },
     () => touchKeyboardState.buffer,
     closeTouchKeyboard,
     () => [],
     () => {},
     (error) => ({ summary: error?.message || "Error" }),
     () => {},
-    () => {},
-    async () => true,
+    emptyList,
+    (ticket) => {
+      shownTicket = ticket;
+    },
+    async (ticket) => {
+      printedTicket = ticket;
+      return true;
+    },
     () => false
   );
 
@@ -289,6 +349,12 @@ function createRuntime() {
     runtime,
     state,
     touchKeyboardState,
+    get printedTicket() {
+      return printedTicket;
+    },
+    get shownTicket() {
+      return shownTicket;
+    },
     get closeCalls() {
       return closeCalls;
     },
@@ -307,7 +373,163 @@ function createRuntime() {
   };
 }
 
-test("una tarifa CLIENTE abre el editor con el precio de jornada y no altera la tarifa asignada", () => {
+test("la tarjeta y el botón Cambiar precio abren editores con responsabilidades distintas", () => {
+  assert.match(
+    priceEventSource,
+    /elements\.assignPrice\.addEventListener\("click", openTicketPriceEditor\)/
+  );
+  assert.match(
+    priceEventSource,
+    /elements\.priceCard\?\.addEventListener\("click", openDirectPriceEditor\)/
+  );
+});
+
+test("Minorista 2 descarta overrides de borradores anteriores incluso sin cliente", () => {
+  const stalePublicList = normalizeStoredList({
+    draftId: "old-public-draft",
+    clientId: "",
+    ticketPriceOverrideVersion: 1,
+    priceOverrides: { POLLO_PELADO: 10.25 },
+    items: []
+  });
+  const currentList = normalizeStoredList({
+    draftId: "current-draft",
+    clientId: "7",
+    ticketPriceOverrideVersion: 2,
+    priceOverrides: { POLLO_PELADO: 10.25 },
+    items: []
+  });
+
+  assert.deepEqual(stalePublicList.priceOverrides, {});
+  assert.deepEqual(currentList.priceOverrides, { POLLO_PELADO: 10.25 });
+});
+
+test("el precio efectivo respeta MANUAL sobre CLIENTE y CLIENTE sobre GENERAL", () => {
+  const harness = createRuntime({ override: 7.25, clientPrice: 8.5, journeyPrice: 9 });
+
+  assert.deepEqual(
+    harness.runtime.effectivePrice(harness.list, harness.chickenType.code),
+    { value: 7.25, source: "MANUAL" }
+  );
+
+  delete harness.list.priceOverrides[harness.chickenType.code];
+  assert.deepEqual(
+    harness.runtime.effectivePrice(harness.list, harness.chickenType.code),
+    { value: 8.5, source: "CLIENTE" }
+  );
+
+  harness.list.clientId = "";
+  assert.deepEqual(
+    harness.runtime.effectivePrice(harness.list, harness.chickenType.code),
+    { value: 9, source: "GENERAL" }
+  );
+});
+
+test("la tarjeta muestra el precio efectivo pero actualiza solo la jornada del producto seleccionado", async () => {
+  const productCases = [
+    { code: "POLLO_PELADO", name: "Pollo pelado" },
+    { code: "POLLO_BENEFICIADO", name: "Pollo beneficiado" }
+  ];
+
+  for (const chickenType of productCases) {
+    const harness = createRuntime({
+      chickenType,
+      override: 7.25,
+      clientPrice: 8.5,
+      journeyPrice: 9
+    });
+
+    harness.runtime.openDirectPriceEditor();
+
+    assert.equal(harness.elements.directPriceInput.value, "7.25");
+    assert.deepEqual(
+      harness.runtime.effectivePrice(harness.list, chickenType.code),
+      { value: 7.25, source: "MANUAL" }
+    );
+    harness.touchKeyboardState.buffer = "9.75";
+    const acceptance = harness.runtime.handleTouchKeyboardAction("accept");
+
+    assert.equal(harness.requests.length, 1);
+    assert.equal(harness.requests[0].path, "/operacion/precios-jornada");
+    assert.deepEqual(JSON.parse(harness.requests[0].options.body), {
+      global_prices: { [chickenType.code]: "9.75" },
+      expected_prices: { [chickenType.code]: "9.00" }
+    });
+
+    harness.pendingResponses[0].resolve({
+      data: { global_prices: { [chickenType.code]: 9.75 } }
+    });
+    await acceptance;
+
+    assert.equal(harness.state.catalog.general_prices[chickenType.code].price_kg, 9.75);
+    assert.equal(harness.list.priceOverrides[chickenType.code], 7.25);
+    assert.equal(harness.client.prices[chickenType.code], harness.clientPrice);
+    assert.equal(harness.clientPrice.price_kg, 8.5);
+    assert.deepEqual(
+      harness.runtime.effectivePrice(harness.list, chickenType.code),
+      { value: 7.25, source: "MANUAL" }
+    );
+  }
+});
+
+test("Cambiar precio aplica un override de columna sin llamar al endpoint de jornada", async () => {
+  const harness = createRuntime({ clientPrice: 8.5, journeyPrice: 9 });
+
+  assert.equal(typeof harness.runtime.openTicketPriceEditor, "function");
+  harness.runtime.openTicketPriceEditor();
+
+  assert.equal(harness.elements.directPriceInput.value, "8.50");
+  harness.touchKeyboardState.buffer = "10.25";
+  await harness.runtime.handleTouchKeyboardAction("accept");
+
+  assert.equal(harness.requests.length, 0);
+  assert.equal(harness.list.priceOverrides.POLLO_PELADO, 10.25);
+  assert.deepEqual(
+    harness.runtime.effectivePrice(harness.list, "POLLO_PELADO"),
+    { value: 10.25, source: "MANUAL" }
+  );
+  assert.equal(harness.state.catalog.general_prices.POLLO_PELADO.price_kg, 9);
+  assert.equal(harness.clientPrice.price_kg, 8.5);
+  assert.equal(harness.persistCalls, 1);
+});
+
+test("el ticket usa el override y al terminar libera cliente y columna para volver a la jornada", async () => {
+  const harness = createRuntime({ override: 10.25, clientPrice: 8.5, journeyPrice: 9 });
+  harness.list.items = [{ chickenTypeCode: "POLLO_PELADO" }];
+
+  const save = harness.runtime.saveDispatch();
+  assert.equal(harness.requests[0].path, "/operacion/precios-jornada");
+  harness.pendingResponses[0].resolve({
+    data: { global_prices: { POLLO_PELADO: 9.6 } }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.requests.length, 2);
+  assert.equal(harness.requests[1].path, "/despacho-minorista-2/tickets");
+  const body = JSON.parse(harness.requests[1].options.body);
+  assert.deepEqual(body.price_overrides, { POLLO_PELADO: "10.25" });
+  assert.deepEqual(body.expected_prices, { POLLO_PELADO: "10.25" });
+
+  const ticket = { code: "DM2-OVERRIDE" };
+  harness.pendingResponses[1].resolve({ data: ticket, message: "Despacho registrado" });
+  await save;
+
+  const cleanList = harness.state.lists[0];
+  assert.notEqual(cleanList, harness.list);
+  assert.equal(cleanList.clientId, "");
+  assert.deepEqual(cleanList.priceOverrides, {});
+  assert.deepEqual(cleanList.items, []);
+  assert.deepEqual(
+    harness.runtime.effectivePrice(cleanList, "POLLO_PELADO"),
+    { value: 9.6, source: "GENERAL" }
+  );
+  assert.equal(harness.shownTicket, ticket);
+  assert.equal(harness.printedTicket, ticket);
+  assert.equal(harness.clientPrice.price_kg, 8.5);
+  assert.equal(harness.state.catalog.general_prices.POLLO_PELADO.price_kg, 9.6);
+});
+
+test("una tarifa CLIENTE abre la tarjeta con el precio efectivo y no altera la tarifa asignada", () => {
   const harness = createRuntime();
 
   harness.runtime.openDirectPriceEditor();
@@ -315,17 +537,13 @@ test("una tarifa CLIENTE abre el editor con el precio de jornada y no altera la 
   assert.equal(harness.openCalls, 1);
   assert.equal(harness.requests.length, 0);
   assert.equal(harness.issues.length, 0);
-  assert.equal(harness.elements.directPriceInput.value, "9.00");
-  assert.match(
-    harness.messages.at(-1),
-    /tarifa propia.+teclado edita el precio general de la jornada/i
-  );
+  assert.equal(harness.elements.directPriceInput.value, "8.50");
   assert.equal(harness.client.prices.POLLO_PELADO, harness.clientPrice);
   assert.equal(harness.clientPrice.price_kg, 8.5);
   assert.equal(harness.clientPrice.source, "CLIENTE");
 });
 
-test("el refresco remoto actualiza la jornada pero conserva intacta la tarifa CLIENTE", async () => {
+test("el refresco remoto actualiza la jornada pero conserva override y tarifa CLIENTE", async () => {
   const harness = createRuntime();
   harness.list.priceOverrides.POLLO_PELADO = 7.25;
 
@@ -346,15 +564,17 @@ test("el refresco remoto actualiza la jornada pero conserva intacta la tarifa CL
   assert.equal(harness.client.prices.POLLO_PELADO, harness.clientPrice);
   assert.equal(harness.clientPrice.price_kg, 8.5);
   assert.equal(harness.clientPrice.source, "CLIENTE");
-  assert.equal("POLLO_PELADO" in harness.list.priceOverrides, false);
+  assert.equal(harness.list.priceOverrides.POLLO_PELADO, 7.25);
+  assert.deepEqual(
+    harness.runtime.effectivePrice(harness.list, "POLLO_PELADO"),
+    { value: 7.25, source: "MANUAL" }
+  );
   assert.equal(harness.persistCalls, 1);
   assert.equal(harness.renderCalls, 1);
 });
 
 test("saveDispatch exige revisar un cambio remoto y solo publica tras un segundo intento estable", async () => {
-  const harness = createRuntime();
-  harness.clientPrice.price_kg = 9;
-  harness.clientPrice.source = "GENERAL";
+  const harness = createRuntime({ withClient: false });
   harness.list.items = [{ chickenTypeCode: "POLLO_PELADO" }];
 
   const save = harness.runtime.saveDispatch();
@@ -401,7 +621,7 @@ test("saveDispatch exige revisar un cambio remoto y solo publica tras un segundo
   );
   assert.equal(harness.requests[2].path, "/despacho-minorista-2/tickets");
   const body = JSON.parse(harness.requests[2].options.body);
-  assert.equal("price_overrides" in body, false);
+  assert.deepEqual(body.price_overrides, {});
   assert.deepEqual(body.expected_prices, { POLLO_PELADO: "9.80" });
 
   harness.pendingResponses[2].resolve({
@@ -411,7 +631,7 @@ test("saveDispatch exige revisar un cambio remoto y solo publica tras un segundo
   await confirmedSave;
 
   assert.equal(harness.issues.length, 1);
-  assert.equal(harness.list.saving, false);
+  assert.equal(harness.state.lists[0].saving, false);
 });
 
 test("un conflicto de tarifa CLIENTE recarga catálogo y el segundo intento envía el expected vigente", async () => {
@@ -492,7 +712,7 @@ test("un conflicto de tarifa CLIENTE recarga catálogo y el segundo intento env�
   assert.equal(harness.requests[4].path, "/despacho-minorista-2/tickets");
   const secondBody = JSON.parse(harness.requests[4].options.body);
   assert.deepEqual(secondBody.expected_prices, { POLLO_PELADO: "8.85" });
-  assert.equal("price_overrides" in secondBody, false);
+  assert.deepEqual(secondBody.price_overrides, {});
 
   harness.pendingResponses[4].resolve({
     data: { code: "DM2-CLIENTE-ACTUALIZADO" },
@@ -501,7 +721,7 @@ test("un conflicto de tarifa CLIENTE recarga catálogo y el segundo intento env�
   await secondSave;
 
   assert.equal(harness.issues.length, 1);
-  assert.equal(harness.list.saving, false);
+  assert.equal(harness.state.lists[0].saving, false);
 });
 
 test("la aceptación asíncrona envía una sola actualización y libera el teclado al terminar", async () => {

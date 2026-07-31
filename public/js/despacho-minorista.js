@@ -61,7 +61,7 @@ const STATION_2_LIST_LAYOUT_VERSION = "processed-first-v1";
 const LIST_COUNT = RETAIL_STATION === "1" ? 8 : 5;
 const MONEY_DECIMALS = 2;
 const MONEY_FACTOR = 10 ** MONEY_DECIMALS;
-const TICKET_PRICE_OVERRIDE_VERSION = 1;
+const TICKET_PRICE_OVERRIDE_VERSION = RETAIL_STATION === "2" ? 2 : 1;
 const JOURNEY_PRICE_REFRESH_INTERVAL_MS = 15000;
 const LIST_CLASSES = [
   "is-list-1",
@@ -330,6 +330,7 @@ const touchKeyboardState = {
   buffer: "",
   mode: "text",
   decimalPlaces: null,
+  layout: "default",
   uppercase: true,
   replaceOnNextKey: false,
   suppressOpen: false,
@@ -373,7 +374,7 @@ function normalizeList(list) {
         .filter(([, value]) => value > 0)
     )
     : {};
-  const supportsClientOverrides = Number(source.ticketPriceOverrideVersion)
+  const supportsTicketOverrides = Number(source.ticketPriceOverrideVersion)
     === TICKET_PRICE_OVERRIDE_VERSION;
 
   return {
@@ -381,9 +382,7 @@ function normalizeList(list) {
     clientId,
     operationType: source.operationType === OPERATION_RETURN ? OPERATION_RETURN : OPERATION_SALE,
     ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
-    priceOverrides: RETAIL_STATION === "2"
-      ? {}
-      : (clientId && !supportsClientOverrides ? {} : normalizedPriceOverrides),
+    priceOverrides: supportsTicketOverrides ? normalizedPriceOverrides : {},
     items: Array.isArray(source.items)
       ? source.items
         .filter((item) => item && item.adjustmentCode && Number(item.readWeight) > 0)
@@ -441,7 +440,7 @@ function persistLists() {
     clientId: list.clientId,
     operationType: list.operationType,
     ticketPriceOverrideVersion: TICKET_PRICE_OVERRIDE_VERSION,
-    priceOverrides: RETAIL_STATION === "2" ? {} : list.priceOverrides,
+    priceOverrides: list.priceOverrides,
     items: list.items
   }));
 
@@ -464,14 +463,12 @@ function recalculateDraftItems() {
   );
 
   state.lists.forEach((list, listIndex) => {
-    list.priceOverrides = RETAIL_STATION === "2"
-      ? {}
-      : Object.fromEntries(
-        Object.entries(list.priceOverrides || {})
-          .filter(([code]) => availableChickenTypeCodes.has(code))
-          .map(([code, value]) => [code, roundMoney(value)])
-          .filter(([, value]) => value > 0)
-      );
+    list.priceOverrides = Object.fromEntries(
+      Object.entries(list.priceOverrides || {})
+        .filter(([code]) => availableChickenTypeCodes.has(code))
+        .map(([code, value]) => [code, roundMoney(value)])
+        .filter(([, value]) => value > 0)
+    );
     list.items = list.items
       .filter((item) => availableChickenTypeCodes.has(item.chickenTypeCode))
       .map((item) => {
@@ -853,13 +850,14 @@ function currentGeneralPrice(chickenTypeCode) {
   return normalizePriceRecord(prices[chickenTypeCode]);
 }
 
-function effectivePrice(list, chickenTypeCode) {
+function basePrice(list, chickenTypeCode) {
   const client = clientFor(list);
-  const base = client
-    ? currentClientPrice(list, chickenTypeCode)
-    : currentGeneralPrice(chickenTypeCode);
-  if (!base) return null;
+  const clientPrice = client ? currentClientPrice(list, chickenTypeCode) : null;
 
+  return clientPrice || currentGeneralPrice(chickenTypeCode);
+}
+
+function effectivePrice(list, chickenTypeCode) {
   const override = list.priceOverrides?.[chickenTypeCode];
   if (override !== undefined && override !== null && override !== "") {
     const rawValue = Number(override);
@@ -867,7 +865,7 @@ function effectivePrice(list, chickenTypeCode) {
     if (Number.isFinite(rawValue) && value > 0) return { value, source: "MANUAL" };
   }
 
-  return base;
+  return basePrice(list, chickenTypeCode);
 }
 
 function missingPriceTypes(list) {
@@ -1255,7 +1253,7 @@ function renderWeightPreview() {
     const priceSource = String(price?.source || "").toUpperCase();
     const usesClientPrice = priceSource === "CLIENTE" && Boolean(client);
     const priceDescription = priceSource === "MANUAL"
-      ? "Precio puntual del ticket"
+      ? "Precio cambiado en esta columna"
       : usesClientPrice
         ? `Tarifa propia de ${client.name}`
         : priceSource === "GENERAL"
@@ -1265,9 +1263,7 @@ function renderWeightPreview() {
       ? `S/ ${formatMoneyValue(price.value)} por kg`
       : "S/ -- por kg";
     elements.priceSource.textContent = price
-      ? (usesClientPrice
-        ? `${priceDescription} · toca para cambiar la jornada`
-        : `Toca para cambiar · ${priceDescription}`)
+      ? `${priceDescription} · toca aquí para cambiar la jornada`
       : `${client
         ? `Toca para configurar · ${client.name} no tiene precio de ${chickenName}`
         : `Toca para configurar · precio de la jornada de ${chickenName} no configurado`}`;
@@ -1277,9 +1273,7 @@ function renderWeightPreview() {
     elements.priceCard.setAttribute(
       "aria-label",
       price
-        ? (usesClientPrice
-          ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Es una tarifa propia del cliente; toca para cambiar el precio de la jornada`
-          : `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo. Toca para cambiar el precio de la jornada`)
+        ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo, ${priceDescription}. Toca para cambiar únicamente el precio de la jornada`
         : `Esta columna no tiene precio de ${chickenName}. Toca para configurar el precio de la jornada`
     );
     elements.weighingTotalPreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
@@ -1466,6 +1460,7 @@ function renderLists() {
   elements.assignPrice.disabled = state.loading
     || state.savingJourneyPrice
     || current.saving;
+  elements.assignPrice.title = "Cambia únicamente el precio de esta columna para el ticket actual.";
   elements.removeWeighing.disabled = current.saving
     || !state.selectedItem
     || state.selectedItem.listIndex !== state.activeList;
@@ -1842,19 +1837,28 @@ function renderTouchKeyboard() {
     return;
   }
 
-  const rows = [
-    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
-    ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-    ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
-    ["Z", "X", "C", "V", "B", "N", "M"],
-    ["Á", "É", "Í", "Ó", "Ú", "Ü", "-", "/", "."]
-  ];
+  const lettersOnly = touchKeyboardState.layout === "letters";
+  const rows = lettersOnly
+    ? [
+      ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+      ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
+      ["Z", "X", "C", "V", "B", "N", "M"],
+      ["Á", "É", "Í", "Ó", "Ú", "Ü"]
+    ]
+    : [
+      ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+      ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+      ["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ñ"],
+      ["Z", "X", "C", "V", "B", "N", "M"],
+      ["Á", "É", "Í", "Ó", "Ú", "Ü", "-", "/", "."]
+    ];
+  const shiftRowIndex = lettersOnly ? 2 : 3;
   const caseKey = (key) => touchKeyboardState.uppercase ? key : key.toLocaleLowerCase("es");
-  elements.touchKeyboardKeys.setAttribute("aria-label", "Teclado español táctil");
-  elements.touchKeyboardKeys.className = "rd-touch-keyboard-keys is-text";
+  elements.touchKeyboardKeys.setAttribute("aria-label", lettersOnly ? "Teclado táctil de letras" : "Teclado español táctil");
+  elements.touchKeyboardKeys.className = `rd-touch-keyboard-keys is-text${lettersOnly ? " is-letters-only" : ""}`;
   elements.touchKeyboardKeys.innerHTML = rows.map((row, index) => `
-    <div class="rd-touch-keyboard-row ${index === 3 ? "is-short" : ""}">
-      ${index === 3 ? `<button type="button" class="is-shift ${touchKeyboardState.uppercase ? "is-active" : ""}" data-retail-keyboard-action="shift" aria-pressed="${touchKeyboardState.uppercase}">Mayús</button>` : ""}
+    <div class="rd-touch-keyboard-row ${index === shiftRowIndex ? "is-short" : ""}">
+      ${index === shiftRowIndex ? `<button type="button" class="is-shift ${touchKeyboardState.uppercase ? "is-active" : ""}" data-retail-keyboard-action="shift" aria-pressed="${touchKeyboardState.uppercase}">Mayús</button>` : ""}
       ${row.map((key) => `<button type="button" data-retail-keyboard-key="${escapeHtml(caseKey(key))}">${escapeHtml(caseKey(key))}</button>`).join("")}
     </div>
   `).join("") + `
@@ -1891,6 +1895,9 @@ function openTouchKeyboard(input, options = {}) {
   touchKeyboardState.initialValue = input.value;
   touchKeyboardState.buffer = input.value;
   touchKeyboardState.mode = mode;
+  touchKeyboardState.layout = mode === "text"
+    ? input.dataset.retailKeyboardLayout || "default"
+    : "default";
   touchKeyboardState.acceptHandler = typeof options.acceptHandler === "function"
     ? options.acceptHandler
     : null;
@@ -1911,7 +1918,10 @@ function openTouchKeyboard(input, options = {}) {
   elements.touchKeyboard.hidden = false;
   elements.touchKeyboard.setAttribute("aria-hidden", "false");
   elements.touchKeyboard.classList.toggle("is-numeric-entry", mode !== "text");
+  const isClientSearch = input === elements.clientSearch;
+  elements.touchKeyboard.classList.toggle("is-client-search", isClientSearch);
   document.body.classList.add("has-retail-touch-keyboard");
+  document.body.classList.toggle("has-retail-client-keyboard", isClientSearch);
   if (touchKeyboardState.lockStation && !hasOpenRetailModal()) {
     elements.station.inert = true;
     elements.station.setAttribute("aria-hidden", "true");
@@ -1942,13 +1952,15 @@ function closeTouchKeyboard(commit = true) {
   setTouchKeyboardBusy(false);
   elements.touchKeyboard.hidden = true;
   elements.touchKeyboard.setAttribute("aria-hidden", "true");
-  elements.touchKeyboard.classList.remove("is-numeric-entry");
+  elements.touchKeyboard.classList.remove("is-numeric-entry", "is-client-search");
   document.body.classList.remove("has-retail-touch-keyboard");
+  document.body.classList.remove("has-retail-client-keyboard");
   target?.setAttribute("aria-expanded", "false");
   touchKeyboardState.target = null;
   touchKeyboardState.initialValue = "";
   touchKeyboardState.buffer = "";
   touchKeyboardState.decimalPlaces = null;
+  touchKeyboardState.layout = "default";
   touchKeyboardState.replaceOnNextKey = false;
   touchKeyboardState.acceptHandler = null;
   touchKeyboardState.lockStation = false;
@@ -2300,7 +2312,6 @@ function assignClient(clientId) {
   const list = activeList();
   if (String(list.clientId) !== String(client.id)) {
     list.clientId = String(client.id);
-    list.priceOverrides = {};
   }
   persistLists();
   closeModal(elements.clientModal);
@@ -2395,10 +2406,6 @@ function syncJourneyPrice(chickenTypeCode, value) {
     }
   });
 
-  state.lists.forEach((list) => {
-    if (!list.priceOverrides || typeof list.priceOverrides !== "object") return;
-    delete list.priceOverrides[chickenTypeCode];
-  });
 }
 
 function syncJourneyPriceSnapshot(globalPrices) {
@@ -2481,9 +2488,6 @@ async function refreshRetailCatalogPrices() {
 
   state.catalog.clients = data.clients;
   state.catalog.general_prices = { ...data.general_prices };
-  state.lists.forEach((list) => {
-    list.priceOverrides = {};
-  });
   persistLists();
   renderAll();
 }
@@ -2597,28 +2601,64 @@ async function applyDirectJourneyPrice(
   }
 }
 
-function applyDirectPrice(
-  listIndex,
-  chickenTypeCode,
-  baseValue,
-  rawValue,
-  expectedJourneyPrice = null
-) {
-  return RETAIL_STATION === "2"
-    ? applyDirectJourneyPrice(listIndex, chickenTypeCode, rawValue, expectedJourneyPrice)
-    : applyDirectTicketPrice(listIndex, chickenTypeCode, baseValue, rawValue);
-}
-
 function openDirectPriceEditor() {
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
   const chickenType = list ? priceChickenTypeForList(list) : null;
   const client = clientFor(list);
-  const base = chickenType
-    ? (client
-      ? currentClientPrice(list, chickenType.code)
-      : currentGeneralPrice(chickenType.code))
-    : null;
+
+  if (
+    RETAIL_STATION !== "2"
+    || state.savingJourneyPrice
+    || !list
+    || !chickenType
+    || !elements.directPriceInput
+  ) {
+    showLocalActionIssue({
+      caption: "Precio no disponible",
+      title: "No hay un producto activo en esta columna",
+      message: "No se abrió el teclado porque no se pudo identificar el producto de la columna activa.",
+      details: [{ label: "Lista activa", value: `Lista ${listIndex + 1}` }],
+      help: "Selecciona nuevamente la columna e inténtalo otra vez."
+    });
+    return;
+  }
+
+  const price = effectivePrice(list, chickenType.code);
+  const journeyPrice = currentGeneralPrice(chickenType.code);
+  const expectedJourneyPrice = journeyPrice?.value ?? null;
+  const editorPrice = price || journeyPrice;
+
+  elements.directPriceInput.value = editorPrice ? formatMoneyValue(editorPrice.value) : "";
+  elements.directPriceInput.placeholder = editorPrice ? formatMoneyValue(editorPrice.value) : "0.00";
+  elements.directPriceInput.dataset.retailKeyboardLabel =
+    `Precio actual de la columna de ${chickenType.name}; al aceptar se cambia la jornada`;
+  elements.directPriceInput.dataset.retailPriceCode = chickenType.code;
+  const source = String(price?.source || "").toUpperCase();
+  const sourceDescription = source === "MANUAL"
+    ? "el cambio propio de la columna"
+    : source === "CLIENTE"
+      ? `la tarifa propia de ${client?.name || "este cliente"}`
+      : "el precio de la jornada";
+  setMessage(
+    `El teclado muestra ${sourceDescription}; al aceptar cambiará únicamente el precio de la jornada de ${chickenType.name}.`
+  );
+  openTouchKeyboard(elements.directPriceInput, {
+    lockStation: true,
+    acceptHandler: (value) => applyDirectJourneyPrice(
+      listIndex,
+      chickenType.code,
+      value,
+      expectedJourneyPrice
+    )
+  });
+}
+
+function openTicketPriceEditor() {
+  const listIndex = state.activeList;
+  const list = state.lists[listIndex];
+  const chickenType = list ? priceChickenTypeForList(list) : null;
+  const base = list && chickenType ? basePrice(list, chickenType.code) : null;
 
   if (state.savingJourneyPrice || !list || !chickenType || !elements.directPriceInput) {
     showLocalActionIssue({
@@ -2631,54 +2671,33 @@ function openDirectPriceEditor() {
     return;
   }
 
-  const price = effectivePrice(list, chickenType.code) || base;
-  const journeyPrice = RETAIL_STATION === "2"
-    ? currentGeneralPrice(chickenType.code)
-    : null;
-  const expectedJourneyPrice = journeyPrice?.value ?? null;
-  const editorPrice = RETAIL_STATION === "2" ? journeyPrice : price;
-
-  if (RETAIL_STATION !== "2" && !base) {
+  if (!base) {
     showLocalActionIssue({
       caption: "Precio no disponible",
       title: `Falta el precio base de ${chickenType.name}`,
-      message: "No se abrió el teclado porque primero debe existir un precio vigente para esta columna.",
-      details: [
-        { label: "Lista activa", value: `Lista ${listIndex + 1}` },
-        {
-          label: "Precio requerido",
-          value: client
-            ? `Tarifa vigente de ${client.name}`
-            : "Precio general vigente"
-        }
-      ],
-      help: client
-        ? "Configura el precio de este producto para el cliente en Directorio y vuelve a intentarlo."
-        : "Configura el precio general de este producto en Directorio y vuelve a intentarlo."
+      message: "Primero debe existir un precio de cliente o de jornada para poder cambiar el precio de esta columna.",
+      details: [{ label: "Lista activa", value: `Lista ${listIndex + 1}` }],
+      help: "Configura el precio base y vuelve a intentarlo."
     });
     return;
   }
 
-  elements.directPriceInput.value = editorPrice ? formatMoneyValue(editorPrice.value) : "";
-  elements.directPriceInput.placeholder = editorPrice ? formatMoneyValue(editorPrice.value) : "0.00";
+  const price = effectivePrice(list, chickenType.code) || base;
+  elements.directPriceInput.value = formatMoneyValue(price.value);
+  elements.directPriceInput.placeholder = formatMoneyValue(base.value);
   elements.directPriceInput.dataset.retailKeyboardLabel =
-    RETAIL_STATION === "2"
-      ? `Precio de la jornada de ${chickenType.name} por kilogramo`
-      : `Precio de ${chickenType.name} por kilogramo`;
+    `Precio exclusivo de la columna de ${chickenType.name} para este ticket`;
   elements.directPriceInput.dataset.retailPriceCode = chickenType.code;
-  if (RETAIL_STATION === "2" && String(price?.source || "").toUpperCase() === "CLIENTE") {
-    setMessage(
-      `La columna muestra la tarifa propia de ${client?.name || "este cliente"}; el teclado edita el precio general de la jornada de ${chickenType.name}.`
-    );
-  }
+  setMessage(
+    `Cambiar precio modifica únicamente esta columna de ${chickenType.name}; no altera la tarifa del cliente ni el precio de la jornada.`
+  );
   openTouchKeyboard(elements.directPriceInput, {
     lockStation: true,
-    acceptHandler: (value) => applyDirectPrice(
+    acceptHandler: (value) => applyDirectTicketPrice(
       listIndex,
       chickenType.code,
-      base?.value ?? null,
-      value,
-      expectedJourneyPrice
+      base.value,
+      value
     )
   });
 }
@@ -2985,13 +3004,11 @@ async function saveDispatch(delivery = null) {
       setMessage(`Grabando ${list.operationType === OPERATION_RETURN ? "devolución" : "venta"} de la lista ${listIndex + 1}...`);
     }
 
-    const priceOverrides = RETAIL_STATION === "2"
-      ? {}
-      : Object.fromEntries(
-        Object.entries(list.priceOverrides || {})
-          .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
-          .map(([code, value]) => [code, formatMoneyValue(value)])
-      );
+    const priceOverrides = Object.fromEntries(
+      Object.entries(list.priceOverrides || {})
+        .filter(([, value]) => Number.isFinite(Number(value)) && roundMoney(value) >= 0.01)
+        .map(([code, value]) => [code, formatMoneyValue(value)])
+    );
     let response;
     try {
       response = await apiRequest(`${RETAIL_API_BASE}/tickets`, {
@@ -3001,9 +3018,8 @@ async function saveDispatch(delivery = null) {
           operation_type: list.operationType,
           client_id: list.clientId ? Number(list.clientId) : null,
           delivery,
-          ...(RETAIL_STATION === "2"
-            ? { expected_prices: expectedPrices }
-            : { price_overrides: priceOverrides }),
+          price_overrides: priceOverrides,
+          ...(RETAIL_STATION === "2" ? { expected_prices: expectedPrices } : {}),
           weighings: list.items.map((item, index) => ({
             local_id: index + 1,
             chicken_type_code: item.chickenTypeCode,
@@ -3435,7 +3451,7 @@ elements.captureWeight.addEventListener("click", captureWeight);
 elements.assignClient.addEventListener("click", openClientModal);
 elements.removeWeighing.addEventListener("click", openRemoveWeighingModal);
 elements.confirmRemoveWeighing.addEventListener("click", confirmRemoveSelectedWeighing);
-elements.assignPrice.addEventListener("click", openDirectPriceEditor);
+elements.assignPrice.addEventListener("click", openTicketPriceEditor);
 elements.priceCard?.addEventListener("click", openDirectPriceEditor);
 elements.saveDispatch.addEventListener("click", prepareDispatchRegistration);
 elements.clientSearch.addEventListener("input", () => renderClientOptions(elements.clientSearch.value));

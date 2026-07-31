@@ -11,13 +11,10 @@ function clientSearchRank(client, query) {
   if (!query) return 0;
 
   const name = normalizeRetailClientSearch(client?.name);
-  const document = normalizeRetailClientSearch(client?.document);
   const nameWords = name.split(" ").filter(Boolean);
 
   if (nameWords.some((word) => word.startsWith(query))) return 0;
-  if (document.startsWith(query)) return 1;
-  if (name.includes(query)) return 2;
-  if (document.includes(query)) return 3;
+  if (name.includes(query)) return 1;
   return Number.POSITIVE_INFINITY;
 }
 

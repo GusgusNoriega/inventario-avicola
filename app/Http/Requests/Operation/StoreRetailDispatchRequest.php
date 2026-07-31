@@ -70,7 +70,6 @@ class StoreRetailDispatchRequest extends FormRequest
                     ->where('estado', 'ACTIVO')),
             ],
             'price_overrides' => [
-                Rule::prohibitedIf(fn (): bool => $this->retailStation() === 2),
                 'sometimes',
                 'array:'.implode(',', [
                     TipoPollo::CHICKEN_DRESSED,
@@ -268,7 +267,6 @@ class StoreRetailDispatchRequest extends FormRequest
             'delivery.driver_id.required_with' => 'Selecciona un chofer de la flota para la entrega.',
             'delivery.driver_id.integer' => 'El chofer seleccionado no es válido.',
             'delivery.driver_id.exists' => 'El chofer seleccionado no pertenece a la empresa o está inactivo.',
-            'price_overrides.prohibited' => 'Despacho minorista 2 usa el precio vigente de la jornada y no admite precios manuales por ticket.',
             'price_overrides.array' => 'Los precios asignados a la lista no tienen un formato válido.',
             'price_overrides.*.numeric' => 'Cada precio manual debe ser un número válido.',
             'price_overrides.*.gt' => 'Cada precio manual debe ser mayor que cero.',
