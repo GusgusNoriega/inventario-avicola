@@ -230,13 +230,14 @@ class CashRegisterApiTest extends TestCase
             (string) Str::uuid(),
             [
                 'direccion' => 'EGRESO',
-                'contraparte_tipo' => 'OTRO',
+                'contraparte_tipo' => 'ADMINISTRATIVO',
                 'fecha_hora' => '2026-07-31 11:45:00',
                 'importe' => '40.10',
                 'detalle' => 'Compra menor pagada por caja',
             ],
         ))->assertCreated()
             ->assertJsonPath('data.direccion', 'EGRESO')
+            ->assertJsonPath('data.contraparte_tipo', 'ADMINISTRATIVO')
             ->assertJsonPath('data.importe', '40.10');
         $expensePaymentId = (int) DB::table('movimientos_caja_efectivo')
             ->where('id', $expenseResponse->json('data.id'))
@@ -331,6 +332,110 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.neto', '60.00');
     }
 
+    public function test_expense_counterpart_accepts_exactly_the_supported_categories(): void
+    {
+        $validCategories = [
+            'ADMINISTRATIVO' => [],
+            'TRANSPORTE' => [],
+            'DEPOSITO' => [],
+            'OTRA_CAJA' => ['otra_caja_id' => $this->otherCashRegisterId],
+        ];
+
+        foreach (array_keys($validCategories) as $index => $category) {
+            $response = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+                (string) Str::uuid(),
+                [
+                    'direccion' => 'EGRESO',
+                    'contraparte_tipo' => $category,
+                    'fecha_hora' => sprintf('2026-07-31 12:%02d:00', $index),
+                    'importe' => number_format(($index + 1) * 10, 2, '.', ''),
+                    'detalle' => "Egreso de categoria {$category}",
+                    ...$validCategories[$category],
+                ],
+            ))->assertCreated()
+                ->assertJsonPath('data.direccion', 'EGRESO')
+                ->assertJsonPath('data.contraparte_tipo', $category);
+
+            $this->assertDatabaseHas('movimientos_caja_efectivo', [
+                'id' => $response->json('data.id'),
+                'caja_id' => $this->cashRegisterId,
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => $category,
+                'otra_caja_id' => $category === 'OTRA_CAJA'
+                    ? $this->otherCashRegisterId
+                    : null,
+            ]);
+        }
+
+        $daily = $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(4, 'data')
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.egresos', '100.00')
+            ->assertJsonPath('resumen.neto', '-100.00');
+        $this->assertEqualsCanonicalizing(
+            array_keys($validCategories),
+            collect($daily->json('data'))->pluck('contraparte_tipo')->all(),
+        );
+
+        foreach (['OTRO', 'CLIENTE', 'PROVEEDOR', 'ADMINISTRACION'] as $invalidCategory) {
+            $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+                (string) Str::uuid(),
+                [
+                    'direccion' => 'EGRESO',
+                    'contraparte_tipo' => $invalidCategory,
+                ],
+            ))->assertUnprocessable()
+                ->assertJsonValidationErrors('contraparte_tipo');
+        }
+
+        $this->assertDatabaseCount('movimientos_caja_efectivo', 4);
+        $this->assertDatabaseCount('pagos', 4);
+    }
+
+    public function test_a_legacy_other_expense_can_still_be_edited_without_reclassifying_it(): void
+    {
+        $movement = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'ADMINISTRATIVO',
+                'fecha_hora' => '2026-07-31 13:00:00',
+                'importe' => '35.00',
+                'detalle' => 'Egreso que simula un registro anterior',
+            ],
+        ))->assertCreated()->json('data');
+        $paymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $movement['id'])
+            ->value('pago_id');
+
+        DB::table('movimientos_caja_efectivo')
+            ->where('id', $movement['id'])
+            ->update(['contraparte_tipo' => 'OTRO']);
+
+        $this->putJson("/api/v1/finanzas/caja-efectivo/{$movement['id']}", $this->payload(
+            null,
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'OTRO',
+                'fecha_hora' => '2026-07-31 13:00:00',
+                'importe' => '35.00',
+                'detalle' => 'Detalle corregido sin reclasificar el egreso historico',
+            ],
+        ))->assertOk()
+            ->assertJsonPath('data.id', $movement['id'])
+            ->assertJsonPath('data.contraparte_tipo', 'OTRO')
+            ->assertJsonPath('data.detalle', 'Detalle corregido sin reclasificar el egreso historico');
+
+        $this->assertSame(
+            $paymentId,
+            (int) DB::table('movimientos_caja_efectivo')
+                ->where('id', $movement['id'])
+                ->value('pago_id'),
+        );
+        $this->assertDatabaseCount('pagos', 1);
+    }
+
     public function test_editing_financial_fields_reverses_the_old_payment_and_links_the_replacement(): void
     {
         $movement = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
@@ -351,7 +456,7 @@ class CashRegisterApiTest extends TestCase
             null,
             [
                 'direccion' => 'EGRESO',
-                'contraparte_tipo' => 'OTRO',
+                'contraparte_tipo' => 'TRANSPORTE',
                 'fecha_hora' => '2026-07-31 08:30:00',
                 'importe' => '80.00',
                 'detalle' => 'Correccion: el efectivo salio de la caja',
@@ -359,6 +464,7 @@ class CashRegisterApiTest extends TestCase
         ))->assertOk()
             ->assertJsonPath('data.id', $movement['id'])
             ->assertJsonPath('data.direccion', 'EGRESO')
+            ->assertJsonPath('data.contraparte_tipo', 'TRANSPORTE')
             ->assertJsonPath('data.importe', '80.00')
             ->assertJsonPath('data.detalle', 'Correccion: el efectivo salio de la caja');
 
@@ -405,6 +511,142 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.ingresos', '0.00')
             ->assertJsonPath('resumen.egresos', '80.00')
             ->assertJsonPath('resumen.neto', '-80.00');
+    }
+
+    public function test_deleting_a_cash_transfer_voids_and_reverses_it_and_removes_it_from_both_daily_views(): void
+    {
+        $movement = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'OTRA_CAJA',
+                'otra_caja_id' => $this->otherCashRegisterId,
+                'fecha_hora' => '2026-07-31 15:00:00',
+                'importe' => '70.00',
+                'detalle' => 'Transferencia que sera anulada',
+            ],
+        ))->assertCreated()->json('data');
+        $paymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $movement['id'])
+            ->value('pago_id');
+
+        $deleted = $this->deleteJson(
+            "/api/v1/finanzas/caja-efectivo/{$movement['id']}",
+        )->assertOk()
+            ->assertJsonPath('data.id', $movement['id'])
+            ->assertJsonPath('data.estado', 'ANULADO')
+            ->assertJsonPath('meta.idempotent', false);
+        $reverseId = (int) $deleted->json('reversa_id');
+
+        $this->assertGreaterThan(0, $reverseId);
+        $this->assertDatabaseHas('movimientos_caja_efectivo', [
+            'id' => $movement['id'],
+            'pago_id' => $paymentId,
+            'estado' => 'ANULADO',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'ANULADO',
+            'anulada_por' => $this->user->id,
+        ]);
+        $voidedPayment = DB::table('pagos')->where('id', $paymentId)->first();
+        $this->assertNotNull($voidedPayment->anulada_at);
+        $this->assertNotEmpty($voidedPayment->motivo_anulacion);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $reverseId,
+            'reversa_de_pago_id' => $paymentId,
+            'cuenta_origen_id' => $this->otherCashRegisterId,
+            'cuenta_destino_id' => $this->cashRegisterId,
+            'direccion' => 'REVERSA',
+            'importe' => 70,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'movimientos_caja_efectivo',
+            'entidad_id' => (string) $movement['id'],
+            'accion' => 'ANULAR',
+        ]);
+
+        foreach ([$this->cashRegisterId, $this->otherCashRegisterId] as $cashRegisterId) {
+            $this->getJson($this->dailyUrl($cashRegisterId, '2026-07-31'))
+                ->assertOk()
+                ->assertJsonCount(0, 'data')
+                ->assertJsonPath('resumen.ingresos', '0.00')
+                ->assertJsonPath('resumen.egresos', '0.00')
+                ->assertJsonPath('resumen.neto', '0.00');
+        }
+
+        $this->deleteJson("/api/v1/finanzas/caja-efectivo/{$movement['id']}")
+            ->assertOk()
+            ->assertJsonPath('reversa_id', $reverseId)
+            ->assertJsonPath('meta.idempotent', true);
+        $this->assertDatabaseCount('movimientos_caja_efectivo', 1);
+        $this->assertDatabaseCount('pagos', 2);
+    }
+
+    public function test_deleting_a_cash_movement_respects_company_isolation_and_void_permission(): void
+    {
+        $movement = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'importe' => '45.00',
+                'detalle' => 'Movimiento protegido para anulacion',
+            ],
+        ))->assertCreated()->json('data');
+        $paymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $movement['id'])
+            ->value('pago_id');
+
+        $foreignUser = User::factory()->create();
+        $this->grantFinanceModule($foreignUser, 'CAJA_DELETE_FOREIGN');
+        Sanctum::actingAs($foreignUser, ['api']);
+
+        $this->deleteJson("/api/v1/finanzas/caja-efectivo/{$movement['id']}")
+            ->assertNotFound();
+        $this->assertDatabaseHas('movimientos_caja_efectivo', [
+            'id' => $movement['id'],
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'REGISTRADO',
+        ]);
+
+        $restrictedUser = User::factory()->create([
+            'empresa_id' => $this->user->empresa_id,
+        ]);
+        $this->grantFinanceModule($restrictedUser, 'CAJA_DELETE_RESTRICTED');
+        $permissionPath = 'access_modules.modules.MODULO_FINANZAS.technical_permissions';
+        $technicalPermissions = config($permissionPath, []);
+        config()->set($permissionPath, array_values(array_diff(
+            $technicalPermissions,
+            ['PAGOS_ANULAR'],
+        )));
+
+        try {
+            Sanctum::actingAs($restrictedUser, ['api']);
+            $this->deleteJson("/api/v1/finanzas/caja-efectivo/{$movement['id']}")
+                ->assertForbidden();
+        } finally {
+            config()->set($permissionPath, $technicalPermissions);
+        }
+
+        $this->assertDatabaseHas('movimientos_caja_efectivo', [
+            'id' => $movement['id'],
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseMissing('pagos', [
+            'reversa_de_pago_id' => $paymentId,
+        ]);
+
+        Sanctum::actingAs($this->user, ['api']);
+        $this->deleteJson("/api/v1/finanzas/caja-efectivo/{$movement['id']}")
+            ->assertOk();
     }
 
     public function test_cash_register_movements_reject_invalid_accounts_clients_and_counterpart_combinations(): void
@@ -500,6 +742,19 @@ class CashRegisterApiTest extends TestCase
 
         $this->assertDatabaseCount('movimientos_caja_efectivo', 0);
         $this->assertDatabaseCount('pagos', 0);
+    }
+
+    private function grantFinanceModule(User $user, string $roleCode): void
+    {
+        $role = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => $roleCode,
+            'nombre' => 'Acceso de prueba a finanzas',
+        ]);
+        $role->permissions()->attach(
+            Permission::query()->where('codigo', 'MODULO_FINANZAS')->value('id'),
+        );
+        $user->roles()->attach($role);
     }
 
     /** @param array<string, mixed> $overrides @return array<string, mixed> */

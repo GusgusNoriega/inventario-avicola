@@ -2224,7 +2224,13 @@ body.fin-page {
   white-space: nowrap;
 }
 
-.fin-cash-item-action { justify-self: end; }
+.fin-cash-item-action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: 7px;
+}
 
 .fin-cash-empty {
   padding: 32px 18px;
@@ -2353,5 +2359,10 @@ body.fin-page {
   .fin-cash-item-copy { grid-column: 2; grid-row: 1; }
   .fin-cash-item-copy > span { white-space: normal; }
   .fin-cash-amount { grid-column: 2; grid-row: 2; justify-self: start; }
-  .fin-cash-item-action { grid-column: 2; grid-row: 3; justify-self: start; }
+  .fin-cash-item-action {
+    grid-column: 2;
+    grid-row: 3;
+    justify-content: flex-start;
+    justify-self: start;
+  }
 }

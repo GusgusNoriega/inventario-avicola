@@ -66,9 +66,9 @@ ni anularse hasta anular primero esos movimientos financieros.
 Los registros de `/finanzas/caja-efectivo` resuelven siempre el método
 `EFECTIVO` en el servidor y nunca solicitan una referencia o número de
 operación. Un ingreso de cliente se registra como `COBRO_CLIENTE`; un traslado
-entre cajas como `TRANSFERENCIA_INTERNA`; y un ingreso o egreso de otro origen
-como `AJUSTE`. Una transferencia se muestra como egreso en la caja de origen e
-ingreso en la caja de destino.
+entre cajas como `TRANSFERENCIA_INTERNA`; y un ingreso de otro origen o un gasto
+administrativo, de transporte o depósito como `AJUSTE`. Una transferencia se
+muestra como gasto en la caja de origen e ingreso en la caja de destino.
 
 Un `PAGO_PROVEEDOR` puede registrarse sin aplicarlo de inmediato. En ese caso
 el dinero sale una sola vez de la cuenta propia y el importe pendiente de
@@ -97,7 +97,7 @@ el saldo global siga considerando el pago. Si el cliente deposita a una cuenta
 propia, se registra un `COBRO_CLIENTE`: disminuye la CXC y aumenta el saldo
 propio, pero la CXP no cambia.
 
-Los egresos ordinarios también pueden registrarse antes de cargar el saldo
+Los gastos ordinarios también pueden registrarse antes de cargar el saldo
 inicial. En ese caso la cuenta propia mostrará temporalmente un saldo negativo,
 que puede regularizarse después con `SALDO_INICIAL` o `AJUSTE`. La anulación de
 un ingreso cuyos fondos ya fueron utilizados conserva su control específico.
@@ -109,8 +109,10 @@ UUID de idempotencia.
 - `/finanzas`: menú del módulo con acceso a saldos, compras, cuentas y movimientos.
 - `/finanzas/saldos`: saldos por cuenta, cartera, pagos a proveedores y trazabilidad.
 - `/finanzas/entidades`: entidades propias/externas y sus cuentas.
-- `/finanzas/caja-efectivo`: lista diaria por caja, ingresos, egresos, neto,
-  transferencias, clientes y caja predeterminada guardada en el navegador.
+- `/finanzas/caja-efectivo`: lista diaria por caja, ingresos, gastos, neto,
+  transferencias, clientes, eliminación mediante reversa y caja predeterminada
+  guardada en el navegador. Los destinos de gasto disponibles son
+  Administrativo, Transporte, Depósito y Otra caja.
 - `/finanzas/movimientos/nuevo`: cobros, pagos directos, pagos a proveedor,
   cargas manuales de saldo a favor, minorista y reembolsos.
 - `/compras`: compras al contado y a crédito, deuda pendiente y documentos.
@@ -133,7 +135,8 @@ Los recursos principales son:
 - `GET /catalogo`, `/cartera`, `/saldos`, `/trazabilidad` y `/movimientos`.
 - CRUD por desactivación de `/entidades` y `/cuentas`.
 - `GET /caja-efectivo/catalogo`, `GET /caja-efectivo`,
-  `POST /caja-efectivo` y `PUT /caja-efectivo/{id}`.
+  `POST /caja-efectivo`, `PUT /caja-efectivo/{id}` y
+  `DELETE /caja-efectivo/{id}`.
 - `POST /movimientos`, `POST /movimientos/{id}/aplicaciones` y
   `POST /movimientos/{id}/anular`.
 - `GET /clientes/{id}/resumen` y `/proveedores/{id}/resumen`.

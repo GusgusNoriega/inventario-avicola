@@ -51,6 +51,11 @@ const canManage = document.body.dataset.canManageCash === "1";
 const canReverse = document.body.dataset.canReverseCash === "1";
 const POLL_INTERVAL = 3000;
 const STORAGE_PREFIX = "sistema-pollos:finanzas:caja-efectivo:v1";
+const EXPENSE_DESTINATION_LABELS = {
+  ADMINISTRATIVO: "Administrativo",
+  TRANSPORTE: "Transporte",
+  DEPOSITO: "Depósito"
+};
 const channel = "BroadcastChannel" in window
   ? new BroadcastChannel("sistema-pollos-caja-efectivo")
   : null;
@@ -67,7 +72,8 @@ const state = {
   selectedClientId: null,
   activeSuggestion: -1,
   suggestionClients: [],
-  saving: false
+  saving: false,
+  deletingId: null
 };
 
 function storageKey() {
@@ -201,13 +207,16 @@ function counterpartDescription(record) {
       ? `${counterpart.nombre} · ${counterpart.entidad}`
       : counterpart.nombre;
   }
+  if (record.direccion === "EGRESO" && EXPENSE_DESTINATION_LABELS[record.contraparte_tipo]) {
+    return EXPENSE_DESTINATION_LABELS[record.contraparte_tipo];
+  }
   return counterpart.nombre || (record.direccion === "INGRESO" ? "Otro origen" : "Otro destino");
 }
 
 function renderLedger(records) {
   state.records = new Map(records.map((record) => [String(record.id), record]));
   if (!records.length) {
-    elements.list.innerHTML = '<li class="fin-cash-empty">No hay ingresos ni egresos registrados para esta caja en el día seleccionado.</li>';
+    elements.list.innerHTML = '<li class="fin-cash-empty">No hay ingresos ni gastos registrados para esta caja en el día seleccionado.</li>';
     return;
   }
 
@@ -217,15 +226,27 @@ function renderLedger(records) {
     const edit = canManage && record.puede_editar
       ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-cash="${record.id}">Editar</button>`
       : "";
+    const deleting = state.deletingId === String(record.id);
+    const code = record.codigo || record.movimiento_codigo || `#${record.id}`;
+    const remove = canReverse && record.puede_anular !== false
+      ? `<button
+          class="fin-btn fin-btn-danger fin-btn-small"
+          type="button"
+          data-delete-cash="${record.id}"
+          aria-haspopup="dialog"
+          aria-label="Eliminar movimiento ${escapeHtml(code)}"
+          ${deleting ? 'disabled aria-busy="true"' : ""}
+        >${deleting ? "Eliminando…" : "Eliminar"}</button>`
+      : "";
     return `<li class="fin-cash-item ${income ? "is-income" : "is-expense"}">
       <span class="fin-cash-direction" aria-hidden="true">${sign}</span>
       <span class="fin-cash-item-copy">
         <strong>${escapeHtml(counterpartDescription(record))}</strong>
         <span>${escapeHtml(record.detalle)}</span>
-        <small>${escapeHtml(formatMovementTime(record.fecha_hora))} · ${escapeHtml(record.codigo || record.movimiento_codigo || `#${record.id}`)}${record.creado_por ? ` · ${escapeHtml(record.creado_por)}` : ""}</small>
+        <small>${escapeHtml(formatMovementTime(record.fecha_hora))} · ${escapeHtml(code)}${record.creado_por ? ` · ${escapeHtml(record.creado_por)}` : ""}</small>
       </span>
       <strong class="fin-cash-amount">${sign}${escapeHtml(formatMoney(record.importe, record.moneda))}</strong>
-      <span class="fin-cash-item-action">${edit}</span>
+      <span class="fin-cash-item-action">${edit}${remove}</span>
     </li>`;
   }).join("");
 }
@@ -334,8 +355,10 @@ function counterpartOptions() {
         ["OTRO", "Otro origen"]
       ]
     : [
-        ["OTRA_CAJA", "Hacia otra caja"],
-        ["OTRO", "Otro destino"]
+        ["ADMINISTRATIVO", "Administrativo"],
+        ["TRANSPORTE", "Transporte"],
+        ["DEPOSITO", "Depósito"],
+        ["OTRA_CAJA", "Otra caja"]
       ];
   elements.counterpartType.innerHTML = options.map(([value, label]) =>
     `<option value="${value}">${label}</option>`
@@ -349,7 +372,7 @@ function updateConditionalFields() {
   const income = elements.direction.value === "INGRESO";
   counterpartOptions();
   const type = elements.counterpartType.value;
-  elements.counterpartLabel.innerHTML = `${income ? "¿De dónde viene el dinero?" : "¿Hacia dónde sale el dinero?"} <b>*</b>`;
+  elements.counterpartLabel.innerHTML = `${income ? "¿De dónde viene el dinero?" : "Destino del gasto"} <b>*</b>`;
   elements.clientField.hidden = type !== "CLIENTE";
   elements.otherCashField.hidden = type !== "OTRA_CAJA";
   elements.otherCashLabel.innerHTML = `${income ? "Caja de origen" : "Caja de destino"} <b>*</b>`;
@@ -529,6 +552,41 @@ async function saveMovement(event) {
   }
 }
 
+async function deleteMovement(id) {
+  const record = state.records.get(String(id));
+  if (!record || !canReverse || state.deletingId !== null) return;
+
+  const kind = record.direccion === "INGRESO" ? "ingreso" : "gasto";
+  const amount = formatMoney(record.importe, record.moneda);
+  const confirmed = window.confirm(
+    `¿Eliminar este ${kind} de ${amount}?\n\nEl sistema conservará la trazabilidad mediante una reversa.`,
+  );
+  if (!confirmed) return;
+
+  state.deletingId = String(record.id);
+  renderLedger([...state.records.values()]);
+  setMessage(elements.listMessage, "Eliminando movimiento de efectivo…");
+
+  try {
+    await apiRequest(`/finanzas/caja-efectivo/${encodeURIComponent(record.id)}`, {
+      method: "DELETE"
+    });
+    channel?.postMessage({ companyId: state.companyId, type: "cash-register-updated" });
+
+    const pendingLoad = state.loadPromise;
+    if (pendingLoad) await pendingLoad;
+    await loadLedger();
+
+    state.deletingId = null;
+    renderLedger([...state.records.values()]);
+    setMessage(elements.listMessage, "Movimiento eliminado correctamente.", "success");
+  } catch (error) {
+    state.deletingId = null;
+    renderLedger([...state.records.values()]);
+    setMessage(elements.listMessage, errorMessage(error, "No se pudo eliminar el movimiento."), "error");
+  }
+}
+
 elements.saveDefault.addEventListener("click", saveDefaultCashRegister);
 elements.account.addEventListener("change", async () => {
   updateCurrency();
@@ -542,8 +600,10 @@ elements.direction.addEventListener("change", updateConditionalFields);
 elements.counterpartType.addEventListener("change", updateConditionalFields);
 elements.form.addEventListener("submit", saveMovement);
 elements.list.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-edit-cash]");
-  if (button) openEditDialog(button.dataset.editCash);
+  const editButton = event.target.closest("[data-edit-cash]");
+  const deleteButton = event.target.closest("[data-delete-cash]");
+  if (editButton) openEditDialog(editButton.dataset.editCash);
+  if (deleteButton) void deleteMovement(deleteButton.dataset.deleteCash);
 });
 document.querySelectorAll("[data-cash-dialog-close]").forEach((button) => {
   button.addEventListener("click", () => elements.dialog.close());

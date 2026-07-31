@@ -88,10 +88,14 @@ class CashRegisterQueryService
     }
 
     /** @return array<string, mixed> */
-    public function movement(int $companyId, int $cashMovementId, int $cashRegisterId): array
-    {
+    public function movement(
+        int $companyId,
+        int $cashMovementId,
+        int $cashRegisterId,
+        bool $includeVoided = false,
+    ): array {
         $this->cashRegister($companyId, $cashRegisterId);
-        $row = $this->query($companyId, $cashRegisterId)
+        $row = $this->query($companyId, $cashRegisterId, $includeVoided)
             ->where('movimiento.id', $cashMovementId)
             ->first();
         abort_unless($row, 404, 'Movimiento de caja no encontrado para la caja seleccionada.');
@@ -103,8 +107,11 @@ class CashRegisterQueryService
         )[0];
     }
 
-    private function query(int $companyId, int $cashRegisterId): Builder
-    {
+    private function query(
+        int $companyId,
+        int $cashRegisterId,
+        bool $includeVoided = false,
+    ): Builder {
         return DB::table('movimientos_caja_efectivo as movimiento')
             ->join('pagos as pago', 'pago.id', '=', 'movimiento.pago_id')
             ->join('cuentas_financieras as caja_principal', 'caja_principal.id', '=', 'movimiento.caja_id')
@@ -113,10 +120,12 @@ class CashRegisterQueryService
             ->leftJoin('entidades_financieras as otra_entidad', 'otra_entidad.id', '=', 'otra_caja.entidad_financiera_id')
             ->leftJoin('terceros as cliente', 'cliente.id', '=', 'movimiento.cliente_id')
             ->leftJoin('usuarios as creador', 'creador.id', '=', 'movimiento.created_by')
+            ->leftJoin('usuarios as anulador', 'anulador.id', '=', 'pago.anulada_por')
             ->where('movimiento.empresa_id', $companyId)
-            ->where('movimiento.estado', MovimientoCajaEfectivo::STATUS_REGISTERED)
-            ->where('pago.estado', Pago::STATUS_REGISTERED)
-            ->whereNull('pago.reversa_de_pago_id')
+            ->when(! $includeVoided, fn (Builder $query) => $query
+                ->where('movimiento.estado', MovimientoCajaEfectivo::STATUS_REGISTERED)
+                ->where('pago.estado', Pago::STATUS_REGISTERED)
+                ->whereNull('pago.reversa_de_pago_id'))
             ->where(function (Builder $query) use ($cashRegisterId): void {
                 $query->where('movimiento.caja_id', $cashRegisterId)
                     ->orWhere('movimiento.otra_caja_id', $cashRegisterId);
@@ -129,6 +138,9 @@ class CashRegisterQueryService
                 'pago.importe',
                 'pago.cuenta_origen_id',
                 'pago.cuenta_destino_id',
+                'pago.estado as pago_estado',
+                'pago.anulada_at',
+                'pago.motivo_anulacion',
                 'pago.updated_at as pago_updated_at',
                 'caja_principal.alias as caja_principal_alias',
                 'entidad_principal.razon_social as entidad_principal_nombre',
@@ -137,6 +149,7 @@ class CashRegisterQueryService
                 'cliente.nombre_razon_social as cliente_nombre',
                 'cliente.numero_documento as cliente_documento',
                 'creador.nombre as creador_nombre',
+                'anulador.nombre as anulador_nombre',
             ]);
     }
 
@@ -167,8 +180,23 @@ class CashRegisterQueryService
                         ? $movement->otra_entidad_nombre
                         : $movement->entidad_principal_nombre,
                 ],
+                MovimientoCajaEfectivo::COUNTERPART_ADMINISTRATIVE => [
+                    'tipo' => MovimientoCajaEfectivo::COUNTERPART_ADMINISTRATIVE,
+                    'id' => null,
+                    'nombre' => 'Administrativo',
+                ],
+                MovimientoCajaEfectivo::COUNTERPART_TRANSPORT => [
+                    'tipo' => MovimientoCajaEfectivo::COUNTERPART_TRANSPORT,
+                    'id' => null,
+                    'nombre' => 'Transporte',
+                ],
+                MovimientoCajaEfectivo::COUNTERPART_DEPOSIT => [
+                    'tipo' => MovimientoCajaEfectivo::COUNTERPART_DEPOSIT,
+                    'id' => null,
+                    'nombre' => 'Depósito',
+                ],
                 default => [
-                    'tipo' => MovimientoCajaEfectivo::COUNTERPART_OTHER,
+                    'tipo' => $movement->contraparte_tipo,
                     'id' => null,
                     'nombre' => $direction === MovimientoCajaEfectivo::DIRECTION_INCOME
                         ? 'Otro origen'
@@ -216,6 +244,7 @@ class CashRegisterQueryService
                 'detalle' => $movement->detalle,
                 'moneda' => $movement->moneda,
                 'importe' => FinancialMoney::normalize((string) $movement->importe),
+                'estado' => $movement->estado,
                 'caja_contexto_id' => $cashRegisterId,
                 'caja_principal_id' => (int) $movement->caja_id,
                 'creado_por' => $movement->creador_nombre,
@@ -223,7 +252,16 @@ class CashRegisterQueryService
                     (string) ($movement->pago_updated_at ?: $movement->updated_at),
                     $this->databaseTimezone(),
                 )->setTimezone($timezone)->toIso8601String(),
-                'puede_editar' => true,
+                'anulada_por' => $movement->anulador_nombre,
+                'anulada_at' => $movement->anulada_at === null
+                    ? null
+                    : CarbonImmutable::parse(
+                        (string) $movement->anulada_at,
+                        $this->databaseTimezone(),
+                    )->setTimezone($timezone)->toIso8601String(),
+                'motivo_anulacion' => $movement->motivo_anulacion,
+                'puede_editar' => $movement->estado === MovimientoCajaEfectivo::STATUS_REGISTERED,
+                'puede_anular' => $movement->estado === MovimientoCajaEfectivo::STATUS_REGISTERED,
             ];
         })->values()->all();
     }

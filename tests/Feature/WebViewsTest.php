@@ -169,6 +169,10 @@ class WebViewsTest extends TestCase
         $this->get('/finanzas/caja-efectivo')
             ->assertOk()
             ->assertSee('Caja de efectivo')
+            ->assertSee('Gastos del día')
+            ->assertSee('Nuevo ingreso o gasto')
+            ->assertSee('<option value="EGRESO">Gasto</option>', false)
+            ->assertDontSee('Egresos del día')
             ->assertSee('id="cashRegisterAccount"', false)
             ->assertSee('id="cashRegisterDate"', false)
             ->assertSee('id="cashRegisterIncome"', false)
@@ -323,6 +327,13 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('POLL_INTERVAL = 3000', $cashRegisterJavascript);
         $this->assertStringContainsString('BroadcastChannel', $cashRegisterJavascript);
         $this->assertStringContainsString('aria-activedescendant', $cashRegisterJavascript);
+        $this->assertMatchesRegularExpression(
+            '/\["ADMINISTRATIVO", "Administrativo"\].*\["TRANSPORTE", "Transporte"\].*\["DEPOSITO", "Depósito"\].*\["OTRA_CAJA", "Otra caja"\]/s',
+            $cashRegisterJavascript,
+        );
+        $this->assertStringContainsString('data-delete-cash', $cashRegisterJavascript);
+        $this->assertStringContainsString('method: "DELETE"', $cashRegisterJavascript);
+        $this->assertStringContainsString('window.confirm', $cashRegisterJavascript);
         $this->assertStringNotContainsString('numero_operacion', $cashRegisterJavascript);
         $this->assertStringContainsString('/finanzas/descuentos-clientes', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);

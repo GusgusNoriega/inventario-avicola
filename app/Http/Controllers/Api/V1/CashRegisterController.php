@@ -76,4 +76,28 @@ class CashRegisterController extends Controller
             ),
         ]);
     }
+
+    public function destroy(Request $request, int $movimientoCaja): JsonResponse
+    {
+        $result = $this->movements->void(
+            (int) $request->user()->empresa_id,
+            $request->user(),
+            $movimientoCaja,
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => $result['idempotent']
+                ? 'El movimiento de efectivo ya estaba anulado.'
+                : 'Movimiento de efectivo anulado y revertido correctamente.',
+            'data' => $this->queries->movement(
+                (int) $request->user()->empresa_id,
+                $movimientoCaja,
+                $result['caja_id'],
+                true,
+            ),
+            'reversa_id' => $result['reversa_id'],
+            'meta' => ['idempotent' => $result['idempotent']],
+        ]);
+    }
 }

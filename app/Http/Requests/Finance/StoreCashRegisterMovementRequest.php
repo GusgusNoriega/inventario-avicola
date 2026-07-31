@@ -27,11 +27,13 @@ class StoreCashRegisterMovementRequest extends FinancialFormRequest
         $direction = strtoupper(trim((string) $this->input('direccion')));
         $counterpart = strtoupper(trim((string) $this->input('contraparte_tipo')));
         $allowedCounterparts = $direction === MovimientoCajaEfectivo::DIRECTION_EXPENSE
-            ? [
-                MovimientoCajaEfectivo::COUNTERPART_CASH_REGISTER,
-                MovimientoCajaEfectivo::COUNTERPART_OTHER,
-            ]
-            : MovimientoCajaEfectivo::COUNTERPARTS;
+            ? MovimientoCajaEfectivo::EXPENSE_COUNTERPARTS
+            : MovimientoCajaEfectivo::INCOME_COUNTERPARTS;
+
+        if ($direction === MovimientoCajaEfectivo::DIRECTION_EXPENSE
+            && $this->allowsLegacyExpenseOther()) {
+            $allowedCounterparts[] = MovimientoCajaEfectivo::COUNTERPART_OTHER;
+        }
 
         return [
             'caja_id' => ['required', 'integer', 'min:1'],
@@ -69,5 +71,10 @@ class StoreCashRegisterMovementRequest extends FinancialFormRequest
             'importe' => $this->normalizedMoney('importe'),
             'detalle' => trim((string) $this->input('detalle')),
         ]);
+    }
+
+    protected function allowsLegacyExpenseOther(): bool
+    {
+        return false;
     }
 }

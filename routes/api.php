@@ -94,6 +94,9 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/caja-efectivo/{movimientoCaja}', [CashRegisterController::class, 'update'])
             ->whereNumber('movimientoCaja')
             ->middleware(['permission:PAGOS_REGISTRAR', 'permission:SALDOS_AJUSTAR']);
+        Route::delete('/caja-efectivo/{movimientoCaja}', [CashRegisterController::class, 'destroy'])
+            ->whereNumber('movimientoCaja')
+            ->middleware('permission:PAGOS_ANULAR');
         Route::put('/movimientos/{movimiento}', [FinancialMovementController::class, 'update'])
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_REGISTRAR');

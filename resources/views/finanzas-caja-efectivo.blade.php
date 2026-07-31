@@ -18,7 +18,7 @@
       'active' => 'caja-efectivo',
       'eyebrow' => 'Control de efectivo',
       'title' => 'Caja de efectivo',
-      'description' => 'Registra ingresos y egresos en efectivo, revisa el movimiento del día y trabaja siempre con tu caja habitual.'
+      'description' => 'Registra ingresos y gastos en efectivo, revisa el movimiento del día y trabaja siempre con tu caja habitual.'
     ])
 
     <section class="fin-card fin-cash-config" aria-labelledby="cashRegisterConfigTitle">
@@ -54,13 +54,13 @@
         <strong id="cashRegisterIncome">S/ 0.00</strong>
       </article>
       <article class="fin-summary-card fin-cash-summary-expense">
-        <span>Egresos del día</span>
+        <span>Gastos del día</span>
         <small>Dinero que salió de la caja</small>
         <strong id="cashRegisterExpense">S/ 0.00</strong>
       </article>
       <article class="fin-summary-card fin-cash-summary-net">
         <span>Total neto del día</span>
-        <small>Ingresos menos egresos</small>
+        <small>Ingresos menos gastos</small>
         <strong id="cashRegisterNet">S/ 0.00</strong>
       </article>
     </section>
@@ -84,7 +84,7 @@
           <span>El formulario no solicita número de operación porque esta vista maneja únicamente dinero en efectivo.</span>
         </div>
         <button id="cashRegisterAdd" class="fin-btn fin-btn-primary" type="button" aria-haspopup="dialog" aria-controls="cashRegisterDialog">
-          Nuevo ingreso o egreso
+          Nuevo ingreso o gasto
         </button>
       </footer>
     </section>
@@ -106,7 +106,7 @@
           <span>Tipo de movimiento <b>*</b></span>
           <select id="cashRegisterDirection" required>
             <option value="INGRESO">Ingreso</option>
-            <option value="EGRESO">Egreso</option>
+            <option value="EGRESO">Gasto</option>
           </select>
         </label>
         <label class="fin-field">

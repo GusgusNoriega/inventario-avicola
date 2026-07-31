@@ -27,6 +27,7 @@ class CashRegisterMovementService
         ?string $ip = null,
     ): array {
         $this->assertCanRegister($companyId, $actor);
+        $this->assertSupportedCounterpart($data);
 
         return DB::transaction(function () use ($companyId, $actor, $data, $ip): array {
             $context = $this->context($companyId, $data);
@@ -117,6 +118,7 @@ class CashRegisterMovementService
                     'movimiento' => 'Solo se puede editar un movimiento de caja vigente.',
                 ]);
             }
+            $this->assertSupportedCounterpart($data, $cashMovement);
 
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -204,6 +206,99 @@ class CashRegisterMovementService
                 $after,
                 $ip,
             );
+        }, 3);
+    }
+
+    /** @return array{movimiento_caja_id: int, caja_id: int, reversa_id: int, idempotent: bool} */
+    public function void(
+        int $companyId,
+        User $actor,
+        int $cashMovementId,
+        ?string $ip = null,
+    ): array {
+        $this->assertCanVoid($companyId, $actor);
+
+        return DB::transaction(function () use ($companyId, $actor, $cashMovementId, $ip): array {
+            $cashMovement = DB::table('movimientos_caja_efectivo')
+                ->where('empresa_id', $companyId)
+                ->where('id', $cashMovementId)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($cashMovement, 404, 'Movimiento de caja no encontrado.');
+
+            $payment = DB::table('pagos')
+                ->where('empresa_id', $companyId)
+                ->where('id', $cashMovement->pago_id)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($payment, 409, 'El movimiento de caja no tiene un asiento financiero valido.');
+
+            if ($cashMovement->estado === MovimientoCajaEfectivo::STATUS_VOIDED) {
+                $reverseId = DB::table('pagos')
+                    ->where('empresa_id', $companyId)
+                    ->where('reversa_de_pago_id', $payment->id)
+                    ->value('id');
+                abort_unless($reverseId, 409, 'El movimiento de caja esta anulado, pero no se encontro su reversa.');
+
+                return [
+                    'movimiento_caja_id' => $cashMovementId,
+                    'caja_id' => (int) $cashMovement->caja_id,
+                    'reversa_id' => (int) $reverseId,
+                    'idempotent' => true,
+                ];
+            }
+            if ($cashMovement->estado !== MovimientoCajaEfectivo::STATUS_REGISTERED) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'El movimiento de caja no esta vigente y no puede anularse.',
+                ]);
+            }
+
+            $reason = 'Eliminación del movimiento de caja '.($cashMovement->codigo ?: '#'.$cashMovementId);
+            $before = [
+                ...(array) $cashMovement,
+                'pago' => (array) $payment,
+            ];
+            $result = $this->movements->void(
+                $companyId,
+                $actor,
+                (int) $payment->id,
+                $reason,
+                $ip,
+            );
+
+            $voidedAt = now();
+            DB::table('movimientos_caja_efectivo')
+                ->where('id', $cashMovementId)
+                ->update([
+                    'estado' => MovimientoCajaEfectivo::STATUS_VOIDED,
+                    'updated_at' => $voidedAt,
+                ]);
+
+            $after = (array) DB::table('movimientos_caja_efectivo')
+                ->where('id', $cashMovementId)
+                ->first();
+            $after['pago'] = (array) DB::table('pagos')
+                ->where('id', $payment->id)
+                ->first();
+            $after['reversa_id'] = $result['reversa_id'];
+            $after['motivo_anulacion'] = $reason;
+            $this->audit->record(
+                $companyId,
+                $actor->id,
+                'movimientos_caja_efectivo',
+                $cashMovementId,
+                'ANULAR',
+                $before,
+                $after,
+                $ip,
+            );
+
+            return [
+                'movimiento_caja_id' => $cashMovementId,
+                'caja_id' => (int) $cashMovement->caja_id,
+                'reversa_id' => $result['reversa_id'],
+                'idempotent' => false,
+            ];
         }, 3);
     }
 
@@ -367,6 +462,43 @@ class CashRegisterMovementService
             403,
             'Se requieren permisos para registrar y ajustar movimientos de caja.',
         );
+    }
+
+    private function assertCanVoid(int $companyId, User $actor): void
+    {
+        abort_unless(
+            (int) $actor->empresa_id === $companyId
+                && $actor->isActive()
+                && $actor->hasPermission('PAGOS_ANULAR'),
+            403,
+            'Se requiere permiso para anular movimientos de caja.',
+        );
+    }
+
+    /** @param array<string, mixed> $data */
+    private function assertSupportedCounterpart(array $data, ?object $existing = null): void
+    {
+        $direction = (string) ($data['direccion'] ?? '');
+        $counterpart = (string) ($data['contraparte_tipo'] ?? '');
+        if (! in_array($direction, MovimientoCajaEfectivo::DIRECTIONS, true)) {
+            throw ValidationException::withMessages([
+                'direccion' => 'La direccion del movimiento de caja no es valida.',
+            ]);
+        }
+
+        $allowed = $direction === MovimientoCajaEfectivo::DIRECTION_INCOME
+            ? MovimientoCajaEfectivo::INCOME_COUNTERPARTS
+            : MovimientoCajaEfectivo::EXPENSE_COUNTERPARTS;
+        $keepsLegacyExpenseOther = $direction === MovimientoCajaEfectivo::DIRECTION_EXPENSE
+            && $counterpart === MovimientoCajaEfectivo::COUNTERPART_OTHER
+            && $existing?->direccion === MovimientoCajaEfectivo::DIRECTION_EXPENSE
+            && $existing?->contraparte_tipo === MovimientoCajaEfectivo::COUNTERPART_OTHER;
+
+        if (! in_array($counterpart, $allowed, true) && ! $keepsLegacyExpenseOther) {
+            throw ValidationException::withMessages([
+                'contraparte_tipo' => 'La contraparte no corresponde a la direccion del movimiento.',
+            ]);
+        }
     }
 
     private function companyTimezone(int $companyId): string

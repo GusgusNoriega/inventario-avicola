@@ -35,15 +35,40 @@ class MovimientoCajaEfectivo extends Model
 
     public const COUNTERPART_CASH_REGISTER = 'OTRA_CAJA';
 
+    public const COUNTERPART_ADMINISTRATIVE = 'ADMINISTRATIVO';
+
+    public const COUNTERPART_TRANSPORT = 'TRANSPORTE';
+
+    public const COUNTERPART_DEPOSIT = 'DEPOSITO';
+
     public const COUNTERPART_OTHER = 'OTRO';
 
-    public const COUNTERPARTS = [
+    public const INCOME_COUNTERPARTS = [
         self::COUNTERPART_CUSTOMER,
         self::COUNTERPART_CASH_REGISTER,
         self::COUNTERPART_OTHER,
     ];
 
+    public const EXPENSE_COUNTERPARTS = [
+        self::COUNTERPART_ADMINISTRATIVE,
+        self::COUNTERPART_TRANSPORT,
+        self::COUNTERPART_DEPOSIT,
+        self::COUNTERPART_CASH_REGISTER,
+    ];
+
+    /** @deprecated Use the direction-specific counterpart constants. */
+    public const COUNTERPARTS = [
+        self::COUNTERPART_CUSTOMER,
+        self::COUNTERPART_CASH_REGISTER,
+        self::COUNTERPART_OTHER,
+        self::COUNTERPART_ADMINISTRATIVE,
+        self::COUNTERPART_TRANSPORT,
+        self::COUNTERPART_DEPOSIT,
+    ];
+
     public const STATUS_REGISTERED = 'REGISTRADO';
+
+    public const STATUS_VOIDED = 'ANULADO';
 
     protected $table = 'movimientos_caja_efectivo';
 
