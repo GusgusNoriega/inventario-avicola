@@ -43,9 +43,9 @@ class ReportController extends Controller
             'providers' => $thirdParties('PROVEEDOR'),
             'users' => DB::table('usuarios')
                 ->where('empresa_id', $companyId)
-                ->where('estado', 'ACTIVO')
+                ->orderBy('estado')
                 ->orderBy('nombre')
-                ->get(['id', 'nombre']),
+                ->get(['id', 'nombre', 'estado']),
             'paymentMethods' => DB::table('metodos_pago')
                 ->where('estado', 'ACTIVO')
                 ->orderBy('nombre')
@@ -199,6 +199,7 @@ class ReportController extends Controller
             $rules['tipo'] = ['nullable', 'string', Rule::in(Pago::TYPES)];
             $rules['metodo_pago_id'] = ['nullable', 'integer'];
             $rules['cuenta_id'] = ['nullable', 'integer'];
+            $rules['usuario_id'] = ['nullable', 'integer'];
         }
         if ($type === 'responsable') {
             $rules['usuario_id'] = ['required', 'integer'];
@@ -214,6 +215,19 @@ class ReportController extends Controller
             if (! $selectedAccount) {
                 throw ValidationException::withMessages([
                     'cuenta_id' => 'La cuenta seleccionada no pertenece a una empresa propia.',
+                ]);
+            }
+        }
+        $selectedUser = null;
+        if (isset($validated['usuario_id'])) {
+            $selectedUser = DB::table('usuarios')
+                ->where('empresa_id', $companyId)
+                ->where('id', (int) $validated['usuario_id'])
+                ->first(['id', 'nombre', 'estado']);
+
+            if (! $selectedUser) {
+                throw ValidationException::withMessages([
+                    'usuario_id' => 'El usuario seleccionado no pertenece a esta empresa.',
                 ]);
             }
         }
@@ -247,6 +261,7 @@ class ReportController extends Controller
             'to' => $validated['hasta'],
             'data' => $data,
             'selectedAccount' => $selectedAccount,
+            'selectedUser' => $selectedUser,
             'generatedAt' => now($company->zona_horaria ?: config('app.timezone')),
             'validated' => $validated,
         ];

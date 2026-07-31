@@ -58,6 +58,12 @@
     </div>
   @endif
 
+  @if(($selectedUser ?? null) && $type === 'pagos')
+    <div class="subject">
+      Usuario filtrado: <strong>{{ $selectedUser->nombre }}</strong>
+    </div>
+  @endif
+
   @if(in_array($type, ['estado-cliente', 'estado-proveedor'], true))
     <div class="subject">
       {{ $type === 'estado-cliente' ? 'Cliente' : 'Proveedor' }}:

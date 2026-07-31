@@ -48,9 +48,22 @@ class ReportPdfTest extends TestCase
             ->assertDontSee('Reporte de ventas por zonas');
     }
 
-    public function test_reports_page_shows_the_csv_download_only_for_payments(): void
+    public function test_reports_page_shows_the_csv_download_and_optional_user_filter_for_payments(): void
     {
+        $inactiveUser = $this->createUserForCompany($this->user, [
+            'nombre' => 'Usuario inactivo reporte',
+            'estado' => User::STATUS_INACTIVE,
+        ]);
+        $otherTenantUser = User::factory()->create([
+            'nombre' => 'Usuario otro tenant reporte',
+        ]);
         $response = $this->get(route('finanzas.reportes'))->assertOk();
+        $response->assertViewHas('users', function ($users) use ($inactiveUser, $otherTenantUser): bool {
+            $userIds = $users->pluck('id')->map(fn (mixed $id): int => (int) $id);
+
+            return $userIds->contains($inactiveUser->id)
+                && ! $userIds->contains($otherTenantUser->id);
+        });
         $document = new \DOMDocument('1.0', 'UTF-8');
         $loaded = @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
 
@@ -70,6 +83,24 @@ class ReportPdfTest extends TestCase
         $form = $forms->item(0);
         $this->assertInstanceOf(\DOMElement::class, $form);
         $this->assertSame(route('finanzas.reportes.pdf', 'pagos'), $form->getAttribute('action'));
+
+        $userFields = $xpath->query('.//select[@name="usuario_id"]', $form);
+        $this->assertNotFalse($userFields);
+        $this->assertSame(1, $userFields->length);
+        $userField = $userFields->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $userField);
+        $this->assertFalse($userField->hasAttribute('required'));
+        $this->assertSame(
+            'Todos los usuarios',
+            trim((string) $xpath->evaluate('string(option[1])', $userField)),
+        );
+        $inactiveOption = $xpath->query('.//option[@value="'.$inactiveUser->id.'"]', $userField);
+        $this->assertNotFalse($inactiveOption);
+        $this->assertSame(1, $inactiveOption->length);
+        $this->assertStringContainsString('Inactivo', trim($inactiveOption->item(0)?->textContent ?? ''));
+        $otherTenantOption = $xpath->query('.//option[@value="'.$otherTenantUser->id.'"]', $userField);
+        $this->assertNotFalse($otherTenantOption);
+        $this->assertSame(0, $otherTenantOption->length);
     }
 
     public function test_reports_page_lists_only_own_tenant_accounts_and_includes_inactive_accounts(): void
@@ -152,7 +183,7 @@ class ReportPdfTest extends TestCase
             ->assertSessionHasErrors('cuenta_id');
     }
 
-    public function test_payments_report_filters_by_origin_or_destination_account_and_recalculates_totals(): void
+    public function test_payments_report_combines_account_and_user_filters_and_recalculates_totals(): void
     {
         $selectedAccount = $this->financialAccount(
             EntidadFinanciera::TYPE_OWN,
@@ -162,6 +193,7 @@ class ReportPdfTest extends TestCase
             EntidadFinanciera::TYPE_OWN,
             'Cuenta no seleccionada pagos reporte',
         );
+        $otherUser = $this->createUserForCompany($this->user, ['nombre' => 'Otro usuario pagos reporte']);
         $this->reportPayment('PG-CUENTA-DESTINO', [
             'cuenta_destino_id' => $selectedAccount,
             'direccion' => Pago::DIRECTION_INCOME,
@@ -184,12 +216,21 @@ class ReportPdfTest extends TestCase
             'direccion' => Pago::DIRECTION_INCOME,
             'importe' => '900.00',
         ]);
+        $this->reportPayment('PG-OTRO-USUARIO', [
+            'cuenta_destino_id' => $selectedAccount,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '800.00',
+            'created_by' => $otherUser->id,
+        ]);
 
         $report = app(ReportDataService::class)->payments(
             (int) $this->user->empresa_id,
             '2026-07-01',
             '2026-07-31',
-            ['cuenta_id' => $selectedAccount],
+            [
+                'cuenta_id' => $selectedAccount,
+                'usuario_id' => $this->user->id,
+            ],
         );
 
         $this->assertSame(
@@ -198,12 +239,14 @@ class ReportPdfTest extends TestCase
         );
         $this->assertSame(1, $report['rows']->where('code', 'PG-CUENTA-TRANSFERENCIA')->count());
         $this->assertFalse($report['rows']->pluck('code')->contains('PG-OTRA-CUENTA'));
+        $this->assertFalse($report['rows']->pluck('code')->contains('PG-OTRO-USUARIO'));
+        $this->assertSame([$this->user->nombre], $report['rows']->pluck('user')->unique()->values()->all());
         $this->assertSame(120.0, (float) $report['income']);
         $this->assertSame(45.0, (float) $report['expense']);
         $this->assertSame(185.0, (float) $report['total']);
     }
 
-    public function test_payments_csv_is_excel_compatible_and_respects_account_and_date_filters(): void
+    public function test_payments_csv_is_excel_compatible_and_respects_account_user_and_date_filters(): void
     {
         $selectedAccount = $this->financialAccount(
             EntidadFinanciera::TYPE_OWN,
@@ -213,6 +256,7 @@ class ReportPdfTest extends TestCase
             EntidadFinanciera::TYPE_OWN,
             'Caja no seleccionada CSV',
         );
+        $otherUser = $this->createUserForCompany($this->user, ['nombre' => 'Otro usuario CSV']);
         $this->reportPayment('PG-CSV-INICIO', [
             'cuenta_destino_id' => $selectedAccount,
             'fecha_hora' => '2026-07-01 00:00:00',
@@ -247,9 +291,16 @@ class ReportPdfTest extends TestCase
             'fecha_hora' => '2026-07-15 10:00:00',
             'importe' => '900.00',
         ]);
+        $this->reportPayment('PG-CSV-OTRO-USUARIO', [
+            'cuenta_destino_id' => $selectedAccount,
+            'fecha_hora' => '2026-07-15 11:00:00',
+            'importe' => '800.00',
+            'created_by' => $otherUser->id,
+        ]);
 
         $response = $this->get(route('finanzas.reportes.pagos.csv', [
             'cuenta_id' => $selectedAccount,
+            'usuario_id' => $this->user->id,
             'desde' => '2026-07-01',
             'hasta' => '2026-07-31',
         ]));
@@ -291,6 +342,7 @@ class ReportPdfTest extends TestCase
         );
         $this->assertSame(['INGRESO', 'SIN_FLUJO', 'EGRESO'], array_column($rows, 7));
         $this->assertSame(['120,50', '20,00', '45,00'], array_column($rows, 8));
+        $this->assertSame([$this->user->nombre], array_values(array_unique(array_column($rows, 6))));
         $this->assertSame(
             'Entidad Caja Ñandú; "Principal" - Caja Ñandú; "Principal" - Referencia; "especial"',
             $rows[0][5],
@@ -319,6 +371,28 @@ class ReportPdfTest extends TestCase
                 ]))
                 ->assertRedirect(route('finanzas.reportes'))
                 ->assertSessionHasErrors('cuenta_id');
+        }
+    }
+
+    public function test_payments_pdf_image_and_csv_reject_a_user_from_another_tenant(): void
+    {
+        $otherTenantUser = User::factory()->create();
+        $query = [
+            'usuario_id' => $otherTenantUser->id,
+            'desde' => '2026-07-01',
+            'hasta' => '2026-07-31',
+        ];
+        $urls = [
+            route('finanzas.reportes.pdf', ['type' => 'pagos', ...$query]),
+            route('finanzas.reportes.imagen', ['type' => 'pagos', ...$query]),
+            route('finanzas.reportes.pagos.csv', $query),
+        ];
+
+        foreach ($urls as $url) {
+            $this->from(route('finanzas.reportes'))
+                ->get($url)
+                ->assertRedirect(route('finanzas.reportes'))
+                ->assertSessionHasErrors('usuario_id');
         }
     }
 

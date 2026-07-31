@@ -59,11 +59,12 @@
       </article>
 
       <article class="report-card fin-card">
-        <div class="report-card-heading"><span>04</span><div><h2>Pagos y cobros</h2><p>Listado general con filtros opcionales por cuenta, tipo y método de pago.</p></div></div>
+        <div class="report-card-heading"><span>04</span><div><h2>Pagos y cobros</h2><p>Listado general con filtros opcionales por cuenta, usuario, tipo y método de pago.</p></div></div>
         <form method="GET" action="{{ route('finanzas.reportes.pdf', 'pagos') }}" target="_blank" class="report-form">
           <label class="fin-field"><span>Tipo</span><select name="tipo"><option value="">Todos</option>@foreach($paymentTypes as $paymentType)<option value="{{ $paymentType }}">{{ str_replace('_', ' ', $paymentType) }}</option>@endforeach</select></label>
           <label class="fin-field"><span>Metodo</span><select name="metodo_pago_id"><option value="">Todos</option>@foreach($paymentMethods as $method)<option value="{{ $method->id }}">{{ $method->nombre }}</option>@endforeach</select></label>
           @include('reports.partials.account-field')
+          @include('reports.partials.user-field', ['required' => false, 'label' => 'Usuario responsable'])
           @include('reports.partials.date-fields')
           @include('reports.partials.form-actions', ['reportType' => 'pagos'])
         </form>
@@ -72,7 +73,7 @@
       <article class="report-card fin-card">
         <div class="report-card-heading"><span>05</span><div><h2>Movimientos por responsable</h2><p>Equivalente al reporte de cobrador, usando el usuario que registro cada movimiento.</p></div></div>
         <form method="GET" action="{{ route('finanzas.reportes.pdf', 'responsable') }}" target="_blank" class="report-form">
-          <label class="fin-field report-wide"><span>Responsable</span><select name="usuario_id" required><option value="">Selecciona un usuario</option>@foreach($users as $user)<option value="{{ $user->id }}">{{ $user->nombre }}</option>@endforeach</select></label>
+          @include('reports.partials.user-field', ['required' => true, 'label' => 'Responsable'])
           @include('reports.partials.account-field')
           @include('reports.partials.date-fields')
           @include('reports.partials.form-actions', ['reportType' => 'responsable'])
