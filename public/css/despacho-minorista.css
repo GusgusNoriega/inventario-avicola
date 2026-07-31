@@ -1665,18 +1665,19 @@ body.has-retail-client-keyboard .rd-client-options {
 .rd-touch-keyboard-row button {
   flex: 1 1 0;
   max-width: 88px;
+  font-size: calc(var(--rd-font-modal-button) * 1.75);
 }
 
 .rd-touch-keyboard-keys.is-numeric button {
   max-width: none;
   min-height: 58px;
-  font-size: calc(var(--rd-font-modal-button) * 2.18);
+  font-size: calc(var(--rd-font-modal-button) * 2.5);
 }
 
 .rd-touch-keyboard-row button.is-shift {
   flex: 1.35 1 0;
   max-width: 112px;
-  font-size: calc(var(--rd-font-modal-button) * 1.08);
+  font-size: calc(var(--rd-font-modal-button) * 1.25);
 }
 
 .rd-touch-keyboard-row button.is-shift.is-active {
@@ -1779,11 +1780,11 @@ body.has-retail-client-keyboard .rd-client-options {
     min-width: 0;
     min-height: 42px;
     padding: 4px 2px;
-    font-size: calc(var(--rd-font-modal-button) * 1.17);
+    font-size: calc(var(--rd-font-modal-button) * 1.42);
   }
 
   .rd-touch-keyboard-row button.is-shift {
-    font-size: calc(var(--rd-font-modal-button) * 0.83);
+    font-size: calc(var(--rd-font-modal-button) * 1.08);
   }
 }
 

@@ -47,4 +47,22 @@ class RetailClientKeyboardLayoutTest extends TestCase
         $this->assertStringContainsString('top: var(--rd-client-keyboard-start);', $stylesheet);
         $this->assertStringContainsString('@media (max-height: 680px)', $stylesheet);
     }
+
+    public function test_touch_keyboard_uses_large_labels_on_desktop_and_mobile(): void
+    {
+        $stylesheet = (string) file_get_contents(public_path('css/despacho-minorista.css'));
+
+        $this->assertStringContainsString(
+            'font-size: calc(var(--rd-font-modal-button) * 1.75);',
+            $stylesheet,
+        );
+        $this->assertStringContainsString(
+            'font-size: calc(var(--rd-font-modal-button) * 2.5);',
+            $stylesheet,
+        );
+        $this->assertStringContainsString(
+            'font-size: calc(var(--rd-font-modal-button) * 1.42);',
+            $stylesheet,
+        );
+    }
 }
