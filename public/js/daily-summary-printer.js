@@ -23,14 +23,19 @@ function formatPrintWeight(value) {
 function formatPrintPrice(value) {
   const normalized = String(value ?? "").trim();
 
-  if (normalized === "VARIOS" || normalized === "SIN PRECIO") {
+  if (normalized === "SIN PRECIO") {
     return normalized;
   }
 
   if (!normalized) return "--";
 
   const numericValue = Number(normalized);
-  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "--";
+  if (!Number.isFinite(numericValue)) return "--";
+
+  const decimalPart = normalized.match(/^[+-]?\d+\.(\d+)$/)?.[1] || "";
+  const hasPrecisionBeyondCents = /[1-9]/.test(decimalPart.slice(2));
+
+  return numericValue.toFixed(hasPrecisionBeyondCents ? 4 : 2);
 }
 
 function formatPrintAmount(value) {

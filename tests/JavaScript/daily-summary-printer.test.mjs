@@ -42,7 +42,7 @@ test("la impresión de jornada contiene título, fecha, horario y tabla completa
   assert.doesNotMatch(html, /Menú|Jornada a consultar|Administrar tickets/);
 });
 
-test("la impresión distingue precios variados y faltantes sin inventar importes", () => {
+test("la impresión conserva filas separadas por tipo y precio sin usar VARIOS", () => {
   const html = buildDailySummaryPrintHtml({
     dateLabel: "31 de julio de 2026",
     windowLabel: "Desde 30/07/2026 a las 21:00 hasta 31/07/2026 a las 21:00.",
@@ -50,15 +50,21 @@ test("la impresión distingue precios variados y faltantes sin inventar importes
       <table>
         <thead><tr><th>Cliente</th><th>Ave</th><th>Num. javas</th><th>Cant. aves</th><th>Peso bruto</th><th>Tara</th><th>Devoluciones</th><th>Peso neto</th></tr></thead>
         <tbody>
-          <tr data-print-price="VARIOS" data-print-amount="123.4"><td>Cliente mixto</td></tr>
-          <tr data-print-price="SIN PRECIO" data-print-amount=""><td>Cliente incompleto</td></tr>
+          <tr data-print-price="8.5000" data-print-amount="85.00"><td>Cliente mixto</td><td>P V</td></tr>
+          <tr data-print-price="8.5040" data-print-amount="85.04"><td>Cliente mixto</td><td>P V</td></tr>
+          <tr data-print-price="10.0000" data-print-amount="500.00"><td>Cliente mixto</td><td>P P</td></tr>
+          <tr data-print-price="SIN PRECIO" data-print-amount=""><td>Cliente incompleto</td><td>P V</td></tr>
         </tbody>
       </table>
     `
   });
 
-  assert.match(html, /<td class="daily-client-price">VARIOS<\/td><td class="daily-client-amount">123\.40<\/td>/);
+  assert.match(html, /Cliente mixto<\/td><td>P V<\/td><td class="daily-client-price">8\.50<\/td><td class="daily-client-amount">85\.00<\/td>/);
+  assert.match(html, /Cliente mixto<\/td><td>P V<\/td><td class="daily-client-price">8\.5040<\/td><td class="daily-client-amount">85\.04<\/td>/);
+  assert.match(html, /Cliente mixto<\/td><td>P P<\/td><td class="daily-client-price">10\.00<\/td><td class="daily-client-amount">500\.00<\/td>/);
   assert.match(html, /<td class="daily-client-price">SIN PRECIO<\/td><td class="daily-client-amount">--<\/td>/);
+  assert.equal((html.match(/class="daily-client-price"/g) || []).length, 4);
+  assert.doesNotMatch(html, /VARIOS/);
   assert.doesNotMatch(html, /data-print-(?:price|amount)=/);
 });
 

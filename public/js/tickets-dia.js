@@ -34,6 +34,7 @@ let tickets = [];
 let selectedTicket = null;
 let loadedJourneyDate = "";
 let loadedJourneyWindow = "";
+let loadedClientSummaries = [];
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -52,12 +53,10 @@ function formatWeight(value) {
   return `${Number(value || 0).toFixed(3)} kg`;
 }
 
-function printPriceValue(pricing) {
-  if (pricing?.status === "SINGLE" && pricing.price_kg !== null) {
-    return String(pricing.price_kg);
-  }
+function printPriceValue(value) {
+  if (value === null || value === undefined || value === "") return "SIN PRECIO";
 
-  return pricing?.status === "MIXED" ? "VARIOS" : "SIN PRECIO";
+  return String(value);
 }
 
 function printAmountValue(value) {
@@ -138,7 +137,7 @@ function renderClientTotals(clients) {
   }
 
   clientTotals.innerHTML = items.map((item) => `
-    <tr data-print-price="${escapeHtml(printPriceValue(item.pricing))}" data-print-amount="${escapeHtml(printAmountValue(item.pricing?.amount))}">
+    <tr>
       <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
       <td><div class="daily-client-types">${renderClientTypes(item.chicken_types)}</div></td>
       <td>${formatNumber(item.cages)}</td>
@@ -149,6 +148,42 @@ function renderClientTotals(clients) {
       <td class="daily-client-net" data-print-weight="${Number(item.net_weight_kg || 0)}"><strong>${formatWeight(item.net_weight_kg)}</strong></td>
     </tr>
   `).join("");
+}
+
+export function renderClientPrintRows(clients) {
+  const items = Array.isArray(clients) ? clients : [];
+
+  return items.flatMap((item) => {
+    const rows = Array.isArray(item.print_rows) ? item.print_rows : [];
+
+    return rows.map((row) => `
+      <tr data-print-price="${escapeHtml(printPriceValue(row.price_kg))}" data-print-amount="${escapeHtml(printAmountValue(row.amount))}">
+        <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
+        <td><div class="daily-client-types">${renderClientTypes([row.chicken_type])}</div></td>
+        <td>${formatNumber(row.cages)}</td>
+        <td>${formatNumber(row.birds)}</td>
+        <td data-print-weight="${Number(row.gross_weight_kg || 0)}">${formatWeight(row.gross_weight_kg)}</td>
+        <td data-print-weight="${Number(row.tare_weight_kg || 0)}">${formatWeight(row.tare_weight_kg)}</td>
+        <td class="daily-client-return" data-print-weight="${Number(row.return_net_weight_kg || 0)}"><strong>${formatWeight(row.return_net_weight_kg)}</strong></td>
+        <td class="daily-client-net" data-print-weight="${Number(row.net_weight_kg || 0)}"><strong>${formatWeight(row.net_weight_kg)}</strong></td>
+      </tr>
+    `);
+  }).join("");
+}
+
+function buildDailySummaryPrintTable() {
+  const printTable = clientTable?.cloneNode(true);
+  const printBody = printTable?.querySelector("tbody");
+
+  if (!printTable || !printBody) return null;
+
+  printBody.innerHTML = renderClientPrintRows(loadedClientSummaries) || `
+    <tr>
+      <td colspan="8" class="customer-history-empty-cell">No hay movimientos de clientes para el día consultado.</td>
+    </tr>
+  `;
+
+  return printTable;
 }
 
 function statusLabel(status) {
@@ -291,6 +326,7 @@ function closeVoidModal() {
 async function loadDailyClientTotals() {
   loadedJourneyDate = "";
   loadedJourneyWindow = "";
+  loadedClientSummaries = [];
   renderMessage("Cargando resultados del día...");
   if (ticketFeedback) ticketFeedback.textContent = "Cargando tickets...";
   setJourneyLoading(true);
@@ -298,8 +334,10 @@ async function loadDailyClientTotals() {
   try {
     const response = await apiRequest(ticketEndpoint());
     const data = response.data || {};
+    const clients = data.summary?.by_client || [];
     updateJourneyContext(data);
-    renderClientTotals(data.summary?.by_client || []);
+    loadedClientSummaries = Array.isArray(clients) ? clients : [];
+    renderClientTotals(loadedClientSummaries);
     renderAdminTickets(data);
     return true;
   } catch (error) {
@@ -330,10 +368,12 @@ journeyPrint?.addEventListener("click", async () => {
     if (!loaded) return;
   }
 
+  const printableTable = buildDailySummaryPrintTable();
+
   printDailySummary({
     dateLabel: journeyDateLabel(loadedJourneyDate),
     windowLabel: loadedJourneyWindow,
-    table: clientTable,
+    table: printableTable,
     onError: () => renderMessage("No se pudo preparar la impresión de la jornada.")
   });
 });

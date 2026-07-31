@@ -240,10 +240,10 @@ class DailyDispatchTicketApiTest extends TestCase
         $this->assertArrayNotHasKey('amount', $ticket['summary']);
         $this->assertArrayNotHasKey('price_kg', $record);
         $this->assertArrayNotHasKey('amount', $record);
-        $this->assertArrayNotHasKey('pricing', $response->json('data.summary.by_client.0'));
+        $this->assertArrayNotHasKey('print_rows', $response->json('data.summary.by_client.0'));
     }
 
-    public function test_printable_daily_summary_calculates_mixed_prices_and_subtracts_returns(): void
+    public function test_printable_daily_summary_separates_types_and_subtracts_returns_from_the_matching_price(): void
     {
         $dispatchTicketId = $this->createTicket('T-20260626-PRICES', '2026-06-26', [
             [
@@ -286,16 +286,32 @@ class DailyDispatchTicketApiTest extends TestCase
 
         $this->getJson('/api/v1/operacion/tickets-dia?date=2026-06-26')
             ->assertOk()
-            ->assertJsonMissingPath('data.summary.by_client.0.pricing');
+            ->assertJsonMissingPath('data.summary.by_client.0.print_rows');
 
-        $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-26')
+        $response = $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-26')
             ->assertOk()
-            ->assertJsonPath('data.summary.by_client.0.pricing.status', 'MIXED')
-            ->assertJsonPath('data.summary.by_client.0.pricing.price_kg', null)
-            ->assertJsonPath('data.summary.by_client.0.pricing.amount', '1095.00');
+            ->assertJsonCount(1, 'data.summary.by_client')
+            ->assertJsonCount(2, 'data.summary.by_client.0.print_rows')
+            ->assertJsonPath('data.summary.by_client.0.net_weight_kg', 120);
+
+        $printRows = collect($response->json('data.summary.by_client.0.print_rows'))
+            ->keyBy(fn (array $row): string => $row['chicken_type']['code'].'|'.$row['price_kg']);
+        $liveRow = $printRows->get(TipoPollo::CHICKEN_LIVE.'|8.5000');
+        $dressedRow = $printRows->get(TipoPollo::CHICKEN_DRESSED.'|10.0000');
+
+        $this->assertIsArray($liveRow);
+        $this->assertSame(100, $liveRow['dispatch_net_weight_kg']);
+        $this->assertSame(30, $liveRow['return_net_weight_kg']);
+        $this->assertSame(70, $liveRow['net_weight_kg']);
+        $this->assertSame('595.00', $liveRow['amount']);
+        $this->assertIsArray($dressedRow);
+        $this->assertSame(50, $dressedRow['net_weight_kg']);
+        $this->assertSame(0, $dressedRow['return_net_weight_kg']);
+        $this->assertSame('500.00', $dressedRow['amount']);
+        $this->assertStringNotContainsString('VARIOS', $response->getContent());
     }
 
-    public function test_printable_daily_summary_rounds_each_record_and_marks_missing_prices(): void
+    public function test_printable_daily_summary_rounds_each_record_and_isolates_missing_prices(): void
     {
         $pricedTicketId = $this->createTicket('T-20260627-ROUND', '2026-06-27', [
             [
@@ -321,9 +337,9 @@ class DailyDispatchTicketApiTest extends TestCase
 
         $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-27')
             ->assertOk()
-            ->assertJsonPath('data.summary.by_client.0.pricing.status', 'SINGLE')
-            ->assertJsonPath('data.summary.by_client.0.pricing.price_kg', '1.00')
-            ->assertJsonPath('data.summary.by_client.0.pricing.amount', '0.68');
+            ->assertJsonCount(1, 'data.summary.by_client.0.print_rows')
+            ->assertJsonPath('data.summary.by_client.0.print_rows.0.price_kg', '1.0000')
+            ->assertJsonPath('data.summary.by_client.0.print_rows.0.amount', '0.68');
 
         $this->createTicket('T-20260628-NO-PRICE', '2026-06-28', [[
             'type_id' => $this->liveTypeId,
@@ -337,9 +353,59 @@ class DailyDispatchTicketApiTest extends TestCase
 
         $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-28')
             ->assertOk()
-            ->assertJsonPath('data.summary.by_client.0.pricing.status', 'INCOMPLETE')
-            ->assertJsonPath('data.summary.by_client.0.pricing.price_kg', null)
-            ->assertJsonPath('data.summary.by_client.0.pricing.amount', null);
+            ->assertJsonCount(1, 'data.summary.by_client.0.print_rows')
+            ->assertJsonPath('data.summary.by_client.0.print_rows.0.price_kg', null)
+            ->assertJsonPath('data.summary.by_client.0.print_rows.0.amount', null);
+    }
+
+    public function test_printable_daily_summary_separates_the_same_type_by_its_exact_price(): void
+    {
+        $firstTicketId = $this->createTicket('T-20260629-PRICE-A', '2026-06-29', [[
+            'type_id' => $this->liveTypeId,
+            'birds_per_cage' => 10,
+            'cages' => 1,
+            'gross_weight' => 17,
+            'tare_weight' => 7,
+            'net_weight' => 10,
+            'weighed_at' => '2026-06-29 09:15:00',
+        ]]);
+        $secondTicketId = $this->createTicket('T-20260629-PRICE-B', '2026-06-29', [[
+            'type_id' => $this->liveTypeId,
+            'birds_per_cage' => 20,
+            'cages' => 1,
+            'gross_weight' => 27,
+            'tare_weight' => 7,
+            'net_weight' => 20,
+            'weighed_at' => '2026-06-29 10:15:00',
+        ]]);
+        $thirdTicketId = $this->createTicket('T-20260629-PRICE-C', '2026-06-29', [[
+            'type_id' => $this->liveTypeId,
+            'birds_per_cage' => 10,
+            'cages' => 1,
+            'gross_weight' => 17,
+            'tare_weight' => 7,
+            'net_weight' => 10,
+            'weighed_at' => '2026-06-29 10:30:00',
+        ]]);
+        $this->attachTicketPrice($firstTicketId, $this->liveTypeId, '8.5000');
+        $this->attachTicketPrice($secondTicketId, $this->liveTypeId, '9.0000');
+        $this->attachTicketPrice($thirdTicketId, $this->liveTypeId, '8.5040');
+
+        $response = $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-29')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.summary.by_client')
+            ->assertJsonCount(3, 'data.summary.by_client.0.print_rows');
+
+        $printRows = collect($response->json('data.summary.by_client.0.print_rows'))
+            ->keyBy('price_kg');
+
+        $this->assertSame(10, $printRows->get('8.5000')['net_weight_kg']);
+        $this->assertSame('85.00', $printRows->get('8.5000')['amount']);
+        $this->assertSame(10, $printRows->get('8.5040')['net_weight_kg']);
+        $this->assertSame('85.04', $printRows->get('8.5040')['amount']);
+        $this->assertSame(20, $printRows->get('9.0000')['net_weight_kg']);
+        $this->assertSame('180.00', $printRows->get('9.0000')['amount']);
+        $this->assertStringNotContainsString('VARIOS', $response->getContent());
     }
 
     public function test_daily_summary_defaults_to_current_operating_date(): void

@@ -1354,6 +1354,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('windowLabel: loadedJourneyWindow', $javascript);
         $this->assertStringContainsString('data-print-weight=', $javascript);
         $this->assertStringContainsString('data-print-price=', $javascript);
+        $this->assertStringContainsString('item.print_rows', $javascript);
+        $this->assertStringContainsString('cloneNode(true)', $javascript);
+        $this->assertStringContainsString('renderClientTotals(loadedClientSummaries)', $javascript);
+        $this->assertStringNotContainsString('"VARIOS"', $javascript);
         $this->assertStringContainsString('/operacion/tickets-dia/impresion?', $javascript);
     }
 
