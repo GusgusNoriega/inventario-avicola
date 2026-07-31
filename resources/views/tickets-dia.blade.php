@@ -15,6 +15,7 @@
           <p class="eyebrow">Movimientos netos</p>
           <h1 id="dailyJourneyTitle">Resumen de la jornada</h1>
           <p id="dailyJourneyMeta" class="daily-summary-meta">Consultando la jornada operativa actual.</p>
+          <p id="dailyJourneyWindow" class="daily-summary-window">El horario operativo aparecerá al cargar la jornada.</p>
         </div>
         <a class="menu-return-btn" href="{{ route('menu') }}">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

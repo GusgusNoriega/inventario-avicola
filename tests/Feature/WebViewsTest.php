@@ -1329,6 +1329,7 @@ class WebViewsTest extends TestCase
             ->assertSee('Resumen de la jornada')
             ->assertSee('id="dailyJourneyFilter"', false)
             ->assertSee('id="dailyJourneyDate"', false)
+            ->assertSee('id="dailyJourneyWindow"', false)
             ->assertSee('Jornada a consultar')
             ->assertSee('id="dailyJourneyPrint"', false)
             ->assertSee('Imprimir jornada')
@@ -1350,6 +1351,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./daily-summary-printer.js"', $javascript);
         $this->assertStringContainsString('params.set("date", journeyDate.value)', $javascript);
         $this->assertStringContainsString('journeyDate?.value !== loadedJourneyDate', $javascript);
+        $this->assertStringContainsString('windowLabel: loadedJourneyWindow', $javascript);
     }
 
     public function test_journey_configuration_view_is_available_without_database_queries(): void

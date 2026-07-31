@@ -9,6 +9,7 @@ const journeyDate = document.getElementById("dailyJourneyDate");
 const journeySubmit = document.getElementById("dailyJourneySubmit");
 const journeyPrint = document.getElementById("dailyJourneyPrint");
 const journeyMeta = document.getElementById("dailyJourneyMeta");
+const journeyWindow = document.getElementById("dailyJourneyWindow");
 const adminSection = document.getElementById("dailyTicketAdmin");
 const ticketFilters = document.getElementById("dailyTicketFilters");
 const ticketSearch = document.getElementById("dailyTicketSearch");
@@ -32,6 +33,7 @@ const CHICKEN_TYPE_SHORT_LABELS = {
 let tickets = [];
 let selectedTicket = null;
 let loadedJourneyDate = "";
+let loadedJourneyWindow = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -70,6 +72,19 @@ function journeyDateLabel(value) {
       month: "long",
       year: "numeric"
     }).format(date);
+}
+
+function journeyWindowLabel(range) {
+  const fromDate = range?.from_date;
+  const fromTime = range?.from_time;
+  const toDate = range?.to_date;
+  const toTime = range?.to_time;
+
+  if (!fromDate || !fromTime || !toDate || !toTime) {
+    return "Horario operativo no disponible.";
+  }
+
+  return `Desde ${formatDate(fromDate)} a las ${fromTime} hasta ${formatDate(toDate)} a las ${toTime} (hora final no incluida).`;
 }
 
 function normalizeCode(value) {
@@ -211,8 +226,10 @@ function updateJourneyContext(data) {
   const label = journeyDateLabel(operatingDate);
 
   loadedJourneyDate = operatingDate;
+  loadedJourneyWindow = journeyWindowLabel(data?.range);
   if (journeyDate) journeyDate.value = operatingDate;
   if (journeyMeta) journeyMeta.textContent = `Jornada operativa del ${label}.`;
+  if (journeyWindow) journeyWindow.textContent = loadedJourneyWindow;
 
   if (operatingDate && window.history?.replaceState) {
     const url = new URL(window.location.href);
@@ -258,6 +275,7 @@ function closeVoidModal() {
 
 async function loadDailyClientTotals() {
   loadedJourneyDate = "";
+  loadedJourneyWindow = "";
   renderMessage("Cargando resultados del día...");
   if (ticketFeedback) ticketFeedback.textContent = "Cargando tickets...";
   setJourneyLoading(true);
@@ -299,6 +317,7 @@ journeyPrint?.addEventListener("click", async () => {
 
   printDailySummary({
     dateLabel: journeyDateLabel(loadedJourneyDate),
+    windowLabel: loadedJourneyWindow,
     table: clientTable,
     onError: () => renderMessage("No se pudo preparar la impresión de la jornada.")
   });

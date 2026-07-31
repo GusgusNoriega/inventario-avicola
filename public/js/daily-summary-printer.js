@@ -7,7 +7,7 @@ function escapePrintHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-export function buildDailySummaryPrintHtml({ dateLabel, tableHtml }) {
+export function buildDailySummaryPrintHtml({ dateLabel, windowLabel, tableHtml }) {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -48,6 +48,10 @@ export function buildDailySummaryPrintHtml({ dateLabel, tableHtml }) {
     p {
       margin: 0;
       font-size: 18px;
+    }
+
+    .journey-window {
+      margin-top: 5px;
     }
 
     table {
@@ -125,13 +129,14 @@ export function buildDailySummaryPrintHtml({ dateLabel, tableHtml }) {
   <header>
     <h1>Resumen de la jornada</h1>
     <p>Fecha: <strong>${escapePrintHtml(dateLabel)}</strong></p>
+    <p class="journey-window"><strong>Horario:</strong> ${escapePrintHtml(windowLabel)}</p>
   </header>
   ${tableHtml}
 </body>
 </html>`;
 }
 
-export function printDailySummary({ dateLabel, table, onError } = {}) {
+export function printDailySummary({ dateLabel, windowLabel, table, onError } = {}) {
   if (!table?.outerHTML) {
     onError?.();
     return;
@@ -173,6 +178,7 @@ export function printDailySummary({ dateLabel, table, onError } = {}) {
 
   printFrame.srcdoc = buildDailySummaryPrintHtml({
     dateLabel,
+    windowLabel,
     tableHtml: table.outerHTML
   });
   document.body.appendChild(printFrame);

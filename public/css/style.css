@@ -3831,6 +3831,12 @@ body[data-fleet-view="choferes"] .fleet-tab.is-active {
   color: var(--text-muted);
 }
 
+.daily-summary-window {
+  margin: 4px 0 0;
+  color: #c8d7e9;
+  font-weight: 700;
+}
+
 .daily-journey-filter {
   display: grid;
   grid-template-columns: minmax(220px, 360px) auto;
