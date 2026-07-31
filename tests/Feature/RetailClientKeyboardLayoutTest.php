@@ -48,36 +48,21 @@ class RetailClientKeyboardLayoutTest extends TestCase
         $this->assertStringContainsString('@media (max-height: 680px)', $stylesheet);
     }
 
-    public function test_client_search_letters_keep_a_large_minimum_size_on_all_viewports(): void
+    public function test_touch_keyboard_uses_large_labels_on_desktop_and_mobile(): void
     {
         $stylesheet = (string) file_get_contents(public_path('css/despacho-minorista.css'));
 
-        $variableMatched = preg_match(
-            '~--rd-client-search-key-font:\s*clamp\((\d+)px,\s*calc\(var\(--rd-font-modal-button\)\s*\*\s*([0-9.]+)\),\s*(\d+)px\);~',
+        $this->assertStringContainsString(
+            'font-size: calc(var(--rd-font-modal-button) * 1.75);',
             $stylesheet,
-            $fontSize,
         );
-
-        $this->assertSame(1, $variableMatched, 'No se encontró el tamaño exclusivo de las letras del buscador.');
-        $this->assertGreaterThanOrEqual(32, (int) $fontSize[1]);
-        $this->assertGreaterThan(1.75, (float) $fontSize[2]);
-        $this->assertGreaterThan((int) $fontSize[1], (int) $fontSize[3]);
-
-        $selectorMatched = preg_match(
-            '~\.rd-touch-keyboard\.is-client-search\s+\.rd-touch-keyboard-keys\.is-letters-only\s+button\[data-retail-keyboard-key\]:not\(\.is-space\)\s*\{([^}]*)\}~s',
+        $this->assertStringContainsString(
+            'font-size: calc(var(--rd-font-modal-button) * 2.5);',
             $stylesheet,
-            $rules,
         );
-
-        $this->assertSame(1, $selectorMatched, 'Las letras del buscador no tienen una regla CSS específica.');
-        $this->assertStringContainsString('font-size: var(--rd-client-search-key-font);', $rules[1]);
-        $this->assertStringContainsString('line-height: 1;', $rules[1]);
-
-        $mobileRulePosition = strpos($stylesheet, '@media (max-width: 720px)');
-        $clientRulePosition = strpos($stylesheet, $rules[0]);
-
-        $this->assertNotFalse($mobileRulePosition);
-        $this->assertNotFalse($clientRulePosition);
-        $this->assertGreaterThan($mobileRulePosition, $clientRulePosition);
+        $this->assertStringContainsString(
+            'font-size: calc(var(--rd-font-modal-button) * 1.42);',
+            $stylesheet,
+        );
     }
 }

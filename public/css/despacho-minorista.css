@@ -1555,7 +1555,6 @@ body.has-retail-client-keyboard .rd-client-options {
 }
 
 .rd-touch-keyboard.is-client-search {
-  --rd-client-search-key-font: clamp(32px, calc(var(--rd-font-modal-button) * 2.25), 40px);
   top: var(--rd-client-keyboard-start);
   bottom: max(12px, env(safe-area-inset-bottom));
 }
@@ -1787,13 +1786,6 @@ body.has-retail-client-keyboard .rd-client-options {
   .rd-touch-keyboard-row button.is-shift {
     font-size: calc(var(--rd-font-modal-button) * 1.08);
   }
-}
-
-.rd-touch-keyboard.is-client-search
-  .rd-touch-keyboard-keys.is-letters-only
-  button[data-retail-keyboard-key]:not(.is-space) {
-  font-size: var(--rd-client-search-key-font);
-  line-height: 1;
 }
 
 .rd-modal-card {
