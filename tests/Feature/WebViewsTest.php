@@ -1352,6 +1352,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('params.set("date", journeyDate.value)', $javascript);
         $this->assertStringContainsString('journeyDate?.value !== loadedJourneyDate', $javascript);
         $this->assertStringContainsString('windowLabel: loadedJourneyWindow', $javascript);
+        $this->assertStringContainsString('data-print-weight=', $javascript);
     }
 
     public function test_journey_configuration_view_is_available_without_database_queries(): void

@@ -128,10 +128,10 @@ function renderClientTotals(clients) {
       <td><div class="daily-client-types">${renderClientTypes(item.chicken_types)}</div></td>
       <td>${formatNumber(item.cages)}</td>
       <td>${formatNumber(item.birds)}</td>
-      <td>${formatWeight(item.gross_weight_kg)}</td>
-      <td>${formatWeight(item.tare_weight_kg)}</td>
-      <td class="daily-client-return"><strong>${formatWeight(item.return_net_weight_kg)}</strong></td>
-      <td class="daily-client-net"><strong>${formatWeight(item.net_weight_kg)}</strong></td>
+      <td data-print-weight="${Number(item.gross_weight_kg || 0)}">${formatWeight(item.gross_weight_kg)}</td>
+      <td data-print-weight="${Number(item.tare_weight_kg || 0)}">${formatWeight(item.tare_weight_kg)}</td>
+      <td class="daily-client-return" data-print-weight="${Number(item.return_net_weight_kg || 0)}"><strong>${formatWeight(item.return_net_weight_kg)}</strong></td>
+      <td class="daily-client-net" data-print-weight="${Number(item.net_weight_kg || 0)}"><strong>${formatWeight(item.net_weight_kg)}</strong></td>
     </tr>
   `).join("");
 }

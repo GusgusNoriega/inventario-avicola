@@ -7,7 +7,34 @@ function escapePrintHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+const PRINT_COLUMN_LABELS = Object.freeze({
+  "Num. javas": "Javas",
+  "Cant. aves": "Aves",
+  "Peso bruto": "P. bruto",
+  Devoluciones: "Dev.",
+  "Peso neto": "P. neto"
+});
+
+function formatPrintWeight(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "--";
+}
+
+export function buildDailySummaryPrintTableHtml(tableHtml) {
+  return String(tableHtml || "")
+    .replace(/<th([^>]*)>([^<]*)<\/th>/g, (match, attributes, label) => {
+      const shortLabel = PRINT_COLUMN_LABELS[label.trim()] || label;
+      return `<th${attributes}>${shortLabel}</th>`;
+    })
+    .replace(/<td([^>]*\sdata-print-weight="([^"]*)"[^>]*)>[\s\S]*?<\/td>/g, (match, attributes, value) => {
+      const cleanAttributes = attributes.replace(/\sdata-print-weight="[^"]*"/, "");
+      return `<td${cleanAttributes}>${formatPrintWeight(value)}</td>`;
+    });
+}
+
 export function buildDailySummaryPrintHtml({ dateLabel, windowLabel, tableHtml }) {
+  const printableTableHtml = buildDailySummaryPrintTableHtml(tableHtml);
+
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -131,7 +158,7 @@ export function buildDailySummaryPrintHtml({ dateLabel, windowLabel, tableHtml }
     <p>Fecha: <strong>${escapePrintHtml(dateLabel)}</strong></p>
     <p class="journey-window"><strong>Horario:</strong> ${escapePrintHtml(windowLabel)}</p>
   </header>
-  ${tableHtml}
+  ${printableTableHtml}
 </body>
 </html>`;
 }

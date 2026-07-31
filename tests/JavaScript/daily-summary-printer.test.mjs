@@ -9,8 +9,18 @@ test("la impresión de jornada contiene título, fecha, horario y tabla completa
     windowLabel: "Desde 30/07/2026 a las 21:00 hasta 31/07/2026 a las 21:00 (hora final no incluida).",
     tableHtml: `
       <table class="daily-client-table">
-        <thead><tr><th>Cliente</th><th>Peso neto</th></tr></thead>
-        <tbody><tr><td>Cliente uno</td><td>125.000 kg</td></tr></tbody>
+        <thead>
+          <tr><th>Cliente</th><th>Ave</th><th>Num. javas</th><th>Cant. aves</th><th>Peso bruto</th><th>Tara</th><th>Devoluciones</th><th>Peso neto</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cliente uno</td><td>P V</td><td>2</td><td>50</td>
+            <td data-print-weight="114.567">114.567 kg</td>
+            <td data-print-weight="14">14.000 kg</td>
+            <td class="daily-client-return" data-print-weight="3.5"><strong>3.500 kg</strong></td>
+            <td class="daily-client-net" data-print-weight="97.067"><strong>97.067 kg</strong></td>
+          </tr>
+        </tbody>
       </table>
     `
   });
@@ -20,7 +30,12 @@ test("la impresión de jornada contiene título, fecha, horario y tabla completa
   assert.match(html, /Horario:<\/strong> Desde 30\/07\/2026 a las 21:00 hasta 31\/07\/2026 a las 21:00 \(hora final no incluida\)\./);
   assert.match(html, /<table class="daily-client-table">/);
   assert.match(html, /Cliente uno/);
-  assert.match(html, /125\.000 kg/);
+  assert.match(html, /<th>Javas<\/th><th>Aves<\/th><th>P\. bruto<\/th><th>Tara<\/th><th>Dev\.<\/th><th>P\. neto<\/th>/);
+  assert.match(html, />114\.57<\/td>/);
+  assert.match(html, />14\.00<\/td>/);
+  assert.match(html, />3\.50<\/td>/);
+  assert.match(html, />97\.07<\/td>/);
+  assert.doesNotMatch(html, /\d(?:\.\d+)? kg\b|Peso bruto|Peso neto|Devoluciones|Num\. javas|Cant\. aves/);
   assert.doesNotMatch(html, /Menú|Jornada a consultar|Administrar tickets/);
 });
 
