@@ -334,6 +334,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data-delete-cash', $cashRegisterJavascript);
         $this->assertStringContainsString('method: "DELETE"', $cashRegisterJavascript);
         $this->assertStringContainsString('window.confirm', $cashRegisterJavascript);
+        $this->assertStringContainsString('class="fin-cash-item-title">${escapeHtml(record.detalle)}', $cashRegisterJavascript);
+        $this->assertStringContainsString('.fin-cash-item-title', $financeStylesheet);
         $this->assertStringNotContainsString('numero_operacion', $cashRegisterJavascript);
         $this->assertStringContainsString('/finanzas/descuentos-clientes', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);

@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Comprobante;
+use App\Models\CuentaFinanciera;
+use App\Models\MovimientoCajaEfectivo;
 use App\Models\Pago;
 use App\Models\Pesada;
 use App\Models\Tercero;
@@ -237,16 +239,45 @@ class ReportDataService
             ])
             ->when($filters['tipo'] ?? null, fn (Builder $builder, string $type) => $builder->where('tipo', $type))
             ->when($filters['metodo_pago_id'] ?? null, fn (Builder $builder, int|string $id) => $builder->where('metodo_pago_id', $id))
-            ->when($filters['usuario_id'] ?? null, fn (Builder $builder, int|string $id) => $builder->where('created_by', $id))
+            ->where(function (Builder $builder): void {
+                $builder->whereDoesntHave('movimientoCajaEfectivo')
+                    ->orWhereHas(
+                        'movimientoCajaEfectivo',
+                        fn (Builder $cashMovement) => $cashMovement
+                            ->where('estado', MovimientoCajaEfectivo::STATUS_REGISTERED),
+                    );
+            })
+            ->when($filters['usuario_id'] ?? null, function (Builder $builder, int|string $id): void {
+                $builder->where(function (Builder $responsible) use ($id): void {
+                    $responsible->whereHas(
+                        'movimientoCajaEfectivo',
+                        fn (Builder $cashMovement) => $cashMovement
+                            ->where('estado', MovimientoCajaEfectivo::STATUS_REGISTERED)
+                            ->where('created_by', $id),
+                    )->orWhere(function (Builder $regularPayment) use ($id): void {
+                        $regularPayment->whereDoesntHave('movimientoCajaEfectivo')
+                            ->where('created_by', $id);
+                    });
+                });
+            })
             ->with([
                 'tercero', 'cliente', 'proveedor', 'metodoPago', 'creador',
                 'cuentaOrigen.entidadFinanciera', 'cuentaDestino.entidadFinanciera',
+                'movimientoCajaEfectivo.cliente',
+                'movimientoCajaEfectivo.caja.entidadFinanciera',
+                'movimientoCajaEfectivo.otraCaja.entidadFinanciera',
+                'movimientoCajaEfectivo.creador',
             ])
             ->orderBy('fecha_hora')
             ->orderBy('id');
 
         $payments = $query->get();
         $rows = $payments->map(function (Pago $payment): array {
+            $cashMovement = $payment->movimientoCajaEfectivo;
+            if ($cashMovement?->estado === MovimientoCajaEfectivo::STATUS_REGISTERED) {
+                return $this->cashPaymentRow($payment, $cashMovement);
+            }
+
             $party = $payment->cliente ?: $payment->proveedor ?: $payment->tercero;
             $account = $payment->cuentaDestino ?: $payment->cuentaOrigen;
 
@@ -289,6 +320,53 @@ class ReportDataService
             ->value('nombre') ?: 'Usuario';
 
         return $data;
+    }
+
+    /** @return array<string, mixed> */
+    private function cashPaymentRow(Pago $payment, MovimientoCajaEfectivo $cashMovement): array
+    {
+        $isTransfer = $cashMovement->contraparte_tipo === MovimientoCajaEfectivo::COUNTERPART_CASH_REGISTER;
+
+        return [
+            'date' => $payment->fecha_hora,
+            'code' => $cashMovement->codigo ?: $payment->codigo ?: 'PG-'.$payment->id,
+            'counterparty' => $this->cashCounterparty($payment, $cashMovement),
+            'type' => $isTransfer
+                ? 'TRANSFERENCIA ENTRE CAJAS'
+                : ($cashMovement->direccion === MovimientoCajaEfectivo::DIRECTION_INCOME
+                    ? 'INGRESO DE CAJA'
+                    : 'GASTO DE CAJA'),
+            'method' => $payment->metodoPago?->nombre ?: $payment->metodo,
+            'detail' => $cashMovement->detalle,
+            'user' => $cashMovement->creador?->nombre ?? $payment->creador?->nombre ?? 'Sin usuario',
+            'amount' => (float) $payment->importe,
+            'flow' => $isTransfer ? Pago::DIRECTION_NO_FLOW : $cashMovement->direccion,
+        ];
+    }
+
+    private function cashCounterparty(Pago $payment, MovimientoCajaEfectivo $cashMovement): string
+    {
+        return match ($cashMovement->contraparte_tipo) {
+            MovimientoCajaEfectivo::COUNTERPART_CUSTOMER => $cashMovement->cliente?->nombre_razon_social
+                ?? $payment->cliente?->nombre_razon_social
+                ?? 'Cliente',
+            MovimientoCajaEfectivo::COUNTERPART_CASH_REGISTER => $this->cashRegisterLabel($cashMovement->otraCaja),
+            MovimientoCajaEfectivo::COUNTERPART_ADMINISTRATIVE => 'Administrativo',
+            MovimientoCajaEfectivo::COUNTERPART_TRANSPORT => 'Transporte',
+            MovimientoCajaEfectivo::COUNTERPART_DEPOSIT => 'Depósito',
+            MovimientoCajaEfectivo::COUNTERPART_OTHER => $cashMovement->direccion === MovimientoCajaEfectivo::DIRECTION_INCOME
+                ? 'Otro origen'
+                : 'Otro destino',
+            default => str_replace('_', ' ', ucfirst(strtolower($cashMovement->contraparte_tipo))),
+        };
+    }
+
+    private function cashRegisterLabel(?CuentaFinanciera $cashRegister): string
+    {
+        return $cashRegister?->alias
+            ?: $cashRegister?->entidadFinanciera?->nombre_comercial
+            ?: $cashRegister?->entidadFinanciera?->razon_social
+            ?: 'Otra caja';
     }
 
     /** @return Builder<Pago> */

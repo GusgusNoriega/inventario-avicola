@@ -241,8 +241,8 @@ function renderLedger(records) {
     return `<li class="fin-cash-item ${income ? "is-income" : "is-expense"}">
       <span class="fin-cash-direction" aria-hidden="true">${sign}</span>
       <span class="fin-cash-item-copy">
-        <strong>${escapeHtml(counterpartDescription(record))}</strong>
-        <span>${escapeHtml(record.detalle)}</span>
+        <h3 class="fin-cash-item-title">${escapeHtml(record.detalle)}</h3>
+        <span class="fin-cash-item-counterpart">${escapeHtml(counterpartDescription(record))}</span>
         <small>${escapeHtml(formatMovementTime(record.fecha_hora))} · ${escapeHtml(code)}${record.creado_por ? ` · ${escapeHtml(record.creado_por)}` : ""}</small>
       </span>
       <strong class="fin-cash-amount">${sign}${escapeHtml(formatMoney(record.importe, record.moneda))}</strong>

@@ -2193,18 +2193,25 @@ body.fin-page {
   gap: 3px;
 }
 
-.fin-cash-item-copy > strong {
+.fin-cash-item-title {
+  display: -webkit-box;
+  margin: 0;
   overflow: hidden;
   color: #fff;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.fin-cash-item-copy > span {
+.fin-cash-item-counterpart {
   overflow: hidden;
   color: var(--fin-soft);
   font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .01em;
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2357,7 +2364,11 @@ body.fin-page {
   }
   .fin-cash-direction { width: 34px; height: 34px; border-radius: 9px; }
   .fin-cash-item-copy { grid-column: 2; grid-row: 1; }
-  .fin-cash-item-copy > span { white-space: normal; }
+  .fin-cash-item-title {
+    font-size: 16px;
+    -webkit-line-clamp: 3;
+  }
+  .fin-cash-item-counterpart { white-space: normal; }
   .fin-cash-amount { grid-column: 2; grid-row: 2; justify-self: start; }
   .fin-cash-item-action {
     grid-column: 2;

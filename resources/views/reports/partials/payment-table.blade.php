@@ -1,6 +1,6 @@
 <table class="report">
   <thead><tr>
-    <th style="width: 9%">Fecha</th><th style="width: 13%">Codigo</th><th style="width: 19%">Cliente / proveedor</th>
+    <th style="width: 9%">Fecha</th><th style="width: 13%">Codigo</th><th style="width: 19%">Contraparte</th>
     <th style="width: 14%">Tipo</th><th style="width: 10%">Metodo</th><th>Detalle</th>
     @if($showUser)<th style="width: 11%">Responsable</th>@endif
     <th style="width: 10%">Monto</th>

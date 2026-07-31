@@ -436,7 +436,7 @@ class ReportImageRenderer
 
         $columns = [
             ['label' => 'Fecha', 'width' => .09], ['label' => 'Codigo', 'width' => .12],
-            ['label' => 'Cliente / proveedor', 'width' => .20], ['label' => 'Tipo', 'width' => .14],
+            ['label' => 'Contraparte', 'width' => .20], ['label' => 'Tipo', 'width' => .14],
             ['label' => 'Metodo', 'width' => .10], ['label' => 'Detalle', 'width' => .19],
             ['label' => 'Responsable', 'width' => .10], ['label' => 'Monto', 'width' => .06, 'align' => 'right'],
         ];

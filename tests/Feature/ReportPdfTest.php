@@ -8,10 +8,12 @@ use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\CashRegisterMovementService;
 use App\Services\ReportDataService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\Support\InteractsWithAccessControl;
 use Tests\TestCase;
 
@@ -150,6 +152,212 @@ class ReportPdfTest extends TestCase
             $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
             $this->assertStringStartsWith('%PDF-', $response->getContent());
         }
+    }
+
+    public function test_responsible_report_includes_each_active_cash_movement_once_in_its_real_section(): void
+    {
+        [$cashRegisterId, $otherCashRegisterId] = $this->cashRegisters();
+        $client = $this->thirdParty('Cliente caja reporte', TerceroRole::CLIENT);
+        $otherUser = $this->userForCompany('Responsable ajeno');
+
+        $income = $this->cashMovement($this->registerCashMovement($this->user, $cashRegisterId, [
+            'direccion' => 'INGRESO',
+            'contraparte_tipo' => 'CLIENTE',
+            'cliente_id' => $client->id,
+            'fecha_hora' => '2026-07-10 09:00:00',
+            'importe' => '100.00',
+            'detalle' => 'Cobro en efectivo del pedido 100',
+        ]));
+        $expense = $this->cashMovement($this->registerCashMovement($this->user, $cashRegisterId, [
+            'direccion' => 'EGRESO',
+            'contraparte_tipo' => 'ADMINISTRATIVO',
+            'fecha_hora' => '2026-07-10 10:00:00',
+            'importe' => '30.00',
+            'detalle' => 'Compra administrativa de utiles',
+        ]));
+        $transfer = $this->cashMovement($this->registerCashMovement($this->user, $cashRegisterId, [
+            'direccion' => 'EGRESO',
+            'contraparte_tipo' => 'OTRA_CAJA',
+            'otra_caja_id' => $otherCashRegisterId,
+            'fecha_hora' => '2026-07-10 11:00:00',
+            'importe' => '20.00',
+            'detalle' => 'Fondo enviado a caja secundaria',
+        ]));
+        $foreignMovement = $this->cashMovement($this->registerCashMovement($otherUser, $cashRegisterId, [
+            'fecha_hora' => '2026-07-10 12:00:00',
+            'importe' => '999.00',
+            'detalle' => 'Movimiento de otro responsable',
+        ]));
+
+        $report = app(ReportDataService::class)->responsibleMovements(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            '2026-07-01',
+            '2026-07-31',
+        );
+        $rows = $report['rows'];
+        $rowsByCode = $rows->keyBy('code');
+
+        $this->assertCount(3, $rows);
+        $this->assertCount(3, $rows->pluck('code')->unique());
+        $this->assertSame($this->user->nombre, $report['user_name']);
+        $this->assertSame([$this->user->nombre], $rows->pluck('user')->unique()->values()->all());
+        $this->assertSame(100.0, (float) $report['income']);
+        $this->assertSame(30.0, (float) $report['expense']);
+        $this->assertSame(150.0, (float) $report['total']);
+        $this->assertCount(1, $report['collections']);
+        $this->assertCount(1, $report['expenses']);
+        $this->assertCount(1, $report['other']);
+        $this->assertFalse($rowsByCode->has($foreignMovement->codigo));
+
+        foreach ([$income, $expense, $transfer] as $cashMovement) {
+            $this->assertStringStartsWith('CAJ-', $cashMovement->codigo);
+            $this->assertSame(1, $rows->where('code', $cashMovement->codigo)->count());
+        }
+
+        $incomeRow = $rowsByCode->get($income->codigo);
+        $this->assertSame('INGRESO DE CAJA', $incomeRow['type']);
+        $this->assertSame('INGRESO', $incomeRow['flow']);
+        $this->assertSame('Cliente caja reporte', $incomeRow['counterparty']);
+        $this->assertSame('Cobro en efectivo del pedido 100', $incomeRow['detail']);
+        $this->assertSame($income->codigo, $report['collections']->sole()['code']);
+
+        $expenseRow = $rowsByCode->get($expense->codigo);
+        $this->assertSame('GASTO DE CAJA', $expenseRow['type']);
+        $this->assertSame('EGRESO', $expenseRow['flow']);
+        $this->assertSame('Administrativo', $expenseRow['counterparty']);
+        $this->assertSame('Compra administrativa de utiles', $expenseRow['detail']);
+        $this->assertSame($expense->codigo, $report['expenses']->sole()['code']);
+
+        $transferRow = $rowsByCode->get($transfer->codigo);
+        $this->assertSame('TRANSFERENCIA ENTRE CAJAS', $transferRow['type']);
+        $this->assertSame('SIN_FLUJO', $transferRow['flow']);
+        $this->assertStringContainsString('Caja secundaria reporte', $transferRow['counterparty']);
+        $this->assertSame('Fondo enviado a caja secundaria', $transferRow['detail']);
+        $this->assertSame($transfer->codigo, $report['other']->sole()['code']);
+    }
+
+    public function test_financial_cash_edit_keeps_the_logical_creator_and_lists_only_the_active_replacement(): void
+    {
+        [$cashRegisterId] = $this->cashRegisters();
+        $editor = $this->userForCompany('Editor de caja');
+        $movementId = $this->registerCashMovement($this->user, $cashRegisterId, [
+            'fecha_hora' => '2026-07-15 09:00:00',
+            'importe' => '80.00',
+            'detalle' => 'Ingreso antes de corregir',
+        ]);
+        $before = $this->cashMovement($movementId);
+
+        app(CashRegisterMovementService::class)->update(
+            (int) $this->user->empresa_id,
+            $editor,
+            $movementId,
+            $this->cashMovementPayload(null, $cashRegisterId, [
+                'fecha_hora' => '2026-07-15 09:00:00',
+                'importe' => '65.00',
+                'detalle' => 'Ingreso corregido por el editor',
+            ]),
+        );
+        $after = $this->cashMovement($movementId);
+
+        $this->assertNotSame((int) $before->pago_id, (int) $after->pago_id);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $before->pago_id,
+            'estado' => Pago::STATUS_VOIDED,
+            'importe' => 80,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'reversa_de_pago_id' => $before->pago_id,
+            'importe' => 80,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $after->pago_id,
+            'created_by' => $editor->id,
+            'estado' => Pago::STATUS_REGISTERED,
+            'importe' => 65,
+        ]);
+        $this->assertDatabaseCount('pagos', 3);
+
+        $creatorReport = app(ReportDataService::class)->responsibleMovements(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            '2026-07-01',
+            '2026-07-31',
+        );
+        $editorReport = app(ReportDataService::class)->responsibleMovements(
+            (int) $this->user->empresa_id,
+            $editor->id,
+            '2026-07-01',
+            '2026-07-31',
+        );
+
+        $this->assertCount(1, $creatorReport['rows']);
+        $this->assertCount(1, $creatorReport['collections']);
+        $this->assertCount(0, $creatorReport['expenses']);
+        $this->assertCount(0, $creatorReport['other']);
+        $this->assertSame(65.0, (float) $creatorReport['income']);
+        $this->assertSame(0.0, (float) $creatorReport['expense']);
+        $this->assertSame(65.0, (float) $creatorReport['total']);
+        $this->assertSame($before->codigo, $creatorReport['rows']->sole()['code']);
+        $this->assertSame($this->user->nombre, $creatorReport['rows']->sole()['user']);
+        $this->assertSame(65.0, (float) $creatorReport['rows']->sole()['amount']);
+        $this->assertSame('Ingreso corregido por el editor', $creatorReport['rows']->sole()['detail']);
+        $this->assertFalse($creatorReport['rows']->contains(
+            fn (array $row): bool => (float) $row['amount'] === 80.0,
+        ));
+
+        $this->assertEmptyResponsibleReport($editorReport);
+    }
+
+    public function test_voided_cash_movement_is_excluded_from_creator_and_voider_reports_and_totals(): void
+    {
+        [$cashRegisterId] = $this->cashRegisters();
+        $voider = $this->userForCompany('Anulador de caja');
+        $movementId = $this->registerCashMovement($this->user, $cashRegisterId, [
+            'direccion' => 'EGRESO',
+            'contraparte_tipo' => 'ADMINISTRATIVO',
+            'fecha_hora' => '2026-07-20 14:00:00',
+            'importe' => '45.00',
+            'detalle' => 'Gasto administrativo que sera eliminado',
+        ]);
+        $cashMovement = $this->cashMovement($movementId);
+
+        app(CashRegisterMovementService::class)->void(
+            (int) $this->user->empresa_id,
+            $voider,
+            $movementId,
+        );
+
+        $this->assertDatabaseHas('movimientos_caja_efectivo', [
+            'id' => $movementId,
+            'estado' => 'ANULADO',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $cashMovement->pago_id,
+            'estado' => Pago::STATUS_VOIDED,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'reversa_de_pago_id' => $cashMovement->pago_id,
+            'created_by' => $voider->id,
+        ]);
+
+        $creatorReport = app(ReportDataService::class)->responsibleMovements(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            '2026-07-01',
+            '2026-07-31',
+        );
+        $voiderReport = app(ReportDataService::class)->responsibleMovements(
+            (int) $this->user->empresa_id,
+            $voider->id,
+            '2026-07-01',
+            '2026-07-31',
+        );
+
+        $this->assertEmptyResponsibleReport($creatorReport);
+        $this->assertEmptyResponsibleReport($voiderReport);
+        $this->assertFalse($creatorReport['rows']->pluck('code')->contains($cashMovement->codigo));
+        $this->assertFalse($voiderReport['rows']->pluck('code')->contains($cashMovement->codigo));
     }
 
     public function test_customer_statement_uses_opening_balance_charges_and_collections(): void
@@ -386,6 +594,105 @@ class ReportPdfTest extends TestCase
         $this->assertSame(2, substr_count($plainText, 'Movimientos del'));
         $this->assertStringContainsString('class="num debit"', $html);
         $this->assertStringContainsString('class="num credit"', $html);
+    }
+
+    /** @return array{int, int} */
+    private function cashRegisters(): array
+    {
+        $entityId = DB::table('entidades_financieras')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo' => 'PROPIA',
+            'razon_social' => 'Entidad de cajas para reporte',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $account = function (string $alias) use ($entityId): int {
+            return DB::table('cuentas_financieras')->insertGetId([
+                'entidad_financiera_id' => $entityId,
+                'tipo' => 'CAJA',
+                'alias' => $alias,
+                'moneda' => 'PEN',
+                'estado' => 'ACTIVO',
+                'created_by' => $this->user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        };
+
+        return [
+            $account('Caja principal reporte'),
+            $account('Caja secundaria reporte'),
+        ];
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function registerCashMovement(User $actor, int $cashRegisterId, array $overrides = []): int
+    {
+        $result = app(CashRegisterMovementService::class)->register(
+            (int) $this->user->empresa_id,
+            $actor,
+            $this->cashMovementPayload((string) Str::uuid(), $cashRegisterId, $overrides),
+        );
+
+        return (int) $result['movimiento_caja_id'];
+    }
+
+    /** @param array<string, mixed> $overrides @return array<string, mixed> */
+    private function cashMovementPayload(
+        ?string $idempotencyKey,
+        int $cashRegisterId,
+        array $overrides = [],
+    ): array {
+        $payload = [
+            'idempotency_key' => $idempotencyKey,
+            'caja_id' => $cashRegisterId,
+            'direccion' => 'INGRESO',
+            'contraparte_tipo' => 'OTRO',
+            'fecha_hora' => '2026-07-10 08:00:00',
+            'importe' => '10.00',
+            'detalle' => 'Movimiento de caja para reporte',
+            ...$overrides,
+        ];
+
+        if ($idempotencyKey === null) {
+            unset($payload['idempotency_key']);
+        }
+
+        return $payload;
+    }
+
+    private function cashMovement(int $movementId): object
+    {
+        $movement = DB::table('movimientos_caja_efectivo')->where('id', $movementId)->first();
+        $this->assertNotNull($movement);
+
+        return $movement;
+    }
+
+    private function userForCompany(string $name): User
+    {
+        $user = $this->createUserForCompany($this->user, ['nombre' => $name]);
+        $administratorRole = $this->user->roles()
+            ->where('roles.codigo', 'ADMINISTRADOR')
+            ->firstOrFail();
+        $user->roles()->attach($administratorRole);
+
+        return $user;
+    }
+
+    /** @param array<string, mixed> $report */
+    private function assertEmptyResponsibleReport(array $report): void
+    {
+        $this->assertCount(0, $report['rows']);
+        $this->assertCount(0, $report['collections']);
+        $this->assertCount(0, $report['expenses']);
+        $this->assertCount(0, $report['other']);
+        $this->assertSame(0.0, (float) $report['income']);
+        $this->assertSame(0.0, (float) $report['expense']);
+        $this->assertSame(0.0, (float) $report['total']);
     }
 
     private function thirdParty(string $name, string $role): Tercero

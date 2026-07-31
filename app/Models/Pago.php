@@ -184,6 +184,16 @@ class Pago extends Model
     }
 
     /**
+     * Capa operativa del movimiento cuando fue registrado desde la caja de efectivo.
+     *
+     * @return HasOne<MovimientoCajaEfectivo, $this>
+     */
+    public function movimientoCajaEfectivo(): HasOne
+    {
+        return $this->hasOne(MovimientoCajaEfectivo::class);
+    }
+
+    /**
      * @return HasOne<Compra, $this>
      */
     public function compraInicial(): HasOne
