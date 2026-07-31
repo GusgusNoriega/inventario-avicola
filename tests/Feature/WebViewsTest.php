@@ -110,6 +110,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Compras a proveedores')
             ->assertSee(route('finanzas.entidades'), false)
             ->assertSee('Empresas y cuentas')
+            ->assertSee(route('finanzas.caja-efectivo'), false)
+            ->assertSee('Caja de efectivo')
             ->assertSee(route('finanzas.movimientos.nuevo'), false)
             ->assertSee('Registrar cobro, deuda o pago')
             ->assertSee(route('finanzas.movimientos'), false)
@@ -128,7 +130,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="financeAuthDialog"', false)
             ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
 
-        $this->assertSame(9, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+        $this->assertSame(10, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
 
         $this->get('/finanzas/saldos')
             ->assertOk()
@@ -163,6 +165,22 @@ class WebViewsTest extends TestCase
             ->assertSee('value="BILLETERA"', false)
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/finanzas-entidades.js'), false);
+
+        $this->get('/finanzas/caja-efectivo')
+            ->assertOk()
+            ->assertSee('Caja de efectivo')
+            ->assertSee('id="cashRegisterAccount"', false)
+            ->assertSee('id="cashRegisterDate"', false)
+            ->assertSee('id="cashRegisterIncome"', false)
+            ->assertSee('id="cashRegisterExpense"', false)
+            ->assertSee('id="cashRegisterNet"', false)
+            ->assertSee('id="cashRegisterList"', false)
+            ->assertSee('id="cashRegisterDialog"', false)
+            ->assertSee('id="cashRegisterCounterpartType"', false)
+            ->assertSee('id="cashRegisterClientSearch"', false)
+            ->assertSee('role="combobox"', false)
+            ->assertDontSee('id="cashRegisterOperation"', false)
+            ->assertSee(asset('js/finanzas-caja-efectivo.js'), false);
 
         $this->get('/finanzas/movimientos/nuevo')
             ->assertOk()
@@ -241,6 +259,7 @@ class WebViewsTest extends TestCase
         $movementJavascript = file_get_contents(public_path('js/finanzas-movimiento.js'));
         $managementJavascript = file_get_contents(public_path('js/finanzas-movimientos.js'));
         $expensesJavascript = file_get_contents(public_path('js/finanzas-gastos.js'));
+        $cashRegisterJavascript = file_get_contents(public_path('js/finanzas-caja-efectivo.js'));
         $discountsJavascript = file_get_contents(public_path('js/finanzas-descuentos-clientes.js'));
         $ticketsJavascript = file_get_contents(public_path('js/finanzas-tickets.js'));
 
@@ -250,6 +269,7 @@ class WebViewsTest extends TestCase
         $this->assertIsString($movementJavascript);
         $this->assertIsString($managementJavascript);
         $this->assertIsString($expensesJavascript);
+        $this->assertIsString($cashRegisterJavascript);
         $this->assertIsString($discountsJavascript);
         $this->assertIsString($ticketsJavascript);
         $this->assertMatchesRegularExpression(
@@ -296,6 +316,14 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/anular', $expensesJavascript);
         $this->assertStringContainsString('idempotency_key:', $expensesJavascript);
         $this->assertStringContainsString('.fin-expense-layout', $financeStylesheet);
+        $this->assertStringContainsString('.fin-cash-list', $financeStylesheet);
+        $this->assertStringContainsString('/finanzas/caja-efectivo/catalogo', $cashRegisterJavascript);
+        $this->assertStringContainsString('/finanzas/caja-efectivo?', $cashRegisterJavascript);
+        $this->assertStringContainsString('localStorage.setItem', $cashRegisterJavascript);
+        $this->assertStringContainsString('POLL_INTERVAL = 3000', $cashRegisterJavascript);
+        $this->assertStringContainsString('BroadcastChannel', $cashRegisterJavascript);
+        $this->assertStringContainsString('aria-activedescendant', $cashRegisterJavascript);
+        $this->assertStringNotContainsString('numero_operacion', $cashRegisterJavascript);
         $this->assertStringContainsString('/finanzas/descuentos-clientes', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);
         $this->assertStringContainsString('data-edit-discount', $discountsJavascript);

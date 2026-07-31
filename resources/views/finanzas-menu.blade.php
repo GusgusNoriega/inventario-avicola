@@ -94,6 +94,23 @@
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.caja-efectivo') }}">
+          <span class="fin-module-icon is-cash-register" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 8h14v11H5z"></path>
+              <path d="M8 5h7l2 3H7z"></path>
+              <path d="M8 12h3"></path>
+              <path d="M14 12h2"></path>
+              <path d="M8 16h8"></path>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Caja de efectivo</strong>
+            <small>Registra ingresos y egresos diarios, controla totales y trabaja con una caja predeterminada.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="fin-module-card fin-card" href="{{ route('finanzas.movimientos.nuevo') }}">
           <span class="fin-module-icon is-movements" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

@@ -17,6 +17,12 @@ Los saldos no se editan directamente. Siempre se derivan del libro inmutable de
 `pagos`: entradas a una cuenta menos salidas de esa cuenta. Una anulación crea
 una reversa y restaura las aplicaciones CXC/CXP.
 
+La vista de caja de efectivo agrega una capa operativa en
+`movimientos_caja_efectivo`. Cada registro apunta al asiento vigente en
+`pagos`, por lo que no mantiene un saldo paralelo. Si se corrigen el importe,
+la dirección, la caja o la contraparte, el asiento anterior se reversa y la fila
+operativa pasa a apuntar al reemplazo.
+
 ## Origen de las obligaciones
 
 Al cerrar un ticket se genera un documento interno de venta idempotente:
@@ -57,6 +63,13 @@ ni anularse hasta anular primero esos movimientos financieros.
 | `AJUSTE` | Entrada o salida autorizada | Cuenta propia | Sin cartera |
 | `TRANSFERENCIA_INTERNA` | Cuenta propia | Otra cuenta propia | Sin cartera |
 
+Los registros de `/finanzas/caja-efectivo` resuelven siempre el método
+`EFECTIVO` en el servidor y nunca solicitan una referencia o número de
+operación. Un ingreso de cliente se registra como `COBRO_CLIENTE`; un traslado
+entre cajas como `TRANSFERENCIA_INTERNA`; y un ingreso o egreso de otro origen
+como `AJUSTE`. Una transferencia se muestra como egreso en la caja de origen e
+ingreso en la caja de destino.
+
 Un `PAGO_PROVEEDOR` puede registrarse sin aplicarlo de inmediato. En ese caso
 el dinero sale una sola vez de la cuenta propia y el importe pendiente de
 aplicar queda como saldo a nuestro favor con ese proveedor. Cuando se usa en
@@ -96,6 +109,8 @@ UUID de idempotencia.
 - `/finanzas`: menú del módulo con acceso a saldos, compras, cuentas y movimientos.
 - `/finanzas/saldos`: saldos por cuenta, cartera, pagos a proveedores y trazabilidad.
 - `/finanzas/entidades`: entidades propias/externas y sus cuentas.
+- `/finanzas/caja-efectivo`: lista diaria por caja, ingresos, egresos, neto,
+  transferencias, clientes y caja predeterminada guardada en el navegador.
 - `/finanzas/movimientos/nuevo`: cobros, pagos directos, pagos a proveedor,
   cargas manuales de saldo a favor, minorista y reembolsos.
 - `/compras`: compras al contado y a crédito, deuda pendiente y documentos.
@@ -117,6 +132,8 @@ Los recursos principales son:
 
 - `GET /catalogo`, `/cartera`, `/saldos`, `/trazabilidad` y `/movimientos`.
 - CRUD por desactivación de `/entidades` y `/cuentas`.
+- `GET /caja-efectivo/catalogo`, `GET /caja-efectivo`,
+  `POST /caja-efectivo` y `PUT /caja-efectivo/{id}`.
 - `POST /movimientos`, `POST /movimientos/{id}/aplicaciones` y
   `POST /movimientos/{id}/anular`.
 - `GET /clientes/{id}/resumen` y `/proveedores/{id}/resumen`.

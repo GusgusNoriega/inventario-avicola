@@ -1,0 +1,594 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Permission;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
+
+class CashRegisterApiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $user;
+
+    private int $cashEntityId;
+
+    private int $cashRegisterId;
+
+    private int $otherCashRegisterId;
+
+    private int $cashMethodId;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->user = User::factory()->create();
+        $role = Role::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'CAJA_EFECTIVO_TEST',
+            'nombre' => 'Caja efectivo test',
+        ]);
+        $role->permissions()->attach(
+            Permission::query()->where('codigo', 'MODULO_FINANZAS')->value('id'),
+        );
+        $this->user->roles()->attach($role);
+        Sanctum::actingAs($this->user, ['api']);
+
+        $this->cashEntityId = $this->financialEntity(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            'PROPIA',
+            'Cajas de la empresa',
+        );
+        $this->cashRegisterId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Caja principal',
+        );
+        $this->otherCashRegisterId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Caja secundaria',
+        );
+        $this->cashMethodId = (int) DB::table('metodos_pago')
+            ->where('codigo', 'EFECTIVO')
+            ->value('id');
+    }
+
+    public function test_catalog_only_returns_active_own_cash_registers_and_active_clients_from_the_company(): void
+    {
+        $clientId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente visible',
+            '10111111',
+        );
+        $inactiveClientId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente inactivo',
+            '10222222',
+            'INACTIVO',
+        );
+        $providerId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'PROVEEDOR',
+            'Proveedor no cliente',
+            '20333333333',
+        );
+        $bankAccountId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Banco propio',
+            'BANCO',
+        );
+        $inactiveCashId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Caja inactiva',
+            'CAJA',
+            'INACTIVO',
+        );
+        $externalEntityId = $this->financialEntity(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            'EXTERNA',
+            'Entidad externa',
+        );
+        $externalCashId = $this->financialAccount(
+            $externalEntityId,
+            $this->user->id,
+            'Caja externa',
+        );
+        $foreignUser = User::factory()->create();
+        $foreignEntityId = $this->financialEntity(
+            (int) $foreignUser->empresa_id,
+            $foreignUser->id,
+            'PROPIA',
+            'Entidad de otra empresa',
+        );
+        $foreignCashId = $this->financialAccount(
+            $foreignEntityId,
+            $foreignUser->id,
+            'Caja de otra empresa',
+        );
+        $foreignClientId = $this->thirdParty(
+            (int) $foreignUser->empresa_id,
+            'CLIENTE',
+            'Cliente de otra empresa',
+            '10444444',
+        );
+
+        $response = $this->getJson('/api/v1/finanzas/caja-efectivo/catalogo')
+            ->assertOk();
+
+        $cashRegisterIds = collect($response->json('data.cajas'))->pluck('id')->all();
+        $clientIds = collect($response->json('data.clientes'))->pluck('id')->all();
+
+        $this->assertEqualsCanonicalizing(
+            [$this->cashRegisterId, $this->otherCashRegisterId],
+            $cashRegisterIds,
+        );
+        $this->assertContains($clientId, $clientIds);
+        $this->assertNotContains($inactiveClientId, $clientIds);
+        $this->assertNotContains($providerId, $clientIds);
+        $this->assertNotContains($foreignClientId, $clientIds);
+        $this->assertNotContains($bankAccountId, $cashRegisterIds);
+        $this->assertNotContains($inactiveCashId, $cashRegisterIds);
+        $this->assertNotContains($externalCashId, $cashRegisterIds);
+        $this->assertNotContains($foreignCashId, $cashRegisterIds);
+    }
+
+    public function test_income_and_expense_are_cash_only_idempotent_and_update_the_daily_totals_immediately(): void
+    {
+        $clientId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente caja',
+            '10555555',
+        );
+        $incomeKey = (string) Str::uuid();
+        $incomePayload = $this->payload($incomeKey, [
+            'direccion' => 'INGRESO',
+            'contraparte_tipo' => 'CLIENTE',
+            'cliente_id' => $clientId,
+            'fecha_hora' => '2026-07-31 09:15:00',
+            'importe' => '150.25',
+            'detalle' => 'Pago en efectivo del cliente',
+        ]);
+
+        $incomeResponse = $this->postJson(
+            '/api/v1/finanzas/caja-efectivo',
+            $incomePayload,
+        )->assertCreated()
+            ->assertJsonPath('meta.idempotent', false)
+            ->assertJsonPath('data.direccion', 'INGRESO')
+            ->assertJsonPath('data.contraparte_tipo', 'CLIENTE')
+            ->assertJsonPath('data.cliente.id', $clientId)
+            ->assertJsonPath('data.caja.id', $this->cashRegisterId)
+            ->assertJsonPath('data.importe', '150.25')
+            ->assertJsonPath('data.detalle', 'Pago en efectivo del cliente');
+        $incomeId = (int) $incomeResponse->json('data.id');
+        $incomePaymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $incomeId)
+            ->value('pago_id');
+
+        $this->assertDatabaseHas('movimientos_caja_efectivo', [
+            'id' => $incomeId,
+            'empresa_id' => $this->user->empresa_id,
+            'pago_id' => $incomePaymentId,
+            'caja_id' => $this->cashRegisterId,
+            'direccion' => 'INGRESO',
+            'contraparte_tipo' => 'CLIENTE',
+            'cliente_id' => $clientId,
+            'otra_caja_id' => null,
+            'detalle' => 'Pago en efectivo del cliente',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $incomePaymentId,
+            'empresa_id' => $this->user->empresa_id,
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $clientId,
+            'cuenta_origen_id' => null,
+            'cuenta_destino_id' => $this->cashRegisterId,
+            'metodo_pago_id' => $this->cashMethodId,
+            'metodo' => 'EFECTIVO',
+            'direccion' => 'INGRESO',
+            'referencia' => null,
+            'moneda' => 'PEN',
+            'importe' => 150.25,
+            'estado' => 'REGISTRADO',
+        ]);
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('resumen.ingresos', '150.25')
+            ->assertJsonPath('resumen.egresos', '0.00')
+            ->assertJsonPath('resumen.neto', '150.25');
+
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $incomePayload)
+            ->assertOk()
+            ->assertJsonPath('meta.idempotent', true)
+            ->assertJsonPath('data.id', $incomeId);
+        $this->assertDatabaseCount('movimientos_caja_efectivo', 1);
+
+        $changedRequest = $incomePayload;
+        $changedRequest['importe'] = '151.25';
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $changedRequest)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $expenseResponse = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'OTRO',
+                'fecha_hora' => '2026-07-31 11:45:00',
+                'importe' => '40.10',
+                'detalle' => 'Compra menor pagada por caja',
+            ],
+        ))->assertCreated()
+            ->assertJsonPath('data.direccion', 'EGRESO')
+            ->assertJsonPath('data.importe', '40.10');
+        $expensePaymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $expenseResponse->json('data.id'))
+            ->value('pago_id');
+
+        $this->assertDatabaseHas('pagos', [
+            'id' => $expensePaymentId,
+            'tipo' => 'AJUSTE',
+            'cliente_id' => null,
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'cuenta_destino_id' => null,
+            'metodo_pago_id' => $this->cashMethodId,
+            'metodo' => 'EFECTIVO',
+            'direccion' => 'EGRESO',
+            'referencia' => null,
+            'importe' => 40.10,
+        ]);
+
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'fecha_hora' => '2026-08-01 00:05:00',
+                'importe' => '999.00',
+                'detalle' => 'Movimiento de un dia diferente',
+            ],
+        ))->assertCreated();
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $expenseResponse->json('data.id'))
+            ->assertJsonPath('resumen.ingresos', '150.25')
+            ->assertJsonPath('resumen.egresos', '40.10')
+            ->assertJsonPath('resumen.neto', '110.15')
+            ->assertJsonPath('resumen.moneda', 'PEN');
+    }
+
+    public function test_a_cash_transfer_is_an_expense_in_the_source_and_income_in_the_destination(): void
+    {
+        $response = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'OTRA_CAJA',
+                'otra_caja_id' => $this->otherCashRegisterId,
+                'fecha_hora' => '2026-07-31 14:20:00',
+                'importe' => '60.00',
+                'detalle' => 'Traslado de efectivo a la caja secundaria',
+            ],
+        ))->assertCreated()
+            ->assertJsonPath('data.direccion', 'EGRESO')
+            ->assertJsonPath('data.caja.id', $this->cashRegisterId)
+            ->assertJsonPath('data.otra_caja.id', $this->otherCashRegisterId)
+            ->assertJsonPath('data.importe', '60.00');
+        $movementId = (int) $response->json('data.id');
+        $paymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $movementId)
+            ->value('pago_id');
+
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'tipo' => 'TRANSFERENCIA_INTERNA',
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'cuenta_destino_id' => $this->otherCashRegisterId,
+            'metodo_pago_id' => $this->cashMethodId,
+            'metodo' => 'EFECTIVO',
+            'direccion' => 'TRANSFERENCIA',
+            'referencia' => null,
+            'importe' => 60,
+        ]);
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $movementId)
+            ->assertJsonPath('data.0.direccion', 'EGRESO')
+            ->assertJsonPath('data.0.caja.id', $this->cashRegisterId)
+            ->assertJsonPath('data.0.otra_caja.id', $this->otherCashRegisterId)
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.egresos', '60.00')
+            ->assertJsonPath('resumen.neto', '-60.00');
+
+        $this->getJson($this->dailyUrl($this->otherCashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $movementId)
+            ->assertJsonPath('data.0.direccion', 'INGRESO')
+            ->assertJsonPath('data.0.caja.id', $this->otherCashRegisterId)
+            ->assertJsonPath('data.0.otra_caja.id', $this->cashRegisterId)
+            ->assertJsonPath('resumen.ingresos', '60.00')
+            ->assertJsonPath('resumen.egresos', '0.00')
+            ->assertJsonPath('resumen.neto', '60.00');
+    }
+
+    public function test_editing_financial_fields_reverses_the_old_payment_and_links_the_replacement(): void
+    {
+        $movement = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'INGRESO',
+                'contraparte_tipo' => 'OTRO',
+                'fecha_hora' => '2026-07-31 08:00:00',
+                'importe' => '120.00',
+                'detalle' => 'Fondo recibido al abrir la caja',
+            ],
+        ))->assertCreated()->json('data');
+        $originalPaymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $movement['id'])
+            ->value('pago_id');
+
+        $this->putJson("/api/v1/finanzas/caja-efectivo/{$movement['id']}", $this->payload(
+            null,
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'OTRO',
+                'fecha_hora' => '2026-07-31 08:30:00',
+                'importe' => '80.00',
+                'detalle' => 'Correccion: el efectivo salio de la caja',
+            ],
+        ))->assertOk()
+            ->assertJsonPath('data.id', $movement['id'])
+            ->assertJsonPath('data.direccion', 'EGRESO')
+            ->assertJsonPath('data.importe', '80.00')
+            ->assertJsonPath('data.detalle', 'Correccion: el efectivo salio de la caja');
+
+        $replacementPaymentId = (int) DB::table('movimientos_caja_efectivo')
+            ->where('id', $movement['id'])
+            ->value('pago_id');
+        $this->assertNotSame($originalPaymentId, $replacementPaymentId);
+        $this->assertDatabaseCount('movimientos_caja_efectivo', 1);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $originalPaymentId,
+            'estado' => 'ANULADO',
+            'importe' => 120,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'reversa_de_pago_id' => $originalPaymentId,
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'cuenta_destino_id' => null,
+            'direccion' => 'EGRESO',
+            'importe' => 120,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $replacementPaymentId,
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'cuenta_destino_id' => null,
+            'metodo_pago_id' => $this->cashMethodId,
+            'metodo' => 'EFECTIVO',
+            'direccion' => 'EGRESO',
+            'referencia' => null,
+            'importe' => 80,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'movimientos_caja_efectivo',
+            'entidad_id' => (string) $movement['id'],
+            'accion' => 'CORREGIR_CON_REVERSA',
+        ]);
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $movement['id'])
+            ->assertJsonPath('data.0.direccion', 'EGRESO')
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.egresos', '80.00')
+            ->assertJsonPath('resumen.neto', '-80.00');
+    }
+
+    public function test_cash_register_movements_reject_invalid_accounts_clients_and_counterpart_combinations(): void
+    {
+        $bankAccountId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Cuenta bancaria invalida',
+            'BANCO',
+        );
+        $inactiveCashId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Caja bloqueada',
+            'CAJA',
+            'INACTIVO',
+        );
+        $externalEntityId = $this->financialEntity(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            'EXTERNA',
+            'Entidad externa invalida',
+        );
+        $externalCashId = $this->financialAccount(
+            $externalEntityId,
+            $this->user->id,
+            'Caja externa invalida',
+        );
+        $foreignUser = User::factory()->create();
+        $foreignEntityId = $this->financialEntity(
+            (int) $foreignUser->empresa_id,
+            $foreignUser->id,
+            'PROPIA',
+            'Entidad extranjera invalida',
+        );
+        $foreignCashId = $this->financialAccount(
+            $foreignEntityId,
+            $foreignUser->id,
+            'Caja extranjera invalida',
+        );
+
+        foreach ([$bankAccountId, $inactiveCashId, $externalCashId, $foreignCashId] as $accountId) {
+            $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+                (string) Str::uuid(),
+                ['caja_id' => $accountId],
+            ))->assertUnprocessable()
+                ->assertJsonValidationErrors('caja_id');
+        }
+
+        $foreignClientId = $this->thirdParty(
+            (int) $foreignUser->empresa_id,
+            'CLIENTE',
+            'Cliente extranjero invalido',
+            '10666666',
+        );
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'INGRESO',
+                'contraparte_tipo' => 'CLIENTE',
+                'cliente_id' => $foreignClientId,
+            ],
+        ))->assertUnprocessable()
+            ->assertJsonValidationErrors('cliente_id');
+
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'CLIENTE',
+                'cliente_id' => $foreignClientId,
+            ],
+        ))->assertUnprocessable()
+            ->assertJsonValidationErrors('contraparte_tipo');
+
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'contraparte_tipo' => 'OTRA_CAJA',
+                'otra_caja_id' => $this->cashRegisterId,
+            ],
+        ))->assertUnprocessable()
+            ->assertJsonValidationErrors('otra_caja_id');
+
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'contraparte_tipo' => 'OTRA_CAJA',
+                'otra_caja_id' => $bankAccountId,
+            ],
+        ))->assertUnprocessable()
+            ->assertJsonValidationErrors('otra_caja_id');
+
+        $this->assertDatabaseCount('movimientos_caja_efectivo', 0);
+        $this->assertDatabaseCount('pagos', 0);
+    }
+
+    /** @param array<string, mixed> $overrides @return array<string, mixed> */
+    private function payload(?string $idempotencyKey, array $overrides = []): array
+    {
+        $payload = [
+            'idempotency_key' => $idempotencyKey,
+            'caja_id' => $this->cashRegisterId,
+            'direccion' => 'INGRESO',
+            'contraparte_tipo' => 'OTRO',
+            'fecha_hora' => '2026-07-31 10:00:00',
+            'importe' => '25.00',
+            'detalle' => 'Movimiento manual de prueba',
+        ];
+
+        if ($idempotencyKey === null) {
+            unset($payload['idempotency_key']);
+        }
+
+        return [...$payload, ...$overrides];
+    }
+
+    private function dailyUrl(int $cashRegisterId, string $date): string
+    {
+        return '/api/v1/finanzas/caja-efectivo?'.http_build_query([
+            'caja_id' => $cashRegisterId,
+            'fecha' => $date,
+        ]);
+    }
+
+    private function financialEntity(
+        int $companyId,
+        int $creatorId,
+        string $type,
+        string $name,
+    ): int {
+        return DB::table('entidades_financieras')->insertGetId([
+            'empresa_id' => $companyId,
+            'tipo' => $type,
+            'razon_social' => $name,
+            'estado' => 'ACTIVO',
+            'created_by' => $creatorId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function financialAccount(
+        int $entityId,
+        int $creatorId,
+        string $alias,
+        string $type = 'CAJA',
+        string $status = 'ACTIVO',
+    ): int {
+        return DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $entityId,
+            'tipo' => $type,
+            'alias' => $alias,
+            'moneda' => 'PEN',
+            'estado' => $status,
+            'created_by' => $creatorId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function thirdParty(
+        int $companyId,
+        string $role,
+        string $name,
+        string $document,
+        string $status = 'ACTIVO',
+    ): int {
+        $thirdPartyId = DB::table('terceros')->insertGetId([
+            'empresa_id' => $companyId,
+            'tipo_documento' => strlen($document) === 11 ? 'RUC' : 'DNI',
+            'numero_documento' => $document,
+            'nombre_razon_social' => $name,
+            'direccion' => 'Direccion de prueba',
+            'estado' => $status,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('tercero_roles')->insert([
+            'tercero_id' => $thirdPartyId,
+            'rol' => $role,
+            'created_at' => now(),
+        ]);
+
+        return $thirdPartyId;
+    }
+}

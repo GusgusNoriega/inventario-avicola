@@ -35,28 +35,32 @@
     <span aria-hidden="true">03</span>
     <strong>Empresas y cuentas</strong>
   </a>
-  <a class="fin-nav-link {{ ($active ?? '') === 'movimiento' ? 'is-active' : '' }}" href="{{ route('finanzas.movimientos.nuevo') }}" @if (($active ?? '') === 'movimiento') aria-current="page" @endif>
+  <a class="fin-nav-link {{ ($active ?? '') === 'caja-efectivo' ? 'is-active' : '' }}" href="{{ route('finanzas.caja-efectivo') }}" @if (($active ?? '') === 'caja-efectivo') aria-current="page" @endif>
     <span aria-hidden="true">04</span>
+    <strong>Caja de efectivo</strong>
+  </a>
+  <a class="fin-nav-link {{ ($active ?? '') === 'movimiento' ? 'is-active' : '' }}" href="{{ route('finanzas.movimientos.nuevo') }}" @if (($active ?? '') === 'movimiento') aria-current="page" @endif>
+    <span aria-hidden="true">05</span>
     <strong>Registrar cobro, deuda o pago</strong>
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'gestion' ? 'is-active' : '' }}" href="{{ route('finanzas.movimientos') }}" @if (($active ?? '') === 'gestion') aria-current="page" @endif>
-    <span aria-hidden="true">05</span>
+    <span aria-hidden="true">06</span>
     <strong>Gestionar movimientos</strong>
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'gastos' ? 'is-active' : '' }}" href="{{ route('finanzas.gastos') }}" @if (($active ?? '') === 'gastos') aria-current="page" @endif>
-    <span aria-hidden="true">06</span>
+    <span aria-hidden="true">07</span>
     <strong>Gastos de empresa</strong>
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'descuentos' ? 'is-active' : '' }}" href="{{ route('finanzas.descuentos-clientes') }}" @if (($active ?? '') === 'descuentos') aria-current="page" @endif>
-    <span aria-hidden="true">07</span>
+    <span aria-hidden="true">08</span>
     <strong>Descuentos a clientes</strong>
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'tickets' ? 'is-active' : '' }}" href="{{ route('finanzas.tickets') }}" @if (($active ?? '') === 'tickets') aria-current="page" @endif>
-    <span aria-hidden="true">08</span>
+    <span aria-hidden="true">09</span>
     <strong>Consultar tickets</strong>
   </a>
   <a class="fin-nav-link {{ ($active ?? '') === 'reportes' ? 'is-active' : '' }}" href="{{ route('finanzas.reportes') }}" @if (($active ?? '') === 'reportes') aria-current="page" @endif>
-    <span aria-hidden="true">09</span>
+    <span aria-hidden="true">10</span>
     <strong>Reportes PDF</strong>
   </a>
 </nav>

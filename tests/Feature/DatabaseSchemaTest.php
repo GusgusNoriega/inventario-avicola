@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(89, $migrationFiles);
+        $this->assertCount(90, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -109,6 +109,7 @@ class DatabaseSchemaTest extends TestCase
             'compras',
             'compra_detalles',
             'gastos_empresa',
+            'movimientos_caja_efectivo',
         ];
 
         foreach ($tables as $table) {
@@ -150,6 +151,7 @@ class DatabaseSchemaTest extends TestCase
             'compras' => ['empresa_id', 'proveedor_id', 'comprobante_id', 'pago_inicial_id', 'codigo', 'idempotency_key', 'tipo_documento', 'numero_documento', 'numero_documento_activo', 'fecha_compra', 'fecha_vencimiento', 'condicion', 'moneda', 'subtotal', 'impuesto', 'total', 'estado', 'observaciones', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'compra_detalles' => ['compra_id', 'tipo_pollo_id', 'descripcion', 'cantidad_aves', 'peso_kg', 'precio_kg', 'subtotal', 'created_at'],
             'gastos_empresa' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'categoria', 'concepto', 'destino', 'numero_documento', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
+            'movimientos_caja_efectivo' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'caja_id', 'direccion', 'contraparte_tipo', 'cliente_id', 'otra_caja_id', 'detalle', 'estado', 'created_by'],
         ];
 
         foreach ($expectations as $table => $columns) {
@@ -512,6 +514,28 @@ class DatabaseSchemaTest extends TestCase
             'estacion',
             'metodo_pago_id',
             'cuenta_destino_id',
+        ]));
+    }
+
+    public function test_cash_register_movement_schema_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_07_31_000001_create_movimientos_caja_efectivo_table.php'
+        );
+
+        $migration->down();
+        $this->assertFalse(Schema::hasTable('movimientos_caja_efectivo'));
+
+        $migration->up();
+        $this->assertTrue(Schema::hasColumns('movimientos_caja_efectivo', [
+            'empresa_id',
+            'pago_id',
+            'caja_id',
+            'direccion',
+            'contraparte_tipo',
+            'cliente_id',
+            'otra_caja_id',
+            'detalle',
         ]));
     }
 

@@ -90,6 +90,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             Route::view('/finanzas', 'finanzas-menu')->name('finanzas');
             Route::view('/finanzas/saldos', 'finanzas')->name('finanzas.saldos');
             Route::view('/finanzas/entidades', 'finanzas-entidades')->name('finanzas.entidades');
+            Route::view('/finanzas/caja-efectivo', 'finanzas-caja-efectivo')
+                ->name('finanzas.caja-efectivo');
             Route::view('/finanzas/movimientos/nuevo', 'finanzas-movimiento')
                 ->name('finanzas.movimientos.nuevo');
             Route::view('/finanzas/movimientos', 'finanzas-movimientos')

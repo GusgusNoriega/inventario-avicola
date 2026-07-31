@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AdminRoleController;
 use App\Http\Controllers\Api\V1\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CashRegisterController;
 use App\Http\Controllers\Api\V1\CompanyExpenseController;
 use App\Http\Controllers\Api\V1\CustomerDiscountController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
@@ -50,6 +51,8 @@ Route::prefix('v1')->group(function (): void {
         'module:MODULO_FINANZAS',
     ])->group(function (): void {
         Route::middleware('permission:FINANZAS_VER')->group(function (): void {
+            Route::get('/caja-efectivo/catalogo', [CashRegisterController::class, 'catalog']);
+            Route::get('/caja-efectivo', [CashRegisterController::class, 'index']);
             Route::get('/entidades', [FinancialEntityController::class, 'index']);
             Route::get('/catalogo', [FinancialQueryController::class, 'catalog']);
             Route::get('/cartera', [FinancialQueryController::class, 'portfolio']);
@@ -86,6 +89,11 @@ Route::prefix('v1')->group(function (): void {
 
         Route::post('/movimientos', [FinancialMovementController::class, 'store'])
             ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/caja-efectivo', [CashRegisterController::class, 'store'])
+            ->middleware(['permission:PAGOS_REGISTRAR', 'permission:SALDOS_AJUSTAR']);
+        Route::put('/caja-efectivo/{movimientoCaja}', [CashRegisterController::class, 'update'])
+            ->whereNumber('movimientoCaja')
+            ->middleware(['permission:PAGOS_REGISTRAR', 'permission:SALDOS_AJUSTAR']);
         Route::put('/movimientos/{movimiento}', [FinancialMovementController::class, 'update'])
             ->whereNumber('movimiento')
             ->middleware('permission:PAGOS_REGISTRAR');
