@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Comprobante;
+use App\Models\CuentaFinanciera;
+use App\Models\EntidadFinanciera;
 use App\Models\Pago;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
@@ -44,6 +46,182 @@ class ReportPdfTest extends TestCase
             ->assertSee('Movimientos por responsable')
             ->assertSee('Sin zonas ni campos heredados')
             ->assertDontSee('Reporte de ventas por zonas');
+    }
+
+    public function test_reports_page_lists_only_own_tenant_accounts_and_includes_inactive_accounts(): void
+    {
+        $activeOwnAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta propia activa reporte',
+        );
+        $inactiveOwnAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta propia inactiva reporte',
+            CuentaFinanciera::STATUS_INACTIVE,
+        );
+        $externalAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_EXTERNAL,
+            'Cuenta externa excluida reporte',
+        );
+        $otherTenantUser = User::factory()->create();
+        $otherTenantAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta de otro tenant excluida reporte',
+            owner: $otherTenantUser,
+        );
+
+        $this->get(route('finanzas.reportes'))
+            ->assertOk()
+            ->assertSee('name="cuenta_id"', false)
+            ->assertSee('Cuenta propia activa reporte')
+            ->assertSee('Cuenta propia inactiva reporte')
+            ->assertSee('Inactiva')
+            ->assertDontSee('Cuenta externa excluida reporte')
+            ->assertDontSee('Cuenta de otro tenant excluida reporte')
+            ->assertViewHas('accounts', function ($accounts) use (
+                $activeOwnAccount,
+                $inactiveOwnAccount,
+                $externalAccount,
+                $otherTenantAccount,
+            ): bool {
+                $accountIds = $accounts->pluck('id')->map(fn (mixed $id): int => (int) $id);
+
+                return $accountIds->contains($activeOwnAccount)
+                    && $accountIds->contains($inactiveOwnAccount)
+                    && ! $accountIds->contains($externalAccount)
+                    && ! $accountIds->contains($otherTenantAccount);
+            });
+    }
+
+    public function test_report_http_validation_rejects_external_and_other_tenant_accounts(): void
+    {
+        $externalAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_EXTERNAL,
+            'Cuenta externa invalida reporte',
+        );
+        $otherTenantUser = User::factory()->create();
+        $otherTenantAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta ajena invalida reporte',
+            owner: $otherTenantUser,
+        );
+
+        $this->from(route('finanzas.reportes'))
+            ->get(route('finanzas.reportes.pdf', [
+                'type' => 'pagos',
+                'cuenta_id' => $externalAccount,
+                'desde' => '2026-07-01',
+                'hasta' => '2026-07-31',
+            ]))
+            ->assertRedirect(route('finanzas.reportes'))
+            ->assertSessionHasErrors('cuenta_id');
+
+        $this->from(route('finanzas.reportes'))
+            ->get(route('finanzas.reportes.pdf', [
+                'type' => 'responsable',
+                'usuario_id' => $this->user->id,
+                'cuenta_id' => $otherTenantAccount,
+                'desde' => '2026-07-01',
+                'hasta' => '2026-07-31',
+            ]))
+            ->assertRedirect(route('finanzas.reportes'))
+            ->assertSessionHasErrors('cuenta_id');
+    }
+
+    public function test_payments_report_filters_by_origin_or_destination_account_and_recalculates_totals(): void
+    {
+        $selectedAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta seleccionada pagos reporte',
+        );
+        $otherAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta no seleccionada pagos reporte',
+        );
+        $this->reportPayment('PG-CUENTA-DESTINO', [
+            'cuenta_destino_id' => $selectedAccount,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '120.00',
+        ]);
+        $this->reportPayment('PG-CUENTA-ORIGEN', [
+            'cuenta_origen_id' => $selectedAccount,
+            'direccion' => Pago::DIRECTION_EXPENSE,
+            'importe' => '45.00',
+        ]);
+        $this->reportPayment('PG-CUENTA-TRANSFERENCIA', [
+            'tipo' => Pago::TYPE_INTERNAL_TRANSFER,
+            'cuenta_origen_id' => $selectedAccount,
+            'cuenta_destino_id' => $otherAccount,
+            'direccion' => Pago::DIRECTION_NO_FLOW,
+            'importe' => '20.00',
+        ]);
+        $this->reportPayment('PG-OTRA-CUENTA', [
+            'cuenta_destino_id' => $otherAccount,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '900.00',
+        ]);
+
+        $report = app(ReportDataService::class)->payments(
+            (int) $this->user->empresa_id,
+            '2026-07-01',
+            '2026-07-31',
+            ['cuenta_id' => $selectedAccount],
+        );
+
+        $this->assertSame(
+            ['PG-CUENTA-DESTINO', 'PG-CUENTA-ORIGEN', 'PG-CUENTA-TRANSFERENCIA'],
+            $report['rows']->pluck('code')->all(),
+        );
+        $this->assertSame(1, $report['rows']->where('code', 'PG-CUENTA-TRANSFERENCIA')->count());
+        $this->assertFalse($report['rows']->pluck('code')->contains('PG-OTRA-CUENTA'));
+        $this->assertSame(120.0, (float) $report['income']);
+        $this->assertSame(45.0, (float) $report['expense']);
+        $this->assertSame(185.0, (float) $report['total']);
+    }
+
+    public function test_responsible_report_respects_the_account_filter(): void
+    {
+        $selectedAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta seleccionada responsable reporte',
+        );
+        $otherAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta no seleccionada responsable reporte',
+        );
+        $otherUser = $this->createUserForCompany($this->user, ['nombre' => 'Otro responsable de cuenta']);
+        $this->reportPayment('PG-RESP-CUENTA', [
+            'cuenta_destino_id' => $selectedAccount,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '70.00',
+        ]);
+        $this->reportPayment('PG-RESP-OTRA-CUENTA', [
+            'cuenta_destino_id' => $otherAccount,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '90.00',
+        ]);
+        $this->reportPayment('PG-RESP-OTRO-USUARIO', [
+            'cuenta_destino_id' => $selectedAccount,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '110.00',
+            'created_by' => $otherUser->id,
+        ]);
+
+        $report = app(ReportDataService::class)->responsibleMovements(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            '2026-07-01',
+            '2026-07-31',
+            $selectedAccount,
+        );
+
+        $this->assertSame(['PG-RESP-CUENTA'], $report['rows']->pluck('code')->all());
+        $this->assertCount(1, $report['collections']);
+        $this->assertCount(0, $report['expenses']);
+        $this->assertCount(0, $report['other']);
+        $this->assertSame(70.0, (float) $report['income']);
+        $this->assertSame(0.0, (float) $report['expense']);
+        $this->assertSame(70.0, (float) $report['total']);
     }
 
     public function test_sales_report_is_generated_as_an_inline_pdf(): void
@@ -626,6 +804,54 @@ class ReportPdfTest extends TestCase
             $account('Caja principal reporte'),
             $account('Caja secundaria reporte'),
         ];
+    }
+
+    private function financialAccount(
+        string $entityType,
+        string $alias,
+        string $accountStatus = CuentaFinanciera::STATUS_ACTIVE,
+        ?User $owner = null,
+        string $entityStatus = EntidadFinanciera::STATUS_ACTIVE,
+    ): int {
+        $owner ??= $this->user;
+        $entityId = DB::table('entidades_financieras')->insertGetId([
+            'empresa_id' => $owner->empresa_id,
+            'tipo' => $entityType,
+            'razon_social' => 'Entidad '.$alias,
+            'estado' => $entityStatus,
+            'created_by' => $owner->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return DB::table('cuentas_financieras')->insertGetId([
+            'entidad_financiera_id' => $entityId,
+            'tipo' => CuentaFinanciera::TYPE_CASH,
+            'alias' => $alias,
+            'moneda' => 'PEN',
+            'estado' => $accountStatus,
+            'created_by' => $owner->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function reportPayment(string $code, array $overrides = []): Pago
+    {
+        return Pago::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => $code,
+            'tipo' => Pago::TYPE_ADJUSTMENT,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'fecha_hora' => '2026-07-15 10:00:00',
+            'metodo' => 'EFECTIVO',
+            'moneda' => 'PEN',
+            'importe' => '10.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+            ...$overrides,
+        ]);
     }
 
     /** @param array<string, mixed> $overrides */

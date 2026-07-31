@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Empresa;
+use App\Models\EntidadFinanciera;
 use App\Models\Pago;
 use App\Services\ReportDataService;
 use App\Services\ReportImageRenderer;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\Response;
 use ZipArchive;
@@ -46,6 +49,11 @@ class ReportController extends Controller
                 ->orderBy('nombre')
                 ->get(['id', 'nombre']),
             'paymentTypes' => Pago::TYPES,
+            'accounts' => $this->ownAccountsQuery($companyId)
+                ->orderBy('entidad.razon_social')
+                ->orderBy('cuenta.estado')
+                ->orderBy('cuenta.alias')
+                ->get(),
         ]);
     }
 
@@ -124,6 +132,7 @@ class ReportController extends Controller
         $request->merge([
             'tipo' => $request->filled('tipo') ? strtoupper(trim((string) $request->input('tipo'))) : null,
         ]);
+        $companyId = (int) $request->user()->empresa_id;
         $rules = [
             'desde' => ['required', 'date_format:Y-m-d'],
             'hasta' => ['required', 'date_format:Y-m-d', 'after_or_equal:desde'],
@@ -138,19 +147,38 @@ class ReportController extends Controller
         if ($type === 'pagos') {
             $rules['tipo'] = ['nullable', 'string', Rule::in(Pago::TYPES)];
             $rules['metodo_pago_id'] = ['nullable', 'integer'];
+            $rules['cuenta_id'] = ['nullable', 'integer'];
         }
         if ($type === 'responsable') {
             $rules['usuario_id'] = ['required', 'integer'];
+            $rules['cuenta_id'] = ['nullable', 'integer'];
         }
         $validated = $request->validate($rules);
-        $companyId = (int) $request->user()->empresa_id;
+        $selectedAccount = null;
+        if (isset($validated['cuenta_id'])) {
+            $selectedAccount = $this->ownAccountsQuery($companyId)
+                ->where('cuenta.id', (int) $validated['cuenta_id'])
+                ->first();
+
+            if (! $selectedAccount) {
+                throw ValidationException::withMessages([
+                    'cuenta_id' => 'La cuenta seleccionada no pertenece a una empresa propia.',
+                ]);
+            }
+        }
         $company = Empresa::query()->findOrFail($companyId);
         $data = match ($type) {
             'ventas-clientes' => $this->reports->salesByCustomer($companyId, $validated['desde'], $validated['hasta']),
             'estado-cliente' => $this->reports->customerStatement($companyId, (int) $validated['cliente_id'], $validated['desde'], $validated['hasta']),
             'estado-proveedor' => $this->reports->providerStatement($companyId, (int) $validated['proveedor_id'], $validated['desde'], $validated['hasta']),
             'pagos' => $this->reports->payments($companyId, $validated['desde'], $validated['hasta'], $validated),
-            'responsable' => $this->reports->responsibleMovements($companyId, (int) $validated['usuario_id'], $validated['desde'], $validated['hasta']),
+            'responsable' => $this->reports->responsibleMovements(
+                $companyId,
+                (int) $validated['usuario_id'],
+                $validated['desde'],
+                $validated['hasta'],
+                isset($validated['cuenta_id']) ? (int) $validated['cuenta_id'] : null,
+            ),
         };
         $titles = [
             'ventas-clientes' => 'Reporte de ventas por cliente',
@@ -167,9 +195,29 @@ class ReportController extends Controller
             'from' => $validated['desde'],
             'to' => $validated['hasta'],
             'data' => $data,
+            'selectedAccount' => $selectedAccount,
             'generatedAt' => now($company->zona_horaria ?: config('app.timezone')),
             'validated' => $validated,
         ];
+    }
+
+    private function ownAccountsQuery(int $companyId): Builder
+    {
+        return DB::table('cuentas_financieras as cuenta')
+            ->join('entidades_financieras as entidad', 'entidad.id', '=', 'cuenta.entidad_financiera_id')
+            ->where('entidad.empresa_id', $companyId)
+            ->where('entidad.tipo', EntidadFinanciera::TYPE_OWN)
+            ->select([
+                'cuenta.id',
+                'cuenta.entidad_financiera_id',
+                'cuenta.alias',
+                'cuenta.tipo',
+                'cuenta.moneda',
+                'cuenta.estado as cuenta_estado',
+                'entidad.razon_social as entidad_razon_social',
+                'entidad.nombre_comercial as entidad_nombre_comercial',
+                'entidad.estado as entidad_estado',
+            ]);
     }
 
     private function addPageNumbers(Dompdf $dompdf): void

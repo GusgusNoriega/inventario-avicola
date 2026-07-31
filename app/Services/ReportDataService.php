@@ -239,6 +239,11 @@ class ReportDataService
             ])
             ->when($filters['tipo'] ?? null, fn (Builder $builder, string $type) => $builder->where('tipo', $type))
             ->when($filters['metodo_pago_id'] ?? null, fn (Builder $builder, int|string $id) => $builder->where('metodo_pago_id', $id))
+            ->when($filters['cuenta_id'] ?? null, fn (Builder $builder, int|string $id) => $builder->where(
+                fn (Builder $accounts) => $accounts
+                    ->where('cuenta_origen_id', $id)
+                    ->orWhere('cuenta_destino_id', $id)
+            ))
             ->where(function (Builder $builder): void {
                 $builder->whereDoesntHave('movimientoCajaEfectivo')
                     ->orWhereHas(
@@ -307,9 +312,17 @@ class ReportDataService
     }
 
     /** @return array<string, mixed> */
-    public function responsibleMovements(int $companyId, int $userId, string $from, string $to): array
-    {
-        $data = $this->payments($companyId, $from, $to, ['usuario_id' => $userId]);
+    public function responsibleMovements(
+        int $companyId,
+        int $userId,
+        string $from,
+        string $to,
+        ?int $accountId = null,
+    ): array {
+        $data = $this->payments($companyId, $from, $to, [
+            'usuario_id' => $userId,
+            'cuenta_id' => $accountId,
+        ]);
 
         $data['collections'] = $data['rows']->filter(fn (array $row) => $row['flow'] === 'INGRESO')->values();
         $data['expenses'] = $data['rows']->filter(fn (array $row) => $row['flow'] === 'EGRESO')->values();

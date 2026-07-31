@@ -50,6 +50,14 @@
   <h1>{{ $title }}</h1>
   <p class="period">Periodo: {{ \Carbon\CarbonImmutable::parse($from)->format('d/m/Y') }} al {{ \Carbon\CarbonImmutable::parse($to)->format('d/m/Y') }}</p>
 
+  @if($selectedAccount ?? null)
+    <div class="subject">
+      Cuenta filtrada:
+      <strong>{{ $selectedAccount->entidad_nombre_comercial ?: $selectedAccount->entidad_razon_social }} - {{ $selectedAccount->alias }}</strong>
+      <span class="muted"> · {{ $selectedAccount->tipo }} · {{ $selectedAccount->moneda }}</span>
+    </div>
+  @endif
+
   @if(in_array($type, ['estado-cliente', 'estado-proveedor'], true))
     <div class="subject">
       {{ $type === 'estado-cliente' ? 'Cliente' : 'Proveedor' }}:
