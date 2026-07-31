@@ -48,6 +48,30 @@ class ReportPdfTest extends TestCase
             ->assertDontSee('Reporte de ventas por zonas');
     }
 
+    public function test_reports_page_shows_the_csv_download_only_for_payments(): void
+    {
+        $response = $this->get(route('finanzas.reportes'))->assertOk();
+        $document = new \DOMDocument('1.0', 'UTF-8');
+        $loaded = @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+
+        $this->assertTrue($loaded);
+        $xpath = new \DOMXPath($document);
+        $buttons = $xpath->query('//button[normalize-space(.) = "Descargar CSV"]');
+
+        $this->assertNotFalse($buttons);
+        $this->assertSame(1, $buttons->length);
+        $button = $buttons->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $button);
+        $this->assertSame(route('finanzas.reportes.pagos.csv'), $button->getAttribute('formaction'));
+        $this->assertSame('_self', $button->getAttribute('formtarget'));
+
+        $forms = $xpath->query('ancestor::form', $button);
+        $this->assertNotFalse($forms);
+        $form = $forms->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $form);
+        $this->assertSame(route('finanzas.reportes.pdf', 'pagos'), $form->getAttribute('action'));
+    }
+
     public function test_reports_page_lists_only_own_tenant_accounts_and_includes_inactive_accounts(): void
     {
         $activeOwnAccount = $this->financialAccount(
@@ -177,6 +201,125 @@ class ReportPdfTest extends TestCase
         $this->assertSame(120.0, (float) $report['income']);
         $this->assertSame(45.0, (float) $report['expense']);
         $this->assertSame(185.0, (float) $report['total']);
+    }
+
+    public function test_payments_csv_is_excel_compatible_and_respects_account_and_date_filters(): void
+    {
+        $selectedAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Caja Ñandú; "Principal"',
+        );
+        $otherAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Caja no seleccionada CSV',
+        );
+        $this->reportPayment('PG-CSV-INICIO', [
+            'cuenta_destino_id' => $selectedAccount,
+            'fecha_hora' => '2026-07-01 00:00:00',
+            'referencia' => 'Referencia; "especial"',
+            'direccion' => Pago::DIRECTION_INCOME,
+            'importe' => '120.50',
+        ]);
+        $this->reportPayment('=PG-CSV-TRANSFERENCIA', [
+            'tipo' => Pago::TYPE_INTERNAL_TRANSFER,
+            'cuenta_origen_id' => $selectedAccount,
+            'cuenta_destino_id' => $otherAccount,
+            'fecha_hora' => '2026-07-15 12:30:45',
+            'direccion' => Pago::DIRECTION_NO_FLOW,
+            'importe' => '20.00',
+        ]);
+        $this->reportPayment('PG-CSV-FIN', [
+            'cuenta_origen_id' => $selectedAccount,
+            'fecha_hora' => '2026-07-31 23:59:59',
+            'direccion' => Pago::DIRECTION_EXPENSE,
+            'importe' => '45.00',
+        ]);
+        $this->reportPayment('PG-CSV-ANTES', [
+            'cuenta_destino_id' => $selectedAccount,
+            'fecha_hora' => '2026-06-30 23:59:59',
+        ]);
+        $this->reportPayment('PG-CSV-DESPUES', [
+            'cuenta_destino_id' => $selectedAccount,
+            'fecha_hora' => '2026-08-01 00:00:00',
+        ]);
+        $this->reportPayment('PG-CSV-OTRA-CUENTA', [
+            'cuenta_destino_id' => $otherAccount,
+            'fecha_hora' => '2026-07-15 10:00:00',
+            'importe' => '900.00',
+        ]);
+
+        $response = $this->get(route('finanzas.reportes.pagos.csv', [
+            'cuenta_id' => $selectedAccount,
+            'desde' => '2026-07-01',
+            'hasta' => '2026-07-31',
+        ]));
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertDownload('pagos-2026-07-01-2026-07-31.csv');
+        $contents = $response->streamedContent();
+        $this->assertStringStartsWith("\xEF\xBB\xBFsep=;\r\n", $contents);
+        $this->assertStringEndsWith("\r\n", $contents);
+        $this->assertSame(0, preg_match('/(?<!\r)\n/', $contents));
+
+        $rows = $this->parseExcelCsv($contents);
+        $this->assertSame([
+            'Fecha y hora',
+            'Código',
+            'Contraparte',
+            'Tipo',
+            'Método',
+            'Detalle',
+            'Responsable',
+            'Flujo',
+            'Monto',
+        ], array_shift($rows));
+        $this->assertCount(3, $rows);
+        $this->assertSame(
+            ['PG-CSV-INICIO', "'=PG-CSV-TRANSFERENCIA", 'PG-CSV-FIN'],
+            array_column($rows, 1),
+        );
+        $this->assertSame(1, count(array_filter(
+            $rows,
+            fn (array $row): bool => $row[1] === "'=PG-CSV-TRANSFERENCIA",
+        )));
+        $this->assertSame(0, preg_match('/^\s*[=+\-@]/u', $rows[1][1]));
+        $this->assertSame(
+            ['01/07/2026 00:00:00', '15/07/2026 12:30:45', '31/07/2026 23:59:59'],
+            array_column($rows, 0),
+        );
+        $this->assertSame(['INGRESO', 'SIN_FLUJO', 'EGRESO'], array_column($rows, 7));
+        $this->assertSame(['120,50', '20,00', '45,00'], array_column($rows, 8));
+        $this->assertSame(
+            'Entidad Caja Ñandú; "Principal" - Caja Ñandú; "Principal" - Referencia; "especial"',
+            $rows[0][5],
+        );
+    }
+
+    public function test_payments_csv_rejects_external_and_other_tenant_accounts(): void
+    {
+        $externalAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_EXTERNAL,
+            'Cuenta externa invalida CSV',
+        );
+        $otherTenantUser = User::factory()->create();
+        $otherTenantAccount = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta ajena invalida CSV',
+            owner: $otherTenantUser,
+        );
+
+        foreach ([$externalAccount, $otherTenantAccount] as $accountId) {
+            $this->from(route('finanzas.reportes'))
+                ->get(route('finanzas.reportes.pagos.csv', [
+                    'cuenta_id' => $accountId,
+                    'desde' => '2026-07-01',
+                    'hasta' => '2026-07-31',
+                ]))
+                ->assertRedirect(route('finanzas.reportes'))
+                ->assertSessionHasErrors('cuenta_id');
+        }
     }
 
     public function test_responsible_report_respects_the_account_filter(): void
@@ -834,6 +977,26 @@ class ReportPdfTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    /** @return list<list<string>> */
+    private function parseExcelCsv(string $contents): array
+    {
+        $prefix = "\xEF\xBB\xBFsep=;\r\n";
+        $this->assertStringStartsWith($prefix, $contents);
+        $stream = fopen('php://temp', 'w+b');
+        $this->assertIsResource($stream);
+        fwrite($stream, substr($contents, strlen($prefix)));
+        rewind($stream);
+        $rows = [];
+
+        while (($row = fgetcsv($stream, null, ';', '"', '')) !== false) {
+            $rows[] = $row;
+        }
+
+        fclose($stream);
+
+        return $rows;
     }
 
     /** @param array<string, mixed> $overrides */

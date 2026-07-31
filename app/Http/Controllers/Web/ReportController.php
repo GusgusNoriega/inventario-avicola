@@ -16,7 +16,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use ZipArchive;
 
 class ReportController extends Controller
@@ -115,6 +117,55 @@ class ReportController extends Controller
         return response($contents, 200, [
             'Content-Type' => 'application/zip',
             'Content-Disposition' => 'attachment; filename="'.$basename.'-imagenes.zip"',
+        ]);
+    }
+
+    public function paymentsCsv(Request $request): StreamedResponse
+    {
+        $payload = $this->payload($request, 'pagos');
+        $validated = $payload['validated'];
+        $rows = $payload['data']['rows'];
+        $filename = 'pagos-'.$validated['desde'].'-'.$validated['hasta'].'.csv';
+
+        return response()->streamDownload(function () use ($rows): void {
+            $output = fopen('php://output', 'wb');
+            if ($output === false) {
+                throw new RuntimeException('No se pudo preparar el archivo CSV.');
+            }
+
+            try {
+                fwrite($output, "\xEF\xBB\xBFsep=;\r\n");
+                $this->writeCsvRow($output, [
+                    'Fecha y hora',
+                    'Código',
+                    'Contraparte',
+                    'Tipo',
+                    'Método',
+                    'Detalle',
+                    'Responsable',
+                    'Flujo',
+                    'Monto',
+                ]);
+
+                foreach ($rows as $row) {
+                    $this->writeCsvRow($output, [
+                        $row['date']->format('d/m/Y H:i:s'),
+                        $this->csvText($row['code']),
+                        $this->csvText($row['counterparty']),
+                        $this->csvText($row['type']),
+                        $this->csvText($row['method']),
+                        $this->csvText($row['detail']),
+                        $this->csvText($row['user']),
+                        $this->csvText($row['flow']),
+                        number_format((float) $row['amount'], 2, ',', ''),
+                    ]);
+                }
+            } finally {
+                fclose($output);
+            }
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -218,6 +269,24 @@ class ReportController extends Controller
                 'entidad.nombre_comercial as entidad_nombre_comercial',
                 'entidad.estado as entidad_estado',
             ]);
+    }
+
+    /**
+     * @param  resource  $output
+     * @param  list<string>  $values
+     */
+    private function writeCsvRow(mixed $output, array $values): void
+    {
+        if (fputcsv($output, $values, ';', '"', '', "\r\n") === false) {
+            throw new RuntimeException('No se pudo escribir el archivo CSV.');
+        }
+    }
+
+    private function csvText(mixed $value): string
+    {
+        $text = (string) ($value ?? '');
+
+        return preg_match('/^\s*[=+\-@]/u', $text) === 1 ? "'".$text : $text;
     }
 
     private function addPageNumbers(Dompdf $dompdf): void

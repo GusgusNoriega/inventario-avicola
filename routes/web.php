@@ -110,6 +110,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('finanzas.reportes.pdf');
             Route::get('/finanzas/reportes/{type}/imagen', [ReportController::class, 'image'])
                 ->name('finanzas.reportes.imagen');
+            Route::get('/finanzas/reportes/pagos/csv', [ReportController::class, 'paymentsCsv'])
+                ->name('finanzas.reportes.pagos.csv');
         });
 
         Route::middleware('module:MODULO_CONTROL_JAVAS')->group(function (): void {
