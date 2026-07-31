@@ -2468,3 +2468,7 @@ body.fin-page {
     justify-self: start;
   }
 }
+
+section#financeApplicationsPanel {
+    display: none;
+}
