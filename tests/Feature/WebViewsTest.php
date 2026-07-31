@@ -203,6 +203,11 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeCxcList"', false)
             ->assertSee('id="financeCxpList"', false)
             ->assertSee('id="financeApplicationsInstructions"', false)
+            ->assertSee('id="financeDailyPanel"', false)
+            ->assertSee('id="financeDailyLiveText"', false)
+            ->assertSee('id="financeDailyRefresh"', false)
+            ->assertSee('id="financeDailyRows"', false)
+            ->assertSee('Actualización automática cada 10 s')
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/finanzas-movimiento.js'), false);
 
@@ -315,6 +320,17 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('queryParameters.get("cliente_id")', $movementJavascript);
         $this->assertStringContainsString('queryParameters.get("proveedor_id")', $movementJavascript);
         $this->assertStringContainsString('method: "POST"', $movementJavascript);
+        $this->assertStringContainsString('DAILY_REFRESH_INTERVAL = 10000', $movementJavascript);
+        $this->assertStringContainsString('function dailyEndpoint(', $movementJavascript);
+        $this->assertStringContainsString('params.set("tipo", modeKey)', $movementJavascript);
+        $this->assertStringContainsString('desde: date', $movementJavascript);
+        $this->assertStringContainsString('hasta: date', $movementJavascript);
+        $this->assertStringContainsString('new BroadcastChannel("sistema-pollos-finanzas-movimientos")', $movementJavascript);
+        $this->assertStringContainsString('refreshDailyAfterSave = true', $movementJavascript);
+        $this->assertStringContainsString('modeKey: savedMode', $movementJavascript);
+        $this->assertStringContainsString('selectedModeInput.checked = true', $movementJavascript);
+        $this->assertStringContainsString('.fin-daily-panel', $financeStylesheet);
+        $this->assertStringContainsString('.fin-daily-table', $financeStylesheet);
         $this->assertStringContainsString('/finanzas/gastos/catalogo', $expensesJavascript);
         $this->assertStringContainsString('/finanzas/gastos?', $expensesJavascript);
         $this->assertStringContainsString('/anular', $expensesJavascript);

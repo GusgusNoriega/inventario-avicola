@@ -136,6 +136,43 @@ class ManualCustomerDebtApiTest extends TestCase
             ->assertJsonPath('data.pending', '85.50');
     }
 
+    public function test_manual_customer_debt_list_filters_by_issue_day(): void
+    {
+        $client = $this->client('CLIENTE LISTADO DIARIO', '10444556');
+        $targetDate = today()->toDateString();
+        $otherDate = today()->subDay()->toDateString();
+
+        $register = function (string $date, string $amount, string $detail) use ($client): int {
+            return (int) $this->postJson('/api/v1/finanzas/deudas-clientes', [
+                'idempotency_key' => (string) Str::uuid(),
+                'cliente_id' => $client,
+                'fecha_emision' => $date,
+                'moneda' => 'PEN',
+                'importe' => $amount,
+                'detalle' => $detail,
+            ])->assertCreated()->json('data.id');
+        };
+
+        $firstTargetId = $register($targetDate, '25.00', 'Primera deuda del día consultado.');
+        $secondTargetId = $register($targetDate, '35.00', 'Segunda deuda del día consultado.');
+        $register($otherDate, '45.00', 'Deuda de un día diferente.');
+
+        $response = $this->getJson(
+            "/api/v1/finanzas/deudas-clientes?desde={$targetDate}&hasta={$targetDate}&per_page=100",
+        )->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 2);
+
+        $this->assertSame(
+            [$secondTargetId, $firstTargetId],
+            collect($response->json('data'))->pluck('id')->all(),
+        );
+        $this->assertSame(
+            [$targetDate],
+            collect($response->json('data'))->pluck('fecha_emision')->unique()->values()->all(),
+        );
+    }
+
     public function test_manual_customer_debt_validates_the_client_date_amount_and_detail(): void
     {
         $client = $this->client('CLIENTE VALIDACIONES', '10444666');

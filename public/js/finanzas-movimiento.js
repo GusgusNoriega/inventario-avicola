@@ -124,6 +124,20 @@ const MODES = {
 };
 
 const PROVIDER_CREDIT_TYPES = new Set(["PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
+const DAILY_REFRESH_INTERVAL = 10000;
+const DAILY_REFRESH_MAX_INTERVAL = 60000;
+const MODE_LABELS = {
+  COBRO_CLIENTE: "Cliente → nuestra empresa",
+  PAGO_DIRECTO: "Cliente → proveedor",
+  PAGO_PROVEEDOR: "Nuestra empresa → proveedor",
+  COBRO_MINORISTA: "Cobro minorista",
+  REEMBOLSO_CLIENTE: "Nuestra empresa → cliente",
+  DEUDA_ANTERIOR_CLIENTE: "Deuda anterior de cliente",
+  SALDO_FAVOR_PROVEEDOR: "Saldo anterior con proveedor"
+};
+const dailyChannel = "BroadcastChannel" in window
+  ? new BroadcastChannel("sistema-pollos-finanzas-movimientos")
+  : null;
 
 const queryParameters = new URLSearchParams(window.location.search);
 const requestedType = String(queryParameters.get("tipo") || "").toUpperCase();
@@ -198,7 +212,14 @@ const elements = {
   cxpPanel: document.getElementById("financeCxpPanel"),
   cxpMessage: document.getElementById("financeCxpMessage"),
   cxpList: document.getElementById("financeCxpList"),
-  cxpAvailable: document.getElementById("financeCxpAvailable")
+  cxpAvailable: document.getElementById("financeCxpAvailable"),
+  dailyPanel: document.getElementById("financeDailyPanel"),
+  dailyTitle: document.getElementById("financeDailyTitle"),
+  dailyDescription: document.getElementById("financeDailyDescription"),
+  dailyLiveText: document.getElementById("financeDailyLiveText"),
+  dailyMessage: document.getElementById("financeDailyMessage"),
+  dailyRefresh: document.getElementById("financeDailyRefresh"),
+  dailyRows: document.getElementById("financeDailyRows")
 };
 
 const state = {
@@ -212,6 +233,14 @@ const state = {
   applications: { CXC: new Map(), CXP: new Map() },
   requestSequence: { CXC: 0, CXP: 0 },
   providerCreditRequestSequence: 0,
+  dailyRequestSequence: 0,
+  dailyLoadPromise: null,
+  dailyLoadSignature: null,
+  dailyRefreshTimer: null,
+  dailyResumeTimer: null,
+  dailyRefreshDelay: DAILY_REFRESH_INTERVAL,
+  dailyRenderedSignature: null,
+  dailyAnnouncementSignature: null,
   idempotencyKey: createIdempotencyKey(),
   saving: false
 };
@@ -289,6 +318,270 @@ function accountName(account) {
   const name = optionLabel(account, firstDefined(account, ["alias", "numero_cuenta", "numero"], "Cuenta"));
   const detail = firstDefined(account, ["banco", "bank", "numero_cuenta", "numero", "alias"], "");
   return `${optionLabel(entity, "Empresa")} — ${name}${detail && detail !== name ? ` · ${detail}` : ""}`;
+}
+
+function financeTimeZone() {
+  return document.body.dataset.financeTimeZone
+    || Intl.DateTimeFormat().resolvedOptions().timeZone
+    || "America/Lima";
+}
+
+function financeBusinessDate(date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: financeTimeZone(),
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  } catch {
+    return toLocalDateTimeValue(date).slice(0, 10);
+  }
+}
+
+function dailyUpdatedTime(date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat("es-PE", {
+      timeZone: financeTimeZone(),
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    }).format(date);
+  } catch {
+    return date.toLocaleTimeString("es-PE");
+  }
+}
+
+function dailyCounterpart(record, modeKey) {
+  const clientName = String(firstDefined(record, ["cliente.nombre", "cliente.nombre_razon_social"], "Cliente sin nombre"));
+  const clientDocument = String(firstDefined(record, ["cliente.numero_documento"], "Sin documento"));
+  const providerName = String(firstDefined(record, ["proveedor.nombre", "proveedor.nombre_razon_social"], "Proveedor sin nombre"));
+  const providerDocument = String(firstDefined(record, ["proveedor.numero_documento"], "Sin documento"));
+
+  if (modeKey === "PAGO_DIRECTO") {
+    return {
+      primary: `${clientName} → ${providerName}`,
+      secondary: `${clientDocument} → ${providerDocument}`
+    };
+  }
+  if (["PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"].includes(modeKey)) {
+    return { primary: providerName, secondary: providerDocument };
+  }
+  if (modeKey === "COBRO_MINORISTA" && !record.cliente) {
+    return { primary: "Sin cliente asignado", secondary: "Cobro minorista" };
+  }
+  return { primary: clientName, secondary: clientDocument };
+}
+
+function dailyAccountAndMethod(record, modeKey) {
+  const manualCustomerDebt = modeKey === "DEUDA_ANTERIOR_CLIENTE";
+  if (manualCustomerDebt) {
+    return { primary: "Cuenta por cobrar", secondary: "Sin movimiento de dinero" };
+  }
+  if (modeKey === "SALDO_FAVOR_PROVEEDOR") {
+    return { primary: "Saldo anterior", secondary: "Sin movimiento de dinero" };
+  }
+
+  const route = [record.cuenta_origen, record.cuenta_destino]
+    .filter(Boolean)
+    .map((account) => accountName(account))
+    .join(" → ");
+  const method = String(firstDefined(record, [
+    "metodo_pago.nombre",
+    "metodo_pago.codigo",
+    "metodo_snapshot"
+  ], "Sin método de pago"));
+
+  return {
+    primary: route || "Sin cuenta vinculada",
+    secondary: method
+  };
+}
+
+function dailyReference(record, manualCustomerDebt) {
+  if (manualCustomerDebt) {
+    return {
+      primary: String(record.detalle || "Sin detalle"),
+      secondary: `Pendiente: ${formatMoney(record.saldo_pendiente, record.moneda)}`
+    };
+  }
+
+  return {
+    primary: String(record.referencia || "Sin referencia"),
+    secondary: String(record.observaciones || "Sin observaciones")
+  };
+}
+
+function dailyStatus(record) {
+  const normalized = String(record.reversa_de_pago_id ? "REVERSA" : record.estado || "REGISTRADO").toUpperCase();
+  const label = {
+    REGISTRADO: "Vigente",
+    PENDIENTE: "Pendiente",
+    PARCIAL: "Parcial",
+    PAGADO: "Pagado",
+    ANULADO: "Anulado",
+    REVERSA: "Reversa"
+  }[normalized] || normalized;
+  const statusClass = normalized.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  return {
+    normalized,
+    html: `<span class="fin-management-status is-${escapeHtml(statusClass)}">${escapeHtml(label)}</span>`
+  };
+}
+
+function renderDailyRecords(records, modeKey, highlightedId = null) {
+  const manualCustomerDebt = modeKey === "DEUDA_ANTERIOR_CLIENTE";
+  const label = MODE_LABELS[modeKey] || "esta operación";
+
+  if (!records.length) {
+    elements.dailyRows.innerHTML = `<tr><td class="fin-empty-cell" colspan="6">Todavía no hay registros de ${escapeHtml(label.toLowerCase())} con fecha de hoy.</td></tr>`;
+    return;
+  }
+
+  elements.dailyRows.innerHTML = records.map((record) => {
+    const counterpart = dailyCounterpart(record, modeKey);
+    const accountAndMethod = dailyAccountAndMethod(record, modeKey);
+    const reference = dailyReference(record, manualCustomerDebt);
+    const status = dailyStatus(record);
+    const recordId = String(record.id ?? "");
+    const classes = ["ANULADO", "REVERSA"].includes(status.normalized) ? ["is-muted"] : [];
+    if (highlightedId !== null && recordId === String(highlightedId)) classes.push("is-new");
+    const date = manualCustomerDebt ? record.fecha_emision : formatDateTime(record.fecha_hora);
+    const amount = manualCustomerDebt ? record.total : record.importe;
+
+    return `<tr class="${classes.join(" ")}" data-daily-record-id="${escapeHtml(recordId)}">
+      <td><strong>${escapeHtml(date || "Sin fecha")}</strong><small>${escapeHtml(record.codigo || `#${recordId}`)}</small></td>
+      <td><strong>${escapeHtml(counterpart.primary)}</strong><small>${escapeHtml(counterpart.secondary)}</small></td>
+      <td><strong>${escapeHtml(accountAndMethod.primary)}</strong><small>${escapeHtml(accountAndMethod.secondary)}</small></td>
+      <td><strong>${escapeHtml(reference.primary)}</strong><small>${escapeHtml(reference.secondary)}</small></td>
+      <td>${status.html}</td>
+      <td class="fin-text-right"><strong class="fin-table-amount">${escapeHtml(formatMoney(amount, record.moneda))}</strong></td>
+    </tr>`;
+  }).join("");
+}
+
+function dailyEndpoint(modeKey, date, page) {
+  const manualCustomerDebt = modeKey === "DEUDA_ANTERIOR_CLIENTE";
+  const params = new URLSearchParams({
+    desde: date,
+    hasta: date,
+    per_page: "100",
+    page: String(page)
+  });
+  if (!manualCustomerDebt) params.set("tipo", modeKey);
+  const endpoint = manualCustomerDebt ? "/finanzas/deudas-clientes" : "/finanzas/movimientos";
+  return `${endpoint}?${params}`;
+}
+
+async function fetchDailyRecords(modeKey, date, sequence) {
+  const firstResponse = await apiRequest(dailyEndpoint(modeKey, date, 1));
+  if (sequence !== state.dailyRequestSequence) return null;
+
+  const records = responseCollection(firstResponse, ["movimientos", "deudas", "items", "records"]);
+  const lastPage = Math.max(1, Number(responseMeta(firstResponse).last_page || 1));
+
+  for (let page = 2; page <= lastPage; page += 1) {
+    const response = await apiRequest(dailyEndpoint(modeKey, date, page));
+    if (sequence !== state.dailyRequestSequence) return null;
+    records.push(...responseCollection(response, ["movimientos", "deudas", "items", "records"]));
+  }
+
+  return [...new Map(records.map((record, index) => [String(record.id ?? `record-${index}`), record])).values()];
+}
+
+async function loadDailyRecords({
+  silent = false,
+  force = false,
+  highlightedId = null,
+  modeKey: requestedMode = null
+} = {}) {
+  const modeKey = requestedMode && MODES[requestedMode] ? requestedMode : currentModeKey();
+  const date = financeBusinessDate();
+  const signature = `${modeKey}:${date}`;
+  if (!force && state.dailyLoadPromise && state.dailyLoadSignature === signature) {
+    return state.dailyLoadPromise;
+  }
+
+  const sequence = ++state.dailyRequestSequence;
+  state.dailyLoadSignature = signature;
+  elements.dailyPanel.setAttribute("aria-busy", "true");
+  if (!silent) elements.dailyRefresh.disabled = true;
+  if (!silent) {
+    setMessage(elements.dailyMessage, "Cargando los registros de hoy...");
+    if (!state.dailyRenderedSignature?.startsWith(`${signature}:`)) {
+      elements.dailyRows.innerHTML = '<tr><td class="fin-empty-cell" colspan="6">Cargando los registros de hoy...</td></tr>';
+      state.dailyRenderedSignature = null;
+    }
+  }
+
+  const loadPromise = (async () => {
+    try {
+      const records = await fetchDailyRecords(modeKey, date, sequence);
+      if (sequence !== state.dailyRequestSequence || records === null) return null;
+
+      const renderedSignature = `${signature}:${JSON.stringify(records)}`;
+      if (renderedSignature !== state.dailyRenderedSignature || highlightedId !== null) {
+        renderDailyRecords(records, modeKey, highlightedId);
+        state.dailyRenderedSignature = highlightedId === null
+          ? renderedSignature
+          : `${renderedSignature}:highlight:${highlightedId}`;
+      }
+      elements.dailyLiveText.textContent = `Actualización automática activa · ${dailyUpdatedTime()}`;
+      const announcementSignature = `${signature}:${records.length}`;
+      if (!silent || announcementSignature !== state.dailyAnnouncementSignature) {
+        setMessage(
+          elements.dailyMessage,
+          `${records.length} registro${records.length === 1 ? "" : "s"} realizado${records.length === 1 ? "" : "s"} hoy para la operación seleccionada.`
+        );
+        state.dailyAnnouncementSignature = announcementSignature;
+      }
+      state.dailyRefreshDelay = DAILY_REFRESH_INTERVAL;
+      markFinanceAccessReady();
+      return records;
+    } catch (error) {
+      if (sequence !== state.dailyRequestSequence) return null;
+      elements.dailyLiveText.textContent = "Intentando recuperar la actualización automática...";
+      if (!silent) {
+        setMessage(elements.dailyMessage, errorMessage(error, "No se pudieron cargar los registros de hoy."), "error");
+      }
+      return null;
+    } finally {
+      if (sequence === state.dailyRequestSequence) {
+        state.dailyLoadPromise = null;
+        state.dailyLoadSignature = null;
+        elements.dailyPanel.setAttribute("aria-busy", "false");
+        elements.dailyRefresh.disabled = false;
+      }
+    }
+  })();
+
+  state.dailyLoadPromise = loadPromise;
+  return loadPromise;
+}
+
+function scheduleDailyRefresh() {
+  window.clearTimeout(state.dailyRefreshTimer);
+  state.dailyRefreshTimer = window.setTimeout(async () => {
+    if (!document.hidden) {
+      const records = await loadDailyRecords({ silent: true });
+      if (records === null) {
+        state.dailyRefreshDelay = Math.min(
+          DAILY_REFRESH_MAX_INTERVAL,
+          Math.max(DAILY_REFRESH_INTERVAL, state.dailyRefreshDelay * 2)
+        );
+      }
+    }
+    scheduleDailyRefresh();
+  }, state.dailyRefreshDelay);
+}
+
+function scheduleDailyResumeRefresh() {
+  window.clearTimeout(state.dailyResumeTimer);
+  state.dailyResumeTimer = window.setTimeout(() => {
+    if (!document.hidden) void loadDailyRecords({ silent: true });
+  }, 150);
 }
 
 function idValue(value) {
@@ -460,7 +753,7 @@ async function loadProviderCredits() {
   }
 }
 
-function updateMode() {
+function updateMode({ refreshDaily = true } = {}) {
   const mode = currentMode();
   const modeKey = currentModeKey();
   const useCredit = usesProviderCredit();
@@ -469,6 +762,12 @@ function updateMode() {
   const hasMethod = mode.method !== false && !useCredit;
   const hasReference = mode.reference !== false && !useCredit;
   const hasApplications = mode.applications !== false;
+  elements.dailyTitle.textContent = `${MODE_LABELS[modeKey] || "Operación seleccionada"}: registros de hoy`;
+  elements.dailyDescription.textContent = useCredit
+    ? "La lista muestra pagos con fecha de hoy. Aplicar un saldo anterior distribuye un registro existente y no crea un movimiento nuevo."
+    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? "Se muestran todas las deudas anteriores cuya fecha corresponde al día de hoy."
+      : "Se muestran todas las transacciones de hoy que corresponden a la operación seleccionada.";
   elements.flowBadge.textContent = mode.badge;
   elements.detailsTitle.textContent = ["SALDO_FAVOR_PROVEEDOR", "DEUDA_ANTERIOR_CLIENTE"].includes(modeKey)
     ? "Datos del saldo anterior"
@@ -568,6 +867,7 @@ function updateMode() {
   updateSummary();
   void loadVisiblePortfolio();
   void loadProviderCredits();
+  if (refreshDaily) void loadDailyRecords();
 }
 
 function normalizeDebt(rawDebt, side) {
@@ -988,8 +1288,14 @@ function providerCreditApplicationPayload() {
   };
 }
 
-function resetMovement({ keepMessage = false } = {}) {
+function resetMovement({
+  keepMessage = false,
+  refreshDaily = true,
+  selectedMode = currentModeKey()
+} = {}) {
   elements.form.reset();
+  const selectedModeInput = document.querySelector(`[name="financeMovementType"][value="${selectedMode}"]`);
+  if (selectedModeInput) selectedModeInput.checked = true;
   elements.date.value = toLocalDateTimeValue();
   state.debts = { CXC: [], CXP: [] };
   state.providerCredits = [];
@@ -999,14 +1305,17 @@ function resetMovement({ keepMessage = false } = {}) {
   if (!keepMessage) setMessage(elements.message);
   [elements.cxcMessage, elements.cxpMessage].forEach((message) => setMessage(message));
   updateMethodConstraints();
-  updateMode();
+  updateMode({ refreshDaily });
 }
 
 async function saveMovement(event) {
   event.preventDefault();
   if (state.saving) return;
   setMessage(elements.message);
+  const savedMode = currentModeKey();
   const manualCustomerDebt = isManualCustomerDebt();
+  let savedRecordId = null;
+  let refreshDailyAfterSave = false;
 
   try {
     const creditApplication = usesProviderCredit() ? providerCreditApplicationPayload() : null;
@@ -1014,6 +1323,7 @@ async function saveMovement(event) {
     state.saving = true;
     elements.save.disabled = true;
     elements.reset.disabled = true;
+    elements.typeInputs.forEach((input) => { input.disabled = true; });
     elements.save.textContent = creditApplication
       ? "Aplicando saldo..."
       : manualCustomerDebt
@@ -1030,12 +1340,15 @@ async function saveMovement(event) {
       body: JSON.stringify(creditApplication?.body || payload)
     });
     const movementNumber = firstDefined(response, ["data.numero", "data.id", "numero", "id"], null);
-    resetMovement({ keepMessage: true });
+    savedRecordId = firstDefined(response, ["data.id", "id"], null);
+    resetMovement({ keepMessage: true, refreshDaily: false, selectedMode: savedMode });
     setMessage(
       elements.message,
       response?.message || `${manualCustomerDebt ? "Deuda" : "Movimiento"}${movementNumber ? ` #${movementNumber}` : ""} registrado correctamente.`,
       "success"
     );
+    dailyChannel?.postMessage({ type: "financial-movement-updated", mode: savedMode });
+    refreshDailyAfterSave = true;
   } catch (error) {
     setMessage(
       elements.message,
@@ -1046,7 +1359,16 @@ async function saveMovement(event) {
     state.saving = false;
     elements.save.disabled = false;
     elements.reset.disabled = false;
-    updateMode();
+    elements.typeInputs.forEach((input) => { input.disabled = false; });
+    updateMode({ refreshDaily: false });
+  }
+
+  if (refreshDailyAfterSave) {
+    void loadDailyRecords({
+      force: true,
+      highlightedId: savedRecordId,
+      modeKey: savedMode
+    });
   }
 }
 
@@ -1054,7 +1376,7 @@ elements.typeInputs.forEach((input) => input.addEventListener("change", updateMo
 elements.providerPaymentSourceInputs.forEach((input) => input.addEventListener("change", () => {
   clearApplications("CXP");
   setMessage(elements.message);
-  updateMode();
+  updateMode({ refreshDaily: false });
 }));
 elements.client.addEventListener("change", () => {
   clearApplications("CXC");
@@ -1093,6 +1415,7 @@ elements.currency.addEventListener("change", () => {
   void loadProviderCredits();
 });
 elements.refresh.addEventListener("click", loadVisiblePortfolio);
+elements.dailyRefresh.addEventListener("click", () => void loadDailyRecords({ force: true }));
 elements.form.addEventListener("submit", saveMovement);
 elements.reset.addEventListener("click", () => resetMovement());
 
@@ -1106,6 +1429,21 @@ elements.applicationsPanel.addEventListener("input", (event) => {
   if (input) updateDebtAmount(input.dataset.debtAmount, input.dataset.debtId, input.value, input);
 });
 
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) scheduleDailyResumeRefresh();
+});
+window.addEventListener("focus", scheduleDailyResumeRefresh);
+dailyChannel?.addEventListener("message", (event) => {
+  if (event.data?.type === "financial-movement-updated") {
+    void loadDailyRecords({ silent: true, force: true });
+  }
+});
+window.addEventListener("beforeunload", () => {
+  window.clearTimeout(state.dailyRefreshTimer);
+  window.clearTimeout(state.dailyResumeTimer);
+  dailyChannel?.close();
+});
+
 initFinanceAccess(loadCatalogData);
 elements.date.value = toLocalDateTimeValue();
 if (queryPrefill.type) {
@@ -1113,4 +1451,5 @@ if (queryPrefill.type) {
   if (requestedMode) requestedMode.checked = true;
 }
 updateMode();
+scheduleDailyRefresh();
 void loadCatalogData();

@@ -146,6 +146,51 @@ class FinancialApiTest extends TestCase
             ->assertJsonPath('cartera.por_cobrar', '60.00');
     }
 
+    public function test_movement_list_filters_by_type_and_day_and_orders_newest_first(): void
+    {
+        $client = $this->thirdParty('CLIENTE', 'CLIENTE LISTADO DIARIO', '10111112');
+        [, $account] = $this->ownAccount();
+        $method = DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        $targetDate = today()->toDateString();
+        $otherDate = today()->subDay()->toDateString();
+
+        $register = function (string $type, string $dateTime) use ($client, $account, $method): int {
+            return (int) $this->postJson('/api/v1/finanzas/movimientos', [
+                'idempotency_key' => (string) Str::uuid(),
+                'tipo' => $type,
+                'fecha_hora' => $dateTime,
+                'cliente_id' => $type === 'COBRO_CLIENTE' ? $client : null,
+                'cuenta_destino_id' => $account,
+                'metodo_pago_id' => $method,
+                'moneda' => 'PEN',
+                'importe' => '10.00',
+                'aplicaciones' => [],
+            ])->assertCreated()->json('data.id');
+        };
+
+        $earlierId = $register('COBRO_CLIENTE', "{$targetDate} 09:15:00");
+        $laterId = $register('COBRO_CLIENTE', "{$targetDate} 18:45:00");
+        $register('COBRO_MINORISTA', "{$targetDate} 20:00:00");
+        $register('COBRO_CLIENTE', "{$otherDate} 23:55:00");
+
+        $response = $this->getJson(
+            "/api/v1/finanzas/movimientos?tipo=COBRO_CLIENTE&desde={$targetDate}&hasta={$targetDate}&per_page=100",
+        )->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('data.0.fecha_hora', "{$targetDate} 18:45:00")
+            ->assertJsonPath('data.1.fecha_hora', "{$targetDate} 09:15:00");
+
+        $this->assertSame(
+            [$laterId, $earlierId],
+            collect($response->json('data'))->pluck('id')->all(),
+        );
+        $this->assertSame(
+            ['COBRO_CLIENTE'],
+            collect($response->json('data'))->pluck('tipo')->unique()->values()->all(),
+        );
+    }
+
     public function test_each_movement_flow_rejects_fields_that_do_not_belong_to_it(): void
     {
         $client = $this->thirdParty('CLIENTE', 'CLIENTE FLUJOS', '10555555');

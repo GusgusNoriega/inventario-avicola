@@ -997,6 +997,7 @@ body.fin-page {
 }
 
 .fin-mode-option:has(input:focus-visible) { outline: 2px solid var(--fin-blue); outline-offset: 2px; }
+.fin-mode-option:has(input:disabled) { opacity: .64; cursor: wait; }
 .fin-mode-number { display: grid; width: 28px; height: 28px; place-items: center; color: var(--fin-blue); border: 1px solid rgba(50, 202, 255, .35); border-radius: 50%; font-size: 9px; font-weight: 900; }
 .fin-mode-option strong,
 .fin-mode-option small { display: block; }
@@ -1071,6 +1072,63 @@ body.fin-page {
 
 .fin-application-columns.is-single {
   grid-template-columns: 1fr;
+}
+
+.fin-daily-panel {
+  margin-top: 11px;
+  padding: 20px;
+}
+
+.fin-daily-panel .fin-section-head h2 { margin-top: 2px; }
+.fin-daily-panel .fin-section-head p:last-child { margin-top: 5px; color: var(--fin-muted); font-size: 11px; line-height: 1.45; }
+
+.fin-daily-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fin-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fin-soft);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fin-live-status > span[aria-hidden="true"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fin-green);
+  box-shadow: 0 0 0 4px rgba(54, 216, 128, .1);
+  animation: fin-live-pulse 2s ease-in-out infinite;
+}
+
+.fin-table.fin-daily-table { min-width: 940px; }
+.fin-daily-table tr.is-muted td { opacity: .62; }
+.fin-daily-table tr.is-new td { animation: fin-daily-highlight 4s ease-out; }
+.fin-daily-table td:nth-child(1) { min-width: 150px; }
+.fin-daily-table td:nth-child(2) { min-width: 180px; }
+.fin-daily-table td:nth-child(3) { min-width: 180px; }
+.fin-daily-table td:nth-child(4) { min-width: 190px; }
+
+@keyframes fin-live-pulse {
+  0%, 100% { opacity: .55; transform: scale(.86); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fin-daily-highlight {
+  0% { background: rgba(54, 216, 128, .22); }
+  100% { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fin-live-status > span[aria-hidden="true"],
+  .fin-daily-table tr.is-new td { animation: none; }
 }
 
 .fin-debt-panel {
@@ -1625,9 +1683,11 @@ body.fin-page {
   .fin-movement-details,
   .fin-application-summary,
   .fin-applications-panel,
+  .fin-daily-panel,
   .fin-form-panel,
   .fin-list-panel { padding: 15px; }
   .fin-section-head-wrap { align-items: stretch; flex-direction: column; }
+  .fin-daily-actions { justify-content: flex-start; flex-wrap: wrap; }
   .fin-section-actions { width: 100%; justify-content: stretch; }
   .fin-section-actions .fin-btn { flex: 1; }
   .fin-account-balance-grid,

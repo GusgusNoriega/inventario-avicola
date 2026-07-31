@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/finanzas.css') }}?v={{ filemtime(public_path('css/finanzas.css')) }}">
 </head>
-<body class="fin-page fin-movement-page">
+<body class="fin-page fin-movement-page" data-finance-time-zone="{{ config('app.timezone') }}">
   <main class="fin-shell">
     @include('partials.finanzas-header', [
       'active' => 'movimiento',
@@ -192,6 +192,39 @@
             <p id="financeCxpMessage" class="fin-message">Selecciona un proveedor para consultar su cartera.</p>
             <div id="financeCxpList" class="fin-debt-list"></div>
           </section>
+        </div>
+      </section>
+
+      <section id="financeDailyPanel" class="fin-card fin-daily-panel" aria-labelledby="financeDailyTitle" aria-busy="true">
+        <div class="fin-section-head fin-section-head-wrap">
+          <div>
+            <p class="fin-eyebrow">Actividad de hoy</p>
+            <h2 id="financeDailyTitle">Transacciones realizadas hoy</h2>
+            <p id="financeDailyDescription">La lista cambia según la operación seleccionada y se actualiza automáticamente.</p>
+          </div>
+          <div class="fin-daily-actions">
+            <span class="fin-live-status"><span aria-hidden="true"></span><span id="financeDailyLiveText">Actualización automática cada 10 s</span></span>
+            <button id="financeDailyRefresh" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Actualizar ahora</button>
+          </div>
+        </div>
+
+        <p id="financeDailyMessage" class="fin-message" role="status" aria-live="polite">Cargando transacciones de hoy...</p>
+        <div class="fin-table-wrap">
+          <table class="fin-table fin-daily-table">
+            <thead>
+              <tr>
+                <th>Fecha / código</th>
+                <th>Contraparte</th>
+                <th>Cuenta / método</th>
+                <th>Referencia / detalle</th>
+                <th>Estado</th>
+                <th class="fin-text-right">Importe</th>
+              </tr>
+            </thead>
+            <tbody id="financeDailyRows">
+              <tr><td class="fin-empty-cell" colspan="6">Cargando transacciones de hoy...</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </form>
