@@ -52,6 +52,21 @@ function formatWeight(value) {
   return `${Number(value || 0).toFixed(3)} kg`;
 }
 
+function printPriceValue(pricing) {
+  if (pricing?.status === "SINGLE" && pricing.price_kg !== null) {
+    return String(pricing.price_kg);
+  }
+
+  return pricing?.status === "MIXED" ? "VARIOS" : "SIN PRECIO";
+}
+
+function printAmountValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? String(numericValue) : "";
+}
+
 function formatDate(value) {
   if (!value) return "--";
 
@@ -123,7 +138,7 @@ function renderClientTotals(clients) {
   }
 
   clientTotals.innerHTML = items.map((item) => `
-    <tr>
+    <tr data-print-price="${escapeHtml(printPriceValue(item.pricing))}" data-print-amount="${escapeHtml(printAmountValue(item.pricing?.amount))}">
       <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
       <td><div class="daily-client-types">${renderClientTypes(item.chicken_types)}</div></td>
       <td>${formatNumber(item.cages)}</td>
@@ -218,7 +233,7 @@ function ticketEndpoint() {
   const params = new URLSearchParams({ include_voided: "1" });
   if (journeyDate?.value) params.set("date", journeyDate.value);
 
-  return `/operacion/tickets-dia?${params.toString()}`;
+  return `/operacion/tickets-dia/impresion?${params.toString()}`;
 }
 
 function updateJourneyContext(data) {

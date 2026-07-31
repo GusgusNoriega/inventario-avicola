@@ -240,6 +240,106 @@ class DailyDispatchTicketApiTest extends TestCase
         $this->assertArrayNotHasKey('amount', $ticket['summary']);
         $this->assertArrayNotHasKey('price_kg', $record);
         $this->assertArrayNotHasKey('amount', $record);
+        $this->assertArrayNotHasKey('pricing', $response->json('data.summary.by_client.0'));
+    }
+
+    public function test_printable_daily_summary_calculates_mixed_prices_and_subtracts_returns(): void
+    {
+        $dispatchTicketId = $this->createTicket('T-20260626-PRICES', '2026-06-26', [
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 25,
+                'cages' => 2,
+                'gross_weight' => 114,
+                'tare_weight' => 14,
+                'net_weight' => 100,
+                'weighed_at' => '2026-06-26 09:15:00',
+            ],
+            [
+                'type_id' => $this->dressedTypeId,
+                'birds_per_cage' => 20,
+                'cages' => 1,
+                'gross_weight' => 57,
+                'tare_weight' => 7,
+                'net_weight' => 50,
+                'weighed_at' => '2026-06-26 09:30:00',
+            ],
+        ]);
+        $returnTicketId = $this->createTicket(
+            'D-20260626-PRICES',
+            '2026-06-26',
+            [[
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 10,
+                'cages' => 1,
+                'gross_weight' => 37,
+                'tare_weight' => 7,
+                'net_weight' => 30,
+                'weighed_at' => '2026-06-26 11:30:00',
+            ]],
+            false,
+            TicketDespacho::OPERATION_RETURN
+        );
+        $this->attachTicketPrice($dispatchTicketId, $this->liveTypeId, '8.5000');
+        $this->attachTicketPrice($dispatchTicketId, $this->dressedTypeId, '10.0000');
+        $this->attachTicketPrice($returnTicketId, $this->liveTypeId, '8.5000');
+
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-06-26')
+            ->assertOk()
+            ->assertJsonMissingPath('data.summary.by_client.0.pricing');
+
+        $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-26')
+            ->assertOk()
+            ->assertJsonPath('data.summary.by_client.0.pricing.status', 'MIXED')
+            ->assertJsonPath('data.summary.by_client.0.pricing.price_kg', null)
+            ->assertJsonPath('data.summary.by_client.0.pricing.amount', '1095.00');
+    }
+
+    public function test_printable_daily_summary_rounds_each_record_and_marks_missing_prices(): void
+    {
+        $pricedTicketId = $this->createTicket('T-20260627-ROUND', '2026-06-27', [
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 1,
+                'cages' => 1,
+                'gross_weight' => 0.335,
+                'tare_weight' => 0,
+                'net_weight' => 0.335,
+                'weighed_at' => '2026-06-27 09:15:00',
+            ],
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 1,
+                'cages' => 1,
+                'gross_weight' => 0.335,
+                'tare_weight' => 0,
+                'net_weight' => 0.335,
+                'weighed_at' => '2026-06-27 09:20:00',
+            ],
+        ]);
+        $this->attachTicketPrice($pricedTicketId, $this->liveTypeId, '1.0000');
+
+        $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-27')
+            ->assertOk()
+            ->assertJsonPath('data.summary.by_client.0.pricing.status', 'SINGLE')
+            ->assertJsonPath('data.summary.by_client.0.pricing.price_kg', '1.00')
+            ->assertJsonPath('data.summary.by_client.0.pricing.amount', '0.68');
+
+        $this->createTicket('T-20260628-NO-PRICE', '2026-06-28', [[
+            'type_id' => $this->liveTypeId,
+            'birds_per_cage' => 10,
+            'cages' => 1,
+            'gross_weight' => 17,
+            'tare_weight' => 7,
+            'net_weight' => 10,
+            'weighed_at' => '2026-06-28 09:15:00',
+        ]]);
+
+        $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-06-28')
+            ->assertOk()
+            ->assertJsonPath('data.summary.by_client.0.pricing.status', 'INCOMPLETE')
+            ->assertJsonPath('data.summary.by_client.0.pricing.price_kg', null)
+            ->assertJsonPath('data.summary.by_client.0.pricing.amount', null);
     }
 
     public function test_daily_summary_defaults_to_current_operating_date(): void
@@ -581,6 +681,42 @@ class DailyDispatchTicketApiTest extends TestCase
             'estado' => 'ACTIVO',
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+    }
+
+    private function attachTicketPrice(int $ticketId, int $typeId, string $price): void
+    {
+        $listId = DB::table('listas_precios')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->clientId,
+            'codigo' => "TEST-{$ticketId}-{$typeId}",
+            'nombre' => "Precio de prueba {$ticketId}-{$typeId}",
+            'operacion' => 'VENTA',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $historyId = DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $listId,
+            'tipo_pollo_id' => $typeId,
+            'precio_kg' => $price,
+            'vigente_desde' => now()->subDay(),
+            'vigente_hasta' => null,
+            'motivo_cambio' => 'Precio para prueba del resumen imprimible',
+            'reemplaza_precio_id' => null,
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $typeId,
+            'precio_historial_id' => $historyId,
+            'precio_kg' => $price,
+            'origen_precio' => 'CLIENTE',
+            'congelado_por' => $this->user->id,
+            'created_at' => now(),
         ]);
     }
 

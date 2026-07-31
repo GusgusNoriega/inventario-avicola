@@ -13,7 +13,7 @@ test("la impresión de jornada contiene título, fecha, horario y tabla completa
           <tr><th>Cliente</th><th>Ave</th><th>Num. javas</th><th>Cant. aves</th><th>Peso bruto</th><th>Tara</th><th>Devoluciones</th><th>Peso neto</th></tr>
         </thead>
         <tbody>
-          <tr>
+          <tr data-print-price="8.5000" data-print-amount="1095.00">
             <td>Cliente uno</td><td>P V</td><td>2</td><td>50</td>
             <td data-print-weight="114.567">114.567 kg</td>
             <td data-print-weight="14">14.000 kg</td>
@@ -31,12 +31,35 @@ test("la impresión de jornada contiene título, fecha, horario y tabla completa
   assert.match(html, /<table class="daily-client-table">/);
   assert.match(html, /Cliente uno/);
   assert.match(html, /<th>Javas<\/th><th>Aves<\/th><th>P\. bruto<\/th><th>Tara<\/th><th>Dev\.<\/th><th>P\. neto<\/th>/);
+  assert.match(html, /<th>Precio<\/th><th>Importe<\/th>/);
   assert.match(html, />114\.57<\/td>/);
   assert.match(html, />14\.00<\/td>/);
   assert.match(html, />3\.50<\/td>/);
   assert.match(html, />97\.07<\/td>/);
+  assert.match(html, /<td class="daily-client-price">8\.50<\/td><td class="daily-client-amount">1095\.00<\/td>/);
+  assert.doesNotMatch(html, /data-print-(?:price|amount|weight)=/);
   assert.doesNotMatch(html, /\d(?:\.\d+)? kg\b|Peso bruto|Peso neto|Devoluciones|Num\. javas|Cant\. aves/);
   assert.doesNotMatch(html, /Menú|Jornada a consultar|Administrar tickets/);
+});
+
+test("la impresión distingue precios variados y faltantes sin inventar importes", () => {
+  const html = buildDailySummaryPrintHtml({
+    dateLabel: "31 de julio de 2026",
+    windowLabel: "Desde 30/07/2026 a las 21:00 hasta 31/07/2026 a las 21:00.",
+    tableHtml: `
+      <table>
+        <thead><tr><th>Cliente</th><th>Ave</th><th>Num. javas</th><th>Cant. aves</th><th>Peso bruto</th><th>Tara</th><th>Devoluciones</th><th>Peso neto</th></tr></thead>
+        <tbody>
+          <tr data-print-price="VARIOS" data-print-amount="123.4"><td>Cliente mixto</td></tr>
+          <tr data-print-price="SIN PRECIO" data-print-amount=""><td>Cliente incompleto</td></tr>
+        </tbody>
+      </table>
+    `
+  });
+
+  assert.match(html, /<td class="daily-client-price">VARIOS<\/td><td class="daily-client-amount">123\.40<\/td>/);
+  assert.match(html, /<td class="daily-client-price">SIN PRECIO<\/td><td class="daily-client-amount">--<\/td>/);
+  assert.doesNotMatch(html, /data-print-(?:price|amount)=/);
 });
 
 test("la impresión usa orientación horizontal y letra de 18 px", () => {

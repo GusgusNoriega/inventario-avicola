@@ -20,6 +20,27 @@ function formatPrintWeight(value) {
   return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "--";
 }
 
+function formatPrintPrice(value) {
+  const normalized = String(value ?? "").trim();
+
+  if (normalized === "VARIOS" || normalized === "SIN PRECIO") {
+    return normalized;
+  }
+
+  if (!normalized) return "--";
+
+  const numericValue = Number(normalized);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "--";
+}
+
+function formatPrintAmount(value) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return "--";
+
+  const numericValue = Number(normalized);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "--";
+}
+
 export function buildDailySummaryPrintTableHtml(tableHtml) {
   return String(tableHtml || "")
     .replace(/<th([^>]*)>([^<]*)<\/th>/g, (match, attributes, label) => {
@@ -29,7 +50,21 @@ export function buildDailySummaryPrintTableHtml(tableHtml) {
     .replace(/<td([^>]*\sdata-print-weight="([^"]*)"[^>]*)>[\s\S]*?<\/td>/g, (match, attributes, value) => {
       const cleanAttributes = attributes.replace(/\sdata-print-weight="[^"]*"/, "");
       return `<td${cleanAttributes}>${formatPrintWeight(value)}</td>`;
-    });
+    })
+    .replace(/<tr([^>]*\sdata-print-price="[^"]*"[^>]*)>([\s\S]*?)<\/tr>/g, (match, attributes, cells) => {
+      const price = attributes.match(/\sdata-print-price="([^"]*)"/)?.[1] || "";
+      const amount = attributes.match(/\sdata-print-amount="([^"]*)"/)?.[1] || "";
+      const cleanAttributes = attributes
+        .replace(/\sdata-print-price="[^"]*"/, "")
+        .replace(/\sdata-print-amount="[^"]*"/, "");
+
+      return `<tr${cleanAttributes}>${cells}<td class="daily-client-price">${formatPrintPrice(price)}</td><td class="daily-client-amount">${formatPrintAmount(amount)}</td></tr>`;
+    })
+    .replace(
+      /(<thead[^>]*>[\s\S]*?<tr[^>]*>[\s\S]*?)(<\/tr>)/,
+      "$1<th>Precio</th><th>Importe</th>$2"
+    )
+    .replace(/colspan="8"/g, 'colspan="10"');
 }
 
 export function buildDailySummaryPrintHtml({ dateLabel, windowLabel, tableHtml }) {

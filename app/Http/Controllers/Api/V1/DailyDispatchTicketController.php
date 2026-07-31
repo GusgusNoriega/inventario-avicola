@@ -22,6 +22,16 @@ class DailyDispatchTicketController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        return $this->summaryResponse($request, false);
+    }
+
+    public function printable(Request $request): JsonResponse
+    {
+        return $this->summaryResponse($request, true);
+    }
+
+    private function summaryResponse(Request $request, bool $includePricing): JsonResponse
+    {
         $filters = $request->validate([
             'date' => ['nullable', 'date_format:Y-m-d'],
             'from_date' => ['nullable', 'date_format:Y-m-d'],
@@ -67,6 +77,7 @@ class DailyDispatchTicketController extends Controller
                 'clienteDestino',
                 'almacenDestino',
                 'anuladoPor:id,nombre',
+                ...($includePricing ? ['precios:id,ticket_id,tipo_pollo_id,precio_kg'] : []),
                 'pesadas' => fn ($query) => $this->applyRecordRange($query, $from, $to)
                     ->orderBy('numero'),
                 'pesadas.tipoPollo',
@@ -110,7 +121,7 @@ class DailyDispatchTicketController extends Controller
                 'summary' => [
                     ...$this->summarizeRecords($records, $effectiveTickets->count()),
                     'by_operation' => $this->summarizeByOperation($effectiveTickets),
-                    'by_client' => $this->summarizeByClient($effectiveTickets),
+                    'by_client' => $this->summarizeByClient($effectiveTickets, $includePricing),
                 ],
                 'tickets' => $tickets
                     ->map(fn (TicketDespacho $ticket) => $this->formatTicket($ticket, $isAdministrator))
@@ -263,12 +274,12 @@ class DailyDispatchTicketController extends Controller
      * @param  Collection<int, TicketDespacho>  $tickets
      * @return list<array<string, mixed>>
      */
-    private function summarizeByClient(Collection $tickets): array
+    private function summarizeByClient(Collection $tickets, bool $includePricing = false): array
     {
         return $tickets
             ->filter(fn (TicketDespacho $ticket) => $ticket->cliente_destino_id !== null)
             ->groupBy('cliente_destino_id')
-            ->map(function (Collection $clientTickets): array {
+            ->map(function (Collection $clientTickets) use ($includePricing): array {
                 /** @var TicketDespacho $firstTicket */
                 $firstTicket = $clientTickets->first();
                 $dispatchTickets = $clientTickets
@@ -282,8 +293,7 @@ class DailyDispatchTicketController extends Controller
                 $allRecords = $dispatchRecords->concat($returnRecords);
                 $dispatchNetWeight = (float) $dispatchRecords->sum('peso_neto_kg');
                 $returnNetWeight = (float) $returnRecords->sum('peso_neto_kg');
-
-                return [
+                $summary = [
                     'client' => [
                         'id' => $firstTicket->clienteDestino?->id,
                         'name' => $firstTicket->clienteDestino?->nombre_razon_social ?? 'Cliente sin registrar',
@@ -309,10 +319,76 @@ class DailyDispatchTicketController extends Controller
                     'return_net_weight_kg' => round($returnNetWeight, 3),
                     'net_weight_kg' => round($dispatchNetWeight - $returnNetWeight, 3),
                 ];
+
+                return $includePricing
+                    ? [...$summary, 'pricing' => $this->summarizeClientPricing($clientTickets)]
+                    : $summary;
             })
             ->sortBy('client.name')
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  Collection<int, TicketDespacho>  $tickets
+     * @return array{status: string, price_kg: ?string, amount: ?string}
+     */
+    private function summarizeClientPricing(Collection $tickets): array
+    {
+        $prices = collect();
+        $amount = '0.00';
+        $hasRecords = false;
+        $complete = true;
+
+        foreach ($tickets as $ticket) {
+            $ticketPrices = $ticket->precios->keyBy('tipo_pollo_id');
+            $isReturn = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN;
+
+            foreach ($ticket->pesadas as $record) {
+                if ($record->estado !== Pesada::STATUS_ACTIVE) {
+                    continue;
+                }
+
+                $hasRecords = true;
+                $price = $ticketPrices->get($record->tipo_pollo_id);
+
+                if (! $price) {
+                    $complete = false;
+
+                    continue;
+                }
+
+                $priceKg = bcadd((string) $price->precio_kg, '0', 4);
+                $lineAmount = $this->moneyProduct((string) $record->peso_neto_kg, $priceKg);
+                $prices->push($priceKg);
+                $amount = $isReturn
+                    ? bcsub($amount, $lineAmount, 2)
+                    : bcadd($amount, $lineAmount, 2);
+            }
+        }
+
+        if (! $hasRecords || ! $complete) {
+            return [
+                'status' => 'INCOMPLETE',
+                'price_kg' => null,
+                'amount' => null,
+            ];
+        }
+
+        $distinctPrices = $prices->uniqueStrict()->sort()->values();
+
+        return [
+            'status' => $distinctPrices->count() === 1 ? 'SINGLE' : 'MIXED',
+            'price_kg' => $distinctPrices->count() === 1
+                ? bcadd((string) $distinctPrices->first(), '0.005', 2)
+                : null,
+            'amount' => $amount,
+        ];
+    }
+
+    private function moneyProduct(string $quantity, string $unitPrice): string
+    {
+        return bcadd(bcmul($quantity, $unitPrice, 6), '0.005', 2);
     }
 
     /**

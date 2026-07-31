@@ -210,6 +210,13 @@ Route::prefix('v1')->group(function (): void {
     });
     Route::get('/operacion/jornada', [JourneyPlanController::class, 'show'])
         ->middleware($journeyReadMiddleware);
+    Route::get('/operacion/tickets-dia/impresion', [DailyDispatchTicketController::class, 'printable'])
+        ->middleware([
+            'auth:sanctum',
+            'active',
+            'password.changed',
+            'module:MODULO_RESUMEN_JORNADA',
+        ]);
     Route::get('/operacion/tickets-dia', [DailyDispatchTicketController::class, 'index'])
         ->middleware($dailyTicketsMiddleware);
     Route::post('/operacion/tickets/{ticket}/anular', DispatchTicketVoidController::class)
