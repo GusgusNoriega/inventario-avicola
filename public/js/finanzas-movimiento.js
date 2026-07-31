@@ -1,5 +1,10 @@
 import { apiRequest } from "./api-client.js";
 import {
+  financeDateRangeContains,
+  financeDateRangePhrase,
+  isValidFinanceFilterDate
+} from "./finanzas-date-range.js";
+import {
   accountListFromEntities,
   createIdempotencyKey,
   errorMessage,
@@ -216,7 +221,13 @@ const elements = {
   dailyPanel: document.getElementById("financeDailyPanel"),
   dailyTitle: document.getElementById("financeDailyTitle"),
   dailyDescription: document.getElementById("financeDailyDescription"),
+  dailyLive: document.getElementById("financeDailyLive"),
   dailyLiveText: document.getElementById("financeDailyLiveText"),
+  dailyFilters: document.getElementById("financeDailyFilters"),
+  dailyFrom: document.getElementById("financeDailyFrom"),
+  dailyTo: document.getElementById("financeDailyTo"),
+  dailyApply: document.getElementById("financeDailyApply"),
+  dailyToday: document.getElementById("financeDailyToday"),
   dailyMessage: document.getElementById("financeDailyMessage"),
   dailyRefresh: document.getElementById("financeDailyRefresh"),
   dailyRows: document.getElementById("financeDailyRows")
@@ -241,6 +252,12 @@ const state = {
   dailyRefreshDelay: DAILY_REFRESH_INTERVAL,
   dailyRenderedSignature: null,
   dailyAnnouncementSignature: null,
+  dailyRecords: [],
+  dailyRecordsSignature: null,
+  dailyFrom: null,
+  dailyTo: null,
+  dailyFollowsToday: true,
+  dailyLiveActive: null,
   idempotencyKey: createIdempotencyKey(),
   saving: false
 };
@@ -354,6 +371,99 @@ function dailyUpdatedTime(date = new Date()) {
   }
 }
 
+function appliedDailyRange() {
+  const today = financeBusinessDate();
+  return {
+    from: state.dailyFrom || today,
+    to: state.dailyTo || today
+  };
+}
+
+function dailyRangePhrase(from = appliedDailyRange().from, to = appliedDailyRange().to) {
+  return financeDateRangePhrase(from, to, financeBusinessDate());
+}
+
+function dailyRangeContains(date, from = appliedDailyRange().from, to = appliedDailyRange().to) {
+  return financeDateRangeContains(date, from, to);
+}
+
+function dailyRangeIncludesToday() {
+  return dailyRangeContains(financeBusinessDate());
+}
+
+function updateDailyLiveStatus(updatedAt = null, { failed = false } = {}) {
+  const live = dailyRangeIncludesToday();
+  const previousLive = state.dailyLiveActive;
+  state.dailyLiveActive = live;
+  elements.dailyLive.classList.toggle("is-manual", !live);
+
+  if (previousLive !== null && previousLive !== live) {
+    setMessage(
+      elements.dailyMessage,
+      live
+        ? "El rango vuelve a incluir hoy; la actualización automática está activa."
+        : "El rango ya no incluye hoy; usa «Actualizar ahora» para volver a consultar el historial."
+    );
+    state.dailyAnnouncementSignature = `live-mode:${live}:${state.dailyFrom}:${state.dailyTo}`;
+  }
+
+  if (failed) {
+    elements.dailyLiveText.textContent = live
+      ? "Intentando recuperar la actualización automática..."
+      : "Rango histórico · no se pudo actualizar";
+    return;
+  }
+
+  if (live) {
+    elements.dailyLiveText.textContent = updatedAt
+      ? `Actualización automática activa · ${updatedAt}`
+      : "Actualización automática cada 10 s";
+    return;
+  }
+
+  elements.dailyLiveText.textContent = updatedAt
+    ? `Rango histórico · actualización manual · ${updatedAt}`
+    : "Rango histórico · actualización manual";
+}
+
+function updateDailyRangeCopy(modeKey = currentModeKey()) {
+  const { from, to } = appliedDailyRange();
+  const phrase = dailyRangePhrase(from, to);
+  const label = MODE_LABELS[modeKey] || "Operación seleccionada";
+  const useCredit = modeKey === "PAGO_PROVEEDOR" && usesProviderCredit();
+
+  elements.dailyTitle.textContent = `${label}: registros ${phrase}`;
+  elements.dailyDescription.textContent = useCredit
+    ? `La lista muestra los pagos ${phrase}. Aplicar un saldo anterior distribuye un registro existente y no crea un movimiento nuevo.`
+    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
+      ? `Se muestran todas las deudas anteriores ${phrase}.`
+      : `Se muestran todas las transacciones ${phrase} que corresponden a la operación seleccionada.`;
+  updateDailyLiveStatus();
+}
+
+function initializeDailyRange() {
+  const today = financeBusinessDate();
+  state.dailyFrom = today;
+  state.dailyTo = today;
+  state.dailyFollowsToday = true;
+  elements.dailyFrom.value = today;
+  elements.dailyTo.value = today;
+  updateDailyRangeCopy();
+}
+
+function syncDailyTodayPreset() {
+  if (!state.dailyFollowsToday) return false;
+  const today = financeBusinessDate();
+  if (state.dailyFrom === today && state.dailyTo === today) return false;
+
+  state.dailyFrom = today;
+  state.dailyTo = today;
+  elements.dailyFrom.value = today;
+  elements.dailyTo.value = today;
+  updateDailyRangeCopy();
+  return true;
+}
+
 function dailyCounterpart(record, modeKey) {
   const clientName = String(firstDefined(record, ["cliente.nombre", "cliente.nombre_razon_social"], "Cliente sin nombre"));
   const clientDocument = String(firstDefined(record, ["cliente.numero_documento"], "Sin documento"));
@@ -431,12 +541,12 @@ function dailyStatus(record) {
   };
 }
 
-function renderDailyRecords(records, modeKey, highlightedId = null) {
+function renderDailyRecords(records, modeKey, highlightedId = null, from = appliedDailyRange().from, to = appliedDailyRange().to) {
   const manualCustomerDebt = modeKey === "DEUDA_ANTERIOR_CLIENTE";
   const label = MODE_LABELS[modeKey] || "esta operación";
 
   if (!records.length) {
-    elements.dailyRows.innerHTML = `<tr><td class="fin-empty-cell" colspan="6">Todavía no hay registros de ${escapeHtml(label.toLowerCase())} con fecha de hoy.</td></tr>`;
+    elements.dailyRows.innerHTML = `<tr><td class="fin-empty-cell" colspan="6">Todavía no hay registros de ${escapeHtml(label.toLowerCase())} ${escapeHtml(dailyRangePhrase(from, to))}.</td></tr>`;
     return;
   }
 
@@ -462,11 +572,11 @@ function renderDailyRecords(records, modeKey, highlightedId = null) {
   }).join("");
 }
 
-function dailyEndpoint(modeKey, date, page) {
+function dailyEndpoint(modeKey, from, to, page) {
   const manualCustomerDebt = modeKey === "DEUDA_ANTERIOR_CLIENTE";
   const params = new URLSearchParams({
-    desde: date,
-    hasta: date,
+    desde: from,
+    hasta: to,
     per_page: "100",
     page: String(page)
   });
@@ -475,65 +585,115 @@ function dailyEndpoint(modeKey, date, page) {
   return `${endpoint}?${params}`;
 }
 
-async function fetchDailyRecords(modeKey, date, sequence) {
-  const firstResponse = await apiRequest(dailyEndpoint(modeKey, date, 1));
+function dailyRecordDate(record, modeKey) {
+  return String(modeKey === "DEUDA_ANTERIOR_CLIENTE" ? record.fecha_emision : record.fecha_hora || "");
+}
+
+function sortDailyRecords(records, modeKey) {
+  return [...records].sort((left, right) => {
+    const byDate = dailyRecordDate(right, modeKey).localeCompare(dailyRecordDate(left, modeKey));
+    if (byDate !== 0) return byDate;
+    return String(right.id ?? "").localeCompare(String(left.id ?? ""), undefined, { numeric: true });
+  });
+}
+
+function mergeDailyLiveRecords(currentRecords, updatedRecords, modeKey, liveDate, completeLiveDate) {
+  const retainedRecords = completeLiveDate
+    ? currentRecords.filter((record) => dailyRecordDate(record, modeKey).slice(0, 10) !== liveDate)
+    : currentRecords;
+  const records = [...new Map(
+    [...updatedRecords, ...retainedRecords]
+      .map((record, index) => [String(record.id ?? `record-${index}`), record])
+  ).values()];
+  return sortDailyRecords(records, modeKey);
+}
+
+async function fetchDailyRecords(modeKey, from, to, sequence, { allPages = true } = {}) {
+  const firstResponse = await apiRequest(dailyEndpoint(modeKey, from, to, 1));
   if (sequence !== state.dailyRequestSequence) return null;
 
   const records = responseCollection(firstResponse, ["movimientos", "deudas", "items", "records"]);
   const lastPage = Math.max(1, Number(responseMeta(firstResponse).last_page || 1));
 
-  for (let page = 2; page <= lastPage; page += 1) {
-    const response = await apiRequest(dailyEndpoint(modeKey, date, page));
+  for (let page = 2; allPages && page <= lastPage; page += 1) {
+    const response = await apiRequest(dailyEndpoint(modeKey, from, to, page));
     if (sequence !== state.dailyRequestSequence) return null;
     records.push(...responseCollection(response, ["movimientos", "deudas", "items", "records"]));
   }
 
-  return [...new Map(records.map((record, index) => [String(record.id ?? `record-${index}`), record])).values()];
+  return {
+    complete: allPages || lastPage === 1,
+    records: [...new Map(records.map((record, index) => [String(record.id ?? `record-${index}`), record])).values()]
+  };
 }
 
 async function loadDailyRecords({
   silent = false,
   force = false,
+  liveOnly = false,
   highlightedId = null,
   modeKey: requestedMode = null
 } = {}) {
+  syncDailyTodayPreset();
   const modeKey = requestedMode && MODES[requestedMode] ? requestedMode : currentModeKey();
-  const date = financeBusinessDate();
-  const signature = `${modeKey}:${date}`;
-  if (!force && state.dailyLoadPromise && state.dailyLoadSignature === signature) {
+  const { from, to } = appliedDailyRange();
+  const phrase = dailyRangePhrase(from, to);
+  const signature = `${modeKey}:${from}:${to}`;
+  const canUseLiveOnly = liveOnly
+    && state.dailyRecordsSignature === signature
+    && dailyRangeIncludesToday();
+  const loadSignature = `${signature}:${canUseLiveOnly ? "live" : "full"}`;
+  if (!force && state.dailyLoadPromise && state.dailyLoadSignature === loadSignature) {
     return state.dailyLoadPromise;
   }
 
   const sequence = ++state.dailyRequestSequence;
-  state.dailyLoadSignature = signature;
+  state.dailyLoadSignature = loadSignature;
+  updateDailyRangeCopy(modeKey);
   elements.dailyPanel.setAttribute("aria-busy", "true");
-  if (!silent) elements.dailyRefresh.disabled = true;
   if (!silent) {
-    setMessage(elements.dailyMessage, "Cargando los registros de hoy...");
+    elements.dailyRefresh.disabled = true;
+    elements.dailyApply.disabled = true;
+  }
+  if (!silent) {
+    setMessage(elements.dailyMessage, `Cargando los registros ${phrase}...`);
     if (!state.dailyRenderedSignature?.startsWith(`${signature}:`)) {
-      elements.dailyRows.innerHTML = '<tr><td class="fin-empty-cell" colspan="6">Cargando los registros de hoy...</td></tr>';
+      elements.dailyRows.innerHTML = `<tr><td class="fin-empty-cell" colspan="6">Cargando los registros ${escapeHtml(phrase)}...</td></tr>`;
       state.dailyRenderedSignature = null;
     }
   }
 
   const loadPromise = (async () => {
     try {
-      const records = await fetchDailyRecords(modeKey, date, sequence);
-      if (sequence !== state.dailyRequestSequence || records === null) return null;
+      const liveDate = financeBusinessDate();
+      const result = await fetchDailyRecords(
+        modeKey,
+        canUseLiveOnly ? liveDate : from,
+        canUseLiveOnly ? liveDate : to,
+        sequence,
+        { allPages: !canUseLiveOnly }
+      );
+      if (sequence !== state.dailyRequestSequence || result === null) return null;
+
+      const records = canUseLiveOnly
+        ? mergeDailyLiveRecords(state.dailyRecords, result.records, modeKey, liveDate, result.complete)
+        : result.records;
+      state.dailyRecords = records;
+      state.dailyRecordsSignature = signature;
 
       const renderedSignature = `${signature}:${JSON.stringify(records)}`;
       if (renderedSignature !== state.dailyRenderedSignature || highlightedId !== null) {
-        renderDailyRecords(records, modeKey, highlightedId);
+        renderDailyRecords(records, modeKey, highlightedId, from, to);
         state.dailyRenderedSignature = highlightedId === null
           ? renderedSignature
           : `${renderedSignature}:highlight:${highlightedId}`;
       }
-      elements.dailyLiveText.textContent = `Actualización automática activa · ${dailyUpdatedTime()}`;
+      updateDailyLiveStatus(dailyUpdatedTime());
       const announcementSignature = `${signature}:${records.length}`;
       if (!silent || announcementSignature !== state.dailyAnnouncementSignature) {
         setMessage(
           elements.dailyMessage,
-          `${records.length} registro${records.length === 1 ? "" : "s"} realizado${records.length === 1 ? "" : "s"} hoy para la operación seleccionada.`
+          `${records.length} registro${records.length === 1 ? "" : "s"} ${phrase} para la operación seleccionada.`
         );
         state.dailyAnnouncementSignature = announcementSignature;
       }
@@ -542,9 +702,12 @@ async function loadDailyRecords({
       return records;
     } catch (error) {
       if (sequence !== state.dailyRequestSequence) return null;
-      elements.dailyLiveText.textContent = "Intentando recuperar la actualización automática...";
-      if (!silent) {
-        setMessage(elements.dailyMessage, errorMessage(error, "No se pudieron cargar los registros de hoy."), "error");
+      updateDailyLiveStatus(null, { failed: true });
+      const failureMessage = errorMessage(error, `No se pudieron cargar los registros ${phrase}.`);
+      const failureSignature = `error:${signature}:${failureMessage}`;
+      if (!silent || state.dailyAnnouncementSignature !== failureSignature) {
+        setMessage(elements.dailyMessage, failureMessage, "error");
+        state.dailyAnnouncementSignature = failureSignature;
       }
       return null;
     } finally {
@@ -553,6 +716,7 @@ async function loadDailyRecords({
         state.dailyLoadSignature = null;
         elements.dailyPanel.setAttribute("aria-busy", "false");
         elements.dailyRefresh.disabled = false;
+        elements.dailyApply.disabled = false;
       }
     }
   })();
@@ -564,8 +728,11 @@ async function loadDailyRecords({
 function scheduleDailyRefresh() {
   window.clearTimeout(state.dailyRefreshTimer);
   state.dailyRefreshTimer = window.setTimeout(async () => {
-    if (!document.hidden) {
-      const records = await loadDailyRecords({ silent: true });
+    syncDailyTodayPreset();
+    const includesToday = dailyRangeIncludesToday();
+    if (state.dailyLiveActive !== includesToday) updateDailyLiveStatus();
+    if (!document.hidden && includesToday) {
+      const records = await loadDailyRecords({ silent: true, liveOnly: true });
       if (records === null) {
         state.dailyRefreshDelay = Math.min(
           DAILY_REFRESH_MAX_INTERVAL,
@@ -580,8 +747,77 @@ function scheduleDailyRefresh() {
 function scheduleDailyResumeRefresh() {
   window.clearTimeout(state.dailyResumeTimer);
   state.dailyResumeTimer = window.setTimeout(() => {
-    if (!document.hidden) void loadDailyRecords({ silent: true });
+    syncDailyTodayPreset();
+    const includesToday = dailyRangeIncludesToday();
+    if (state.dailyLiveActive !== includesToday) updateDailyLiveStatus();
+    if (!document.hidden && includesToday) void loadDailyRecords({ silent: true, liveOnly: true });
   }, 150);
+}
+
+function dailyFilterError(input, message) {
+  input.setCustomValidity(message);
+  setMessage(elements.dailyMessage, message, "error");
+  input.focus();
+  input.reportValidity();
+  return null;
+}
+
+function readDailyFilterRange() {
+  const from = elements.dailyFrom.value;
+  const to = elements.dailyTo.value;
+  elements.dailyFrom.setCustomValidity("");
+  elements.dailyTo.setCustomValidity("");
+
+  if (!isValidFinanceFilterDate(from)) {
+    return dailyFilterError(elements.dailyFrom, "Selecciona una fecha válida en Desde.");
+  }
+  if (!isValidFinanceFilterDate(to)) {
+    return dailyFilterError(elements.dailyTo, "Selecciona una fecha válida en Hasta.");
+  }
+  if (from > to) {
+    return dailyFilterError(elements.dailyTo, "La fecha Hasta debe ser igual o posterior a Desde.");
+  }
+
+  return { from, to };
+}
+
+function clearDailyFilterError() {
+  elements.dailyFrom.setCustomValidity("");
+  elements.dailyTo.setCustomValidity("");
+  if (elements.dailyMessage.classList.contains("is-error")) {
+    setMessage(
+      elements.dailyMessage,
+      `El filtro actual muestra los registros ${dailyRangePhrase()}. Presiona «Aplicar filtro» para consultar las nuevas fechas.`
+    );
+  }
+}
+
+function applyDailyFilters(event) {
+  event?.preventDefault();
+  const range = readDailyFilterRange();
+  if (!range) return;
+
+  const today = financeBusinessDate();
+  state.dailyFrom = range.from;
+  state.dailyTo = range.to;
+  state.dailyFollowsToday = range.from === today && range.to === today;
+  state.dailyRefreshDelay = DAILY_REFRESH_INTERVAL;
+  updateDailyRangeCopy();
+  void loadDailyRecords({ force: true });
+}
+
+function showTodayDailyRecords() {
+  const today = financeBusinessDate();
+  elements.dailyFrom.value = today;
+  elements.dailyTo.value = today;
+  elements.dailyFrom.setCustomValidity("");
+  elements.dailyTo.setCustomValidity("");
+  state.dailyFrom = today;
+  state.dailyTo = today;
+  state.dailyFollowsToday = true;
+  state.dailyRefreshDelay = DAILY_REFRESH_INTERVAL;
+  updateDailyRangeCopy();
+  void loadDailyRecords({ force: true });
 }
 
 function idValue(value) {
@@ -762,12 +998,7 @@ function updateMode({ refreshDaily = true } = {}) {
   const hasMethod = mode.method !== false && !useCredit;
   const hasReference = mode.reference !== false && !useCredit;
   const hasApplications = mode.applications !== false;
-  elements.dailyTitle.textContent = `${MODE_LABELS[modeKey] || "Operación seleccionada"}: registros de hoy`;
-  elements.dailyDescription.textContent = useCredit
-    ? "La lista muestra pagos con fecha de hoy. Aplicar un saldo anterior distribuye un registro existente y no crea un movimiento nuevo."
-    : modeKey === "DEUDA_ANTERIOR_CLIENTE"
-      ? "Se muestran todas las deudas anteriores cuya fecha corresponde al día de hoy."
-      : "Se muestran todas las transacciones de hoy que corresponden a la operación seleccionada.";
+  updateDailyRangeCopy(modeKey);
   elements.flowBadge.textContent = mode.badge;
   elements.detailsTitle.textContent = ["SALDO_FAVOR_PROVEEDOR", "DEUDA_ANTERIOR_CLIENTE"].includes(modeKey)
     ? "Datos del saldo anterior"
@@ -1315,6 +1546,7 @@ async function saveMovement(event) {
   const savedMode = currentModeKey();
   const manualCustomerDebt = isManualCustomerDebt();
   let savedRecordId = null;
+  let savedRecordDate = String(elements.date.value || "").slice(0, 10);
   let refreshDailyAfterSave = false;
 
   try {
@@ -1341,13 +1573,19 @@ async function saveMovement(event) {
     });
     const movementNumber = firstDefined(response, ["data.numero", "data.id", "numero", "id"], null);
     savedRecordId = firstDefined(response, ["data.id", "id"], null);
+    savedRecordDate = String(firstDefined(response, [
+      "data.fecha_hora",
+      "data.fecha_emision",
+      "fecha_hora",
+      "fecha_emision"
+    ], savedRecordDate) || "").slice(0, 10);
     resetMovement({ keepMessage: true, refreshDaily: false, selectedMode: savedMode });
     setMessage(
       elements.message,
       response?.message || `${manualCustomerDebt ? "Deuda" : "Movimiento"}${movementNumber ? ` #${movementNumber}` : ""} registrado correctamente.`,
       "success"
     );
-    dailyChannel?.postMessage({ type: "financial-movement-updated", mode: savedMode });
+    dailyChannel?.postMessage({ type: "financial-movement-updated", mode: savedMode, date: savedRecordDate });
     refreshDailyAfterSave = true;
   } catch (error) {
     setMessage(
@@ -1366,7 +1604,7 @@ async function saveMovement(event) {
   if (refreshDailyAfterSave) {
     void loadDailyRecords({
       force: true,
-      highlightedId: savedRecordId,
+      highlightedId: dailyRangeContains(savedRecordDate) ? savedRecordId : null,
       modeKey: savedMode
     });
   }
@@ -1416,6 +1654,10 @@ elements.currency.addEventListener("change", () => {
 });
 elements.refresh.addEventListener("click", loadVisiblePortfolio);
 elements.dailyRefresh.addEventListener("click", () => void loadDailyRecords({ force: true }));
+elements.dailyFilters.addEventListener("submit", applyDailyFilters);
+elements.dailyFrom.addEventListener("input", clearDailyFilterError);
+elements.dailyTo.addEventListener("input", clearDailyFilterError);
+elements.dailyToday.addEventListener("click", showTodayDailyRecords);
 elements.form.addEventListener("submit", saveMovement);
 elements.reset.addEventListener("click", () => resetMovement());
 
@@ -1434,7 +1676,11 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", scheduleDailyResumeRefresh);
 dailyChannel?.addEventListener("message", (event) => {
-  if (event.data?.type === "financial-movement-updated") {
+  if (
+    event.data?.type === "financial-movement-updated"
+    && (!event.data.mode || event.data.mode === currentModeKey())
+    && (!event.data.date || dailyRangeContains(event.data.date))
+  ) {
     void loadDailyRecords({ silent: true, force: true });
   }
 });
@@ -1446,6 +1692,7 @@ window.addEventListener("beforeunload", () => {
 
 initFinanceAccess(loadCatalogData);
 elements.date.value = toLocalDateTimeValue();
+initializeDailyRange();
 if (queryPrefill.type) {
   const requestedMode = document.querySelector(`[name="financeMovementType"][value="${queryPrefill.type}"]`);
   if (requestedMode) requestedMode.checked = true;

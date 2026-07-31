@@ -204,9 +204,15 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeCxpList"', false)
             ->assertSee('id="financeApplicationsInstructions"', false)
             ->assertSee('id="financeDailyPanel"', false)
+            ->assertSee('id="financeDailyFilters"', false)
+            ->assertSee('id="financeDailyFrom"', false)
+            ->assertSee('id="financeDailyTo"', false)
+            ->assertSee('id="financeDailyApply"', false)
+            ->assertSee('id="financeDailyToday"', false)
             ->assertSee('id="financeDailyLiveText"', false)
             ->assertSee('id="financeDailyRefresh"', false)
             ->assertSee('id="financeDailyRows"', false)
+            ->assertSee('Historial por fechas')
             ->assertSee('Actualización automática cada 10 s')
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/finanzas-movimiento.js'), false);
@@ -323,13 +329,22 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('DAILY_REFRESH_INTERVAL = 10000', $movementJavascript);
         $this->assertStringContainsString('function dailyEndpoint(', $movementJavascript);
         $this->assertStringContainsString('params.set("tipo", modeKey)', $movementJavascript);
-        $this->assertStringContainsString('desde: date', $movementJavascript);
-        $this->assertStringContainsString('hasta: date', $movementJavascript);
+        $this->assertStringContainsString('desde: from', $movementJavascript);
+        $this->assertStringContainsString('hasta: to', $movementJavascript);
+        $this->assertStringContainsString('function applyDailyFilters(', $movementJavascript);
+        $this->assertStringContainsString('function dailyRangeIncludesToday()', $movementJavascript);
+        $this->assertStringContainsString('La fecha Hasta debe ser igual o posterior a Desde.', $movementJavascript);
+        $this->assertStringContainsString('state.dailyFollowsToday', $movementJavascript);
+        $this->assertStringContainsString('liveOnly: true', $movementJavascript);
+        $this->assertStringContainsString('state.dailyLiveActive !== includesToday', $movementJavascript);
+        $this->assertStringContainsString('El rango ya no incluye hoy', $movementJavascript);
+        $this->assertStringContainsString('./finanzas-date-range.js', $movementJavascript);
         $this->assertStringContainsString('new BroadcastChannel("sistema-pollos-finanzas-movimientos")', $movementJavascript);
         $this->assertStringContainsString('refreshDailyAfterSave = true', $movementJavascript);
         $this->assertStringContainsString('modeKey: savedMode', $movementJavascript);
         $this->assertStringContainsString('selectedModeInput.checked = true', $movementJavascript);
         $this->assertStringContainsString('.fin-daily-panel', $financeStylesheet);
+        $this->assertStringContainsString('.fin-daily-filters', $financeStylesheet);
         $this->assertStringContainsString('.fin-daily-table', $financeStylesheet);
         $this->assertStringContainsString('/finanzas/gastos/catalogo', $expensesJavascript);
         $this->assertStringContainsString('/finanzas/gastos?', $expensesJavascript);

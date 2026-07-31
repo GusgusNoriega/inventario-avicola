@@ -1089,6 +1089,26 @@ body.fin-page {
   gap: 10px;
 }
 
+.fin-daily-filters {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(150px, 220px) auto;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 13px;
+  align-items: end;
+  border: 1px solid var(--fin-border);
+  border-radius: 10px;
+  background: rgba(5, 10, 17, .56);
+}
+
+.fin-daily-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fin-daily-filter-actions .fin-btn { min-height: 40px; }
+
 .fin-live-status {
   display: inline-flex;
   align-items: center;
@@ -1106,6 +1126,12 @@ body.fin-page {
   background: var(--fin-green);
   box-shadow: 0 0 0 4px rgba(54, 216, 128, .1);
   animation: fin-live-pulse 2s ease-in-out infinite;
+}
+
+.fin-live-status.is-manual > span[aria-hidden="true"] {
+  background: var(--fin-yellow);
+  box-shadow: 0 0 0 4px rgba(242, 194, 48, .1);
+  animation: none;
 }
 
 .fin-table.fin-daily-table { min-width: 940px; }
@@ -1655,6 +1681,8 @@ body.fin-page {
   .fin-movement-columns { grid-template-columns: 1fr; }
   .fin-application-summary { position: static; }
   .fin-application-columns { grid-template-columns: 1fr; }
+  .fin-daily-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-daily-filter-actions { grid-column: 1 / -1; }
   .fin-purchase-form-columns { grid-template-columns: 1fr; }
   .fin-purchase-total-panel { position: static; }
   .fin-purchase-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1688,6 +1716,9 @@ body.fin-page {
   .fin-list-panel { padding: 15px; }
   .fin-section-head-wrap { align-items: stretch; flex-direction: column; }
   .fin-daily-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .fin-daily-filters { grid-template-columns: 1fr; }
+  .fin-daily-filter-actions { grid-column: 1; }
+  .fin-daily-filter-actions .fin-btn { flex: 1; }
   .fin-section-actions { width: 100%; justify-content: stretch; }
   .fin-section-actions .fin-btn { flex: 1; }
   .fin-account-balance-grid,

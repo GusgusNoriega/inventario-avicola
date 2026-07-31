@@ -146,7 +146,7 @@ class FinancialApiTest extends TestCase
             ->assertJsonPath('cartera.por_cobrar', '60.00');
     }
 
-    public function test_movement_list_filters_by_type_and_day_and_orders_newest_first(): void
+    public function test_movement_list_filters_by_type_and_inclusive_date_range_and_orders_newest_first(): void
     {
         $client = $this->thirdParty('CLIENTE', 'CLIENTE LISTADO DIARIO', '10111112');
         [, $account] = $this->ownAccount();
@@ -171,7 +171,7 @@ class FinancialApiTest extends TestCase
         $earlierId = $register('COBRO_CLIENTE', "{$targetDate} 09:15:00");
         $laterId = $register('COBRO_CLIENTE', "{$targetDate} 18:45:00");
         $register('COBRO_MINORISTA', "{$targetDate} 20:00:00");
-        $register('COBRO_CLIENTE', "{$otherDate} 23:55:00");
+        $previousDayId = $register('COBRO_CLIENTE', "{$otherDate} 23:55:00");
 
         $response = $this->getJson(
             "/api/v1/finanzas/movimientos?tipo=COBRO_CLIENTE&desde={$targetDate}&hasta={$targetDate}&per_page=100",
@@ -189,6 +189,22 @@ class FinancialApiTest extends TestCase
             ['COBRO_CLIENTE'],
             collect($response->json('data'))->pluck('tipo')->unique()->values()->all(),
         );
+
+        $rangeResponse = $this->getJson(
+            "/api/v1/finanzas/movimientos?tipo=COBRO_CLIENTE&desde={$otherDate}&hasta={$targetDate}&per_page=100",
+        )->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('meta.total', 3);
+
+        $this->assertSame(
+            [$laterId, $earlierId, $previousDayId],
+            collect($rangeResponse->json('data'))->pluck('id')->all(),
+        );
+
+        $this->getJson(
+            "/api/v1/finanzas/movimientos?desde={$targetDate}&hasta={$otherDate}",
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors('hasta');
     }
 
     public function test_each_movement_flow_rejects_fields_that_do_not_belong_to_it(): void

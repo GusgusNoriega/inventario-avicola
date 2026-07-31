@@ -195,20 +195,37 @@
         </div>
       </section>
 
-      <section id="financeDailyPanel" class="fin-card fin-daily-panel" aria-labelledby="financeDailyTitle" aria-busy="true">
+    </form>
+
+    <section id="financeDailyPanel" class="fin-card fin-daily-panel" aria-labelledby="financeDailyTitle" aria-busy="true">
         <div class="fin-section-head fin-section-head-wrap">
           <div>
-            <p class="fin-eyebrow">Actividad de hoy</p>
-            <h2 id="financeDailyTitle">Transacciones realizadas hoy</h2>
-            <p id="financeDailyDescription">La lista cambia según la operación seleccionada y se actualiza automáticamente.</p>
+            <p class="fin-eyebrow">Historial por fechas</p>
+            <h2 id="financeDailyTitle">Transacciones por fecha</h2>
+            <p id="financeDailyDescription">Elige un rango para consultar la operación seleccionada.</p>
           </div>
           <div class="fin-daily-actions">
-            <span class="fin-live-status"><span aria-hidden="true"></span><span id="financeDailyLiveText">Actualización automática cada 10 s</span></span>
+            <span id="financeDailyLive" class="fin-live-status"><span aria-hidden="true"></span><span id="financeDailyLiveText">Actualización automática cada 10 s</span></span>
             <button id="financeDailyRefresh" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Actualizar ahora</button>
           </div>
         </div>
 
-        <p id="financeDailyMessage" class="fin-message" role="status" aria-live="polite">Cargando transacciones de hoy...</p>
+        <form id="financeDailyFilters" class="fin-daily-filters" novalidate>
+          <label class="fin-field fin-field-compact">
+            <span>Desde</span>
+            <input id="financeDailyFrom" type="date" autocomplete="off" required>
+          </label>
+          <label class="fin-field fin-field-compact">
+            <span>Hasta</span>
+            <input id="financeDailyTo" type="date" autocomplete="off" required>
+          </label>
+          <div class="fin-daily-filter-actions">
+            <button id="financeDailyApply" class="fin-btn fin-btn-primary fin-btn-small" type="submit">Aplicar filtro</button>
+            <button id="financeDailyToday" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Hoy</button>
+          </div>
+        </form>
+
+        <p id="financeDailyMessage" class="fin-message" role="status" aria-live="polite">Cargando el rango seleccionado...</p>
         <div class="fin-table-wrap">
           <table class="fin-table fin-daily-table">
             <thead>
@@ -222,12 +239,11 @@
               </tr>
             </thead>
             <tbody id="financeDailyRows">
-              <tr><td class="fin-empty-cell" colspan="6">Cargando transacciones de hoy...</td></tr>
+              <tr><td class="fin-empty-cell" colspan="6">Cargando el rango seleccionado...</td></tr>
             </tbody>
           </table>
         </div>
-      </section>
-    </form>
+    </section>
   </main>
 
   <script type="module" src="{{ asset('js/finanzas-movimiento.js') }}"></script>
