@@ -1796,7 +1796,7 @@ body.fin-page {
 }
 
 .fin-ticket-filters {
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
 }
 
 .fin-ticket-filter-combobox {
@@ -1894,15 +1894,24 @@ body.fin-page {
 }
 
 .fin-ticket-table {
-  min-width: 1110px;
+  min-width: 1280px;
 }
 
-.fin-ticket-table th:nth-child(1) { width: 14%; }
-.fin-ticket-table th:nth-child(2) { width: 18%; }
-.fin-ticket-table th:nth-child(3) { width: 22%; }
-.fin-ticket-table th:nth-child(4) { width: 12%; }
-.fin-ticket-table th:nth-child(5) { width: 17%; }
-.fin-ticket-table th:nth-child(6) { width: 17%; }
+.fin-ticket-table th:nth-child(1) { width: 12%; }
+.fin-ticket-table th:nth-child(2) { width: 16%; }
+.fin-ticket-table th:nth-child(3) { width: 19%; }
+.fin-ticket-table th:nth-child(4) { width: 11%; }
+.fin-ticket-table th:nth-child(5) { width: 14%; }
+.fin-ticket-table th:nth-child(6) { width: 11%; }
+.fin-ticket-table th:nth-child(7) { width: 17%; }
+
+.fin-ticket-table tr.is-voided td {
+  background: rgba(255, 116, 116, .025);
+}
+
+.fin-ticket-table tr.is-voided:hover td {
+  background: rgba(255, 116, 116, .045);
+}
 
 .fin-ticket-prices {
   display: grid;
@@ -1921,7 +1930,24 @@ body.fin-page {
 }
 
 .fin-ticket-actions {
-  min-width: 176px;
+  min-width: 190px;
+}
+
+.fin-ticket-lifecycle-warning {
+  margin: 14px 0;
+  padding: 11px 12px;
+  color: #ffd1d1;
+  border: 1px solid rgba(255, 116, 116, .32);
+  border-radius: 9px;
+  background: rgba(255, 116, 116, .07);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fin-ticket-lifecycle-warning.is-restore {
+  color: #bceeff;
+  border-color: rgba(50, 202, 255, .32);
+  background: rgba(50, 202, 255, .07);
 }
 
 .fin-table-amount.is-negative {

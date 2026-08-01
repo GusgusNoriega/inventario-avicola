@@ -11,20 +11,21 @@
 <body
   class="fin-page fin-ticket-page"
   data-can-manage-tickets="{{ auth()->user()->hasPermission('SALDOS_AJUSTAR') ? '1' : '0' }}"
+  data-can-manage-ticket-status="{{ auth()->user()->isAdministrator() ? '1' : '0' }}"
 >
   <main class="fin-shell">
     @include('partials.finanzas-header', [
       'active' => 'tickets',
       'eyebrow' => 'Control de ventas',
       'title' => 'Consulta y edición de tickets',
-      'description' => 'Busca tickets históricos, revisa sus importes y corrige el cliente o los precios asignados.'
+      'description' => 'Busca tickets históricos, incluidos los anulados, y administra su estado, cliente o precios.'
     ])
 
     <section class="fin-card fin-management-notice" aria-label="Condición de consulta">
       <div class="fin-management-notice-mark" aria-hidden="true">i</div>
       <div>
         <strong>Debes aplicar al menos un filtro para consultar tickets.</strong>
-        <p>Puedes buscar por número, por nombre o documento del cliente, o por un rango completo de fecha y hora.</p>
+        <p>Puedes buscar por número, cliente o rango de fecha. También puedes seleccionar “Solo anulados” para consultarlos directamente.</p>
       </div>
     </section>
 
@@ -73,6 +74,14 @@
           </div>
         </div>
         <label class="fin-field">
+          <span>Estado</span>
+          <select id="financeTicketStatus">
+            <option value="VIGENTES">Solo vigentes</option>
+            <option value="ANULADOS">Solo anulados</option>
+            <option value="TODOS">Todos</option>
+          </select>
+        </label>
+        <label class="fin-field">
           <span>Desde</span>
           <input id="financeTicketFrom" type="datetime-local">
         </label>
@@ -99,12 +108,13 @@
               <th>Precio asignado</th>
               <th class="fin-text-right">Monto</th>
               <th>Fecha y hora</th>
+              <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="financeTicketRows">
             <tr>
-              <td class="fin-empty-cell" colspan="6">Los tickets aparecerán aquí después de aplicar un filtro.</td>
+              <td class="fin-empty-cell" colspan="7">Los tickets aparecerán aquí después de aplicar un filtro.</td>
             </tr>
           </tbody>
         </table>
@@ -157,6 +167,52 @@
       <footer class="fin-purchase-dialog-actions">
         <button class="fin-btn fin-btn-ghost" type="button" data-dialog-close>Cancelar</button>
         <button id="financeTicketClientSave" class="fin-btn fin-btn-primary" type="submit" disabled>Guardar cliente</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="financeTicketVoidDialog" class="fin-purchase-dialog fin-void-dialog" aria-labelledby="financeTicketVoidTitle">
+    <form id="financeTicketVoidForm" class="fin-purchase-dialog-card" novalidate>
+      <header class="fin-purchase-dialog-head">
+        <div>
+          <p class="fin-eyebrow">Acción exclusiva de administrador</p>
+          <h2 id="financeTicketVoidTitle">Anular ticket</h2>
+        </div>
+        <button class="fin-dialog-close" type="button" data-dialog-close aria-label="Cerrar">×</button>
+      </header>
+      <p id="financeTicketVoidDescription" class="fin-section-copy"></p>
+      <p class="fin-ticket-lifecycle-warning">
+        Se anularán sus pesadas, se retirará su efecto en javas y se neutralizará la cuenta por cobrar. Los cobros exclusivos se reversarán automáticamente.
+      </p>
+      <label class="fin-field">
+        <span>Motivo de anulación <b>*</b></span>
+        <textarea id="financeTicketVoidReason" rows="4" minlength="3" maxlength="250" required placeholder="Explica por qué se anula este ticket"></textarea>
+      </label>
+      <p id="financeTicketVoidMessage" class="fin-message" role="status" aria-live="polite"></p>
+      <footer class="fin-purchase-dialog-actions">
+        <button class="fin-btn fin-btn-ghost" type="button" data-dialog-close>Cancelar</button>
+        <button id="financeTicketVoidSubmit" class="fin-btn fin-btn-danger" type="submit">Sí, anular ticket</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="financeTicketRestoreDialog" class="fin-purchase-dialog fin-void-dialog" aria-labelledby="financeTicketRestoreTitle">
+    <form id="financeTicketRestoreForm" class="fin-purchase-dialog-card">
+      <header class="fin-purchase-dialog-head">
+        <div>
+          <p class="fin-eyebrow">Acción exclusiva de administrador</p>
+          <h2 id="financeTicketRestoreTitle">Restablecer ticket</h2>
+        </div>
+        <button class="fin-dialog-close" type="button" data-dialog-close aria-label="Cerrar">×</button>
+      </header>
+      <p id="financeTicketRestoreDescription" class="fin-section-copy"></p>
+      <p class="fin-ticket-lifecycle-warning is-restore">
+        Las pesadas anuladas junto con el ticket, la cuenta por cobrar y el movimiento de javas volverán a estar activos. Los cobros que se revirtieron al anular el ticket no se recuperan automáticamente.
+      </p>
+      <p id="financeTicketRestoreMessage" class="fin-message" role="status" aria-live="polite"></p>
+      <footer class="fin-purchase-dialog-actions">
+        <button class="fin-btn fin-btn-ghost" type="button" data-dialog-close>Cancelar</button>
+        <button id="financeTicketRestoreSubmit" class="fin-btn fin-btn-primary" type="submit">Sí, restablecer ticket</button>
       </footer>
     </form>
   </dialog>

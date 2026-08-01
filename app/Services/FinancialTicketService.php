@@ -28,6 +28,7 @@ class FinancialTicketService
         private readonly FinancialAuditService $audit,
         private readonly FinancialObligationService $financialObligations,
         private readonly JavaControlService $javaControl,
+        private readonly TicketVoidWeighingResolver $voidedRecords,
     ) {}
 
     /**
@@ -43,10 +44,9 @@ class FinancialTicketService
         $paginator = $query
             ->with([
                 'clienteDestino:id,nombre_razon_social,numero_documento,estado',
+                'anuladoPor:id,nombre',
                 'precios.tipoPollo:id,codigo,nombre',
-                'pesadas' => fn ($query) => $query
-                    ->where('estado', Pesada::STATUS_ACTIVE)
-                    ->select(['id', 'ticket_id', 'tipo_pollo_id', 'peso_neto_kg', 'estado']),
+                'pesadas:id,ticket_id,tipo_pollo_id,peso_neto_kg,estado,anulada_por,anulada_at,motivo_anulacion',
             ])
             ->orderByRaw(
                 'COALESCE(tickets_despacho.cerrado_at, tickets_despacho.created_at) DESC',
@@ -59,6 +59,7 @@ class FinancialTicketService
         return [
             'data' => collect($paginator->items())
                 ->map(fn (TicketDespacho $ticket): array => $this->formatTicket(
+                    $companyId,
                     $ticket,
                     $currency,
                     $timezone,
@@ -339,7 +340,10 @@ class FinancialTicketService
                 ];
             }
 
-            $ticketIds = $this->filteredQuery($companyId, $data)
+            $ticketIds = $this->filteredQuery($companyId, [
+                ...$data,
+                'estado' => 'VIGENTES',
+            ])
                 ->orderBy('tickets_despacho.id')
                 ->lockForUpdate()
                 ->pluck('tickets_despacho.id')
@@ -458,14 +462,29 @@ class FinancialTicketService
      */
     private function filteredQuery(int $companyId, array $filters): Builder
     {
-        $query = $this->companyTicketQuery($companyId)
-            ->where('tickets_despacho.estado', '!=', TicketDespacho::STATUS_VOIDED);
+        $query = $this->companyTicketQuery($companyId);
         $ticket = trim((string) ($filters['ticket'] ?? ''));
         $client = trim((string) ($filters['cliente'] ?? ''));
         $clientId = (int) ($filters['cliente_id'] ?? 0);
+        $status = (string) ($filters['estado'] ?? 'VIGENTES');
         $companyTimezone = $this->companyTimezone($companyId);
 
         return $query
+            ->when(
+                $status === 'VIGENTES',
+                fn (Builder $query) => $query->where(
+                    'tickets_despacho.estado',
+                    '!=',
+                    TicketDespacho::STATUS_VOIDED,
+                ),
+            )
+            ->when(
+                $status === 'ANULADOS',
+                fn (Builder $query) => $query->where(
+                    'tickets_despacho.estado',
+                    TicketDespacho::STATUS_VOIDED,
+                ),
+            )
             ->when(
                 $ticket !== '',
                 fn (Builder $query) => $query->whereRaw(
@@ -569,14 +588,14 @@ class FinancialTicketService
             ->where('tickets_despacho.id', $ticketId)
             ->with([
                 'clienteDestino:id,nombre_razon_social,numero_documento,estado',
+                'anuladoPor:id,nombre',
                 'precios.tipoPollo:id,codigo,nombre',
-                'pesadas' => fn ($query) => $query
-                    ->where('estado', Pesada::STATUS_ACTIVE)
-                    ->select(['id', 'ticket_id', 'tipo_pollo_id', 'peso_neto_kg', 'estado']),
+                'pesadas:id,ticket_id,tipo_pollo_id,peso_neto_kg,estado,anulada_por,anulada_at,motivo_anulacion',
             ])
             ->firstOrFail();
 
         return $this->formatTicket(
+            $companyId,
             $ticket,
             $this->companyCurrency($companyId),
             $this->companyTimezone($companyId),
@@ -585,11 +604,13 @@ class FinancialTicketService
 
     /** @return array<string, mixed> */
     private function formatTicket(
+        int $companyId,
         TicketDespacho $ticket,
         string $currency,
         string $timezone,
     ): array {
-        $recordsByType = $ticket->pesadas->groupBy('tipo_pollo_id');
+        $recordsByType = $this->financialRecords($companyId, $ticket)
+            ->groupBy('tipo_pollo_id');
         $isReturn = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN;
         $amount = '0.00';
         $prices = $ticket->precios
@@ -651,12 +672,48 @@ class FinancialTicketService
             'operation_type' => (string) $ticket->tipo_operacion,
             'status' => (string) $ticket->estado,
             'registered_at' => $this->formattedRegisteredAt($ticket, $timezone),
+            'voided_at' => $this->formattedDatabaseDateTime(
+                $ticket->getRawOriginal('anulado_at'),
+                $timezone,
+            ),
+            'void_reason' => $ticket->motivo_anulacion,
+            'voided_by' => $ticket->anuladoPor
+                ? [
+                    'id' => (int) $ticket->anuladoPor->id,
+                    'name' => (string) $ticket->anuladoPor->nombre,
+                ]
+                : null,
             'currency' => $currency,
             'amount' => $amount,
             'prices' => $prices,
-            'can_edit_prices' => $prices !== [],
-            'can_change_client' => $prices !== [],
+            'can_edit_prices' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
+                && $prices !== [],
+            'can_change_client' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
+                && $prices !== [],
+            'can_void' => $ticket->estado === TicketDespacho::STATUS_CLOSED,
+            'can_restore' => $ticket->estado === TicketDespacho::STATUS_VOIDED,
         ];
+    }
+
+    /** @return Collection<int, Pesada> */
+    private function financialRecords(
+        int $companyId,
+        TicketDespacho $ticket,
+    ): Collection {
+        if ($ticket->estado !== TicketDespacho::STATUS_VOIDED) {
+            return $ticket->pesadas
+                ->where('estado', Pesada::STATUS_ACTIVE)
+                ->values();
+        }
+
+        return $ticket->pesadas
+            ->where('estado', Pesada::STATUS_ACTIVE)
+            ->concat($this->voidedRecords->recordsForCycle(
+                $companyId,
+                $ticket,
+                $ticket->pesadas,
+            ))
+            ->values();
     }
 
     private function syncFinancialDocument(
@@ -895,12 +952,19 @@ class FinancialTicketService
         $rawRegisteredAt = $ticket->getRawOriginal('cerrado_at')
             ?: $ticket->getRawOriginal('created_at');
 
-        if ($rawRegisteredAt === null) {
+        return $this->formattedDatabaseDateTime($rawRegisteredAt, $companyTimezone);
+    }
+
+    private function formattedDatabaseDateTime(
+        mixed $value,
+        string $companyTimezone,
+    ): ?string {
+        if ($value === null) {
             return null;
         }
 
         return CarbonImmutable::parse(
-            (string) $rawRegisteredAt,
+            (string) $value,
             $this->databaseTimezone(),
         )
             ->setTimezone($companyTimezone)
@@ -915,6 +979,7 @@ class FinancialTicketService
             'cliente' => $data['cliente'] ?? null,
             'desde' => $data['desde'] ?? null,
             'hasta' => $data['hasta'] ?? null,
+            'estado' => $data['estado'] ?? 'VIGENTES',
             'operacion' => (string) $data['operacion'],
             'tipo_pollo_id' => (int) $data['tipo_pollo_id'],
             'monto' => bcadd((string) $data['monto'], '0', 4),

@@ -1036,6 +1036,409 @@ class FinancialTicketApiTest extends TestCase
         ]);
     }
 
+    public function test_an_administrator_can_list_void_and_restore_a_ticket_from_finance(): void
+    {
+        $ticket = $this->createTicket(
+            'CICLO-FIN-001',
+            CarbonImmutable::parse('2026-07-20 20:00:00'),
+            $this->sourceClientId,
+        );
+        $priceId = $ticket['price_ids'][$this->firstChickenTypeId];
+
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/precios", [
+            'precios' => [[
+                'id' => $priceId,
+                'precio_kg' => '8.5000',
+            ]],
+        ])->assertOk();
+        $this->createJavaMovement($ticket['id'], $this->sourceClientId);
+        $document = DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET:{$ticket['id']}")
+            ->firstOrFail();
+        $paymentId = DB::table('pagos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->sourceClientId,
+            'codigo' => 'COBRO-CICLO-FIN-001',
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $this->sourceClientId,
+            'proveedor_id' => null,
+            'cuenta_origen_id' => null,
+            'cuenta_destino_id' => null,
+            'metodo_pago_id' => null,
+            'direccion' => 'INGRESO',
+            'fecha_hora' => '2026-07-20 20:01:00',
+            'metodo' => 'EFECTIVO',
+            'referencia' => null,
+            'moneda' => 'PEN',
+            'importe' => '85.00',
+            'estado' => 'REGISTRADO',
+            'idempotency_key' => (string) Str::uuid(),
+            'reversa_de_pago_id' => null,
+            'observaciones' => 'Cobro que debe permanecer reversado',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('pago_aplicaciones')->insert([
+            'pago_id' => $paymentId,
+            'comprobante_id' => $document->id,
+            'lado' => 'CXC',
+            'importe_aplicado' => '85.00',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        DB::table('comprobantes')->where('id', $document->id)->update([
+            'saldo_pendiente' => '0.00',
+            'estado' => 'PAGADO',
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+            'motivo' => 'Corrección solicitada desde Finanzas',
+        ])->assertForbidden();
+
+        $this->makeAdministrator($this->user);
+
+        $voidResponse = $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+            'motivo' => 'Corrección solicitada desde Finanzas',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_VOIDED)
+            ->assertJsonPath('data.void_reason', 'Corrección solicitada desde Finanzas');
+        $reversePaymentId = (int) $voidResponse->json('data.reversed_payment_ids.0');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'],
+            'estado' => TicketDespacho::STATUS_VOIDED,
+            'anulado_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticket['id'],
+            'estado' => Pesada::STATUS_VOIDED,
+            'anulada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseMissing('movimientos_javas', [
+            'ticket_despacho_id' => $ticket['id'],
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'estado' => 'ANULADO',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'ANULADO',
+            'anulada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $reversePaymentId,
+            'reversa_de_pago_id' => $paymentId,
+            'estado' => 'REGISTRADO',
+        ]);
+
+        $this->getJson('/api/v1/finanzas/tickets?'.http_build_query([
+            'ticket' => 'CICLO-FIN-001',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('meta.total', 0);
+
+        $this->getJson('/api/v1/finanzas/tickets?'.http_build_query([
+            'estado' => 'ANULADOS',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.code', 'CICLO-FIN-001')
+            ->assertJsonPath('data.0.amount', '85.00')
+            ->assertJsonPath('data.0.status', TicketDespacho::STATUS_VOIDED)
+            ->assertJsonPath('data.0.void_reason', 'Corrección solicitada desde Finanzas')
+            ->assertJsonPath('data.0.voided_by.id', $this->user->id)
+            ->assertJsonPath('data.0.can_edit_prices', false)
+            ->assertJsonPath('data.0.can_change_client', false)
+            ->assertJsonPath('data.0.can_void', false)
+            ->assertJsonPath('data.0.can_restore', true);
+
+        $restore = $this->postJson(
+            "/api/v1/finanzas/tickets/{$ticket['id']}/restablecer",
+        )
+            ->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_CLOSED)
+            ->assertJsonCount(1, 'data.restored_weighing_ids');
+
+        $restoredWeighingId = (int) $restore->json('data.restored_weighing_ids.0');
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'],
+            'estado' => TicketDespacho::STATUS_CLOSED,
+            'anulado_por' => null,
+            'anulado_at' => null,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $restoredWeighingId,
+            'estado' => Pesada::STATUS_ACTIVE,
+            'anulada_por' => null,
+            'anulada_at' => null,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticket['id'],
+            'cliente_id' => $this->sourceClientId,
+            'cantidad' => 1,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'estado' => 'PENDIENTE',
+            'total' => 85,
+            'saldo_pendiente' => 85,
+            'anulada_por' => null,
+            'anulada_at' => null,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'ANULADO',
+            'anulada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $reversePaymentId,
+            'reversa_de_pago_id' => $paymentId,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertSame(
+            2,
+            DB::table('pagos')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->count(),
+        );
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'RESTABLECER',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'pesadas',
+            'entidad_id' => (string) $restoredWeighingId,
+            'accion' => 'RESTABLECER_POR_TICKET',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'movimientos_javas',
+            'accion' => 'RECREAR_POR_TICKET_RESTABLECIDO',
+        ]);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")
+            ->assertOk()
+            ->assertJsonPath('meta.idempotent', true)
+            ->assertJsonCount(0, 'data.restored_weighing_ids');
+        $this->assertSame(
+            1,
+            DB::table('auditoria_eventos')
+                ->where('entidad', 'tickets_despacho')
+                ->where('entidad_id', (string) $ticket['id'])
+                ->where('accion', 'RESTABLECER')
+                ->count(),
+        );
+        $this->assertSame(
+            1,
+            DB::table('auditoria_eventos')
+                ->where('entidad', 'movimientos_javas')
+                ->where('accion', 'RECREAR_POR_TICKET_RESTABLECIDO')
+                ->count(),
+        );
+    }
+
+    public function test_restore_keeps_a_weighing_that_was_voided_individually_before_the_ticket(): void
+    {
+        $ticket = $this->createTicket(
+            'CICLO-PESADAS-001',
+            CarbonImmutable::parse('2026-07-20 20:10:00'),
+            $this->sourceClientId,
+            $this->twoTypeValues(),
+        );
+        $this->makeAdministrator($this->user);
+        $reason = 'Mismo motivo y segundo para probar la auditoría';
+        $generatedReason = "Ticket CICLO-PESADAS-001 anulado: {$reason}";
+        $records = DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->orderBy('id')
+            ->get();
+        $manualRecord = $records->first();
+        $ticketRecord = $records->last();
+
+        $this->travelTo(CarbonImmutable::parse('2026-07-20 20:15:00'));
+        try {
+            $manualBefore = (array) $manualRecord;
+            $manualAfter = [
+                ...$manualBefore,
+                'estado' => Pesada::STATUS_VOIDED,
+                'anulada_por' => $this->user->id,
+                'anulada_at' => now()->format('Y-m-d H:i:s'),
+                'motivo_anulacion' => $generatedReason,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ];
+            DB::table('pesadas')->where('id', $manualRecord->id)->update([
+                'estado' => $manualAfter['estado'],
+                'anulada_por' => $manualAfter['anulada_por'],
+                'anulada_at' => $manualAfter['anulada_at'],
+                'motivo_anulacion' => $manualAfter['motivo_anulacion'],
+                'updated_at' => $manualAfter['updated_at'],
+            ]);
+            DB::table('auditoria_eventos')->insert([
+                'empresa_id' => $this->user->empresa_id,
+                'usuario_id' => $this->user->id,
+                'entidad' => 'pesadas',
+                'entidad_id' => (string) $manualRecord->id,
+                'accion' => 'ANULAR',
+                'datos_antes' => json_encode($manualBefore, JSON_THROW_ON_ERROR),
+                'datos_despues' => json_encode($manualAfter, JSON_THROW_ON_ERROR),
+                'created_at' => now(),
+            ]);
+
+            $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+                'motivo' => $reason,
+            ])->assertOk();
+
+            $this->getJson('/api/v1/finanzas/tickets?'.http_build_query([
+                'ticket' => 'CICLO-PESADAS-001',
+                'estado' => 'ANULADOS',
+            ]))
+                ->assertOk()
+                ->assertJsonPath('data.0.amount', '60.00');
+
+            $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")
+                ->assertOk()
+                ->assertJsonPath('data.restored_weighing_ids.0', $ticketRecord->id)
+                ->assertJsonCount(1, 'data.restored_weighing_ids');
+        } finally {
+            $this->travelBack();
+        }
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $manualRecord->id,
+            'estado' => Pesada::STATUS_VOIDED,
+            'motivo_anulacion' => $generatedReason,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $ticketRecord->id,
+            'estado' => Pesada::STATUS_ACTIVE,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertSame(
+            0,
+            DB::table('auditoria_eventos')
+                ->where('entidad', 'pesadas')
+                ->where('entidad_id', (string) $manualRecord->id)
+                ->where('accion', 'RESTABLECER_POR_TICKET')
+                ->count(),
+        );
+    }
+
+    public function test_bulk_price_adjustment_never_changes_voided_tickets(): void
+    {
+        $activeTicket = $this->createTicket(
+            'ESTADO-MASIVO-ACTIVO',
+            CarbonImmutable::parse('2026-07-20 20:20:00'),
+            $this->sourceClientId,
+        );
+        $voidedTicket = $this->createTicket(
+            'ESTADO-MASIVO-ANULADO',
+            CarbonImmutable::parse('2026-07-20 20:21:00'),
+            $this->sourceClientId,
+        );
+        $this->makeAdministrator($this->user);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$voidedTicket['id']}/anular", [
+            'motivo' => 'Excluir del ajuste masivo',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/finanzas/tickets/ajustar-precios', [
+            'ticket' => 'ESTADO-MASIVO-',
+            'estado' => 'TODOS',
+            'idempotency_key' => (string) Str::uuid(),
+            'operacion' => 'AUMENTAR',
+            'tipo_pollo_id' => $this->firstChickenTypeId,
+            'monto' => '1.0000',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['estado']);
+        $this->postJson('/api/v1/finanzas/tickets/ajustar-precios', [
+            'estado' => 'ANULADOS',
+            'idempotency_key' => (string) Str::uuid(),
+            'operacion' => 'AUMENTAR',
+            'tipo_pollo_id' => $this->firstChickenTypeId,
+            'monto' => '1.0000',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['estado']);
+
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $activeTicket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '8.5000',
+            4,
+        );
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $voidedTicket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '8.5000',
+            4,
+        );
+
+        $this->postJson('/api/v1/finanzas/tickets/ajustar-precios', [
+            'ticket' => 'ESTADO-MASIVO-',
+            'estado' => 'VIGENTES',
+            'idempotency_key' => (string) Str::uuid(),
+            'operacion' => 'AUMENTAR',
+            'tipo_pollo_id' => $this->firstChickenTypeId,
+            'monto' => '1.0000',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.matched_tickets', 1)
+            ->assertJsonPath('data.updated_tickets', 1);
+
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $activeTicket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '9.5000',
+            4,
+        );
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $voidedTicket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '8.5000',
+            4,
+        );
+    }
+
+    public function test_ticket_lifecycle_endpoints_are_isolated_by_company(): void
+    {
+        $ticket = $this->createTicket(
+            'CICLO-EMPRESA-001',
+            CarbonImmutable::parse('2026-07-20 20:30:00'),
+            $this->sourceClientId,
+        );
+        $foreignAdministrator = User::factory()->create();
+        $this->makeAdministrator($foreignAdministrator);
+        Sanctum::actingAs($foreignAdministrator, ['api']);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+            'motivo' => 'Intento desde otra empresa',
+        ])->assertNotFound();
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'],
+            'estado' => TicketDespacho::STATUS_CLOSED,
+            'anulado_por' => null,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticket['id'],
+            'estado' => Pesada::STATUS_ACTIVE,
+        ]);
+    }
+
     private function createClient(string $name, string $document): int
     {
         $clientId = DB::table('terceros')->insertGetId([

@@ -12,6 +12,7 @@ class BulkAdjustFinancialTicketPricesRequest extends ListFinancialTicketsRequest
     {
         return [
             ...parent::rules(),
+            'estado' => ['required', Rule::in(['VIGENTES'])],
             'idempotency_key' => ['required', 'uuid'],
             'operacion' => ['required', Rule::in(['AUMENTAR', 'DISMINUIR'])],
             'tipo_pollo_id' => [
@@ -43,6 +44,7 @@ class BulkAdjustFinancialTicketPricesRequest extends ListFinancialTicketsRequest
     {
         return [
             ...parent::messages(),
+            'estado.in' => 'Los ajustes masivos solo pueden aplicarse a tickets vigentes.',
             'idempotency_key.required' => 'Envía una clave UUID de idempotencia para procesar el ajuste.',
             'idempotency_key.uuid' => 'La clave de idempotencia debe ser un UUID válido.',
             'operacion.required' => 'Selecciona si deseas aumentar o disminuir los precios.',

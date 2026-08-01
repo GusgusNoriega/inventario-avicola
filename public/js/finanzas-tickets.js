@@ -19,6 +19,7 @@ const elements = {
   client: document.getElementById("financeTicketClient"),
   clientCombobox: document.getElementById("financeTicketClientCombobox"),
   clientSuggestions: document.getElementById("financeTicketClientSuggestions"),
+  status: document.getElementById("financeTicketStatus"),
   from: document.getElementById("financeTicketFrom"),
   until: document.getElementById("financeTicketUntil"),
   clear: document.getElementById("financeTicketClear"),
@@ -43,6 +44,17 @@ const elements = {
   clientSelection: document.getElementById("financeTicketClientSelection"),
   clientMessage: document.getElementById("financeTicketClientMessage"),
   clientSave: document.getElementById("financeTicketClientSave"),
+  voidDialog: document.getElementById("financeTicketVoidDialog"),
+  voidForm: document.getElementById("financeTicketVoidForm"),
+  voidDescription: document.getElementById("financeTicketVoidDescription"),
+  voidReason: document.getElementById("financeTicketVoidReason"),
+  voidMessage: document.getElementById("financeTicketVoidMessage"),
+  voidSubmit: document.getElementById("financeTicketVoidSubmit"),
+  restoreDialog: document.getElementById("financeTicketRestoreDialog"),
+  restoreForm: document.getElementById("financeTicketRestoreForm"),
+  restoreDescription: document.getElementById("financeTicketRestoreDescription"),
+  restoreMessage: document.getElementById("financeTicketRestoreMessage"),
+  restoreSubmit: document.getElementById("financeTicketRestoreSubmit"),
   bulkDialog: document.getElementById("financeTicketBulkDialog"),
   bulkForm: document.getElementById("financeTicketBulkForm"),
   bulkScope: document.getElementById("financeTicketBulkScope"),
@@ -73,6 +85,8 @@ const state = {
   filterClientLoading: false,
   editingPriceTicketId: null,
   editingClientTicketId: null,
+  voidingTicketId: null,
+  restoringTicketId: null,
   selectedClientId: null,
   selectedBulkTypeId: null,
   pendingFilters: null,
@@ -82,11 +96,13 @@ const state = {
   bulkIdempotencyKey: null,
   bulkAttemptFingerprint: null,
   bulkSaving: false,
+  lifecycleSaving: false,
   loading: false,
   saving: false
 };
 
 const canManage = document.body.dataset.canManageTickets === "1";
+const canManageStatus = document.body.dataset.canManageTicketStatus === "1";
 const FILTER_CLIENT_RESULT_LIMIT = 8;
 const FILTER_CLIENT_DEBOUNCE_MS = 180;
 
@@ -101,6 +117,7 @@ function normalizeSearch(value) {
 function currentFilters() {
   const filters = {
     ticket: elements.ticket.value.trim(),
+    estado: elements.status.value,
     desde: elements.from.value,
     hasta: elements.until.value
   };
@@ -126,15 +143,21 @@ function validateFilters(filters) {
   if (filters.desde && filters.hasta && Date.parse(filters.hasta) < Date.parse(filters.desde)) {
     return "La fecha y hora final debe ser igual o posterior a la inicial.";
   }
-  if (!filters.ticket && !filters.cliente && !filters.cliente_id && !hasRangeValue) {
-    return "Debes filtrar por número de ticket, cliente o un rango de fecha y hora.";
+  if (
+    !filters.ticket
+    && !filters.cliente
+    && !filters.cliente_id
+    && !hasRangeValue
+    && filters.estado !== "ANULADOS"
+  ) {
+    return "Debes filtrar por número de ticket, cliente, un rango de fecha y hora o seleccionar solo los anulados.";
   }
   return "";
 }
 
 function filtersEqual(first, second) {
   if (!first || !second) return false;
-  return ["ticket", "cliente", "cliente_id", "desde", "hasta"]
+  return ["ticket", "cliente", "cliente_id", "desde", "hasta", "estado"]
     .every((key) => String(first[key] || "") === String(second[key] || ""));
 }
 
@@ -144,6 +167,7 @@ function updateBulkAvailability() {
     || state.saving
     || state.total < 1
     || state.priceTypes.length < 1
+    || String(state.appliedFilters?.estado || "VIGENTES") !== "VIGENTES"
     || !filtersEqual(currentFilters(), state.appliedFilters);
 }
 
@@ -156,6 +180,7 @@ function queryFor(filters, page) {
 function filterSnapshot(filters) {
   const snapshot = {
     ticket: String(filters?.ticket || "").trim(),
+    estado: String(filters?.estado || "VIGENTES").toUpperCase(),
     desde: String(filters?.desde || ""),
     hasta: String(filters?.hasta || "")
   };
@@ -242,31 +267,57 @@ function pricesHtml(record) {
   `).join("")}</div>`;
 }
 
-function actionsHtml(record) {
-  if (!canManage) {
-    return '<span class="fin-management-muted">Solo consulta</span>';
+function statusHtml(record) {
+  const status = String(record.status || "SIN ESTADO").toUpperCase();
+  const statusClass = `is-${status.toLocaleLowerCase("es")}`;
+  const details = [];
+
+  if (status === "ANULADO") {
+    if (record.void_reason) details.push(String(record.void_reason));
+    if (record.voided_by?.name) details.push(`Por ${record.voided_by.name}`);
+    if (record.voided_at) details.push(formatTicketDateTime(record.voided_at));
   }
 
-  const priceButton = record.can_edit_prices
-    ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-prices="${record.id}">Editar precio</button>`
-    : '<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" disabled>Sin precios</button>';
-  const clientButton = record.can_change_client
-    ? `<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-change-client="${record.id}">Cambiar cliente</button>`
-    : '<button class="fin-btn fin-btn-primary fin-btn-small" type="button" disabled>Sin venta</button>';
+  return `
+    <span class="fin-management-status ${escapeHtml(statusClass)}">${escapeHtml(status)}</span>
+    ${details.length ? `<small>${escapeHtml(details.join(" · "))}</small>` : ""}
+  `;
+}
 
-  return `<div class="fin-management-actions fin-ticket-actions">${priceButton}${clientButton}</div>`;
+function actionsHtml(record) {
+  const actions = [];
+
+  if (canManage && record.status !== "ANULADO") {
+    actions.push(record.can_edit_prices
+      ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-prices="${record.id}">Editar precio</button>`
+      : '<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" disabled>Sin precios</button>');
+    actions.push(record.can_change_client
+      ? `<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-change-client="${record.id}">Cambiar cliente</button>`
+      : '<button class="fin-btn fin-btn-primary fin-btn-small" type="button" disabled>Sin venta</button>');
+  }
+
+  if (canManageStatus && record.can_void) {
+    actions.push(`<button class="fin-btn fin-btn-danger fin-btn-small" type="button" data-void-ticket="${record.id}">Anular ticket</button>`);
+  }
+  if (canManageStatus && record.can_restore) {
+    actions.push(`<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-restore-ticket="${record.id}">Restablecer ticket</button>`);
+  }
+
+  return actions.length
+    ? `<div class="fin-management-actions fin-ticket-actions">${actions.join("")}</div>`
+    : '<span class="fin-management-muted">Solo consulta</span>';
 }
 
 function renderTickets(records) {
   state.records = new Map(records.map((record) => [String(record.id), record]));
 
   if (!records.length) {
-    elements.rows.innerHTML = '<tr><td class="fin-empty-cell" colspan="6">No hay tickets que coincidan con los filtros.</td></tr>';
+    elements.rows.innerHTML = '<tr><td class="fin-empty-cell" colspan="7">No hay tickets que coincidan con los filtros.</td></tr>';
     return;
   }
 
   elements.rows.innerHTML = records.map((record) => `
-    <tr>
+    <tr class="${record.status === "ANULADO" ? "is-voided" : ""}">
       <td>
         <strong>${escapeHtml(record.code || `#${record.id}`)}</strong>
         <small>${escapeHtml(operationLabel(record))}</small>
@@ -283,8 +334,8 @@ function renderTickets(records) {
       </td>
       <td>
         <strong>${escapeHtml(formatTicketDateTime(record.registered_at))}</strong>
-        <small>${escapeHtml(record.status || "Sin estado")}</small>
       </td>
+      <td>${statusHtml(record)}</td>
       <td>${actionsHtml(record)}</td>
     </tr>
   `).join("");
@@ -396,7 +447,7 @@ function resetResults({ invalidateRequest = true } = {}) {
   state.records.clear();
   state.appliedFilters = null;
   state.priceTypes = [];
-  elements.rows.innerHTML = '<tr><td class="fin-empty-cell" colspan="6">Los tickets aparecerán aquí después de aplicar un filtro.</td></tr>';
+  elements.rows.innerHTML = '<tr><td class="fin-empty-cell" colspan="7">Los tickets aparecerán aquí después de aplicar un filtro.</td></tr>';
   elements.page.textContent = "Sin consulta";
   elements.previous.disabled = true;
   elements.next.disabled = true;
@@ -406,7 +457,7 @@ function resetResults({ invalidateRequest = true } = {}) {
 
 function openPriceDialog(ticketId) {
   const record = state.records.get(String(ticketId));
-  if (!record?.prices?.length) return;
+  if (!record?.can_edit_prices || !record?.prices?.length) return;
 
   state.editingPriceTicketId = record.id;
   elements.priceTitle.textContent = `Editar precios · ${record.code}`;
@@ -808,6 +859,102 @@ async function saveClient(event) {
   }
 }
 
+function setLifecycleSaving(isSaving) {
+  state.lifecycleSaving = isSaving;
+  elements.voidForm.setAttribute("aria-busy", String(isSaving));
+  elements.restoreForm.setAttribute("aria-busy", String(isSaving));
+  elements.voidReason.disabled = isSaving;
+  elements.voidSubmit.disabled = isSaving;
+  elements.restoreSubmit.disabled = isSaving;
+  elements.voidSubmit.textContent = isSaving ? "Anulando..." : "Sí, anular ticket";
+  elements.restoreSubmit.textContent = isSaving ? "Restableciendo..." : "Sí, restablecer ticket";
+}
+
+function openVoidDialog(ticketId) {
+  const record = state.records.get(String(ticketId));
+  if (!canManageStatus || !record?.can_void || state.lifecycleSaving) return;
+
+  state.voidingTicketId = record.id;
+  elements.voidDescription.textContent = `Vas a anular el ticket ${record.code}. El registro se conservará para auditoría.`;
+  elements.voidReason.value = "";
+  setMessage(elements.voidMessage, "");
+  elements.voidDialog.showModal();
+  elements.voidReason.focus();
+}
+
+async function voidTicket(event) {
+  event.preventDefault();
+  if (state.lifecycleSaving || !state.voidingTicketId) return;
+
+  const reason = elements.voidReason.value.trim();
+  elements.voidReason.value = reason;
+  if (!elements.voidForm.checkValidity()) {
+    elements.voidForm.reportValidity();
+    setMessage(elements.voidMessage, "Escribe un motivo de al menos 3 caracteres.", "error");
+    return;
+  }
+
+  state.saving = true;
+  setLifecycleSaving(true);
+  updateBulkAvailability();
+  setMessage(elements.voidMessage, "Anulando el ticket y actualizando sus efectos...");
+  try {
+    const response = await apiRequest(
+      `/finanzas/tickets/${encodeURIComponent(state.voidingTicketId)}/anular`,
+      {
+        method: "POST",
+        body: JSON.stringify({ motivo: reason })
+      }
+    );
+    elements.voidDialog.close();
+    state.voidingTicketId = null;
+    await refreshAfterMutation(response?.message || "Ticket anulado correctamente.");
+  } catch (error) {
+    setMessage(elements.voidMessage, errorMessage(error, "No se pudo anular el ticket."), "error");
+  } finally {
+    state.saving = false;
+    setLifecycleSaving(false);
+    updateBulkAvailability();
+  }
+}
+
+function openRestoreDialog(ticketId) {
+  const record = state.records.get(String(ticketId));
+  if (!canManageStatus || !record?.can_restore || state.lifecycleSaving) return;
+
+  state.restoringTicketId = record.id;
+  const reason = record.void_reason ? ` Motivo de anulación: ${record.void_reason}.` : "";
+  elements.restoreDescription.textContent = `Vas a restablecer el ticket ${record.code}.${reason}`;
+  setMessage(elements.restoreMessage, "");
+  elements.restoreDialog.showModal();
+  elements.restoreSubmit.focus();
+}
+
+async function restoreTicket(event) {
+  event.preventDefault();
+  if (state.lifecycleSaving || !state.restoringTicketId) return;
+
+  state.saving = true;
+  setLifecycleSaving(true);
+  updateBulkAvailability();
+  setMessage(elements.restoreMessage, "Restableciendo el ticket y actualizando sus efectos...");
+  try {
+    const response = await apiRequest(
+      `/finanzas/tickets/${encodeURIComponent(state.restoringTicketId)}/restablecer`,
+      { method: "POST" }
+    );
+    elements.restoreDialog.close();
+    state.restoringTicketId = null;
+    await refreshAfterMutation(response?.message || "Ticket restablecido correctamente.");
+  } catch (error) {
+    setMessage(elements.restoreMessage, errorMessage(error, "No se pudo restablecer el ticket."), "error");
+  } finally {
+    state.saving = false;
+    setLifecycleSaving(false);
+    updateBulkAvailability();
+  }
+}
+
 function renderBulkTypes() {
   elements.bulkTypes.innerHTML = state.priceTypes.map((type) => {
     const selected = String(type.id) === String(state.selectedBulkTypeId);
@@ -963,6 +1110,7 @@ elements.filters.addEventListener("submit", (event) => {
 });
 
 elements.filters.addEventListener("input", updateBulkAvailability);
+elements.status.addEventListener("change", updateBulkAvailability);
 elements.client.addEventListener("focus", () => {
   void openFilterClientSuggestions();
 });
@@ -1046,11 +1194,17 @@ elements.next.addEventListener("click", () => {
 elements.rows.addEventListener("click", (event) => {
   const editPrices = event.target.closest("[data-edit-prices]");
   const changeClient = event.target.closest("[data-change-client]");
+  const voidButton = event.target.closest("[data-void-ticket]");
+  const restoreButton = event.target.closest("[data-restore-ticket]");
   if (editPrices) openPriceDialog(editPrices.dataset.editPrices);
   if (changeClient) void openClientDialog(changeClient.dataset.changeClient);
+  if (voidButton) openVoidDialog(voidButton.dataset.voidTicket);
+  if (restoreButton) openRestoreDialog(restoreButton.dataset.restoreTicket);
 });
 elements.priceForm.addEventListener("submit", savePrices);
 elements.clientForm.addEventListener("submit", saveClient);
+elements.voidForm.addEventListener("submit", voidTicket);
+elements.restoreForm.addEventListener("submit", restoreTicket);
 elements.clientSearch.addEventListener("input", renderClientOptions);
 elements.clientOptions.addEventListener("change", (event) => {
   const option = event.target.closest("[data-client-id]");
@@ -1078,6 +1232,14 @@ document.querySelectorAll("[data-dialog-close]").forEach((button) => {
       setMessage(elements.bulkMessage, "Espera a que termine el ajuste antes de cerrar.", "error");
       return;
     }
+    if (state.lifecycleSaving && dialog === elements.voidDialog) {
+      setMessage(elements.voidMessage, "Espera a que termine la anulación antes de cerrar.", "error");
+      return;
+    }
+    if (state.lifecycleSaving && dialog === elements.restoreDialog) {
+      setMessage(elements.restoreMessage, "Espera a que termine la restauración antes de cerrar.", "error");
+      return;
+    }
     dialog?.close();
   });
 });
@@ -1085,6 +1247,22 @@ elements.bulkDialog.addEventListener("cancel", (event) => {
   if (!state.bulkSaving) return;
   event.preventDefault();
   setMessage(elements.bulkMessage, "Espera a que termine el ajuste antes de cerrar.", "error");
+});
+elements.voidDialog.addEventListener("cancel", (event) => {
+  if (!state.lifecycleSaving) return;
+  event.preventDefault();
+  setMessage(elements.voidMessage, "Espera a que termine la anulación antes de cerrar.", "error");
+});
+elements.restoreDialog.addEventListener("cancel", (event) => {
+  if (!state.lifecycleSaving) return;
+  event.preventDefault();
+  setMessage(elements.restoreMessage, "Espera a que termine la restauración antes de cerrar.", "error");
+});
+elements.voidDialog.addEventListener("close", () => {
+  if (!state.lifecycleSaving) state.voidingTicketId = null;
+});
+elements.restoreDialog.addEventListener("close", () => {
+  if (!state.lifecycleSaving) state.restoringTicketId = null;
 });
 
 initFinanceAccess(() => {

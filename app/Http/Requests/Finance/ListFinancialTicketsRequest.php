@@ -7,6 +7,7 @@ use App\Models\TerceroRole;
 use Closure;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ListFinancialTicketsRequest extends FinancialFormRequest
 {
@@ -52,6 +53,10 @@ class ListFinancialTicketsRequest extends FinancialFormRequest
                 'required_with:desde',
                 'after_or_equal:desde',
             ],
+            'estado' => [
+                'nullable',
+                Rule::in(['VIGENTES', 'ANULADOS', 'TODOS']),
+            ],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
     }
@@ -94,10 +99,11 @@ class ListFinancialTicketsRequest extends FinancialFormRequest
                 && ! $this->filled('cliente')
                 && ! $this->filled('cliente_id')
                 && ! ($this->filled('desde') && $this->filled('hasta'))
+                && $this->input('estado') !== 'ANULADOS'
             ) {
                 $validator->errors()->add(
                     'filtros',
-                    'Debes filtrar por número de ticket, cliente o un rango completo de fecha y hora.',
+                    'Debes filtrar por número de ticket, cliente, un rango completo de fecha y hora o seleccionar solo los anulados.',
                 );
             }
         });
@@ -105,11 +111,18 @@ class ListFinancialTicketsRequest extends FinancialFormRequest
 
     protected function prepareForValidation(): void
     {
+        $status = $this->input('estado');
+
         $this->merge([
             'ticket' => $this->trimmedNullable('ticket'),
             'cliente' => $this->trimmedNullable('cliente'),
             'desde' => $this->trimmedNullable('desde'),
             'hasta' => $this->trimmedNullable('hasta'),
+            'estado' => ! $this->filled('estado')
+                ? 'VIGENTES'
+                : (is_scalar($status)
+                    ? mb_strtoupper(trim((string) $status), 'UTF-8')
+                    : $status),
         ]);
     }
 
@@ -122,6 +135,7 @@ class ListFinancialTicketsRequest extends FinancialFormRequest
             'desde.date_format' => 'La fecha y hora inicial no tiene un formato válido.',
             'hasta.date_format' => 'La fecha y hora final no tiene un formato válido.',
             'hasta.after_or_equal' => 'La fecha y hora final debe ser igual o posterior a la inicial.',
+            'estado.in' => 'Selecciona un estado de ticket válido.',
         ];
     }
 }

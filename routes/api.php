@@ -131,6 +131,12 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/tickets/{ticket}/cliente', [FinancialTicketController::class, 'updateClient'])
             ->whereNumber('ticket')
             ->middleware('permission:SALDOS_AJUSTAR');
+        Route::post('/tickets/{ticket}/anular', [FinancialTicketController::class, 'void'])
+            ->whereNumber('ticket')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::post('/tickets/{ticket}/restablecer', [FinancialTicketController::class, 'restore'])
+            ->whereNumber('ticket')
+            ->middleware('permission:SALDOS_AJUSTAR');
 
         Route::middleware('permission:FINANZAS_VER')->group(function (): void {
             Route::get('/gastos/catalogo', [CompanyExpenseController::class, 'catalog']);

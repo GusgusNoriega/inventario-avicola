@@ -267,9 +267,17 @@ class WebViewsTest extends TestCase
             ->assertSee('aria-controls="financeTicketClientSuggestions"', false)
             ->assertSee('id="financeTicketClientSuggestions"', false)
             ->assertSee('role="listbox"', false)
+            ->assertSee('id="financeTicketStatus"', false)
+            ->assertSee('value="ANULADOS"', false)
             ->assertSee('id="financeTicketRows"', false)
             ->assertSee('id="financeTicketPriceDialog"', false)
             ->assertSee('id="financeTicketClientDialog"', false)
+            ->assertSee('id="financeTicketVoidDialog"', false)
+            ->assertSee('id="financeTicketVoidReason"', false)
+            ->assertSee('id="financeTicketRestoreDialog"', false)
+            ->assertSee('Sí, anular ticket')
+            ->assertSee('Sí, restablecer ticket')
+            ->assertSee('Las pesadas anuladas junto con el ticket')
             ->assertSee('id="financeTicketBulkDialog"', false)
             ->assertSee('data-bulk-operation="AUMENTAR"', false)
             ->assertSee('data-bulk-operation="DISMINUIR"', false)
@@ -303,6 +311,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/movimientos?per_page=6', $dashboardJavascript);
         $this->assertStringContainsString('aplicacion_estado: "CON_SALDO"', $dashboardJavascript);
         $this->assertStringContainsString('/aplicaciones', $dashboardJavascript);
+        $this->assertStringContainsString('data-void-ticket', $ticketsJavascript);
+        $this->assertStringContainsString('data-restore-ticket', $ticketsJavascript);
+        $this->assertStringContainsString('/anular`', $ticketsJavascript);
+        $this->assertStringContainsString('/restablecer`', $ticketsJavascript);
         $this->assertStringContainsString('data-advance-apply', $dashboardJavascript);
         $this->assertStringContainsString('["ANULADO", "REVERSA"]', $dashboardJavascript);
         $this->assertStringContainsString('state.savingAdvance && !force', $dashboardJavascript);
