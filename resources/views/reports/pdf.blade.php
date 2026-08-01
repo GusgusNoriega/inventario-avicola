@@ -75,13 +75,13 @@
     @if($type === 'estado-cliente')
       <table class="report">
         <thead><tr>
-          <th style="width: 10%">Fecha</th><th style="width: 15%">Codigo</th><th style="width: 14%">Tipo</th>
-          <th style="width: 24%">Detalle</th><th style="width: 9%">Kg</th><th style="width: 8%">Precio</th>
-          <th style="width: 10%"><span class="debit">Cargo</span> / <span class="credit">Abono</span></th>
+          <th style="width: 10%">Fec.</th><th style="width: 15%">Cód.</th><th style="width: 14%">Tipo</th>
+          <th style="width: 27%">Det.</th><th style="width: 8%">Kg</th><th style="width: 7%">P/Kg</th>
+          <th style="width: 9%"><span class="debit">C</span>/<span class="credit">A</span></th>
           <th style="width: 10%">Saldo</th>
         </tr></thead>
         <tbody>
-          <tr><td colspan="7" class="muted">Saldo anterior al {{ \Carbon\CarbonImmutable::parse($from)->format('d/m/Y') }}</td><td class="num balance">{{ number_format($data['opening'], 2) }}</td></tr>
+          <tr><td colspan="7" class="muted">Saldo anterior</td><td class="num balance">{{ number_format($data['opening'], 2) }}</td></tr>
           @forelse($data['rows']->groupBy('date') as $date => $rows)
             <tr class="day-separator">
               <td colspan="8">Movimientos del {{ \Carbon\CarbonImmutable::parse($date)->format('d/m/Y') }}</td>

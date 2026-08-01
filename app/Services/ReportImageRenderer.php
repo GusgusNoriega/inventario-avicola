@@ -30,7 +30,7 @@ class ReportImageRenderer
         }
 
         $landscape = in_array($payload['type'], ['ventas-clientes', 'responsable'], true);
-        [$columns, $rows] = $this->table($payload['type'], $payload['data'], $payload['from']);
+        [$columns, $rows] = $this->table($payload['type'], $payload['data']);
         $firstCapacity = $landscape ? 20 : ($payload['type'] === 'estado-cliente' ? 37 : 34);
         $followingCapacity = $landscape ? 27 : 42;
         $chunks = $this->chunkRows($rows, $firstCapacity, $followingCapacity);
@@ -342,20 +342,20 @@ class ReportImageRenderer
      *     1: list<list<string>|array{kind: string, cells: list<string>, movement?: string}>
      * }
      */
-    private function table(string $type, array $data, string $from): array
+    private function table(string $type, array $data): array
     {
         if ($type === 'estado-cliente') {
             $columns = [
-                ['label' => 'Fecha', 'width' => .10], ['label' => 'Codigo', 'width' => .15],
-                ['label' => 'Tipo', 'width' => .14], ['label' => 'Detalle', 'width' => .24],
-                ['label' => 'Kg', 'width' => .09, 'align' => 'right'], ['label' => 'Precio', 'width' => .08, 'align' => 'right'],
-                ['label' => 'Cargo / abono', 'width' => .10, 'align' => 'right'],
+                ['label' => 'FEC.', 'width' => .10], ['label' => 'CÓD.', 'width' => .15],
+                ['label' => 'TIPO', 'width' => .14], ['label' => 'DET.', 'width' => .27],
+                ['label' => 'KG', 'width' => .08, 'align' => 'right'], ['label' => 'P/KG', 'width' => .07, 'align' => 'right'],
+                ['label' => 'C/A', 'width' => .09, 'align' => 'right'],
                 ['label' => 'Saldo', 'width' => .10, 'align' => 'right'],
             ];
             $rows = [[
                 'kind' => 'opening',
                 'cells' => [
-                    'Saldo anterior al '.CarbonImmutable::parse($from)->format('d/m/Y'),
+                    'Saldo anterior',
                     '', '', '', '', '', '',
                     number_format($data['opening'], 2),
                 ],

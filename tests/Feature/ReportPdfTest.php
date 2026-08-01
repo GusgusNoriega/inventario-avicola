@@ -802,6 +802,62 @@ class ReportPdfTest extends TestCase
         $this->assertSame(900.0, $statement['balance']);
     }
 
+    public function test_customer_statement_compacts_credit_notes_and_collection_destinations(): void
+    {
+        $client = $this->thirdParty('Cliente con detalle compacto', TerceroRole::CLIENT);
+        $accountId = $this->financialAccount(EntidadFinanciera::TYPE_OWN, 'DARWIND');
+        $account = CuentaFinanciera::query()->with('entidadFinanciera')->findOrFail($accountId);
+        $account->entidadFinanciera()->update([
+            'razon_social' => 'SADACSA',
+            'nombre_comercial' => 'SADACSA',
+        ]);
+        Comprobante::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $client->id,
+            'operacion' => Comprobante::OPERATION_SALE,
+            'naturaleza' => Comprobante::NATURE_CREDIT,
+            'tipo_documento' => 'NOTA DE CREDITO',
+            'codigo' => 'NCV-COMPACTA',
+            'origen_codigo' => 'PRUEBA',
+            'fecha_emision' => '2026-07-10',
+            'moneda' => 'PEN',
+            'subtotal' => '50.00',
+            'impuesto' => '0.00',
+            'total' => '50.00',
+            'saldo_pendiente' => '0.00',
+            'estado' => Comprobante::STATUS_PAID,
+            'created_by' => $this->user->id,
+        ]);
+        Pago::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PG-COMPACTO',
+            'tercero_id' => $client->id,
+            'tipo' => Pago::TYPE_CUSTOMER_COLLECTION,
+            'cliente_id' => $client->id,
+            'cuenta_destino_id' => $accountId,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'fecha_hora' => '2026-07-11 10:00:00',
+            'metodo' => 'EFECTIVO',
+            'referencia' => 'NORMA',
+            'moneda' => 'PEN',
+            'importe' => '20.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+        ]);
+
+        $rows = app(ReportDataService::class)->customerStatement(
+            (int) $this->user->empresa_id,
+            (int) $client->id,
+            '2026-07-01',
+            '2026-07-31',
+        )['rows']->keyBy('code');
+
+        $this->assertSame('DEV', $rows->get('NCV-COMPACTA')['type']);
+        $this->assertSame('EFECTIVO - Caja: DARWIND', $rows->get('PG-COMPACTO')['detail']);
+        $this->assertStringNotContainsString('SADACSA', $rows->get('PG-COMPACTO')['detail']);
+        $this->assertStringNotContainsString('NORMA', $rows->get('PG-COMPACTO')['detail']);
+    }
+
     public function test_customer_statement_abbreviates_only_known_chicken_types(): void
     {
         $client = $this->thirdParty('Cliente con productos', TerceroRole::CLIENT);
@@ -985,7 +1041,11 @@ class ReportPdfTest extends TestCase
         $this->assertStringNotContainsString((string) $client->numero_documento, $plainText);
         $this->assertStringNotContainsString('<table class="summary">', $html);
         $this->assertStringNotContainsString('Cargos del periodo', $plainText);
-        $this->assertStringContainsString('Cargo / Abono', $plainText);
+        foreach (['Fec.', 'Cód.', 'Tipo', 'Det.', 'Kg', 'P/Kg', 'C/A', 'Saldo'] as $heading) {
+            $this->assertStringContainsString($heading, $plainText);
+        }
+        $this->assertStringContainsString('Saldo anterior', $plainText);
+        $this->assertStringNotContainsString('Saldo anterior al', $plainText);
         $this->assertSame(2, substr_count($plainText, 'Movimientos del'));
         $this->assertStringContainsString('class="num debit"', $html);
         $this->assertStringContainsString('class="num credit"', $html);

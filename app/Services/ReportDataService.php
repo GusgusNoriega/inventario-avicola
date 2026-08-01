@@ -80,7 +80,7 @@ class ReportDataService
             ])
             ->groupBy('comprobante_id');
 
-        $transactions = $documents->map(function (Comprobante $document) use ($details, $abbreviateChickenTypes): array {
+        $transactions = $documents->map(function (Comprobante $document) use ($details, $operation, $abbreviateChickenTypes): array {
             $lines = $details->get($document->id, collect());
             $effect = $this->documentEffect($document);
 
@@ -88,7 +88,9 @@ class ReportDataService
                 'date' => $document->fecha_emision->format('Y-m-d'),
                 'sort' => $document->fecha_emision->format('Y-m-d').' 00:00:00-D-'.$document->id,
                 'code' => $document->codigo,
-                'type' => $document->naturaleza === Comprobante::NATURE_CREDIT ? 'NOTA / DEVOLUCION' : $document->tipo_documento,
+                'type' => $document->naturaleza === Comprobante::NATURE_CREDIT
+                    ? ($operation === Comprobante::OPERATION_SALE ? 'DEV' : 'NOTA / DEVOLUCION')
+                    : $document->tipo_documento,
                 'detail' => $lines
                     ->map(fn (object $line): string => $abbreviateChickenTypes
                         ? $this->customerChickenTypeLabel($line->tipo_pollo_codigo, $line->descripcion)
@@ -120,17 +122,23 @@ class ReportDataService
                     $account?->entidadFinanciera?->nombre_comercial ?: $account?->entidadFinanciera?->razon_social,
                     $account?->alias,
                 ])->filter()->implode(' - ');
+                $detail = $operation === Comprobante::OPERATION_SALE
+                    ? collect([
+                        $payment->metodoPago?->nombre ?: $payment->metodo,
+                        $this->customerStatementAccountLabel($account),
+                    ])->filter()->implode(' - ')
+                    : collect([
+                        $payment->metodoPago?->nombre ?: $payment->metodo,
+                        $destination,
+                        $payment->referencia,
+                    ])->filter()->implode(' - ');
 
                 return [
                     'date' => $payment->fecha_hora->format('Y-m-d'),
                     'sort' => $payment->fecha_hora->format('Y-m-d H:i:s').'-P-'.$payment->id,
                     'code' => $payment->codigo ?: 'PG-'.$payment->id,
                     'type' => str_replace('_', ' ', $payment->tipo ?: $payment->direccion),
-                    'detail' => collect([
-                        $payment->metodoPago?->nombre ?: $payment->metodo,
-                        $destination,
-                        $payment->referencia,
-                    ])->filter()->implode(' - '),
+                    'detail' => $detail,
                     'weight' => null,
                     'price' => null,
                     'debit' => $effect > 0 ? abs($effect) : 0,
@@ -406,6 +414,22 @@ class ReportDataService
             TipoPollo::CHICKEN_PROCESSED => 'PB',
             default => $description,
         };
+    }
+
+    private function customerStatementAccountLabel(?CuentaFinanciera $account): ?string
+    {
+        if (! $account) {
+            return null;
+        }
+
+        $type = match ($account->tipo) {
+            CuentaFinanciera::TYPE_CASH => 'Caja',
+            CuentaFinanciera::TYPE_WALLET => 'Billetera',
+            CuentaFinanciera::TYPE_BANK => 'Banco',
+            default => 'Cuenta',
+        };
+
+        return $type.': '.$account->alias;
     }
 
     private function paymentEffect(Pago $payment, string $operation): float
