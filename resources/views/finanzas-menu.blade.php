@@ -111,6 +111,24 @@
           <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="fin-module-card fin-card" href="{{ route('finanzas.cobranzas') }}">
+          <span class="fin-module-icon is-collections" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 7h14v12H5z"></path>
+              <path d="M8 7V5h8v2"></path>
+              <path d="M8 11h8"></path>
+              <path d="M12 9v4"></path>
+              <circle cx="8" cy="16" r="1.5"></circle>
+              <circle cx="16" cy="16" r="1.5"></circle>
+            </svg>
+          </span>
+          <span class="fin-module-copy">
+            <strong>Cobranzas</strong>
+            <small>Consolida el efectivo de varios clientes en un solo depósito y conserva el desglose de cada abono.</small>
+          </span>
+          <span class="fin-module-action">Abrir <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="fin-module-card fin-card" href="{{ route('finanzas.movimientos.nuevo') }}">
           <span class="fin-module-icon is-movements" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

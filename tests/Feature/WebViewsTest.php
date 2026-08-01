@@ -115,6 +115,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Empresas y cuentas')
             ->assertSee(route('finanzas.caja-efectivo'), false)
             ->assertSee('Caja de efectivo')
+            ->assertSee(route('finanzas.cobranzas'), false)
+            ->assertSee('Cobranzas')
             ->assertSee(route('finanzas.movimientos.nuevo'), false)
             ->assertSee('Registrar cobro, deuda o pago')
             ->assertSee(route('finanzas.movimientos'), false)
@@ -133,7 +135,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('id="financeAuthDialog"', false)
             ->assertDontSee(asset('js/finanzas-dashboard.js'), false);
 
-        $this->assertSame(10, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
+        $this->assertSame(11, substr_count($financeMenu->getContent(), 'class="fin-module-card fin-card"'));
 
         $this->get('/finanzas/saldos')
             ->assertOk()
@@ -194,6 +196,20 @@ class WebViewsTest extends TestCase
             ->assertSee('role="combobox"', false)
             ->assertDontSee('id="cashRegisterOperation"', false)
             ->assertSee(asset('js/finanzas-caja-efectivo.js'), false);
+
+        $this->get('/finanzas/cobranzas')
+            ->assertOk()
+            ->assertSee('Cobranzas')
+            ->assertSee('id="collectionDepositTitle"', false)
+            ->assertSee('id="collectionCollector"', false)
+            ->assertSee('id="collectionDestination"', false)
+            ->assertSee('id="collectionDetails"', false)
+            ->assertSee('id="collectionSummaryDifference"', false)
+            ->assertSee('id="collectionHistoryTitle"', false)
+            ->assertSee('id="collectorDialog"', false)
+            ->assertSee('id="collectionDetailDialog"', false)
+            ->assertSee('id="collectionVoidDialog"', false)
+            ->assertSee(asset('js/finanzas-cobranzas.js'), false);
 
         $this->get('/finanzas/movimientos/nuevo')
             ->assertOk()

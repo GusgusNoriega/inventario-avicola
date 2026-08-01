@@ -100,6 +100,18 @@ class FinancialMovementService
                 ]);
             }
 
+            $collectionDetail = DB::table('cobranza_detalles as detalle')
+                ->join('cobranzas as cobranza', 'cobranza.id', '=', 'detalle.cobranza_id')
+                ->where('cobranza.empresa_id', $companyId)
+                ->where('detalle.pago_id', $paymentId)
+                ->lockForUpdate()
+                ->first(['detalle.id']);
+            if ($collectionDetail) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este movimiento pertenece a una cobranza consolidada y no puede editarse por separado.',
+                ]);
+            }
+
             $after = [
                 ...(array) $payment,
                 'fecha_hora' => CarbonImmutable::parse($data['fecha_hora'])->toDateTimeString(),
@@ -417,6 +429,7 @@ class FinancialMovementService
         string $reason,
         ?string $ip = null,
         ?int $purchaseContextId = null,
+        ?int $collectionContextId = null,
     ): array {
         abort_unless(
             (int) $actor->empresa_id === $companyId && $actor->isActive(),
@@ -431,6 +444,7 @@ class FinancialMovementService
             $reason,
             $ip,
             $purchaseContextId,
+            $collectionContextId,
         ): array {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -438,6 +452,24 @@ class FinancialMovementService
                 ->lockForUpdate()
                 ->first();
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
+
+            $collectionDetail = DB::table('cobranza_detalles as detalle')
+                ->join('cobranzas as cobranza', 'cobranza.id', '=', 'detalle.cobranza_id')
+                ->where('cobranza.empresa_id', $companyId)
+                ->where('detalle.pago_id', $paymentId)
+                ->lockForUpdate()
+                ->first(['detalle.cobranza_id']);
+            if ($collectionDetail
+                && (int) $collectionDetail->cobranza_id !== (int) $collectionContextId) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este movimiento pertenece a una cobranza consolidada. Anula el voucher completo desde Cobranzas.',
+                ]);
+            }
+            if ($collectionContextId !== null && ! $collectionDetail) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'El movimiento no pertenece a la cobranza indicada.',
+                ]);
+            }
 
             $cashPurchase = DB::table('compras')
                 ->where('empresa_id', $companyId)

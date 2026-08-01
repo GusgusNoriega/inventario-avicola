@@ -112,11 +112,13 @@ function statusBadge(status) {
 
 function movementActions(record) {
   const active = record.estado === "REGISTRADO" && !record.reversa_de_pago_id;
+  const canEdit = active && record.puede_editar !== false;
+  const canVoid = active && record.puede_anular !== false;
   const actions = [];
-  if (active && permissions.editMovements) {
+  if (canEdit && permissions.editMovements) {
     actions.push(`<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-movement="${record.id}">Editar</button>`);
   }
-  if (active && permissions.voidMovements) {
+  if (canVoid && permissions.voidMovements) {
     actions.push(`<button class="fin-btn fin-btn-danger fin-btn-small" type="button" data-void-movement="${record.id}">Anular</button>`);
   }
   if (!actions.length) return '<span class="fin-management-muted">Sin acciones</span>';

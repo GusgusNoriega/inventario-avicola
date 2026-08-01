@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\V1\AdminRoleController;
 use App\Http\Controllers\Api\V1\AdminUserController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CashRegisterController;
+use App\Http\Controllers\Api\V1\CollectionController;
+use App\Http\Controllers\Api\V1\CollectorController;
 use App\Http\Controllers\Api\V1\CompanyExpenseController;
 use App\Http\Controllers\Api\V1\CustomerDiscountController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
@@ -52,6 +54,11 @@ Route::prefix('v1')->group(function (): void {
         'module:MODULO_FINANZAS',
     ])->group(function (): void {
         Route::middleware('permission:FINANZAS_VER')->group(function (): void {
+            Route::get('/cobranzas/catalogo', [CollectionController::class, 'catalog']);
+            Route::get('/cobranzas', [CollectionController::class, 'index']);
+            Route::get('/cobranzas/{cobranza}', [CollectionController::class, 'show'])
+                ->whereNumber('cobranza');
+            Route::get('/cobradores', [CollectorController::class, 'index']);
             Route::get('/caja-efectivo/catalogo', [CashRegisterController::class, 'catalog']);
             Route::get('/caja-efectivo', [CashRegisterController::class, 'index']);
             Route::get('/entidades', [FinancialEntityController::class, 'index']);
@@ -90,6 +97,16 @@ Route::prefix('v1')->group(function (): void {
 
         Route::post('/movimientos', [FinancialMovementController::class, 'store'])
             ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/cobradores', [CollectorController::class, 'store'])
+            ->middleware('permission:PAGOS_REGISTRAR');
+        Route::put('/cobradores/{cobrador}', [CollectorController::class, 'update'])
+            ->whereNumber('cobrador')
+            ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/cobranzas', [CollectionController::class, 'store'])
+            ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/cobranzas/{cobranza}/anular', [CollectionController::class, 'void'])
+            ->whereNumber('cobranza')
+            ->middleware('permission:PAGOS_ANULAR');
         Route::post('/caja-efectivo', [CashRegisterController::class, 'store'])
             ->middleware(['permission:PAGOS_REGISTRAR', 'permission:SALDOS_AJUSTAR']);
         Route::put('/caja-efectivo/{movimientoCaja}', [CashRegisterController::class, 'update'])

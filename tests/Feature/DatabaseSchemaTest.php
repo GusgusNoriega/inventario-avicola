@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(92, $migrationFiles);
+        $this->assertCount(93, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -37,6 +37,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_07_12_000002_add_trays_to_java_movements.php' => 3,
                 '2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php' => 2,
                 '2026_07_22_000001_add_station_to_retail_weight_adjustments.php' => 2,
+                '2026_08_01_000003_create_cobranzas_tables.php' => 3,
                 default => 1,
             };
 
@@ -111,6 +112,9 @@ class DatabaseSchemaTest extends TestCase
             'compra_detalles',
             'gastos_empresa',
             'movimientos_caja_efectivo',
+            'cobradores',
+            'cobranzas',
+            'cobranza_detalles',
         ];
 
         foreach ($tables as $table) {
@@ -154,6 +158,9 @@ class DatabaseSchemaTest extends TestCase
             'compra_detalles' => ['compra_id', 'tipo_pollo_id', 'descripcion', 'cantidad_aves', 'peso_kg', 'precio_kg', 'subtotal', 'created_at'],
             'gastos_empresa' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'categoria', 'concepto', 'destino', 'numero_documento', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'movimientos_caja_efectivo' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'caja_id', 'direccion', 'contraparte_tipo', 'cliente_id', 'otra_caja_id', 'detalle', 'estado', 'created_by'],
+            'cobradores' => ['empresa_id', 'nombre', 'estado', 'created_by', 'created_at', 'updated_at'],
+            'cobranzas' => ['empresa_id', 'cobrador_id', 'cobrador_nombre_snapshot', 'codigo', 'idempotency_key', 'payload_hash', 'cuenta_destino_id', 'proveedor_id', 'metodo_pago_id', 'fecha_hora', 'referencia', 'moneda', 'importe_total', 'observaciones', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
+            'cobranza_detalles' => ['cobranza_id', 'pago_id', 'cliente_id', 'fecha_recepcion', 'medio_recepcion', 'importe', 'orden', 'created_at'],
         ];
 
         foreach ($expectations as $table => $columns) {

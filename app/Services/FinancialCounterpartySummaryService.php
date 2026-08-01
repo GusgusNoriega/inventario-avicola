@@ -63,7 +63,7 @@ class FinancialCounterpartySummaryService
             $companyId,
             'proveedor_id',
             $providerId,
-            [Pago::TYPE_DIRECT_PAYMENT, ...Pago::PROVIDER_CREDIT_SOURCE_TYPES],
+            Pago::PROVIDER_CREDIT_SOURCE_TYPES,
             'CXP',
             $currency,
         );

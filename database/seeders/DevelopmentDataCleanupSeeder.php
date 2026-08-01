@@ -17,6 +17,8 @@ class DevelopmentDataCleanupSeeder extends Seeder
     public const TABLES_TO_CLEAN = [
         'compra_detalles',
         'compras',
+        'cobranza_detalles',
+        'cobranzas',
         'pago_aplicacion_operaciones',
         'ticket_precio_ajuste_operaciones',
         'pago_aplicaciones',
@@ -87,6 +89,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'metodos_pago',
         'entidades_financieras',
         'cuentas_financieras',
+        'cobradores',
     ];
 
     public function run(): void

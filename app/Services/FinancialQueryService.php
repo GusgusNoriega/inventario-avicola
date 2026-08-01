@@ -246,7 +246,12 @@ class FinancialQueryService
             'saldo_favor_proveedores' => [
                 'moneda' => $summaryCurrency,
                 'disponible' => $providerCredit['disponible'],
-                'originado_en_pagos' => $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
+                'originado_en_pagos' => FinancialMoney::add(
+                    $providerCredit[Pago::TYPE_DIRECT_PAYMENT],
+                    $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
+                ),
+                'originado_en_pagos_directos' => $providerCredit[Pago::TYPE_DIRECT_PAYMENT],
+                'originado_en_pagos_empresa' => $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
                 'registrado_manualmente' => $providerCredit[Pago::TYPE_PROVIDER_CREDIT],
             ],
         ];
@@ -287,6 +292,8 @@ class FinancialQueryService
             ->leftJoin('entidades_financieras as entidad_origen', 'entidad_origen.id', '=', 'cuenta_origen.entidad_financiera_id')
             ->leftJoin('cuentas_financieras as cuenta_destino', 'cuenta_destino.id', '=', 'pago.cuenta_destino_id')
             ->leftJoin('entidades_financieras as entidad_destino', 'entidad_destino.id', '=', 'cuenta_destino.entidad_financiera_id')
+            ->leftJoin('cobranza_detalles as cobranza_detalle', 'cobranza_detalle.pago_id', '=', 'pago.id')
+            ->leftJoin('cobranzas as cobranza', 'cobranza.id', '=', 'cobranza_detalle.cobranza_id')
             ->where('pago.empresa_id', $companyId)
             ->when($filters['tipo'] ?? null, fn (Builder $query, string $type) => $query->where('pago.tipo', $type))
             ->when($filters['estado'] ?? null, fn (Builder $query, string $status) => $query->where('pago.estado', $status))
@@ -358,6 +365,12 @@ class FinancialQueryService
                 'entidad_destino.id as entidad_destino_id',
                 'entidad_destino.razon_social as entidad_destino_nombre',
                 'entidad_destino.tipo as entidad_destino_tipo',
+                'cobranza.id as cobranza_id',
+                'cobranza.codigo as cobranza_codigo',
+                'cobranza.estado as cobranza_estado',
+                'cobranza.referencia as cobranza_referencia',
+                'cobranza.cobrador_id as cobranza_cobrador_id',
+                'cobranza.cobrador_nombre_snapshot as cobranza_cobrador_nombre',
             ]);
     }
 
@@ -471,6 +484,22 @@ class FinancialQueryService
                 'motivo_anulacion' => $payment->motivo_anulacion,
                 'aplicaciones' => $items,
                 'aplicacion' => $providerApplication,
+                'cobranza' => $payment->cobranza_id === null ? null : [
+                    'id' => (int) $payment->cobranza_id,
+                    'codigo' => $payment->cobranza_codigo,
+                    'estado' => $payment->cobranza_estado,
+                    'referencia' => $payment->cobranza_referencia,
+                    'cobrador' => [
+                        'id' => (int) $payment->cobranza_cobrador_id,
+                        'nombre' => $payment->cobranza_cobrador_nombre,
+                    ],
+                ],
+                'puede_editar' => $payment->estado === Pago::STATUS_REGISTERED
+                    && $payment->reversa_de_pago_id === null
+                    && $payment->cobranza_id === null,
+                'puede_anular' => $payment->estado === Pago::STATUS_REGISTERED
+                    && $payment->reversa_de_pago_id === null
+                    && $payment->cobranza_id === null,
                 'created_by' => (int) $payment->created_by,
                 'created_at' => $payment->created_at,
             ];
@@ -589,7 +618,7 @@ class FinancialQueryService
     }
 
     /**
-     * @return array{disponible: string, PAGO_PROVEEDOR: string, SALDO_FAVOR_PROVEEDOR: string}
+     * @return array{disponible: string, PAGO_DIRECTO: string, PAGO_PROVEEDOR: string, SALDO_FAVOR_PROVEEDOR: string}
      */
     private function providerCreditSummary(int $companyId, string $currency): array
     {
@@ -613,6 +642,7 @@ class FinancialQueryService
 
         $totals = [
             'disponible' => '0.00',
+            Pago::TYPE_DIRECT_PAYMENT => '0.00',
             Pago::TYPE_PROVIDER_PAYMENT => '0.00',
             Pago::TYPE_PROVIDER_CREDIT => '0.00',
         ];

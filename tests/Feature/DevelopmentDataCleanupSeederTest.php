@@ -44,6 +44,7 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'id' => $records['financial_account_id'],
             'entidad_financiera_id' => $records['financial_entity_id'],
         ]);
+        $this->assertDatabaseHas('cobradores', ['id' => $records['collector_id']]);
         $this->assertDatabaseHas('terceros', ['id' => $records['client_id']]);
         $this->assertDatabaseHas('terceros', ['id' => $records['provider_id']]);
         $this->assertDatabaseHas('tercero_roles', [
@@ -302,6 +303,42 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'importe' => 100,
             'estado' => 'REGISTRADO',
             'created_by' => $user->id,
+            'created_at' => $now,
+        ]);
+        $collectorId = DB::table('cobradores')->insertGetId([
+            'empresa_id' => $companyId,
+            'nombre' => 'COBRADOR CONSERVADO',
+            'estado' => 'ACTIVO',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $collectionId = DB::table('cobranzas')->insertGetId([
+            'empresa_id' => $companyId,
+            'cobrador_id' => $collectorId,
+            'cobrador_nombre_snapshot' => 'COBRADOR CONSERVADO',
+            'codigo' => 'COB-PRUEBA',
+            'idempotency_key' => (string) Str::uuid(),
+            'payload_hash' => hash('sha256', 'cobranza-prueba'),
+            'cuenta_destino_id' => $accountId,
+            'metodo_pago_id' => DB::table('metodos_pago')->where('codigo', 'DEPOSITO')->value('id'),
+            'fecha_hora' => $now,
+            'referencia' => 'VOUCHER-PRUEBA',
+            'moneda' => 'PEN',
+            'importe_total' => 100,
+            'estado' => 'REGISTRADO',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('cobranza_detalles')->insert([
+            'cobranza_id' => $collectionId,
+            'pago_id' => $paymentId,
+            'cliente_id' => $client->id,
+            'fecha_recepcion' => today(),
+            'medio_recepcion' => 'EFECTIVO',
+            'importe' => 100,
+            'orden' => 1,
             'created_at' => $now,
         ]);
         DB::table('pagos')->insert([
@@ -678,6 +715,7 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'company_id' => $companyId,
             'financial_entity_id' => $entityId,
             'financial_account_id' => $accountId,
+            'collector_id' => $collectorId,
             'client_id' => $client->id,
             'provider_id' => $provider->id,
             'driver_id' => $driver->id,

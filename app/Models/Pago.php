@@ -77,6 +77,7 @@ class Pago extends Model
      * empresa con un proveedor y puede asignarse posteriormente a una CXP.
      */
     public const PROVIDER_CREDIT_SOURCE_TYPES = [
+        self::TYPE_DIRECT_PAYMENT,
         self::TYPE_PROVIDER_PAYMENT,
         self::TYPE_PROVIDER_CREDIT,
     ];
@@ -191,6 +192,16 @@ class Pago extends Model
     public function movimientoCajaEfectivo(): HasOne
     {
         return $this->hasOne(MovimientoCajaEfectivo::class);
+    }
+
+    /**
+     * Desglose de cobranza consolidada que originó este movimiento.
+     *
+     * @return HasOne<CobranzaDetalle, $this>
+     */
+    public function cobranzaDetalle(): HasOne
+    {
+        return $this->hasOne(CobranzaDetalle::class);
     }
 
     /**

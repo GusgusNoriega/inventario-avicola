@@ -32,7 +32,7 @@ const MOVEMENT_LABELS = {
   REVERSO: "Reverso"
 };
 
-const PROVIDER_CREDIT_TYPES = new Set(["PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
+const PROVIDER_CREDIT_TYPES = new Set(["PAGO_DIRECTO", "PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
 const requestedProviderId = new URLSearchParams(window.location.search).get("proveedor_id") || "";
 
 const elements = {
