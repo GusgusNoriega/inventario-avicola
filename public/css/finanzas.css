@@ -2257,7 +2257,7 @@ body.fin-page {
 
 .fin-cash-item {
   display: grid;
-  grid-template-columns: 44px minmax(230px, 1fr) minmax(145px, auto) minmax(76px, auto);
+  grid-template-columns: 44px minmax(260px, 520px) clamp(150px, 14vw, 180px) minmax(170px, 1fr);
   min-height: 76px;
   padding: 11px 12px;
   align-items: center;
@@ -2309,14 +2309,16 @@ body.fin-page {
 }
 
 .fin-cash-item-counterpart {
+  display: -webkit-box;
   overflow: hidden;
-  color: var(--fin-soft);
-  font-size: 11px;
-  font-weight: 700;
+  color: #e7f3ff;
+  font-size: 15px;
+  font-weight: 850;
   letter-spacing: .01em;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .fin-cash-item-copy small {
@@ -2326,16 +2328,18 @@ body.fin-page {
 }
 
 .fin-cash-amount {
-  justify-self: end;
+  width: 100%;
+  justify-self: stretch;
   font-size: 18px;
   font-variant-numeric: tabular-nums;
   letter-spacing: -.025em;
+  text-align: right;
   white-space: nowrap;
 }
 
 .fin-cash-item-action {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   justify-self: end;
   gap: 7px;
@@ -2471,7 +2475,13 @@ body.fin-page {
     -webkit-line-clamp: 3;
   }
   .fin-cash-item-counterpart { white-space: normal; }
-  .fin-cash-amount { grid-column: 2; grid-row: 2; justify-self: start; }
+  .fin-cash-amount {
+    grid-column: 2;
+    grid-row: 2;
+    width: auto;
+    justify-self: start;
+    text-align: left;
+  }
   .fin-cash-item-action {
     grid-column: 2;
     grid-row: 3;

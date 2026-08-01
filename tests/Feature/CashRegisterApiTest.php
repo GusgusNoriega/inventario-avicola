@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -273,6 +274,33 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.egresos', '40.10')
             ->assertJsonPath('resumen.neto', '110.15')
             ->assertJsonPath('resumen.moneda', 'PEN');
+    }
+
+    public function test_daily_list_places_the_newly_registered_movement_first_even_with_an_earlier_effective_time(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-08-01 09:00:00', 'America/Lima'));
+        $firstResponse = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'fecha_hora' => '2026-07-31 18:00:00',
+                'detalle' => 'Registro creado primero',
+            ],
+        ))->assertCreated();
+
+        $this->travelTo(CarbonImmutable::parse('2026-08-01 09:05:00', 'America/Lima'));
+        $secondResponse = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'fecha_hora' => '2026-07-31 08:00:00',
+                'detalle' => 'Registro recién agregado',
+            ],
+        ))->assertCreated();
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $secondResponse->json('data.id'))
+            ->assertJsonPath('data.1.id', $firstResponse->json('data.id'));
     }
 
     public function test_daily_summary_shows_backdated_income_to_own_bank_and_wallet_accounts_without_counting_cash(): void

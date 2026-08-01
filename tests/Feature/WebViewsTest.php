@@ -179,7 +179,7 @@ class WebViewsTest extends TestCase
             ->assertSee('id="cashRegisterAccount"', false)
             ->assertSee('id="cashRegisterDate"', false)
             ->assertSee('id="cashRegisterIncome"', false)
-            ->assertSee('Ingresado a cuentas')
+            ->assertSee('Centro')
             ->assertSee('id="cashRegisterAccountIncome"', false)
             ->assertSee('id="cashRegisterExpense"', false)
             ->assertSee('id="cashRegisterNet"', false)
@@ -361,6 +361,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/caja-efectivo?', $cashRegisterJavascript);
         $this->assertStringContainsString('localStorage.setItem', $cashRegisterJavascript);
         $this->assertStringContainsString('POLL_INTERVAL = 3000', $cashRegisterJavascript);
+        $this->assertStringContainsString('function reloadLedgerAfterMutation()', $cashRegisterJavascript);
         $this->assertStringContainsString('function accountIncomeText(', $cashRegisterJavascript);
         $this->assertStringContainsString('summary.ingresos_cuentas', $cashRegisterJavascript);
         $this->assertStringContainsString('BroadcastChannel', $cashRegisterJavascript);
@@ -374,6 +375,12 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('window.confirm', $cashRegisterJavascript);
         $this->assertStringContainsString('class="fin-cash-item-title">${escapeHtml(record.detalle)}', $cashRegisterJavascript);
         $this->assertStringContainsString('.fin-cash-item-title', $financeStylesheet);
+        $this->assertStringContainsString('minmax(260px, 520px)', $financeStylesheet);
+        $this->assertStringContainsString('clamp(150px, 14vw, 180px)', $financeStylesheet);
+        $this->assertMatchesRegularExpression(
+            '/\.fin-cash-item-counterpart\s*\{[^}]*font-size:\s*15px;/s',
+            $financeStylesheet,
+        );
         $this->assertStringNotContainsString('numero_operacion', $cashRegisterJavascript);
         $this->assertStringContainsString('/finanzas/descuentos-clientes', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);

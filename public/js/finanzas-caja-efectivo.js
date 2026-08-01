@@ -330,6 +330,12 @@ async function loadLedger({ silent = false } = {}) {
   return state.loadPromise;
 }
 
+async function reloadLedgerAfterMutation() {
+  const pendingLoad = state.loadPromise;
+  if (pendingLoad) await pendingLoad;
+  return loadLedger();
+}
+
 function schedulePolling() {
   window.clearTimeout(state.pollingTimer);
   state.pollingTimer = window.setTimeout(async () => {
@@ -553,7 +559,7 @@ async function saveMovement(event) {
     state.pendingKey = null;
     elements.dialog.close();
     channel?.postMessage({ companyId: state.companyId, type: "cash-register-updated" });
-    await loadLedger();
+    await reloadLedgerAfterMutation();
     setMessage(elements.listMessage, id ? "Movimiento actualizado correctamente." : "Movimiento registrado correctamente.", "success");
   } catch (error) {
     setMessage(elements.formMessage, errorMessage(error, "No se pudo guardar el movimiento."), "error");
@@ -584,9 +590,7 @@ async function deleteMovement(id) {
     });
     channel?.postMessage({ companyId: state.companyId, type: "cash-register-updated" });
 
-    const pendingLoad = state.loadPromise;
-    if (pendingLoad) await pendingLoad;
-    await loadLedger();
+    await reloadLedgerAfterMutation();
 
     state.deletingId = null;
     renderLedger([...state.records.values()]);
