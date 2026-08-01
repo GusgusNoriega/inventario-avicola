@@ -48,15 +48,15 @@
     </section>
 
     <section class="fin-summary-grid fin-cash-summary" aria-label="Resumen financiero del día">
-      <article class="fin-summary-card fin-cash-summary-income">
-        <span>Ingresos del día</span>
-        <small>Dinero que entró a la caja</small>
-        <strong id="cashRegisterIncome">S/ 0.00</strong>
-      </article>
       <article class="fin-summary-card fin-cash-summary-accounts">
         <span>Ingresado a cuentas</span>
         <small>Bancos y billeteras; no incluye cajas</small>
         <strong id="cashRegisterAccountIncome">S/ 0.00</strong>
+      </article>
+      <article class="fin-summary-card fin-cash-summary-income">
+        <span>Ingresos del día</span>
+        <small>Dinero que entró a la caja</small>
+        <strong id="cashRegisterIncome">S/ 0.00</strong>
       </article>
       <article class="fin-summary-card fin-cash-summary-expense">
         <span>Gastos del día</span>
