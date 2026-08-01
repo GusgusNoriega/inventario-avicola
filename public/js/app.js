@@ -581,6 +581,10 @@ function getTicketOperationLabel(truck) {
 function normalizeTicketRegistration(registration) {
   const id = Number(registration?.id);
   const code = String(registration?.code || "").trim();
+  const hasTicketMessage = typeof registration?.hasTicketMessage === "boolean"
+    ? registration.hasTicketMessage
+    : Object.prototype.hasOwnProperty.call(registration || {}, "ticketMessage")
+      || Object.prototype.hasOwnProperty.call(registration || {}, "ticket_message");
 
   if (!Number.isInteger(id) || id <= 0 || !code) {
     return null;
@@ -593,6 +597,8 @@ function normalizeTicketRegistration(registration) {
     status: String(registration?.status || "CERRADO"),
     operatingDate: String(registration?.operatingDate || registration?.operating_date || ""),
     registeredAt: String(registration?.registeredAt || registration?.registered_at || ""),
+    hasTicketMessage,
+    ticketMessage: String(registration?.ticketMessage ?? registration?.ticket_message ?? "").trim(),
     destination: registration?.destination
       ? {
           type: String(registration.destination.type || ""),
@@ -6649,6 +6655,9 @@ function buildDispatchTicketData(truck) {
     code: getTruckTicketLabel(truck),
     operationType,
     destinationName: getTruckClientName(truck),
+    ticketMessage: registration?.hasTicketMessage
+      ? registration.ticketMessage
+      : operationCatalog?.ticket_message || "",
     emittedAt: registration?.registeredAt || null,
     delivery: registration?.delivery || null,
     records: truck.cages.map((cage) => ({
@@ -7015,6 +7024,9 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
       status: response.data?.status,
       operating_date: response.data?.operating_date,
       registered_at: response.data?.registered_at,
+      ...(Object.prototype.hasOwnProperty.call(response.data || {}, "ticket_message")
+        ? { ticket_message: response.data.ticket_message }
+        : {}),
       destination: response.data?.destination,
       delivery: response.data?.delivery
     });

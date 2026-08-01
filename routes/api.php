@@ -275,6 +275,8 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($journeyPriceMiddleware);
     Route::put('/operacion/precios-jornada', [JourneyPriceController::class, 'update'])
         ->middleware($journeyPriceMiddleware);
+    Route::put('/operacion/precios-jornada/mensaje-ticket', [JourneyPriceController::class, 'updateTicketMessage'])
+        ->middleware($journeyPriceMiddleware);
     Route::get('/control-javas', [JavaControlController::class, 'index'])
         ->middleware($javaControlReadMiddleware);
     Route::post('/control-javas/recepciones', [JavaControlController::class, 'store'])

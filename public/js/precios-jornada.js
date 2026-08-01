@@ -6,6 +6,10 @@ const elements = {
   window: document.getElementById("journeyPriceWindow"),
   message: document.getElementById("journeyPriceMessage"),
   save: document.getElementById("journeyPriceSave"),
+  ticketMessageForm: document.getElementById("ticketMessageForm"),
+  ticketMessageInput: document.getElementById("ticketMessageInput"),
+  ticketMessageStatus: document.getElementById("ticketMessageStatus"),
+  ticketMessageSave: document.getElementById("ticketMessageSave"),
   prices: {
     POLLO_VIVO: document.getElementById("journeyPriceLive"),
     POLLO_PELADO: document.getElementById("journeyPriceDressed"),
@@ -36,7 +40,16 @@ function setMessage(message, isError = false) {
   elements.message.classList.toggle("is-error", isError);
 }
 
-function render(data) {
+function setTicketMessageStatus(message, isError = false) {
+  elements.ticketMessageStatus.textContent = message;
+  elements.ticketMessageStatus.classList.toggle("is-error", isError);
+}
+
+function renderTicketMessage(message) {
+  elements.ticketMessageInput.value = typeof message === "string" ? message : "";
+}
+
+function renderPrices(data) {
   elements.date.textContent = formatDate(`${data.operating_date}T12:00:00`, {
     weekday: "long",
     day: "numeric",
@@ -87,8 +100,15 @@ function buildPayload() {
 
 async function loadPrices(message = "Puedes actualizar los precios sin modificar los orígenes de la jornada.") {
   const response = await apiRequest("/operacion/precios-jornada");
-  render(response.data);
+  renderPrices(response.data);
   setMessage(message);
+
+  return response.data;
+}
+
+async function loadPage() {
+  const data = await loadPrices();
+  renderTicketMessage(data.ticket_message);
 }
 
 async function savePrices() {
@@ -108,7 +128,7 @@ async function savePrices() {
       method: "PUT",
       body: JSON.stringify(body)
     });
-    render(response.data);
+    renderPrices(response.data);
     setMessage(response.message || "Precios actualizados correctamente.");
   } catch (error) {
     const validationMessage = Object.values(error.data?.errors || {})[0]?.[0];
@@ -132,7 +152,30 @@ async function savePrices() {
   }
 }
 
-elements.save.addEventListener("click", savePrices);
+async function saveTicketMessage(event) {
+  event.preventDefault();
+  elements.ticketMessageSave.disabled = true;
+  setTicketMessageStatus("Guardando mensaje...");
 
-loadPrices()
+  try {
+    const response = await apiRequest("/operacion/precios-jornada/mensaje-ticket", {
+      method: "PUT",
+      body: JSON.stringify({
+        ticket_message: elements.ticketMessageInput.value
+      })
+    });
+    renderTicketMessage(response.data?.ticket_message);
+    setTicketMessageStatus(response.message || "Mensaje actualizado correctamente.");
+  } catch (error) {
+    const validationMessage = Object.values(error.data?.errors || {})[0]?.[0];
+    setTicketMessageStatus(validationMessage || error.message, true);
+  } finally {
+    elements.ticketMessageSave.disabled = false;
+  }
+}
+
+elements.save.addEventListener("click", savePrices);
+elements.ticketMessageForm.addEventListener("submit", saveTicketMessage);
+
+loadPage()
   .catch((error) => setMessage(error.message, true));

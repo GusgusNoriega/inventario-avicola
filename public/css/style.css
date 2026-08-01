@@ -9818,6 +9818,10 @@ body.journey-page {
   font-weight: 900;
 }
 
+.journey-ticket-message input {
+  color: #ffffff;
+}
+
 .journey-price-summary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

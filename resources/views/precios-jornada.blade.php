@@ -58,6 +58,31 @@
         <button id="journeyPriceSave" class="btn btn-success" type="button">Guardar precios</button>
       </div>
     </section>
+
+    <form id="ticketMessageForm" class="journey-global-prices journey-ticket-message card" aria-labelledby="ticketMessageTitle">
+      <div class="journey-global-prices-head">
+        <div>
+          <p class="eyebrow">Impresión de tickets</p>
+          <h2 id="ticketMessageTitle">Mensaje global</h2>
+        </div>
+        <p>Este mensaje aparecerá por defecto en los tickets de los tres módulos de despacho.</p>
+      </div>
+      <label class="field" for="ticketMessageInput">
+        Mensaje para los tickets
+        <input
+          id="ticketMessageInput"
+          name="ticket_message"
+          type="text"
+          maxlength="255"
+          autocomplete="off"
+          placeholder="Escribe un mensaje breve"
+        >
+      </label>
+      <div class="journey-price-actions">
+        <p id="ticketMessageStatus" class="journey-message" role="status" aria-live="polite"></p>
+        <button id="ticketMessageSave" class="btn btn-success" type="submit">Guardar mensaje</button>
+      </div>
+    </form>
   </main>
 
   <script type="module" src="{{ asset('js/precios-jornada.js') }}"></script>

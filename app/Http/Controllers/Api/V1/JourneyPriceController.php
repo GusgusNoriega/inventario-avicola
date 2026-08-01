@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Operation\UpdateJourneyPricesRequest;
+use App\Http\Requests\Operation\UpdateTicketMessageRequest;
 use App\Services\GlobalPriceService;
 use App\Services\JourneyPlanService;
 use App\Services\OperationContextService;
+use App\Services\TicketMessageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +18,8 @@ class JourneyPriceController extends Controller
     public function __construct(
         private readonly OperationContextService $context,
         private readonly JourneyPlanService $journeys,
-        private readonly GlobalPriceService $prices
+        private readonly GlobalPriceService $prices,
+        private readonly TicketMessageService $ticketMessages
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -45,6 +48,21 @@ class JourneyPriceController extends Controller
         ]);
     }
 
+    public function updateTicketMessage(UpdateTicketMessageRequest $request): JsonResponse
+    {
+        $ticketMessage = $this->ticketMessages->save(
+            $this->context->companyId($request),
+            $request->validated('ticket_message')
+        );
+
+        return response()->json([
+            'message' => 'Mensaje para los tickets actualizado correctamente.',
+            'data' => [
+                'ticket_message' => $ticketMessage,
+            ],
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -60,6 +78,7 @@ class JourneyPriceController extends Controller
             'ends_at' => $window['ends_at']->toIso8601String(),
             'timezone' => $branch->zona_horaria,
             'global_prices' => $this->prices->current($companyId),
+            'ticket_message' => $this->ticketMessages->current($companyId),
         ];
     }
 }

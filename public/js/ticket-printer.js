@@ -10,6 +10,14 @@ function escapeTicketHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function buildTicketMessageHtml(ticket) {
+  const message = String(ticket?.ticketMessage ?? ticket?.ticket_message ?? "").trim();
+
+  return message
+    ? `<p class="ticket-message">${escapeTicketHtml(message)}</p>`
+    : "";
+}
+
 function roundTicketMoney(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return 0;
@@ -32,7 +40,7 @@ function retailChickenTypeCode(code) {
  * corresponde al precio congelado en ticket_precios, no a la tarifa vigente
  * que todavía conserva el cliente en Directorio.
  */
-export function buildRetailTicketPrintData(ticket) {
+export function buildRetailTicketPrintData(ticket, ticketMessage = ticket?.ticket_message) {
   return {
     code: ticket?.code,
     channel: ticket?.channel,
@@ -42,6 +50,7 @@ export function buildRetailTicketPrintData(ticket) {
     operatingDate: ticket?.operating_date,
     emittedAt: ticket?.registered_at,
     totalAmount: roundTicketMoney(ticket?.totals?.amount),
+    ticketMessage: String(ticketMessage || "").trim(),
     delivery: ticket?.delivery,
     records: (ticket?.weighings || []).map((weighing) => ({
       typeCode: retailChickenTypeCode(weighing.chicken_type_code),
@@ -407,6 +416,15 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       font-weight: 900;
     }
 
+    .ticket-message {
+      text-align: center;
+      font-size: 12.5px;
+      font-weight: 700;
+      line-height: 1.25;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     .form-fields {
       margin-top: 30mm;
       display: grid;
@@ -478,6 +496,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
   </section>
 
   <section class="form-fields">
+    ${buildTicketMessageHtml(ticket)}
     <p>OBSERV:</p>
     <p>NOMBRE:</p>
     <p>FIRMA:</p>
@@ -722,6 +741,15 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       text-align: left;
     }
 
+    .ticket-message {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     .form-fields {
       margin-top: 5mm;
       display: grid;
@@ -794,6 +822,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   ` : ""}
 
   <section class="form-fields">
+    ${buildTicketMessageHtml(ticket)}
     <p>OBSERV:</p>
     <p>NOMBRE:</p>
     <p>FIRMA:</p>

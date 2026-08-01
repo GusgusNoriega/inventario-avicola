@@ -1457,6 +1457,13 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Precios de la jornada')
             ->assertSee('despacho minorista 1 y 2')
+            ->assertSee('id="ticketMessageForm"', false)
+            ->assertSee('id="ticketMessageInput"', false)
+            ->assertSee('name="ticket_message"', false)
+            ->assertSee('maxlength="255"', false)
+            ->assertSee('id="ticketMessageStatus"', false)
+            ->assertSee('id="ticketMessageSave"', false)
+            ->assertSee('Guardar mensaje')
             ->assertSee(asset('js/precios-jornada.js'), false)
             ->assertDontSee('journeyRows', false)
             ->assertDontSee('journeySelectAll', false);
@@ -1468,6 +1475,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('expected_prices: Object.fromEntries(', $javascript);
         $this->assertStringContainsString('field.startsWith("expected_prices")', $javascript);
         $this->assertStringContainsString('Se cargaron los valores vigentes para que los revises.', $javascript);
+        $this->assertStringContainsString('renderTicketMessage(data.ticket_message);', $javascript);
+        $this->assertStringContainsString('elements.ticketMessageForm.addEventListener("submit", saveTicketMessage);', $javascript);
+        $this->assertStringContainsString('event.preventDefault();', $javascript);
+        $this->assertStringContainsString('apiRequest("/operacion/precios-jornada/mensaje-ticket", {', $javascript);
+        $this->assertStringContainsString('ticket_message: elements.ticketMessageInput.value', $javascript);
     }
 
     public function test_weighing_management_view_is_available_without_database_queries(): void
@@ -1544,7 +1556,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('record?.amount', $printerJavascript);
 
         $this->assertStringContainsString('buildRetailTicketPrintData,', $retailJavascript);
-        $this->assertStringContainsString('buildRetailTicketPrintData(ticket)', $retailJavascript);
+        $this->assertStringContainsString('buildRetailTicketPrintData(ticket, ticketMessage)', $retailJavascript);
         $this->assertStringContainsString('operatingDate: ticket?.operating_date', $printerJavascript);
         $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $printerJavascript);
         $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $printerJavascript);

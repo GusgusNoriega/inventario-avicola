@@ -60,6 +60,7 @@ const elements = {
 const state = {
   tickets: [],
   selectedTicket: null,
+  ticketMessage: "",
   catalogs: { chicken_types: [], cage_types: [], delivery_trucks: [], delivery_drivers: [], origin_trucks: [] },
   editingWeighing: null,
   editingChickenSex: "MACHO",
@@ -239,6 +240,7 @@ function buildSelectedTicketPrintData(ticket) {
     operationType: ticket.operation_type,
     destinationName: retail ? (ticket.client?.name || "Venta externa") : ticketCustomerName(ticket),
     customerKind: retail ? (ticket.client?.id ? "CLIENTE_REGISTRADO" : "VENTA_EXTERNA") : null,
+    ticketMessage: state.ticketMessage,
     operatingDate: ticket.operating_date,
     emittedAt: ticket.closed_at,
     totalAmount: ticket.summary?.amount,
@@ -541,6 +543,7 @@ async function selectTicket(ticketId, showStatus = true) {
   try {
     const response = await apiRequest(`/operacion/tickets/${ticketId}/pesadas`);
     state.selectedTicket = response.data?.ticket || null;
+    state.ticketMessage = String(response.data?.ticket_message || "").trim();
     state.catalogs = response.data?.catalogs || {
       chicken_types: [],
       cage_types: [],

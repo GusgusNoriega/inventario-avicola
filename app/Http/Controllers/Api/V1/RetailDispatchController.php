@@ -13,6 +13,7 @@ use App\Models\TipoPollo;
 use App\Services\OperationContextService;
 use App\Services\RetailConfigurationService;
 use App\Services\RetailDispatchService;
+use App\Services\TicketMessageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,8 @@ class RetailDispatchController extends Controller
     public function __construct(
         private readonly OperationContextService $context,
         private readonly RetailDispatchService $dispatches,
-        private readonly RetailConfigurationService $configuration
+        private readonly RetailConfigurationService $configuration,
+        private readonly TicketMessageService $ticketMessages,
     ) {}
 
     public function catalog(Request $request): JsonResponse
@@ -54,6 +56,7 @@ class RetailDispatchController extends Controller
 
         return response()->json([
             'data' => [
+                'ticket_message' => $this->ticketMessages->current($companyId),
                 'branch' => [
                     'id' => $branch->id,
                     'name' => $branch->nombre,
@@ -140,9 +143,10 @@ class RetailDispatchController extends Controller
     public function store(StoreRetailDispatchRequest $request): JsonResponse
     {
         $branch = $this->context->branch($request);
+        $companyId = $this->context->companyId($request);
         $station = $this->retailStation($request);
         $result = $this->dispatches->register(
-            $this->context->companyId($request),
+            $companyId,
             $branch,
             $this->context->actor($request, (int) $branch->id),
             $request->validated(),
@@ -154,12 +158,16 @@ class RetailDispatchController extends Controller
                 ? 'El despacho ya estaba registrado.'
                 : 'Despacho minorista registrado correctamente.',
             'already_registered' => $result['already_registered'],
-            'data' => $this->formatTicket($result['ticket'], $station),
+            'data' => $this->formatTicket(
+                $result['ticket'],
+                $station,
+                $this->ticketMessages->current($companyId)
+            ),
         ], $result['already_registered'] ? 200 : 201);
     }
 
     /** @return array<string, mixed> */
-    private function formatTicket(TicketDespacho $ticket, int $station): array
+    private function formatTicket(TicketDespacho $ticket, int $station, ?string $ticketMessage): array
     {
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
         $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
@@ -185,6 +193,7 @@ class RetailDispatchController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
+            'ticket_message' => $ticketMessage,
             'customer_type' => $ticket->clienteDestino ? 'CLIENTE_REGISTRADO' : 'VENTA_PUBLICO',
             'customer_label' => $customerLabel,
             'client' => $ticket->clienteDestino

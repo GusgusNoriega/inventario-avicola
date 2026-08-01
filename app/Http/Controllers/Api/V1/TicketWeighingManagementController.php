@@ -13,6 +13,7 @@ use App\Models\TipoPollo;
 use App\Services\FinancialObligationService;
 use App\Services\JavaControlService;
 use App\Services\OperationContextService;
+use App\Services\TicketMessageService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,7 @@ class TicketWeighingManagementController extends Controller
         private readonly OperationContextService $context,
         private readonly JavaControlService $javaControl,
         private readonly FinancialObligationService $financialObligations,
+        private readonly TicketMessageService $ticketMessages,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -116,6 +118,7 @@ class TicketWeighingManagementController extends Controller
 
         return response()->json([
             'data' => [
+                'ticket_message' => $this->ticketMessages->current((int) $branch->empresa_id),
                 'ticket' => $this->formatTicket(
                     $selected,
                     $branch->zona_horaria,

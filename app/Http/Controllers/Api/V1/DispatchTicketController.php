@@ -7,20 +7,23 @@ use App\Http\Requests\Operation\StoreDispatchTicketRequest;
 use App\Models\TicketDespacho;
 use App\Services\DispatchTicketService;
 use App\Services\OperationContextService;
+use App\Services\TicketMessageService;
 use Illuminate\Http\JsonResponse;
 
 class DispatchTicketController extends Controller
 {
     public function __construct(
         private readonly OperationContextService $context,
-        private readonly DispatchTicketService $tickets
+        private readonly DispatchTicketService $tickets,
+        private readonly TicketMessageService $ticketMessages,
     ) {}
 
     public function store(StoreDispatchTicketRequest $request): JsonResponse
     {
         $branch = $this->context->branch($request);
+        $companyId = $this->context->companyId($request);
         $result = $this->tickets->register(
-            $this->context->companyId($request),
+            $companyId,
             $branch,
             $this->context->actor($request, (int) $branch->id),
             $request->validated()
@@ -31,14 +34,17 @@ class DispatchTicketController extends Controller
                 ? 'El ticket ya estaba registrado.'
                 : 'Ticket y pesadas registrados correctamente.',
             'already_registered' => $result['already_registered'],
-            'data' => $this->formatTicket($result['ticket']),
+            'data' => $this->formatTicket(
+                $result['ticket'],
+                $this->ticketMessages->current($companyId)
+            ),
         ], $result['already_registered'] ? 200 : 201);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function formatTicket(TicketDespacho $ticket): array
+    private function formatTicket(TicketDespacho $ticket, ?string $ticketMessage): array
     {
         return [
             'id' => $ticket->id,
@@ -48,6 +54,7 @@ class DispatchTicketController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
+            'ticket_message' => $ticketMessage,
             'destination' => $ticket->clienteDestino
                 ? [
                     'type' => 'CLIENTE',

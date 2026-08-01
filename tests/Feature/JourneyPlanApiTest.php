@@ -215,6 +215,70 @@ class JourneyPlanApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 6);
     }
 
+    public function test_ticket_message_is_managed_through_its_own_endpoint(): void
+    {
+        $otherCompanyUser = User::factory()->create();
+        DB::table('empresas')->where('id', $otherCompanyUser->empresa_id)->update([
+            'mensaje_ticket' => 'Mensaje de otra empresa',
+        ]);
+
+        $this->getJson('/api/v1/operacion/precios-jornada')
+            ->assertOk()
+            ->assertJsonPath('data.ticket_message', null);
+
+        $this->putJson('/api/v1/operacion/precios-jornada/mensaje-ticket', [
+            'ticket_message' => '  Gracias por su compra  ',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.ticket_message', 'Gracias por su compra');
+
+        $this->assertDatabaseHas('empresas', [
+            'id' => $this->user->empresa_id,
+            'mensaje_ticket' => 'Gracias por su compra',
+        ]);
+        $this->assertDatabaseHas('empresas', [
+            'id' => $otherCompanyUser->empresa_id,
+            'mensaje_ticket' => 'Mensaje de otra empresa',
+        ]);
+
+        $this->getJson('/api/v1/operacion/precios-jornada')
+            ->assertOk()
+            ->assertJsonPath('data.ticket_message', 'Gracias por su compra');
+    }
+
+    public function test_ticket_message_can_be_cleared_and_rejects_invalid_payloads(): void
+    {
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update([
+            'mensaje_ticket' => 'Mensaje vigente',
+        ]);
+
+        $this->putJson('/api/v1/operacion/precios-jornada/mensaje-ticket', [
+            'ticket_message' => '   ',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.ticket_message', null);
+
+        $this->assertDatabaseHas('empresas', [
+            'id' => $this->user->empresa_id,
+            'mensaje_ticket' => null,
+        ]);
+
+        $this->putJson('/api/v1/operacion/precios-jornada/mensaje-ticket', [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ticket_message');
+
+        $this->putJson('/api/v1/operacion/precios-jornada/mensaje-ticket', [
+            'ticket_message' => str_repeat('x', 256),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ticket_message');
+
+        $this->assertDatabaseHas('empresas', [
+            'id' => $this->user->empresa_id,
+            'mensaje_ticket' => null,
+        ]);
+    }
+
     public function test_journey_price_update_requires_the_prices_seen_by_the_operator(): void
     {
         $listCount = DB::table('listas_precios')->count();

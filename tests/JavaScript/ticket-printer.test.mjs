@@ -46,6 +46,62 @@ test("el ticket mayorista usa tipografia grande y muestra el camion y chofer sel
   assert.match(html, /CHOFER: María &lt;Prueba&gt;/);
 });
 
+test("el mensaje global aparece pequeño, escapado y antes de los campos finales en ambos tickets", () => {
+  const message = '  Gracias <cliente> & vuelva "pronto"  ';
+  const expectedMessage = 'Gracias &lt;cliente&gt; &amp; vuelva &quot;pronto&quot;';
+  const wholesaleHtml = compactHtml(buildWeightControlTicketHtml({
+    code: "T-20260723-010",
+    operationType: "DESPACHO",
+    destinationName: "Cliente mayorista",
+    ticketMessage: message,
+    records: []
+  }, "2026-07-23T12:30:00-05:00"));
+  const retailData = buildRetailTicketPrintData({
+    code: "M-20260723-010",
+    channel: "MINORISTA",
+    operation_type: "DESPACHO",
+    operating_date: "2026-07-23",
+    customer_label: "Venta público",
+    ticket_message: message,
+    totals: { amount: 0 },
+    weighings: []
+  });
+  const retailHtml = compactHtml(buildWeightControlTicketHtml(
+    retailData,
+    "2026-07-23T12:30:00-05:00"
+  ));
+
+  assert.equal(retailData.ticketMessage, message.trim());
+  assert.match(wholesaleHtml, new RegExp(`<p class="ticket-message">${expectedMessage}</p>.*OBSERV:.*NOMBRE:.*FIRMA:`));
+  assert.match(retailHtml, new RegExp(`<p class="ticket-message">${expectedMessage}</p>.*OBSERV:.*NOMBRE:.*FIRMA:`));
+  assert.match(wholesaleHtml, /\.ticket-message \{[^}]*font-size: 14px;/);
+  assert.match(retailHtml, /\.ticket-message \{[^}]*font-size: 12\.5px;/);
+  assert.doesNotMatch(wholesaleHtml, /<cliente>/);
+  assert.doesNotMatch(retailHtml, /<cliente>/);
+});
+
+test("el bloque del mensaje no se imprime cuando la configuración está vacía", () => {
+  const wholesaleHtml = buildWeightControlTicketHtml({
+    code: "T-20260723-011",
+    operationType: "DESPACHO",
+    destinationName: "Cliente mayorista",
+    ticketMessage: "   ",
+    records: []
+  }, "2026-07-23T12:30:00-05:00");
+  const retailHtml = buildWeightControlTicketHtml({
+    code: "M-20260723-011",
+    channel: "MINORISTA",
+    operationType: "DESPACHO",
+    operatingDate: "2026-07-23",
+    destinationName: "Venta público",
+    ticketMessage: null,
+    records: []
+  }, "2026-07-23T12:30:00-05:00");
+
+  assert.doesNotMatch(wholesaleHtml, /<p class="ticket-message">/);
+  assert.doesNotMatch(retailHtml, /<p class="ticket-message">/);
+});
+
 test("el ticket minorista reproduce el encabezado, detalle y resumen del control de peso", () => {
   const html = buildWeightControlTicketHtml({
     code: "231271",

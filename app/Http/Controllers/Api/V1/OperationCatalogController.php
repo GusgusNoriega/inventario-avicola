@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\TipoPollo;
 use App\Services\OperationContextService;
+use App\Services\TicketMessageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 class OperationCatalogController extends Controller
 {
     public function __construct(
-        private readonly OperationContextService $context
+        private readonly OperationContextService $context,
+        private readonly TicketMessageService $ticketMessages,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -22,6 +24,7 @@ class OperationCatalogController extends Controller
 
         return response()->json([
             'data' => [
+                'ticket_message' => $this->ticketMessages->current($companyId),
                 'branch' => [
                     'id' => $branch->id,
                     'code' => $branch->codigo,

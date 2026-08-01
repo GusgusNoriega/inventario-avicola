@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'moneda',
     'zona_horaria',
     'hora_corte_operativo',
+    'mensaje_ticket',
     'sunat_habilitado',
     'estado',
 ])]
