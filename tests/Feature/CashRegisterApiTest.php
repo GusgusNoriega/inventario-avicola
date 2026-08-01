@@ -269,14 +269,15 @@ class CashRegisterApiTest extends TestCase
         $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
             ->assertOk()
             ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.id', $expenseResponse->json('data.id'))
+            ->assertJsonPath('data.0.id', $incomeId)
+            ->assertJsonPath('data.1.id', $expenseResponse->json('data.id'))
             ->assertJsonPath('resumen.ingresos', '150.25')
             ->assertJsonPath('resumen.egresos', '40.10')
             ->assertJsonPath('resumen.neto', '110.15')
             ->assertJsonPath('resumen.moneda', 'PEN');
     }
 
-    public function test_daily_list_places_the_newly_registered_movement_first_even_with_an_earlier_effective_time(): void
+    public function test_daily_list_places_the_newly_registered_movement_last_even_with_an_earlier_effective_time(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-01 09:00:00', 'America/Lima'));
         $firstResponse = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
@@ -299,8 +300,8 @@ class CashRegisterApiTest extends TestCase
         $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
             ->assertOk()
             ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.id', $secondResponse->json('data.id'))
-            ->assertJsonPath('data.1.id', $firstResponse->json('data.id'));
+            ->assertJsonPath('data.0.id', $firstResponse->json('data.id'))
+            ->assertJsonPath('data.1.id', $secondResponse->json('data.id'));
     }
 
     public function test_daily_summary_shows_backdated_income_to_own_bank_and_wallet_accounts_without_counting_cash(): void

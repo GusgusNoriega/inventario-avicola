@@ -55,8 +55,8 @@ class CashRegisterQueryService
         $rows = $this->query($companyId, (int) $cashRegister->id)
             ->where('pago.fecha_hora', '>=', $from)
             ->where('pago.fecha_hora', '<', $to)
-            ->orderByDesc('movimiento.created_at')
-            ->orderByDesc('movimiento.id')
+            ->orderBy('movimiento.created_at')
+            ->orderBy('movimiento.id')
             ->get();
         $formatted = $this->format($rows, (int) $cashRegister->id, $timezone);
         $accountIncome = $this->accountIncome(

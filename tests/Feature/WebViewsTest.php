@@ -381,6 +381,14 @@ class WebViewsTest extends TestCase
             '/\.fin-cash-item-counterpart\s*\{[^}]*font-size:\s*15px;/s',
             $financeStylesheet,
         );
+        $this->assertMatchesRegularExpression(
+            '/\.fin-cash-item\.is-income \.fin-cash-item-counterpart\s*\{[^}]*order:\s*1;/s',
+            $financeStylesheet,
+        );
+        $this->assertMatchesRegularExpression(
+            '/\.fin-cash-item\.is-income \.fin-cash-item-title\s*\{[^}]*order:\s*2;[^}]*font-size:\s*14px;/s',
+            $financeStylesheet,
+        );
         $this->assertStringNotContainsString('numero_operacion', $cashRegisterJavascript);
         $this->assertStringContainsString('/finanzas/descuentos-clientes', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);

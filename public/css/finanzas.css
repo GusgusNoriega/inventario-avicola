@@ -2327,6 +2327,17 @@ body.fin-page {
   line-height: 1.4;
 }
 
+.fin-cash-item.is-income .fin-cash-item-counterpart { order: 1; }
+
+.fin-cash-item.is-income .fin-cash-item-title {
+  order: 2;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.fin-cash-item.is-income .fin-cash-item-copy small { order: 3; }
+
 .fin-cash-amount {
   width: 100%;
   justify-self: stretch;
