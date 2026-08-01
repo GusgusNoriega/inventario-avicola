@@ -36,6 +36,9 @@ class WebViewsTest extends TestCase
             ->assertSee(route('tickets-dia'), false)
             ->assertSee('Resumen de la jornada')
             ->assertSee('Consolidado diario por cliente')
+            ->assertSee(route('reporte-proveedores'), false)
+            ->assertSee('Reporte de proveedores')
+            ->assertSee('Javas, pollos, peso y destinos por camión')
             ->assertSee(route('gestion-pesadas'), false)
             ->assertSee(route('jornada'), false)
             ->assertSee(route('directorio'), false)
@@ -1546,6 +1549,30 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('ticket.prices', $managementJavascript);
         $this->assertStringContainsString('summary.amount', $managementJavascript);
         $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);
+    }
+
+    public function test_provider_report_view_is_available_without_database_queries(): void
+    {
+        $this->get('/reporte-proveedores')
+            ->assertOk()
+            ->assertSee('Reporte de proveedores')
+            ->assertSee('Jornada operativa actual')
+            ->assertSee('Consulta de pesadas')
+            ->assertSee('Resumen por proveedor y camión')
+            ->assertSee('A dónde fueron los pollos')
+            ->assertSee('Detalle de pesadas')
+            ->assertSee('id="providerJourneyFilter"', false)
+            ->assertSee('id="providerNameFilter"', false)
+            ->assertSee('id="providerTruckFilter"', false)
+            ->assertSee(asset('css/reporte-proveedores.css'), false)
+            ->assertSee(asset('js/reporte-proveedores.js'), false);
+
+        $javascript = file_get_contents(public_path('js/reporte-proveedores.js'));
+
+        $this->assertIsString($javascript);
+        $this->assertStringContainsString('/operacion/reporte-proveedores?', $javascript);
+        $this->assertStringContainsString('reportData?.current_operating_date', $javascript);
+        $this->assertStringContainsString('renderTruckOptions', $javascript);
     }
 
     public function test_retail_ticket_print_and_reprint_keep_the_sale_weight_and_delivery_data(): void

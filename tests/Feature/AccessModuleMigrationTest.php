@@ -18,7 +18,7 @@ class AccessModuleMigrationTest extends TestCase
     {
         $moduleCodes = array_keys(config('access_modules.modules'));
 
-        $this->assertCount(11, $moduleCodes);
+        $this->assertCount(12, $moduleCodes);
         $this->assertEqualsCanonicalizing(
             $moduleCodes,
             Permission::query()
@@ -69,10 +69,75 @@ class AccessModuleMigrationTest extends TestCase
         );
     }
 
+    public function test_provider_report_migration_grants_existing_operational_roles(): void
+    {
+        $user = User::factory()->create();
+        $operator = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'OPERADOR',
+            'nombre' => 'Operador',
+        ]);
+        $receivingRole = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'RECEPCION_EXISTENTE',
+            'nombre' => 'Recepción existente',
+        ]);
+        $journeyRole = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'JORNADA_EXISTENTE',
+            'nombre' => 'Jornada existente',
+        ]);
+        $unrelatedRole = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'SIN_ACCESO',
+            'nombre' => 'Sin acceso',
+        ]);
+        $receivingPermission = Permission::query()->firstOrCreate(
+            ['codigo' => 'RECEPCIONES_VER'],
+            ['descripcion' => 'Consultar recepciones'],
+        );
+        $receivingRole->permissions()->attach($receivingPermission);
+        $journeyRole->permissions()->attach(
+            Permission::query()->where('codigo', 'MODULO_JORNADA_PROVEEDORES')->value('id'),
+        );
+
+        $migration = $this->providerReportMigration();
+        $migration->down();
+        $migration->up();
+
+        foreach ([
+            'operator' => $operator,
+            'receiving role' => $receivingRole,
+            'journey role' => $journeyRole,
+        ] as $roleLabel => $eligibleRole) {
+            $this->assertTrue(
+                $eligibleRole->fresh()->permissions()->where(
+                    'codigo',
+                    'MODULO_REPORTE_PROVEEDORES',
+                )->exists(),
+                "The {$roleLabel} should receive the provider report module. Current permissions: ".
+                    $eligibleRole->fresh()->permissions()->pluck('codigo')->implode(', '),
+            );
+        }
+        $this->assertFalse(
+            $unrelatedRole->fresh()->permissions()->where(
+                'codigo',
+                'MODULO_REPORTE_PROVEEDORES',
+            )->exists(),
+        );
+    }
+
     private function moduleMigration(): Migration
     {
         return require database_path(
             'migrations/2026_07_16_000003_add_module_access_and_password_change_flag.php',
+        );
+    }
+
+    private function providerReportMigration(): Migration
+    {
+        return require database_path(
+            'migrations/2026_08_01_000002_add_provider_report_module.php',
         );
     }
 }

@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\JourneyPriceController;
 use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
+use App\Http\Controllers\Api\V1\ProviderReportController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
 use App\Http\Controllers\Api\V1\PurchaseController;
 use App\Http\Controllers\Api\V1\RetailDispatchController;
@@ -186,6 +187,12 @@ Route::prefix('v1')->group(function (): void {
     $dailyTicketsMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_RESUMEN_JORNADA'];
+    $providerReportMiddleware = [
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_REPORTE_PROVEEDORES',
+    ];
     $operationWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA'];
@@ -230,6 +237,8 @@ Route::prefix('v1')->group(function (): void {
         ]);
     Route::get('/operacion/tickets-dia', [DailyDispatchTicketController::class, 'index'])
         ->middleware($dailyTicketsMiddleware);
+    Route::get('/operacion/reporte-proveedores', [ProviderReportController::class, 'index'])
+        ->middleware($providerReportMiddleware);
     Route::post('/operacion/tickets/{ticket}/anular', DispatchTicketVoidController::class)
         ->whereNumber('ticket')
         ->middleware([

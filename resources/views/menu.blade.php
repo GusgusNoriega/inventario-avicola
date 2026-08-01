@@ -154,6 +154,26 @@
         </a>
         @endif
 
+        @if ($user->hasModule('MODULO_REPORTE_PROVEEDORES'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('reporte-proveedores') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M3 7h11v9H3z"></path>
+              <path d="M14 10h3l3 3v3h-6z"></path>
+              <path d="M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+              <path d="M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+              <path d="M5 10h6"></path>
+              <path d="M9 12H5"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Reporte de proveedores</strong>
+            <small>Javas, pollos, peso y destinos por camión</small>
+          </span>
+          <span class="menu-status">Consultar</span>
+        </a>
+        @endif
+
         @if ($user->hasModule('MODULO_GESTION_PESADAS'))
         <a class="menu-tile menu-tile-primary" href="{{ route('gestion-pesadas') }}">
           <span class="menu-tile-icon" aria-hidden="true">

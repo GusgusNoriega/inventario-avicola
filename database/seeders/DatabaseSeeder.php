@@ -225,6 +225,7 @@ class DatabaseSeeder extends Seeder
             'MODULO_DESPACHO_MINORISTA_1',
             'MODULO_DESPACHO_MINORISTA_2',
             'MODULO_RESUMEN_JORNADA',
+            'MODULO_REPORTE_PROVEEDORES',
             'MODULO_GESTION_PESADAS',
             'MODULO_CONTROL_JAVAS',
         ];

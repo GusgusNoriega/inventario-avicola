@@ -65,6 +65,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         Route::view('/tickets-dia', 'tickets-dia')
             ->middleware('module:MODULO_RESUMEN_JORNADA')
             ->name('tickets-dia');
+        Route::view('/reporte-proveedores', 'reporte-proveedores')
+            ->middleware('module:MODULO_REPORTE_PROVEEDORES')
+            ->name('reporte-proveedores');
         Route::view('/gestion-pesadas', 'gestion-pesadas')
             ->middleware('module:MODULO_GESTION_PESADAS')
             ->name('gestion-pesadas');

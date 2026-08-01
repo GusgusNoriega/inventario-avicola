@@ -50,6 +50,16 @@ return [
             'technical_permissions' => ['TICKETS_DIA_VER'],
             'legacy_permissions' => ['TICKETS_DIA_VER'],
         ],
+        'MODULO_REPORTE_PROVEEDORES' => [
+            'name' => 'Reporte de proveedores',
+            'description' => 'Javas, pollos, pesadas y destinos por proveedor y camion.',
+            'path' => '/reporte-proveedores',
+            'technical_permissions' => [
+                'RECEPCIONES_VER',
+                'DESPACHOS_VER',
+            ],
+            'legacy_permissions' => ['RECEPCIONES_VER'],
+        ],
         'MODULO_GESTION_PESADAS' => [
             'name' => 'Gestion de pesadas',
             'description' => 'Consulta, edicion y anulacion de pesadas.',

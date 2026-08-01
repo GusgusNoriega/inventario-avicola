@@ -19,6 +19,7 @@ class ModuleAccessControlTest extends TestCase
             '/',
             '/operacion',
             '/precios-jornada',
+            '/reporte-proveedores',
             '/finanzas',
             '/finanzas/saldos',
             '/finanzas/caja-efectivo',
@@ -42,6 +43,7 @@ class ModuleAccessControlTest extends TestCase
         foreach ([
             '/operacion',
             '/precios-jornada',
+            '/reporte-proveedores',
             '/finanzas',
             '/finanzas/saldos',
             '/finanzas/caja-efectivo',
@@ -135,6 +137,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertDontSee(route('operacion'), false)
             ->assertDontSee(route('despacho-minorista'), false)
             ->assertDontSee(route('precios-jornada'), false)
+            ->assertDontSee(route('reporte-proveedores'), false)
             ->assertDontSee(route('directorio'), false)
             ->assertDontSee(route('flota'), false)
             ->assertDontSee(route('control-javas'), false)
@@ -171,6 +174,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-minorista-2',
             '/precios-jornada',
             '/tickets-dia',
+            '/reporte-proveedores',
             '/gestion-pesadas',
             '/directorio',
             '/flota',
