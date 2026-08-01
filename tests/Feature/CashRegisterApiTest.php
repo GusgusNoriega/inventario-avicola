@@ -275,6 +275,183 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.moneda', 'PEN');
     }
 
+    public function test_daily_summary_shows_backdated_income_to_own_bank_and_wallet_accounts_without_counting_cash(): void
+    {
+        $clientId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente con depósitos',
+            '10777777',
+        );
+        $providerId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'PROVEEDOR',
+            'Proveedor con cuenta externa',
+            '20777777777',
+        );
+        $bankAccountId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Banco propio',
+            'BANCO',
+        );
+        $walletAccountId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Billetera propia',
+            'BILLETERA',
+        );
+        $otherAccountId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Cuenta de otro tipo',
+            'OTRA',
+        );
+        $usdBankAccountId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Banco propio USD',
+            'BANCO',
+            'ACTIVO',
+            'USD',
+        );
+        $usdCashRegisterId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Caja USD',
+            'CAJA',
+            'ACTIVO',
+            'USD',
+        );
+        $externalEntityId = $this->financialEntity(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            'EXTERNA',
+            'Entidad externa del proveedor',
+        );
+        DB::table('entidades_financieras')
+            ->where('id', $externalEntityId)
+            ->update(['proveedor_id' => $providerId]);
+        $externalBankAccountId = $this->financialAccount(
+            $externalEntityId,
+            $this->user->id,
+            'Banco externo',
+            'BANCO',
+        );
+
+        $registerIncome = function (
+            int $accountId,
+            string $amount,
+            string $date,
+            string $currency = 'PEN',
+        ) use ($clientId): int {
+            return (int) $this->postJson('/api/v1/finanzas/movimientos', [
+                'idempotency_key' => (string) Str::uuid(),
+                'tipo' => 'COBRO_CLIENTE',
+                'cliente_id' => $clientId,
+                'cuenta_destino_id' => $accountId,
+                'metodo_pago_id' => $this->cashMethodId,
+                'fecha_hora' => $date,
+                'moneda' => $currency,
+                'importe' => $amount,
+                'aplicaciones' => [],
+            ])->assertCreated()->json('data.id');
+        };
+
+        $bankPaymentId = $registerIncome($bankAccountId, '100.10', '2026-07-31 00:00:00');
+        $walletPaymentId = $registerIncome($walletAccountId, '50.25', '2026-07-31 23:59:59');
+        $cashPaymentId = $registerIncome($this->cashRegisterId, '800.00', '2026-07-31 10:00:00');
+        $otherPaymentId = $registerIncome($otherAccountId, '900.00', '2026-07-31 11:00:00');
+        $usdPaymentId = $registerIncome($usdBankAccountId, '75.00', '2026-07-31 12:00:00', 'USD');
+        $nextDayPaymentId = $registerIncome($bankAccountId, '500.00', '2026-08-01 00:00:00');
+        $openingBalanceId = (int) $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'SALDO_INICIAL',
+            'cuenta_destino_id' => $bankAccountId,
+            'fecha_hora' => '2026-07-31 12:30:00',
+            'moneda' => 'PEN',
+            'importe' => '1000.00',
+            'aplicaciones' => [],
+        ])->assertCreated()->json('data.id');
+        $internalTransferId = (int) $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'TRANSFERENCIA_INTERNA',
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'cuenta_destino_id' => $bankAccountId,
+            'fecha_hora' => '2026-07-31 12:45:00',
+            'moneda' => 'PEN',
+            'importe' => '70.00',
+            'aplicaciones' => [],
+        ])->assertCreated()->json('data.id');
+        $externalPaymentId = (int) $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'PAGO_DIRECTO',
+            'cliente_id' => $clientId,
+            'proveedor_id' => $providerId,
+            'cuenta_destino_id' => $externalBankAccountId,
+            'metodo_pago_id' => $this->cashMethodId,
+            'fecha_hora' => '2026-07-31 13:00:00',
+            'moneda' => 'PEN',
+            'importe' => '60.00',
+            'aplicaciones' => [],
+        ])->assertCreated()->json('data.id');
+
+        DB::table('pagos')
+            ->whereIn('id', [
+                $bankPaymentId,
+                $walletPaymentId,
+                $cashPaymentId,
+                $otherPaymentId,
+                $usdPaymentId,
+                $nextDayPaymentId,
+                $openingBalanceId,
+                $internalTransferId,
+                $externalPaymentId,
+            ])
+            ->update(['created_at' => '2026-08-01 12:00:00']);
+        DB::table('cuentas_financieras')
+            ->where('id', $walletAccountId)
+            ->update(['estado' => 'INACTIVO']);
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.egresos', '0.00')
+            ->assertJsonPath('resumen.neto', '0.00')
+            ->assertJsonPath('resumen.ingresos_cuentas.0.moneda', 'PEN')
+            ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '150.35')
+            ->assertJsonPath('resumen.ingresos_cuentas.1.moneda', 'USD')
+            ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
+
+        $this->getJson($this->dailyUrl($this->otherCashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '150.35')
+            ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
+        $this->getJson($this->dailyUrl($usdCashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonPath('resumen.moneda', 'USD')
+            ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '150.35')
+            ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonCount(1, 'resumen.ingresos_cuentas')
+            ->assertJsonPath('resumen.ingresos_cuentas.0.moneda', 'PEN')
+            ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '500.00');
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-30'))
+            ->assertOk()
+            ->assertJsonCount(0, 'resumen.ingresos_cuentas');
+
+        $this->postJson("/api/v1/finanzas/movimientos/{$bankPaymentId}/anular", [
+            'motivo' => 'El depósito bancario estaba duplicado',
+        ])->assertOk();
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '50.25')
+            ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
+    }
+
     public function test_a_cash_transfer_is_an_expense_in_the_source_and_income_in_the_destination(): void
     {
         $response = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
@@ -808,12 +985,13 @@ class CashRegisterApiTest extends TestCase
         string $alias,
         string $type = 'CAJA',
         string $status = 'ACTIVO',
+        string $currency = 'PEN',
     ): int {
         return DB::table('cuentas_financieras')->insertGetId([
             'entidad_financiera_id' => $entityId,
             'tipo' => $type,
             'alias' => $alias,
-            'moneda' => 'PEN',
+            'moneda' => $currency,
             'estado' => $status,
             'created_by' => $creatorId,
             'created_at' => now(),

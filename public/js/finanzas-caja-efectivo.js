@@ -17,6 +17,7 @@ const elements = {
   liveStatus: byId("cashRegisterLiveStatus"),
   configMessage: byId("cashRegisterConfigMessage"),
   income: byId("cashRegisterIncome"),
+  accountIncome: byId("cashRegisterAccountIncome"),
   expense: byId("cashRegisterExpense"),
   net: byId("cashRegisterNet"),
   refresh: byId("cashRegisterRefresh"),
@@ -188,9 +189,18 @@ function updateCurrency() {
   elements.currencyPrefix.textContent = currencyPrefix(currency);
 }
 
+function accountIncomeText(income, fallbackCurrency) {
+  if (!Array.isArray(income) || !income.length) return formatMoney(0, fallbackCurrency);
+  return income.map((item) => {
+    const currency = item?.moneda === "USD" ? "USD" : "PEN";
+    return formatMoney(item?.importe || 0, currency);
+  }).join(" · ");
+}
+
 function resetSummary() {
   const currency = selectedCashRegister()?.moneda || "PEN";
   elements.income.textContent = formatMoney(0, currency);
+  elements.accountIncome.textContent = accountIncomeText([], currency);
   elements.expense.textContent = formatMoney(0, currency);
   elements.net.textContent = formatMoney(0, currency);
 }
@@ -254,6 +264,7 @@ function renderLedger(records) {
 function applySummary(summary = {}) {
   const currency = summary.moneda || selectedCashRegister()?.moneda || "PEN";
   elements.income.textContent = formatMoney(summary.ingresos || 0, currency);
+  elements.accountIncome.textContent = accountIncomeText(summary.ingresos_cuentas, currency);
   elements.expense.textContent = formatMoney(summary.egresos || 0, currency);
   elements.net.textContent = formatMoney(summary.total || 0, currency);
   elements.net.classList.toggle("is-negative", Number(summary.total || 0) < 0);

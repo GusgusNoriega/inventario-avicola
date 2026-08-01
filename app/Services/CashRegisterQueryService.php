@@ -59,6 +59,11 @@ class CashRegisterQueryService
             ->orderByDesc('movimiento.id')
             ->get();
         $formatted = $this->format($rows, (int) $cashRegister->id, $timezone);
+        $accountIncome = $this->accountIncome(
+            $companyId,
+            $from,
+            $to,
+        );
         $income = '0.00';
         $expense = '0.00';
         foreach ($formatted as $movement) {
@@ -73,6 +78,7 @@ class CashRegisterQueryService
             'data' => $formatted,
             'resumen' => [
                 'ingresos' => $income,
+                'ingresos_cuentas' => $accountIncome,
                 'egresos' => $expense,
                 'total' => FinancialMoney::subtract($income, $expense),
                 'neto' => FinancialMoney::subtract($income, $expense),
@@ -105,6 +111,39 @@ class CashRegisterQueryService
             $cashRegisterId,
             $this->companyTimezone($companyId),
         )[0];
+    }
+
+    /** @return list<array{moneda: string, importe: string}> */
+    private function accountIncome(int $companyId, string $from, string $to): array
+    {
+        return DB::table('pagos as pago')
+            ->join('cuentas_financieras as cuenta_destino', 'cuenta_destino.id', '=', 'pago.cuenta_destino_id')
+            ->join('entidades_financieras as entidad_destino', 'entidad_destino.id', '=', 'cuenta_destino.entidad_financiera_id')
+            ->where('pago.empresa_id', $companyId)
+            ->where('entidad_destino.empresa_id', $companyId)
+            ->where('entidad_destino.tipo', 'PROPIA')
+            ->whereIn('cuenta_destino.tipo', [
+                CuentaFinanciera::TYPE_BANK,
+                CuentaFinanciera::TYPE_WALLET,
+            ])
+            ->whereNotIn('pago.tipo', [
+                Pago::TYPE_OPENING_BALANCE,
+                Pago::TYPE_INTERNAL_TRANSFER,
+            ])
+            ->where('pago.estado', Pago::STATUS_REGISTERED)
+            ->whereNull('pago.reversa_de_pago_id')
+            ->where('pago.fecha_hora', '>=', $from)
+            ->where('pago.fecha_hora', '<', $to)
+            ->selectRaw('pago.moneda, COALESCE(SUM(pago.importe), 0) as importe')
+            ->groupBy('pago.moneda')
+            ->orderBy('pago.moneda')
+            ->get()
+            ->map(fn (object $row): array => [
+                'moneda' => (string) $row->moneda,
+                'importe' => FinancialMoney::normalize((string) $row->importe),
+            ])
+            ->values()
+            ->all();
     }
 
     private function query(

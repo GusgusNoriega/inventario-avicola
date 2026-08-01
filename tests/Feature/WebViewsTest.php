@@ -179,6 +179,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="cashRegisterAccount"', false)
             ->assertSee('id="cashRegisterDate"', false)
             ->assertSee('id="cashRegisterIncome"', false)
+            ->assertSee('Ingresado a cuentas')
+            ->assertSee('id="cashRegisterAccountIncome"', false)
             ->assertSee('id="cashRegisterExpense"', false)
             ->assertSee('id="cashRegisterNet"', false)
             ->assertSee('id="cashRegisterList"', false)
@@ -359,6 +361,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/caja-efectivo?', $cashRegisterJavascript);
         $this->assertStringContainsString('localStorage.setItem', $cashRegisterJavascript);
         $this->assertStringContainsString('POLL_INTERVAL = 3000', $cashRegisterJavascript);
+        $this->assertStringContainsString('function accountIncomeText(', $cashRegisterJavascript);
+        $this->assertStringContainsString('summary.ingresos_cuentas', $cashRegisterJavascript);
         $this->assertStringContainsString('BroadcastChannel', $cashRegisterJavascript);
         $this->assertStringContainsString('aria-activedescendant', $cashRegisterJavascript);
         $this->assertMatchesRegularExpression(

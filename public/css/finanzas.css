@@ -2216,6 +2216,17 @@ body.fin-page {
 
 .fin-cash-summary-income > strong { color: #75efad; }
 
+.fin-cash-summary-accounts {
+  border-color: rgba(180, 136, 255, .36);
+  background: linear-gradient(145deg, rgba(54, 34, 85, .72), rgba(18, 12, 31, .98));
+}
+
+.fin-cash-summary-accounts > strong {
+  color: #c9a7ff;
+  font-size: clamp(18px, 1.65vw, 25px);
+  line-height: 1.2;
+}
+
 .fin-cash-summary-expense {
   border-color: rgba(255, 116, 116, .34);
   background: linear-gradient(145deg, rgba(67, 26, 31, .68), rgba(24, 11, 17, .98));

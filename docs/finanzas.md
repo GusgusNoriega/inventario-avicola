@@ -110,8 +110,11 @@ UUID de idempotencia.
 - `/finanzas/saldos`: saldos por cuenta, cartera, pagos a proveedores y trazabilidad.
 - `/finanzas/entidades`: entidades propias/externas y sus cuentas.
 - `/finanzas/caja-efectivo`: lista diaria por caja, ingresos, gastos, neto,
+  total ingresado a bancos y billeteras propias por moneda (sin sumar cajas,
+  saldos iniciales ni transferencias internas),
   transferencias, clientes, eliminación mediante reversa y caja predeterminada
-  guardada en el navegador. Los destinos de gasto disponibles son
+  guardada en el navegador. Los resúmenes usan la fecha efectiva del movimiento,
+  aunque haya sido registrado posteriormente. Los destinos de gasto disponibles son
   Administrativo, Transporte, Depósito y Otra caja.
 - `/finanzas/movimientos/nuevo`: cobros, pagos directos, pagos a proveedor,
   cargas manuales de saldo a favor, minorista y reembolsos.
