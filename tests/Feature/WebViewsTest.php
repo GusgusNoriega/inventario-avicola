@@ -248,10 +248,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="customerDiscountForm"', false)
             ->assertSee('id="customerDiscountClientSearch"', false)
             ->assertSee('id="customerDiscountClient"', false)
+            ->assertSee('id="customerDiscountDate"', false)
             ->assertSee('id="customerDiscountAmount"', false)
             ->assertSee('id="customerDiscountReason"', false)
             ->assertSee('id="customerDiscountRows"', false)
             ->assertSee('id="customerDiscountEditDialog"', false)
+            ->assertSee('id="customerDiscountEditDate"', false)
             ->assertSee('id="customerDiscountVoidDialog"', false)
             ->assertSee(asset('js/finanzas-descuentos-clientes.js'), false);
 
@@ -394,6 +396,7 @@ class WebViewsTest extends TestCase
         $this->assertStringNotContainsString('numero_operacion', $cashRegisterJavascript);
         $this->assertStringContainsString('/finanzas/descuentos-clientes', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/clientes/', $discountsJavascript);
+        $this->assertStringContainsString('fecha_transaccion', $discountsJavascript);
         $this->assertStringContainsString('data-edit-discount', $discountsJavascript);
         $this->assertStringContainsString('data-void-discount', $discountsJavascript);
         $this->assertStringContainsString('/finanzas/tickets?', $ticketsJavascript);

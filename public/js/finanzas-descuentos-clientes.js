@@ -15,6 +15,7 @@ const elements = {
   form: byId("customerDiscountForm"),
   clientSearch: byId("customerDiscountClientSearch"),
   client: byId("customerDiscountClient"),
+  date: byId("customerDiscountDate"),
   amount: byId("customerDiscountAmount"),
   reason: byId("customerDiscountReason"),
   currencyPrefix: byId("customerDiscountCurrencyPrefix"),
@@ -37,6 +38,7 @@ const elements = {
   editForm: byId("customerDiscountEditForm"),
   editId: byId("customerDiscountEditId"),
   editClient: byId("customerDiscountEditClient"),
+  editDate: byId("customerDiscountEditDate"),
   editAmount: byId("customerDiscountEditAmount"),
   editReason: byId("customerDiscountEditReason"),
   editMessage: byId("customerDiscountEditMessage"),
@@ -63,6 +65,31 @@ const state = {
 
 function currencyPrefix(currency) {
   return currency === "USD" ? "$" : "S/";
+}
+
+function todayLocal() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function transactionDate(value) {
+  const date = String(value || "").slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return formatDateTime(value);
+
+  return new Intl.DateTimeFormat("es-PE", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))));
+}
+
+function configureTransactionDates() {
+  const today = elements.date.max || todayLocal();
+  elements.editDate.max = today;
+  if (!elements.date.value) elements.date.value = today;
 }
 
 function clientLabel(client) {
@@ -174,7 +201,7 @@ function renderRows(records) {
 
   elements.rows.innerHTML = records.map((record) => `
     <tr class="${record.estado === "ANULADO" ? "is-muted" : ""}">
-      <td><strong>${escapeHtml(formatDateTime(record.fecha_hora))}</strong><small>${escapeHtml(record.codigo || `#${record.id}`)}</small></td>
+      <td><strong>${escapeHtml(transactionDate(record.fecha_transaccion || record.fecha_hora))}</strong><small>${escapeHtml(record.codigo || `#${record.id}`)}</small></td>
       <td><strong>${escapeHtml(record.cliente?.nombre || "Cliente")}</strong><small>${escapeHtml(record.cliente?.numero_documento || "Sin documento")}</small></td>
       <td><span class="fin-management-detail">${escapeHtml(record.motivo || "Sin motivo")}</span></td>
       <td>${statusBadge(record.estado)}</td>
@@ -214,14 +241,18 @@ async function loadRecords() {
   }
 }
 
-function validPayload(client, amount, reason) {
+function validPayload(client, date, amount, reason) {
   if (!client) throw new Error("Selecciona un cliente.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Selecciona la fecha de la transacción.");
+  if (date < "1970-01-01") throw new Error("La fecha de la transacción debe ser posterior a 1969.");
+  if (date > (elements.date.max || todayLocal())) throw new Error("La fecha de la transacción no puede ser futura.");
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("Ingresa un monto mayor que cero.");
   if (reason.length < 3) throw new Error("Escribe el motivo del descuento.");
 
   return {
     idempotency_key: createIdempotencyKey(),
     cliente_id: client,
+    fecha_transaccion: date,
     importe: amount.toFixed(2),
     motivo: reason
   };
@@ -237,6 +268,7 @@ async function submitCreate(event) {
   try {
     const payload = validPayload(
       Number(elements.client.value || 0),
+      elements.date.value,
       Number(elements.amount.value || 0),
       elements.reason.value.trim()
     );
@@ -247,6 +279,7 @@ async function submitCreate(event) {
       body: JSON.stringify(payload)
     });
     setMessage(elements.message, response.message || "Descuento registrado.", "success");
+    elements.date.value = elements.date.max || todayLocal();
     elements.amount.value = "";
     elements.reason.value = "";
     state.page = 1;
@@ -273,6 +306,7 @@ function openEdit(record) {
   elements.editId.value = record.id;
   elements.editClient.innerHTML = clientOptions(state.clients);
   elements.editClient.value = String(record.cliente?.id || "");
+  elements.editDate.value = String(record.fecha_transaccion || record.fecha_hora || "").slice(0, 10);
   elements.editAmount.value = Number(record.importe).toFixed(2);
   elements.editReason.value = record.motivo || "";
   setMessage(elements.editMessage);
@@ -286,6 +320,7 @@ async function submitEdit(event) {
   try {
     const payload = validPayload(
       Number(elements.editClient.value || 0),
+      elements.editDate.value,
       Number(elements.editAmount.value || 0),
       elements.editReason.value.trim()
     );
@@ -382,6 +417,8 @@ elements.voidForm.addEventListener("submit", submitVoid);
 document.querySelectorAll("[data-dialog-close]").forEach((button) => {
   button.addEventListener("click", () => closeDialog(button.closest("dialog")));
 });
+
+configureTransactionDates();
 
 if (!canAdjust) {
   elements.form.querySelectorAll("input, select, textarea, button").forEach((control) => {

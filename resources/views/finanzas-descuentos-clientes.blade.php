@@ -26,7 +26,7 @@
           <div>
             <p class="fin-eyebrow">Nuevo descuento</p>
             <h2>Registrar descuento</h2>
-            <p class="fin-section-copy">Solo necesitas seleccionar el cliente, indicar el monto y escribir el motivo.</p>
+            <p class="fin-section-copy">Selecciona el cliente, indica la fecha de la transacción, el monto y el motivo.</p>
           </div>
           <span class="fin-badge">Sin movimiento de caja</span>
         </div>
@@ -41,6 +41,11 @@
             <select id="customerDiscountClient" required>
               <option value="">Cargando clientes...</option>
             </select>
+          </label>
+          <label class="fin-field">
+            <span>Fecha de la transacción <b>*</b></span>
+            <input id="customerDiscountDate" type="date" value="{{ now()->toDateString() }}" min="1970-01-01" max="{{ now()->toDateString() }}" required>
+            <small>Puede ser anterior al día en que registras el descuento.</small>
           </label>
           <label class="fin-field">
             <span>Monto del descuento <b>*</b></span>
@@ -118,7 +123,7 @@
         <table class="fin-table fin-management-table">
           <thead>
             <tr>
-              <th>Fecha / código</th>
+              <th>Fecha de transacción / código</th>
               <th>Cliente</th>
               <th>Motivo</th>
               <th>Estado</th>
@@ -150,6 +155,10 @@
         <label class="fin-field fin-grid-span-2">
           <span>Cliente <b>*</b></span>
           <select id="customerDiscountEditClient" required></select>
+        </label>
+        <label class="fin-field">
+          <span>Fecha de la transacción <b>*</b></span>
+          <input id="customerDiscountEditDate" type="date" min="1970-01-01" max="{{ now()->toDateString() }}" required>
         </label>
         <label class="fin-field">
           <span>Monto <b>*</b></span>

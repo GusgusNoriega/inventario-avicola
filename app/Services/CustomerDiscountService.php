@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Pago;
 use App\Models\User;
 use App\Support\FinancialMoney;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -39,7 +40,9 @@ class CustomerDiscountService
             [
                 'idempotency_key' => $data['idempotency_key'],
                 'tipo' => Pago::TYPE_CUSTOMER_DISCOUNT,
-                'fecha_hora' => now()->toDateTimeString(),
+                'fecha_hora' => $this->transactionDateTime(
+                    $data['fecha_transaccion'] ?? today()->toDateString(),
+                ),
                 'cliente_id' => (int) $data['cliente_id'],
                 'moneda' => $currency,
                 'importe' => $data['importe'],
@@ -107,7 +110,10 @@ class CustomerDiscountService
                 [
                     'idempotency_key' => $data['idempotency_key'],
                     'tipo' => Pago::TYPE_CUSTOMER_DISCOUNT,
-                    'fecha_hora' => $original->fecha_hora,
+                    'fecha_hora' => $this->transactionDateTime(
+                        $data['fecha_transaccion']
+                            ?? CarbonImmutable::parse($original->fecha_hora)->toDateString(),
+                    ),
                     'cliente_id' => (int) $data['cliente_id'],
                     'moneda' => $currency,
                     'importe' => $data['importe'],
@@ -313,7 +319,10 @@ class CustomerDiscountService
     {
         $same = (int) $payment->cliente_id === (int) $data['cliente_id']
             && FinancialMoney::compare((string) $payment->importe, (string) $data['importe']) === 0
-            && (string) $payment->observaciones === (string) $data['motivo'];
+            && (string) $payment->observaciones === (string) $data['motivo']
+            && (($data['fecha_transaccion'] ?? null) === null
+                || CarbonImmutable::parse($payment->fecha_hora)->toDateString()
+                    === $data['fecha_transaccion']);
         if (! $same) {
             throw ValidationException::withMessages([
                 'idempotency_key' => 'La clave de idempotencia ya fue usada con otro descuento.',
@@ -334,6 +343,7 @@ class CustomerDiscountService
             'id' => (int) $payment->id,
             'codigo' => $payment->codigo,
             'fecha_hora' => $payment->fecha_hora,
+            'fecha_transaccion' => CarbonImmutable::parse($payment->fecha_hora)->toDateString(),
             'moneda' => $payment->moneda,
             'importe' => FinancialMoney::normalize((string) $payment->importe),
             'importe_aplicado' => $applied,
@@ -355,6 +365,15 @@ class CustomerDiscountService
     private function companyCurrency(int $companyId): string
     {
         return (string) (DB::table('empresas')->where('id', $companyId)->value('moneda') ?: 'PEN');
+    }
+
+    private function transactionDateTime(string $date): string
+    {
+        return CarbonImmutable::createFromFormat(
+            '!Y-m-d',
+            $date,
+            config('app.timezone'),
+        )->toDateTimeString();
     }
 
     private function assertActor(int $companyId, User $actor): void

@@ -29,6 +29,7 @@ class CustomerDiscountApiTest extends TestCase
     public function test_discount_is_applied_to_customer_debt_and_excess_becomes_credit(): void
     {
         $clientId = $this->client('CLIENTE CON DESCUENTO', '10990011');
+        $transactionDate = today()->subDays(7)->toDateString();
         $debt = $this->postJson('/api/v1/finanzas/deudas-clientes', [
             'idempotency_key' => (string) Str::uuid(),
             'cliente_id' => $clientId,
@@ -42,11 +43,14 @@ class CustomerDiscountApiTest extends TestCase
         $discount = $this->postJson('/api/v1/finanzas/descuentos-clientes', [
             'idempotency_key' => (string) Str::uuid(),
             'cliente_id' => $clientId,
+            'fecha_transaccion' => $transactionDate,
             'importe' => '150.00',
             'motivo' => 'Acuerdo comercial con el cliente.',
         ])
             ->assertCreated()
             ->assertJsonPath('data.cliente.id', $clientId)
+            ->assertJsonPath('data.fecha_transaccion', $transactionDate)
+            ->assertJsonPath('data.fecha_hora', "{$transactionDate} 00:00:00")
             ->assertJsonPath('data.importe', '150.00')
             ->assertJsonPath('data.importe_aplicado', '100.00')
             ->assertJsonPath('data.saldo_favor', '50.00')
@@ -57,11 +61,14 @@ class CustomerDiscountApiTest extends TestCase
             'id' => $discountId,
             'tipo' => 'DESCUENTO_CLIENTE',
             'cliente_id' => $clientId,
+            'fecha_hora' => "{$transactionDate} 00:00:00",
             'direccion' => 'SIN_FLUJO',
             'importe' => 150,
             'observaciones' => 'Acuerdo comercial con el cliente.',
             'estado' => 'REGISTRADO',
         ]);
+        $registeredAt = DB::table('pagos')->where('id', $discountId)->value('created_at');
+        $this->assertSame(today()->toDateString(), substr((string) $registeredAt, 0, 10));
         $this->assertDatabaseHas('pago_aplicaciones', [
             'pago_id' => $discountId,
             'comprobante_id' => $documentId,
@@ -108,10 +115,12 @@ class CustomerDiscountApiTest extends TestCase
         $updated = $this->putJson("/api/v1/finanzas/descuentos-clientes/{$originalId}", [
             'idempotency_key' => (string) Str::uuid(),
             'cliente_id' => $clientId,
+            'fecha_transaccion' => today()->subDay()->toDateString(),
             'importe' => '40.00',
             'motivo' => 'Monto corregido por acuerdo final.',
         ])
             ->assertOk()
+            ->assertJsonPath('data.fecha_transaccion', today()->subDay()->toDateString())
             ->assertJsonPath('data.importe', '40.00')
             ->assertJsonPath('data.importe_aplicado', '40.00')
             ->assertJsonPath('data.saldo_favor', '0.00')
@@ -129,6 +138,10 @@ class CustomerDiscountApiTest extends TestCase
             'saldo_pendiente' => 60,
             'estado' => 'PARCIAL',
         ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $replacementId,
+            'fecha_hora' => today()->subDay()->startOfDay()->toDateTimeString(),
+        ]);
 
         $this->postJson("/api/v1/finanzas/descuentos-clientes/{$replacementId}/anular", [
             'motivo' => 'El descuento fue cancelado.',
@@ -144,6 +157,26 @@ class CustomerDiscountApiTest extends TestCase
         $this->getJson("/api/v1/finanzas/clientes/{$clientId}/resumen")
             ->assertOk()
             ->assertJsonPath('data.pending', '100.00');
+    }
+
+    public function test_future_transaction_date_is_rejected(): void
+    {
+        $clientId = $this->client('CLIENTE FECHA FUTURA', '10990033');
+
+        $this->postJson('/api/v1/finanzas/descuentos-clientes', [
+            'idempotency_key' => (string) Str::uuid(),
+            'cliente_id' => $clientId,
+            'fecha_transaccion' => today()->addDay()->toDateString(),
+            'importe' => '25.00',
+            'motivo' => 'Intento con fecha futura.',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('fecha_transaccion');
+
+        $this->assertDatabaseMissing('pagos', [
+            'tipo' => 'DESCUENTO_CLIENTE',
+            'cliente_id' => $clientId,
+        ]);
     }
 
     private function client(string $name, string $document): int
