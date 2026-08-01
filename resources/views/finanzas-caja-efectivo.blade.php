@@ -55,7 +55,7 @@
       </article>
       <article class="fin-summary-card fin-cash-summary-retail-two">
         <span>Despacho minorista 2</span>
-        <small>Monto despachado del día · solo informativo; no modifica la caja</small>
+        <small>Monto despachado de la jornada filtrada · solo informativo; no modifica la caja</small>
         <strong id="cashRegisterRetailTwoDispatch">S/ 0.00</strong>
       </article>
       <article class="fin-summary-card fin-cash-summary-income">

@@ -182,6 +182,7 @@ class WebViewsTest extends TestCase
             ->assertSee('Centro')
             ->assertSee('id="cashRegisterAccountIncome"', false)
             ->assertSee('Despacho minorista 2')
+            ->assertSee('Monto despachado de la jornada filtrada')
             ->assertSee('solo informativo; no modifica la caja')
             ->assertSee('id="cashRegisterRetailTwoDispatch"', false)
             ->assertSee('id="cashRegisterExpense"', false)

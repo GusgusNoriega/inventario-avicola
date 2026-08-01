@@ -69,8 +69,7 @@ class CashRegisterQueryService
         );
         $retailStationTwoDispatch = $this->retailStationTwoDispatch(
             $companyId,
-            $from,
-            $to,
+            (string) $filters['fecha'],
         );
         $income = '0.00';
         $expense = '0.00';
@@ -123,7 +122,7 @@ class CashRegisterQueryService
     }
 
     /** @return array{importe: string, moneda: string, solo_informativo: true} */
-    private function retailStationTwoDispatch(int $companyId, string $from, string $to): array
+    private function retailStationTwoDispatch(int $companyId, string $operatingDate): array
     {
         $amount = DB::table('pesadas as pesada')
             ->join('tickets_despacho as ticket', 'ticket.id', '=', 'pesada.ticket_id')
@@ -138,8 +137,7 @@ class CashRegisterQueryService
             ->where('ticket.tipo_operacion', TicketDespacho::OPERATION_DISPATCH)
             ->where('ticket.estado', TicketDespacho::STATUS_CLOSED)
             ->where('pesada.estado', Pesada::STATUS_ACTIVE)
-            ->whereRaw('COALESCE(ticket.cerrado_at, ticket.created_at) >= ?', [$from])
-            ->whereRaw('COALESCE(ticket.cerrado_at, ticket.created_at) < ?', [$to])
+            ->where('jornada.fecha_operativa', $operatingDate)
             ->whereExists(function (Builder $marker) use ($companyId): void {
                 $marker->selectRaw('1')
                     ->from('pesadas as marca')

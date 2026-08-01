@@ -484,7 +484,7 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
     }
 
-    public function test_daily_summary_reports_station_two_retail_dispatch_without_changing_cash_totals(): void
+    public function test_daily_summary_reports_station_two_retail_dispatch_for_the_filtered_journey_without_changing_cash_totals(): void
     {
         $context = $this->retailDispatchSummaryContext($this->user);
 
@@ -519,7 +519,8 @@ class CashRegisterApiTest extends TestCase
         $this->createRetailDispatchSummaryTicket(
             $context,
             'M2-MANUAL',
-            '2026-07-31 12:00:00',
+            '2026-07-30 22:30:00',
+            operatingDate: '2026-07-31',
             station: 2,
             weightSource: 'MANUAL',
         );
@@ -566,9 +567,11 @@ class CashRegisterApiTest extends TestCase
         $this->createRetailDispatchSummaryTicket(
             $context,
             'M2-DIA-SIGUIENTE',
-            '2026-08-01 11:00:00',
+            '2026-07-31 22:30:00',
+            operatingDate: '2026-08-01',
             station: 2,
             weightSource: 'MANUAL',
+            weight: '2.000',
         );
 
         $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
@@ -599,7 +602,7 @@ class CashRegisterApiTest extends TestCase
 
         $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
             ->assertOk()
-            ->assertJsonPath('resumen.despacho_minorista_2.importe', '1.23');
+            ->assertJsonPath('resumen.despacho_minorista_2.importe', '2.46');
     }
 
     public function test_a_cash_transfer_is_an_expense_in_the_source_and_income_in_the_destination(): void
@@ -1200,6 +1203,7 @@ class CashRegisterApiTest extends TestCase
         array $context,
         string $code,
         string $closedAt,
+        ?string $operatingDate = null,
         int $station = 2,
         string $weightSource = 'MANUAL',
         string $ticketStatus = TicketDespacho::STATUS_CLOSED,
@@ -1209,7 +1213,7 @@ class CashRegisterApiTest extends TestCase
         string $weight = '1.004',
         string $price = '1.2300',
     ): int {
-        $operatingDate = substr($closedAt, 0, 10);
+        $operatingDate ??= substr($closedAt, 0, 10);
         $journeyId = DB::table('jornadas_operativas')
             ->where('sucursal_id', $context['branch_id'])
             ->whereDate('fecha_operativa', $operatingDate)
