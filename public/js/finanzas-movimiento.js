@@ -4,6 +4,7 @@ import {
   financeDateRangePhrase,
   isValidFinanceFilterDate
 } from "./finanzas-date-range.js";
+import { movementRepeatContext } from "./finanzas-movimiento-repetido.js";
 import {
   accountListFromEntities,
   createIdempotencyKey,
@@ -1521,13 +1522,20 @@ function providerCreditApplicationPayload() {
 
 function resetMovement({
   keepMessage = false,
+  repeatContext = null,
   refreshDaily = true,
   selectedMode = currentModeKey()
 } = {}) {
   elements.form.reset();
   const selectedModeInput = document.querySelector(`[name="financeMovementType"][value="${selectedMode}"]`);
   if (selectedModeInput) selectedModeInput.checked = true;
-  elements.date.value = toLocalDateTimeValue();
+  if (repeatContext) {
+    ["currency", "client", "provider", "method", "date"].forEach((field) => {
+      if (field in repeatContext) elements[field].value = repeatContext[field];
+    });
+  } else {
+    elements.date.value = toLocalDateTimeValue();
+  }
   state.debts = { CXC: [], CXP: [] };
   state.providerCredits = [];
   state.applications.CXC.clear();
@@ -1536,6 +1544,9 @@ function resetMovement({
   if (!keepMessage) setMessage(elements.message);
   [elements.cxcMessage, elements.cxpMessage].forEach((message) => setMessage(message));
   updateMethodConstraints();
+  if (repeatContext && "destination" in repeatContext) {
+    elements.destination.value = repeatContext.destination;
+  }
   updateMode({ refreshDaily });
 }
 
@@ -1547,11 +1558,20 @@ async function saveMovement(event) {
   const manualCustomerDebt = isManualCustomerDebt();
   let savedRecordId = null;
   let savedRecordDate = String(elements.date.value || "").slice(0, 10);
+  let repeatContext = null;
   let refreshDailyAfterSave = false;
 
   try {
     const creditApplication = usesProviderCredit() ? providerCreditApplicationPayload() : null;
     const payload = creditApplication ? null : movementPayload();
+    repeatContext = movementRepeatContext(savedMode, {
+      currency: elements.currency.value,
+      client: elements.client.value,
+      provider: elements.provider.value,
+      method: elements.method.value,
+      date: elements.date.value,
+      destination: elements.destination.value
+    });
     state.saving = true;
     elements.save.disabled = true;
     elements.reset.disabled = true;
@@ -1579,7 +1599,12 @@ async function saveMovement(event) {
       "fecha_hora",
       "fecha_emision"
     ], savedRecordDate) || "").slice(0, 10);
-    resetMovement({ keepMessage: true, refreshDaily: false, selectedMode: savedMode });
+    resetMovement({
+      keepMessage: true,
+      repeatContext,
+      refreshDaily: false,
+      selectedMode: savedMode
+    });
     setMessage(
       elements.message,
       response?.message || `${manualCustomerDebt ? "Deuda" : "Movimiento"}${movementNumber ? ` #${movementNumber}` : ""} registrado correctamente.`,
