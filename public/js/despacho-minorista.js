@@ -1411,7 +1411,7 @@ function renderLists() {
             <td>${escapeHtml(item.chickenShortName || item.chickenTypeName || "Pollo")}<small>${escapeHtml(item.adjustmentName || item.adjustmentCode)}</small></td>
             <td>${Number(item.trayCount) === 0 ? '<span class="rd-no-trays">Sin bandeja</span>' : item.trayCount}</td>
             <td>${item.birds}</td>
-            <td>${Number(item.netWeight).toFixed(3)}<small>${formatMoney(signedAmount)}</small></td>
+            <td>${Number(item.readWeight || 0).toFixed(3)}<small>${formatMoney(signedAmount)}</small></td>
           </tr>
         `;
       }).join("")
@@ -1426,7 +1426,7 @@ function renderLists() {
         </header>
         <div class="rd-list-table-wrap">
           <table class="rd-list-table">
-            <thead><tr><th>Tipo</th><th>Band.</th><th>Aves</th><th>P. neto</th></tr></thead>
+            <thead><tr><th>Tipo</th><th>Band.</th><th>Aves</th><th>P. leído</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>

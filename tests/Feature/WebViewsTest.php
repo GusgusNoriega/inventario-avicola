@@ -549,6 +549,16 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('from "./retail-client-search.js"', $javascript);
         $this->assertStringContainsString('filterAndRankRetailClients(state.catalog.clients, search)', $javascript);
         $this->assertStringContainsString('newestRecordsFirst(list.items).map((item) => {', $javascript);
+        $this->assertStringContainsString('<th>Tipo</th><th>Band.</th><th>Aves</th><th>P. leído</th>', $javascript);
+        $this->assertStringContainsString(
+            '<td>${Number(item.readWeight || 0).toFixed(3)}<small>${formatMoney(signedAmount)}</small></td>',
+            $javascript
+        );
+        $this->assertStringContainsString('<span>Peso neto<b>${formatWeight(totals.net)}</b></span>', $javascript);
+        $this->assertStringNotContainsString(
+            '<td>${Number(item.netWeight).toFixed(3)}<small>${formatMoney(signedAmount)}</small></td>',
+            $javascript
+        );
         $this->assertStringContainsString('showRetailError(presentation)', $javascript);
         $this->assertStringContainsString('continueDispatchRegistration();', $javascript);
         $this->assertStringNotContainsString('openPaymentModal()', $javascript);
