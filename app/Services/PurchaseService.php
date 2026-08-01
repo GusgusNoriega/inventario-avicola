@@ -64,6 +64,124 @@ class PurchaseService
     }
 
     /**
+     * Replaces an immutable purchase by voiding the original and registering its
+     * correction in the same database transaction.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{compra_id: int, original_compra_id: int, reversa_id: ?int, idempotent: bool}
+     */
+    public function correct(
+        int $companyId,
+        User $actor,
+        int $purchaseId,
+        array $data,
+        ?string $ip = null,
+    ): array {
+        $this->assertActor($companyId, $actor, 'COMPRAS_REGISTRAR');
+        $this->assertPermission($actor, 'COMPRAS_ANULAR');
+        $canonical = $this->canonicalPayload($data);
+
+        return DB::transaction(function () use (
+            $companyId,
+            $actor,
+            $purchaseId,
+            $data,
+            $canonical,
+            $ip,
+        ): array {
+            $purchase = DB::table('compras')
+                ->where('empresa_id', $companyId)
+                ->where('id', $purchaseId)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($purchase, 404, 'Compra no encontrada.');
+
+            if ($purchase->condicion === Compra::CONDITION_CASH) {
+                $this->assertPermission($actor, 'PAGOS_ANULAR');
+            }
+            if ($canonical['condicion'] === Compra::CONDITION_CASH) {
+                $this->assertPermission($actor, 'PAGOS_REGISTRAR');
+            }
+
+            $existingReplacement = DB::table('compras')
+                ->where('empresa_id', $companyId)
+                ->where('idempotency_key', $canonical['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+            if ($existingReplacement) {
+                $this->assertSameIdempotentRequest($existingReplacement, $canonical);
+                if (! $this->isCorrectionReplacement(
+                    $companyId,
+                    $purchaseId,
+                    (int) $existingReplacement->id,
+                    $canonical['idempotency_key'],
+                )) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => 'La clave de idempotencia ya fue usada fuera de esta correccion.',
+                    ]);
+                }
+
+                return [
+                    'compra_id' => (int) $existingReplacement->id,
+                    'original_compra_id' => $purchaseId,
+                    'reversa_id' => $this->initialPaymentReverseId($companyId, $purchase),
+                    'idempotent' => true,
+                ];
+            }
+
+            if ($purchase->estado === Compra::STATUS_VOIDED) {
+                throw ValidationException::withMessages([
+                    'compra' => 'La compra anulada no puede corregirse sin su reemplazo idempotente.',
+                ]);
+            }
+            if ($purchase->condicion === Compra::CONDITION_LEGACY) {
+                throw ValidationException::withMessages([
+                    'compra' => 'Una compra historica conserva su comprobante original y no puede anularse desde el modulo de compras.',
+                ]);
+            }
+
+            $purchaseBefore = (array) $purchase;
+            $voided = $this->void(
+                $companyId,
+                $actor,
+                $purchaseId,
+                'Correccion de compra '.$purchase->codigo,
+                $ip,
+            );
+            $replacement = $this->register($companyId, $actor, $data, $ip);
+            if ($replacement['idempotent']) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => 'La clave de idempotencia ya fue usada fuera de esta correccion.',
+                ]);
+            }
+
+            $purchaseAfter = (array) DB::table('compras')->where('id', $purchaseId)->first();
+            $this->audit->record(
+                $companyId,
+                $actor->id,
+                'compras',
+                $purchaseId,
+                'CORREGIR',
+                $purchaseBefore,
+                [
+                    ...$purchaseAfter,
+                    'compra_original_id' => $purchaseId,
+                    'compra_reemplazo_id' => $replacement['compra_id'],
+                    'idempotency_key' => $canonical['idempotency_key'],
+                ],
+                $ip,
+            );
+
+            return [
+                'compra_id' => $replacement['compra_id'],
+                'original_compra_id' => $purchaseId,
+                'reversa_id' => $voided['reversa_id'],
+                'idempotent' => false,
+            ];
+        }, 3);
+    }
+
+    /**
      * @return array{compra_id: int, idempotent: bool, reversa_id: ?int}
      */
     public function void(
@@ -624,6 +742,34 @@ class PurchaseService
             ->value('id');
 
         return $id === null ? null : (int) $id;
+    }
+
+    private function isCorrectionReplacement(
+        int $companyId,
+        int $originalPurchaseId,
+        int $replacementPurchaseId,
+        string $idempotencyKey,
+    ): bool {
+        $events = DB::table('auditoria_eventos')
+            ->where('empresa_id', $companyId)
+            ->where('entidad', 'compras')
+            ->where('entidad_id', (string) $originalPurchaseId)
+            ->where('accion', 'CORREGIR')
+            ->orderByDesc('id')
+            ->pluck('datos_despues');
+
+        foreach ($events as $json) {
+            $after = is_string($json) ? json_decode($json, true) : null;
+            if (! is_array($after)) {
+                continue;
+            }
+            if ((int) ($after['compra_reemplazo_id'] ?? 0) === $replacementPurchaseId
+                && ($after['idempotency_key'] ?? null) === $idempotencyKey) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function assertActor(int $companyId, User $actor, string $permission): void

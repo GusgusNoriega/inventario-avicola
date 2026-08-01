@@ -8,7 +8,14 @@
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/finanzas.css') }}?v={{ filemtime(public_path('css/finanzas.css')) }}">
 </head>
-<body class="fin-page fin-purchases-page" data-finance-movement-url="{{ route('finanzas.movimientos.nuevo') }}" data-finance-balances-url="{{ route('finanzas.saldos') }}">
+<body
+  class="fin-page fin-purchases-page"
+  data-finance-movement-url="{{ route('finanzas.movimientos.nuevo') }}"
+  data-finance-balances-url="{{ route('finanzas.saldos') }}"
+  data-purchase-edit-url="{{ route('compras.edit', ['compra' => '__ID__']) }}"
+  data-can-edit-purchases="{{ auth()->user()->hasPermission('COMPRAS_REGISTRAR') && auth()->user()->hasPermission('COMPRAS_ANULAR') ? '1' : '0' }}"
+  data-can-edit-cash-purchases="{{ auth()->user()->hasPermission('COMPRAS_REGISTRAR') && auth()->user()->hasPermission('COMPRAS_ANULAR') && auth()->user()->hasPermission('PAGOS_REGISTRAR') && auth()->user()->hasPermission('PAGOS_ANULAR') ? '1' : '0' }}"
+>
   <main class="fin-shell">
     @include('partials.finanzas-header', [
       'active' => 'compras',
@@ -169,6 +176,7 @@
       </section>
 
       <footer class="fin-purchase-dialog-actions">
+        <a id="purchaseEdit" class="fin-btn fin-btn-ghost" href="{{ route('compras.index') }}" data-purchase-edit hidden>Editar compra</a>
         <a id="purchaseCompanyPayment" class="fin-btn fin-btn-primary" href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_PROVEEDOR" hidden>Pagar desde una cuenta</a>
         <a id="purchaseProviderCredit" class="fin-btn fin-btn-ghost" href="{{ route('finanzas.saldos') }}" hidden>Usar saldo a favor</a>
         <a id="purchaseDirectPayment" class="fin-btn fin-btn-ghost" href="{{ route('finanzas.movimientos.nuevo') }}?tipo=PAGO_DIRECTO" hidden>Registrar pago directo de cliente</a>

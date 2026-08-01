@@ -161,6 +161,9 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::post('/', [PurchaseController::class, 'store'])
             ->middleware('permission:COMPRAS_REGISTRAR');
+        Route::put('/{compra}', [PurchaseController::class, 'update'])
+            ->whereNumber('compra')
+            ->middleware('permission:COMPRAS_REGISTRAR');
         Route::post('/{compra}/anular', [PurchaseController::class, 'void'])
             ->whereNumber('compra')
             ->middleware('permission:COMPRAS_ANULAR');

@@ -41,6 +41,7 @@ const elements = {
   paymentDate: document.getElementById("purchasePaymentDate"),
   referenceLabel: document.getElementById("purchasePaymentReferenceLabel"),
   reference: document.getElementById("purchasePaymentReference"),
+  paymentNotes: document.getElementById("purchasePaymentNotes"),
   subtotal: document.getElementById("purchaseSubtotal"),
   tax: document.getElementById("purchaseTax"),
   total: document.getElementById("purchaseTotal"),
@@ -59,10 +60,36 @@ const state = {
   lines: [],
   nextLineId: 1,
   idempotencyKey: createIdempotencyKey(),
-  saving: false
+  saving: false,
+  loadingPurchase: false,
+  editingId: document.body.dataset.purchaseId || null,
+  originalPurchase: null,
+  canEditCurrent: false
+};
+
+const permissions = {
+  edit: document.body.dataset.canEditPurchases === "1",
+  editCash: document.body.dataset.canEditCashPurchases === "1"
 };
 
 const queryProvider = new URLSearchParams(window.location.search).get("proveedor_id") || "";
+
+function isEditing() {
+  return state.editingId !== null;
+}
+
+function trueValue(value) {
+  return value === true || value === 1 || String(value).toLowerCase() === "true" || String(value) === "1";
+}
+
+function purchaseConditionValue(purchase) {
+  return String(firstDefined(purchase, ["condicion", "condicion_pago", "payment_condition"], "CREDITO")).toUpperCase();
+}
+
+function canEditPurchase(purchase) {
+  if (!permissions.edit || !trueValue(firstDefined(purchase, ["editable"], false))) return false;
+  return purchaseConditionValue(purchase) !== "CONTADO" || permissions.editCash;
+}
 
 function idValue(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -81,6 +108,10 @@ function isCashPurchase() {
 function todayValue(date = new Date()) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+}
+
+function localDateTimeValue(value) {
+  return value ? String(value).replace(" ", "T").slice(0, 16) : "";
 }
 
 function normalizeEntity(entity) {
@@ -258,10 +289,19 @@ function updateCondition() {
   elements.destination.required = cash;
   elements.method.required = cash;
   elements.paymentDate.required = cash;
-  elements.summaryHint.textContent = cash
-    ? "Al guardar se registrará la compra, la salida de dinero y el pago completo."
-    : "Al guardar se creará una deuda por el total de la compra.";
-  elements.save.textContent = cash ? "Registrar compra al contado" : "Registrar compra a crédito";
+  if (isEditing()) {
+    elements.summaryHint.textContent = cash
+      ? "La corrección volverá a registrar la compra y su pago al contado."
+      : "La corrección volverá a crear la compra y su saldo por pagar.";
+    elements.save.textContent = "Guardar corrección";
+    elements.reset.textContent = "Restaurar datos originales";
+  } else {
+    elements.summaryHint.textContent = cash
+      ? "Al guardar se registrará la compra, la salida de dinero y el pago completo."
+      : "Al guardar se creará una deuda por el total de la compra.";
+    elements.save.textContent = cash ? "Registrar compra al contado" : "Registrar compra a crédito";
+    elements.reset.textContent = "Limpiar formulario";
+  }
   updateMethodConstraints();
 }
 
@@ -359,7 +399,8 @@ function purchasePayload() {
       cuenta_destino_id: idValue(elements.destination.value),
       metodo_pago_id: idValue(elements.method.value),
       referencia: optionalString(elements.reference.value),
-      fecha_hora: elements.paymentDate.value
+      fecha_hora: elements.paymentDate.value,
+      observaciones: optionalString(elements.paymentNotes.value)
     };
   }
   return payload;
@@ -374,7 +415,68 @@ function setDefaultDates() {
   elements.paymentDate.value = toLocalDateTimeValue(now);
 }
 
+function hydratePurchase(purchase) {
+  const provider = firstDefined(purchase, ["proveedor.id", "proveedor_id", "provider.id", "provider_id"], "");
+  const conditionValue = purchaseConditionValue(purchase);
+  const currency = String(firstDefined(purchase, ["moneda", "currency"], elements.currency.value));
+  const details = responseCollection(purchase, ["detalles", "details", "lineas", "items"]);
+  const payment = firstDefined(purchase, ["pago_inicial", "pago", "initial_payment"], null);
+
+  elements.form.reset();
+  elements.provider.value = provider === null ? "" : String(provider);
+  elements.documentType.value = String(firstDefined(purchase, ["tipo_documento", "document_type"], "FACTURA"));
+  elements.documentNumber.value = String(firstDefined(purchase, ["numero_documento", "document_number"], "") || "");
+  elements.date.value = String(firstDefined(purchase, ["fecha_compra", "fecha_emision", "date"], "") || "");
+  elements.dueDate.value = String(firstDefined(purchase, ["fecha_vencimiento", "due_date"], "") || "");
+  if ([...elements.currency.options].some((option) => option.value === currency)) elements.currency.value = currency;
+  elements.notes.value = String(firstDefined(purchase, ["observaciones", "notes"], "") || "");
+  elements.tax.value = String(firstDefined(purchase, ["impuesto", "tax"], "0.00") || "0.00");
+
+  const conditionInput = [...elements.conditionInputs].find((input) => input.value === conditionValue);
+  if (conditionInput) conditionInput.checked = true;
+
+  elements.method.value = payment
+    ? String(firstDefined(payment, ["metodo_pago_id", "metodo_pago.id", "payment_method_id", "payment_method.id"], "") || "")
+    : "";
+  elements.reference.value = payment ? String(firstDefined(payment, ["referencia", "reference"], "") || "") : "";
+  elements.paymentNotes.value = payment ? String(firstDefined(payment, ["observaciones", "notes"], "") || "") : "";
+  elements.paymentDate.value = payment
+    ? localDateTimeValue(firstDefined(payment, ["fecha_hora", "date_time", "fecha"], ""))
+    : "";
+
+  state.nextLineId = 1;
+  state.lines = details.map((line) => ({
+    key: state.nextLineId++,
+    tipo_pollo_id: String(firstDefined(line, ["tipo_pollo.id", "tipo_pollo_id", "tipo.id"], "") || ""),
+    descripcion: String(firstDefined(line, ["descripcion", "description"], "") || ""),
+    cantidad_aves: firstDefined(line, ["cantidad_aves", "birds"], null) ?? "",
+    peso_kg: String(firstDefined(line, ["peso_kg", "peso_neto_kg", "weight"], "") || ""),
+    precio_kg: String(firstDefined(line, ["precio_kg", "unit_price"], "") || "")
+  }));
+  if (!state.lines.length) state.lines = [newLine()];
+
+  renderLines();
+  updateCondition();
+  elements.origin.value = payment
+    ? String(firstDefined(payment, ["cuenta_origen_id", "cuenta_origen.id", "origin_account_id", "origin_account.id"], "") || "")
+    : "";
+  elements.destination.value = payment
+    ? String(firstDefined(payment, ["cuenta_destino_id", "cuenta_destino.id", "destination_account_id", "destination_account.id"], "") || "")
+    : "";
+  updateMethodConstraints();
+  updateTotals();
+}
+
 function resetForm({ keepMessage = false } = {}) {
+  if (isEditing() && state.originalPurchase) {
+    hydratePurchase(state.originalPurchase);
+    elements.save.disabled = !state.canEditCurrent;
+    elements.reset.disabled = false;
+    if (!keepMessage) setMessage(elements.message, "Se restauraron los datos originales.", "success");
+    setMessage(elements.linesMessage);
+    return;
+  }
+
   elements.form.reset();
   state.lines = [newLine()];
   state.idempotencyKey = createIdempotencyKey();
@@ -421,29 +523,83 @@ async function loadCatalog() {
     if (!state.providers.length) setMessage(elements.message, "No hay proveedores activos para registrar la compra.", "error");
     else if (!state.types.length) setMessage(elements.message, "No hay tipos de pollo activos para agregar al detalle.", "error");
     markFinanceAccessReady();
+    return true;
   } catch (error) {
     setMessage(elements.message, errorMessage(error, "No se pudo cargar el catálogo de compras."), "error");
+    return false;
   }
+}
+
+async function loadPurchase() {
+  if (!isEditing() || state.loadingPurchase) return;
+  state.loadingPurchase = true;
+  state.canEditCurrent = false;
+  elements.save.disabled = true;
+  elements.reset.disabled = true;
+  setMessage(elements.message, "Cargando compra para corrección...");
+
+  try {
+    const response = await apiRequest(`/compras/${encodeURIComponent(state.editingId)}`);
+    const purchase = firstDefined(response, ["data", "compra"], response);
+    state.originalPurchase = purchase;
+    hydratePurchase(purchase);
+    state.canEditCurrent = canEditPurchase(purchase);
+
+    if (state.canEditCurrent) {
+      setMessage(elements.message, "Revisa los datos y guarda la corrección cuando estén listos.");
+    } else if (purchaseConditionValue(purchase) === "CONTADO" && !permissions.editCash) {
+      setMessage(elements.message, "No tienes los permisos necesarios para corregir esta compra al contado.", "error");
+    } else {
+      setMessage(
+        elements.message,
+        String(firstDefined(purchase, ["edit_restriction"], "Esta compra no está disponible para corrección.")),
+        "error"
+      );
+    }
+    markFinanceAccessReady();
+  } catch (error) {
+    state.originalPurchase = null;
+    setMessage(elements.message, errorMessage(error, "No se pudo cargar la compra para corregirla."), "error");
+  } finally {
+    state.loadingPurchase = false;
+    elements.save.disabled = !state.canEditCurrent;
+    elements.reset.disabled = state.originalPurchase === null;
+  }
+}
+
+async function loadAll() {
+  const catalogLoaded = await loadCatalog();
+  if (catalogLoaded && isEditing()) await loadPurchase();
 }
 
 async function savePurchase(event) {
   event.preventDefault();
   if (state.saving) return;
+  if (isEditing() && !state.canEditCurrent) {
+    setMessage(elements.message, "Esta compra no está disponible para corrección.", "error");
+    return;
+  }
+  if (isEditing() && isCashPurchase() && !permissions.editCash) {
+    setMessage(elements.message, "No tienes los permisos necesarios para guardar una corrección al contado.", "error");
+    return;
+  }
   setMessage(elements.message);
   setMessage(elements.linesMessage);
 
   try {
+    const editing = isEditing();
     const payload = purchasePayload();
     state.saving = true;
     elements.save.disabled = true;
     elements.reset.disabled = true;
-    elements.save.textContent = "Registrando compra...";
-    const response = await apiRequest("/compras", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    const purchaseId = firstDefined(response, ["data.id", "data.compra.id", "compra.id", "id"], null);
-    const message = response?.message || "Compra registrada correctamente.";
+    elements.save.textContent = editing ? "Guardando corrección..." : "Registrando compra...";
+    const path = editing ? `/compras/${encodeURIComponent(state.editingId)}` : "/compras";
+    const request = editing
+      ? { method: "PUT", body: JSON.stringify(payload) }
+      : { method: "POST", body: JSON.stringify(payload) };
+    const response = await apiRequest(path, request);
+    const purchaseId = firstDefined(response, ["data.id", "data.compra.id", "compra.id", "id"], editing ? state.editingId : null);
+    const message = response?.message || (editing ? "Compra corregida correctamente." : "Compra registrada correctamente.");
     if (purchaseId) {
       setMessage(elements.message, `${message} Abriendo el detalle...`, "success");
       const base = document.body.dataset.purchasesUrl || "/compras";
@@ -453,11 +609,11 @@ async function savePurchase(event) {
     resetForm({ keepMessage: true });
     setMessage(elements.message, message, "success");
   } catch (error) {
-    setMessage(elements.message, errorMessage(error, "No se pudo registrar la compra."), "error");
+    setMessage(elements.message, errorMessage(error, isEditing() ? "No se pudo guardar la corrección." : "No se pudo registrar la compra."), "error");
   } finally {
     state.saving = false;
-    elements.save.disabled = false;
-    elements.reset.disabled = false;
+    elements.save.disabled = isEditing() && !state.canEditCurrent;
+    elements.reset.disabled = isEditing() && state.originalPurchase === null;
     updateCondition();
   }
 }
@@ -495,10 +651,15 @@ elements.lines.addEventListener("click", (event) => {
 elements.form.addEventListener("submit", savePurchase);
 elements.reset.addEventListener("click", () => resetForm());
 
+if (isEditing() && !permissions.editCash) {
+  const cashConditionInput = [...elements.conditionInputs].find((input) => input.value === "CONTADO");
+  if (cashConditionInput) cashConditionInput.disabled = true;
+}
+
 state.lines = [newLine()];
 setDefaultDates();
 renderLines();
 updateCondition();
 updateTotals();
-initFinanceAccess(loadCatalog);
-void loadCatalog();
+initFinanceAccess(loadAll);
+void loadAll();

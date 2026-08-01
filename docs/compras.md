@@ -99,10 +99,13 @@ Las rutas requieren Sanctum, usuario activo y el permiso indicado:
 | `GET` | `/api/v1/compras` | `COMPRAS_VER` |
 | `GET` | `/api/v1/compras/{id}` | `COMPRAS_VER` |
 | `POST` | `/api/v1/compras` | `COMPRAS_REGISTRAR` |
+| `PUT` | `/api/v1/compras/{id}` | `COMPRAS_REGISTRAR` y `COMPRAS_ANULAR` |
 | `POST` | `/api/v1/compras/{id}/anular` | `COMPRAS_ANULAR` |
 
 Una compra al contado también requiere autorización para registrar el pago; su
-anulación requiere autorización para anularlo. El listado permite distinguir
+anulación requiere autorización para anularlo. Su corrección exige además
+`PAGOS_ANULAR` para revertir el pago original y `PAGOS_REGISTRAR` cuando el
+reemplazo también es al contado. El listado permite distinguir
 `CONTADO`, `CREDITO` y `LEGADO` sin mezclar una compra histórica sin clasificar
 con las compras explícitas del modelo actual. Los totales y el estado financiero
 del proveedor se consultan por moneda para no sumar PEN y USD.
@@ -111,9 +114,16 @@ del proveedor se consultan por moneda para no sumar PEN y USD.
 son capacidades adicionales y deben asignarse junto con el permiso de consulta
 al rol que operará la interfaz.
 
-## Inmutabilidad y anulación
+## Corrección, inmutabilidad y anulación
 
-Las compras confirmadas no se editan. Una compra a crédito solo puede anularse
+El historial ofrece la acción **Editar** para compras vigentes que todavía
+pueden corregirse. El formulario carga los datos originales, pero al guardar no
+reescribe el asiento financiero: dentro de una sola transacción anula la compra
+original y registra su reemplazo corregido. De esta forma se conservan el
+documento, los detalles, los movimientos y la auditoría previos sin dejar un
+estado intermedio si alguna validación falla.
+
+Una compra a crédito solo puede corregirse o anularse
 si no tiene movimientos financieros activos; primero deben anularse sus pagos o
 depositos aplicados. Al anular una compra al contado se crea la reversa de su
 pago inicial y luego se anulan el comprobante y la compra dentro de la misma
@@ -128,7 +138,12 @@ Un saldo a favor reutilizable no se enlaza a `compras.pago_inicial_id`, porque
 una misma fuente puede aplicarse a varias compras. La compra se registra como
 CXP y el saldo se aplica desde el flujo de pagos a proveedores. Para corregir
 una compra que ya recibió una aplicación, primero debe revertirse el movimiento
-financiero relacionado de acuerdo con la política de inmutabilidad.
+financiero relacionado de acuerdo con la política de inmutabilidad. Las compras
+`LEGADO` y las compras anuladas permanecen en modo de solo lectura.
+
+Cada corrección usa un UUID de idempotencia. Repetir la misma solicitud devuelve
+el reemplazo ya creado y no vuelve a anular, pagar ni afectar saldos. La auditoría
+`CORREGIR` enlaza el identificador de la compra original con el de su reemplazo.
 
 El número del documento queda reservado mientras la compra está activa. Al
 anularla se conserva el número en el historial, pero puede registrarse otra

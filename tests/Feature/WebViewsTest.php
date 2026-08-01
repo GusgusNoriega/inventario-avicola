@@ -416,6 +416,9 @@ class WebViewsTest extends TestCase
         $this->get('/compras')
             ->assertOk()
             ->assertSee('Compras a proveedores')
+            ->assertSee('data-purchase-edit-url=', false)
+            ->assertSee('data-can-edit-purchases=', false)
+            ->assertSee('data-can-edit-cash-purchases=', false)
             ->assertSee('id="purchaseTotalAmount"', false)
             ->assertSee('id="purchaseLegacyAmount"', false)
             ->assertSee('id="purchaseFilters"', false)
@@ -424,6 +427,7 @@ class WebViewsTest extends TestCase
             ->assertSee('Histórica sin clasificar')
             ->assertSee('id="purchaseRows"', false)
             ->assertSee('id="purchaseDetailDialog"', false)
+            ->assertSee('id="purchaseEdit"', false)
             ->assertSee('id="purchaseVoidReason"', false)
             ->assertSee('Cliente → nuestra empresa', false)
             ->assertSee('Cliente → proveedor', false)
@@ -446,6 +450,21 @@ class WebViewsTest extends TestCase
             ->assertSee('css/finanzas.css?v=', false)
             ->assertSee(asset('js/compra-form.js'), false);
 
+        $this->get(route('compras.edit', ['compra' => 123]))
+            ->assertOk()
+            ->assertSee('Editar compra')
+            ->assertSee('id="purchaseForm"', false)
+            ->assertSee('data-purchase-id="123"', false)
+            ->assertSee('data-can-edit-purchases=', false)
+            ->assertSee('data-can-edit-cash-purchases=', false)
+            ->assertSee('id="purchaseCorrectionNote"', false)
+            ->assertSee('El original quedará anulado y se creará el registro corregido para conservar la trazabilidad.')
+            ->assertSee('id="purchaseSave"', false)
+            ->assertSee('Guardar corrección')
+            ->assertSee('id="purchaseReset"', false)
+            ->assertSee('Restaurar datos originales')
+            ->assertSee(asset('js/compra-form.js'), false);
+
         $purchaseJavascript = file_get_contents(public_path('js/compras.js'));
         $purchaseFormJavascript = file_get_contents(public_path('js/compra-form.js'));
         $financeStylesheet = file_get_contents(public_path('css/finanzas.css'));
@@ -455,6 +474,7 @@ class WebViewsTest extends TestCase
         $this->assertIsString($financeStylesheet);
         $this->assertStringContainsString('/compras/catalogo', $purchaseJavascript);
         $this->assertStringContainsString('/compras?', $purchaseJavascript);
+        $this->assertStringContainsString('data-purchase-edit', $purchaseJavascript);
         $this->assertStringContainsString('/anular', $purchaseJavascript);
         $this->assertStringContainsString('tipo=PAGO_PROVEEDOR', $purchaseJavascript);
         $this->assertStringContainsString('tipo=PAGO_DIRECTO', $purchaseJavascript);
@@ -465,13 +485,15 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('status === "ANULADO" || condition === "LEGADO"', $purchaseJavascript);
         $this->assertStringContainsString('is-legacy', $purchaseJavascript);
         $this->assertStringContainsString('/compras/catalogo', $purchaseFormJavascript);
+        $this->assertStringContainsString('method: "PUT"', $purchaseFormJavascript);
+        $this->assertStringContainsString('idempotency_key:', $purchaseFormJavascript);
+        $this->assertStringContainsString('/compras/${encodeURIComponent', $purchaseFormJavascript);
         $this->assertStringContainsString('cuentas_propias', $purchaseFormJavascript);
         $this->assertStringContainsString('cuentas_proveedores', $purchaseFormJavascript);
         $this->assertStringContainsString('condicion: condition()', $purchaseFormJavascript);
         $this->assertStringContainsString('payload.pago =', $purchaseFormJavascript);
         $this->assertStringContainsString('peso_kg:', $purchaseFormJavascript);
         $this->assertStringContainsString('function roundMoney(value)', $purchaseFormJavascript);
-        $this->assertStringContainsString('idempotency_key:', $purchaseFormJavascript);
         $this->assertStringNotContainsString('no tiene saldo suficiente para esta compra', $purchaseFormJavascript);
         $this->assertStringContainsString('.fin-purchase-form-columns', $financeStylesheet);
         $this->assertStringContainsString('.fin-purchase-dialog', $financeStylesheet);

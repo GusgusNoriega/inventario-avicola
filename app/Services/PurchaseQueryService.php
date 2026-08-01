@@ -112,7 +112,7 @@ class PurchaseQueryService
         }
 
         /** @var LengthAwarePaginator $paginator */
-        $paginator = $query
+        $paginator = $this->withEditability($query)
             ->orderByDesc('compra.fecha_compra')
             ->orderByDesc('compra.id')
             ->paginate((int) ($filters['per_page'] ?? 30));
@@ -134,7 +134,7 @@ class PurchaseQueryService
     /** @return array<string, mixed> */
     public function purchase(int $companyId, int $purchaseId): array
     {
-        $purchase = $this->baseQuery($companyId, [])
+        $purchase = $this->withEditability($this->baseQuery($companyId, []))
             ->where('compra.id', $purchaseId)
             ->first();
         abort_unless($purchase, 404, 'Compra no encontrada.');
@@ -211,7 +211,32 @@ class PurchaseQueryService
                 'pago_inicial.codigo as pago_inicial_codigo',
                 'pago_inicial.estado as pago_inicial_estado',
                 'pago_inicial.importe as pago_inicial_importe',
+                'pago_inicial.cuenta_origen_id as pago_inicial_cuenta_origen_id',
+                'pago_inicial.cuenta_destino_id as pago_inicial_cuenta_destino_id',
+                'pago_inicial.metodo_pago_id as pago_inicial_metodo_pago_id',
+                'pago_inicial.fecha_hora as pago_inicial_fecha_hora',
+                'pago_inicial.referencia as pago_inicial_referencia',
+                'pago_inicial.observaciones as pago_inicial_observaciones',
             ]);
+    }
+
+    private function withEditability(Builder $query): Builder
+    {
+        return $query->selectSub(function (Builder $query): void {
+            $query->from('pago_aplicaciones as edit_aplicacion')
+                ->join('pagos as edit_pago', 'edit_pago.id', '=', 'edit_aplicacion.pago_id')
+                ->whereColumn('edit_aplicacion.comprobante_id', 'comprobante.id')
+                ->where('edit_pago.estado', 'REGISTRADO')
+                ->selectRaw('COUNT(DISTINCT edit_pago.id)');
+        }, 'active_application_payment_count')
+            ->selectSub(function (Builder $query): void {
+                $query->from('pago_aplicaciones as edit_aplicacion')
+                    ->join('pagos as edit_pago', 'edit_pago.id', '=', 'edit_aplicacion.pago_id')
+                    ->whereColumn('edit_aplicacion.comprobante_id', 'comprobante.id')
+                    ->where('edit_pago.estado', 'REGISTRADO')
+                    ->whereRaw('edit_pago.id <> COALESCE(compra.pago_inicial_id, 0)')
+                    ->selectRaw('COUNT(DISTINCT edit_pago.id)');
+            }, 'unexpected_active_application_payment_count');
     }
 
     /** @return array<string, mixed> */
@@ -220,6 +245,7 @@ class PurchaseQueryService
         $effectivePending = $purchase->comprobante_estado === 'ANULADO'
             ? '0.00'
             : FinancialMoney::normalize((string) $purchase->comprobante_saldo_pendiente);
+        [$editable, $editRestriction] = $this->purchaseEditability($purchase);
 
         return [
             'id' => (int) $purchase->id,
@@ -245,6 +271,8 @@ class PurchaseQueryService
             'saldo_pendiente' => $effectivePending,
             'estado' => $purchase->comprobante_estado,
             'estado_compra' => $purchase->estado,
+            'editable' => $editable,
+            'edit_restriction' => $editRestriction,
             'observaciones' => $purchase->observaciones,
             'comprobante' => [
                 'id' => (int) $purchase->comprobante_id,
@@ -257,6 +285,18 @@ class PurchaseQueryService
                 'codigo' => $purchase->pago_inicial_codigo,
                 'estado' => $purchase->pago_inicial_estado,
                 'importe' => FinancialMoney::normalize((string) $purchase->pago_inicial_importe),
+                'cuenta_origen_id' => $purchase->pago_inicial_cuenta_origen_id === null
+                    ? null
+                    : (int) $purchase->pago_inicial_cuenta_origen_id,
+                'cuenta_destino_id' => $purchase->pago_inicial_cuenta_destino_id === null
+                    ? null
+                    : (int) $purchase->pago_inicial_cuenta_destino_id,
+                'metodo_pago_id' => $purchase->pago_inicial_metodo_pago_id === null
+                    ? null
+                    : (int) $purchase->pago_inicial_metodo_pago_id,
+                'fecha_hora' => $purchase->pago_inicial_fecha_hora,
+                'referencia' => $purchase->pago_inicial_referencia,
+                'observaciones' => $purchase->pago_inicial_observaciones,
             ],
             'created_by' => (int) $purchase->created_by,
             'created_at' => $purchase->created_at,
@@ -264,6 +304,40 @@ class PurchaseQueryService
             'anulada_at' => $purchase->anulada_at,
             'motivo_anulacion' => $purchase->motivo_anulacion,
         ];
+    }
+
+    /** @return array{bool, ?string} */
+    private function purchaseEditability(object $purchase): array
+    {
+        if ($purchase->estado !== 'REGISTRADA' || $purchase->comprobante_estado === 'ANULADO') {
+            return [false, 'La compra anulada no puede editarse.'];
+        }
+        if ($purchase->condicion === 'LEGADO') {
+            return [false, 'Las compras historicas son de solo lectura.'];
+        }
+
+        $activePayments = (int) ($purchase->active_application_payment_count ?? 0);
+        if ($purchase->condicion === 'CREDITO') {
+            return $activePayments === 0
+                ? [true, null]
+                : [false, 'La compra tiene pagos aplicados. Anula primero los movimientos financieros relacionados.'];
+        }
+
+        if ($purchase->condicion === 'CONTADO') {
+            if ($purchase->pago_inicial_id === null || $purchase->pago_inicial_estado !== 'REGISTRADO') {
+                return [false, 'La compra al contado no tiene un pago inicial activo.'];
+            }
+            if ((int) ($purchase->unexpected_active_application_payment_count ?? 0) > 0) {
+                return [false, 'La compra tiene movimientos adicionales. Anulalos antes de editarla.'];
+            }
+            if ($activePayments !== 1) {
+                return [false, 'La aplicacion del pago inicial de la compra no esta disponible.'];
+            }
+
+            return [true, null];
+        }
+
+        return [false, 'La condicion de la compra no admite edicion.'];
     }
 
     /** @return array<string, mixed> */

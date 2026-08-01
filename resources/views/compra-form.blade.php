@@ -1,20 +1,32 @@
+@php
+  $purchaseId = request()->route('compra');
+  $isEditingPurchase = $purchaseId !== null;
+@endphp
 <!doctype html>
 <html lang="es" class="fin-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   @include('partials.pwa')
-  <title>Registrar compra | Sistema Pollos</title>
+  <title>{{ $isEditingPurchase ? 'Editar compra' : 'Registrar compra' }} | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/finanzas.css') }}?v={{ filemtime(public_path('css/finanzas.css')) }}">
 </head>
-<body class="fin-page fin-purchase-form-page" data-purchases-url="{{ route('compras.index') }}">
+<body
+  class="fin-page fin-purchase-form-page"
+  data-purchases-url="{{ route('compras.index') }}"
+  data-purchase-id="{{ $purchaseId ?? '' }}"
+  data-can-edit-purchases="{{ auth()->user()->hasPermission('COMPRAS_REGISTRAR') && auth()->user()->hasPermission('COMPRAS_ANULAR') ? '1' : '0' }}"
+  data-can-edit-cash-purchases="{{ auth()->user()->hasPermission('COMPRAS_REGISTRAR') && auth()->user()->hasPermission('COMPRAS_ANULAR') && auth()->user()->hasPermission('PAGOS_REGISTRAR') && auth()->user()->hasPermission('PAGOS_ANULAR') ? '1' : '0' }}"
+>
   <main class="fin-shell">
     @include('partials.finanzas-header', [
       'active' => 'compras',
-      'eyebrow' => 'Nueva obligación de proveedor',
-      'title' => 'Registrar compra',
-      'description' => 'Guarda el documento y sus productos; elige si queda pendiente o si se paga al momento.'
+      'eyebrow' => $isEditingPurchase ? 'Corrección con trazabilidad' : 'Nueva obligación de proveedor',
+      'title' => $isEditingPurchase ? 'Editar compra' : 'Registrar compra',
+      'description' => $isEditingPurchase
+        ? 'Corrige los datos conservando el registro original y su historial financiero.'
+        : 'Guarda el documento y sus productos; elige si queda pendiente o si se paga al momento.'
     ])
 
     <section class="fin-purchase-form-guide fin-card" aria-label="Efecto financiero de la compra">
@@ -133,6 +145,10 @@
                 <span id="purchasePaymentReferenceLabel">Número de operación / referencia</span>
                 <input id="purchasePaymentReference" type="text" maxlength="100" autocomplete="off" placeholder="Ej: OP-384729">
               </label>
+              <label class="fin-field fin-grid-span-2">
+                <span>Observaciones del pago</span>
+                <textarea id="purchasePaymentNotes" rows="2" maxlength="2000" placeholder="Detalle opcional del pago"></textarea>
+              </label>
             </div>
           </section>
         </div>
@@ -147,9 +163,12 @@
           </label>
           <div class="fin-summary-line fin-summary-line-total"><span>Total</span><strong id="purchaseTotal">S/ 0.00</strong></div>
           <p id="purchaseSummaryHint" class="fin-summary-hint">Al guardar se creará una deuda por el total de la compra.</p>
+          @if ($isEditingPurchase)
+          <p id="purchaseCorrectionNote" class="fin-purchase-correction-note">El original quedará anulado y se creará el registro corregido para conservar la trazabilidad.</p>
+          @endif
           <p id="purchaseFormMessage" class="fin-message" role="status" aria-live="polite"></p>
-          <button id="purchaseSave" class="fin-btn fin-btn-primary fin-btn-block" type="submit">Registrar compra a crédito</button>
-          <button id="purchaseReset" class="fin-btn fin-btn-ghost fin-btn-block" type="button">Limpiar formulario</button>
+          <button id="purchaseSave" class="fin-btn fin-btn-primary fin-btn-block" type="submit">{{ $isEditingPurchase ? 'Guardar corrección' : 'Registrar compra a crédito' }}</button>
+          <button id="purchaseReset" class="fin-btn fin-btn-ghost fin-btn-block" type="button">{{ $isEditingPurchase ? 'Restaurar datos originales' : 'Limpiar formulario' }}</button>
           <a class="fin-btn fin-btn-ghost fin-btn-block" href="{{ route('compras.index') }}">Volver al historial</a>
         </aside>
       </div>

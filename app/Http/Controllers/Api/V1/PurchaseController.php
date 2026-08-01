@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Purchase\ListPurchasesRequest;
 use App\Http\Requests\Purchase\StorePurchaseRequest;
+use App\Http\Requests\Purchase\UpdatePurchaseRequest;
 use App\Http\Requests\Purchase\VoidPurchaseRequest;
 use App\Services\PurchaseQueryService;
 use App\Services\PurchaseService;
@@ -61,6 +62,30 @@ class PurchaseController extends Controller
     {
         return response()->json([
             'data' => $this->queries->purchase((int) $request->user()->empresa_id, $compra),
+        ]);
+    }
+
+    public function update(UpdatePurchaseRequest $request, int $compra): JsonResponse
+    {
+        $result = $this->purchases->correct(
+            (int) $request->user()->empresa_id,
+            $request->user(),
+            $compra,
+            $request->validated(),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => $result['idempotent']
+                ? 'La correccion ya habia sido aplicada con esta clave de idempotencia.'
+                : 'Compra corregida correctamente.',
+            'data' => $this->queries->purchase(
+                (int) $request->user()->empresa_id,
+                $result['compra_id'],
+            ),
+            'original_compra_id' => $result['original_compra_id'],
+            'reversa_id' => $result['reversa_id'],
+            'meta' => ['idempotent' => $result['idempotent']],
         ]);
     }
 

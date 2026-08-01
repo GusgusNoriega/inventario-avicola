@@ -107,6 +107,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('finanzas.tickets');
             Route::view('/compras', 'compras')->name('compras.index');
             Route::view('/compras/nueva', 'compra-form')->name('compras.create');
+            Route::view('/compras/{compra}/editar', 'compra-form')
+                ->whereNumber('compra')
+                ->name('compras.edit');
             Route::get('/finanzas/reportes', [ReportController::class, 'index'])
                 ->name('finanzas.reportes');
             Route::get('/finanzas/reportes/{type}/pdf', [ReportController::class, 'pdf'])

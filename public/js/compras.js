@@ -39,6 +39,7 @@ const elements = {
   detailMessage: document.getElementById("purchaseDetailMessage"),
   detailContent: document.getElementById("purchaseDetailContent"),
   detailClose: document.getElementById("purchaseDetailClose"),
+  edit: document.getElementById("purchaseEdit"),
   companyPayment: document.getElementById("purchaseCompanyPayment"),
   providerCredit: document.getElementById("purchaseProviderCredit"),
   directPayment: document.getElementById("purchaseDirectPayment"),
@@ -48,6 +49,11 @@ const elements = {
   voidMessage: document.getElementById("purchaseVoidMessage"),
   voidConfirm: document.getElementById("purchaseVoidConfirm"),
   voidCancel: document.getElementById("purchaseVoidCancel")
+};
+
+const permissions = {
+  edit: document.body.dataset.canEditPurchases === "1",
+  editCash: document.body.dataset.canEditCashPurchases === "1"
 };
 
 const state = {
@@ -145,6 +151,20 @@ function statusClass(status) {
   return "is-pending";
 }
 
+function trueValue(value) {
+  return value === true || value === 1 || String(value).toLowerCase() === "true" || String(value) === "1";
+}
+
+function canEditPurchase(purchase) {
+  if (!permissions.edit || !trueValue(firstDefined(purchase, ["editable"], false))) return false;
+  return purchaseCondition(purchase) !== "CONTADO" || permissions.editCash;
+}
+
+function purchaseEditUrl(id) {
+  const template = document.body.dataset.purchaseEditUrl || "/compras/__ID__/editar";
+  return template.replace("__ID__", encodeURIComponent(id));
+}
+
 function renderSummary(response, records) {
   const summary = firstDefined(response, ["resumen", "summary", "data.resumen", "data.summary"], {});
   const calculated = records.reduce((totals, record) => {
@@ -178,6 +198,9 @@ function renderRows(records) {
     const status = purchaseStatus(purchase);
     const currency = purchaseCurrency(purchase);
     const date = firstDefined(purchase, ["fecha_compra", "fecha_emision", "date"], null);
+    const editAction = canEditPurchase(purchase)
+      ? `<a class="fin-btn fin-btn-ghost fin-btn-small" href="${escapeHtml(purchaseEditUrl(id))}" data-purchase-edit="${escapeHtml(id)}">Editar</a>`
+      : "";
 
     return `
       <tr>
@@ -188,7 +211,7 @@ function renderRows(records) {
         <td class="fin-text-right fin-table-amount">${escapeHtml(formatMoney(purchaseTotal(purchase), currency))}</td>
         <td class="fin-text-right fin-table-amount ${purchasePending(purchase) > 0 ? "is-pending" : ""}">${escapeHtml(formatMoney(purchasePending(purchase), currency))}</td>
         <td><span class="fin-status-tag ${statusClass(status)}">${escapeHtml(status.replaceAll("_", " "))}</span></td>
-        <td class="fin-text-right"><button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-purchase-detail="${escapeHtml(id)}">Ver detalle</button></td>
+        <td class="fin-text-right"><div class="fin-purchase-row-actions">${editAction}<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-purchase-detail="${escapeHtml(id)}">Ver detalle</button></div></td>
       </tr>`;
   }).join("");
 }
@@ -268,6 +291,7 @@ function detailLines(purchase) {
 }
 
 function renderDetail(purchase) {
+  const id = firstDefined(purchase, ["id", "compra_id"]);
   const status = purchaseStatus(purchase);
   const condition = purchaseCondition(purchase);
   const currency = purchaseCurrency(purchase);
@@ -314,6 +338,9 @@ function renderDetail(purchase) {
   const movementBase = document.body.dataset.financeMovementUrl || "/finanzas/movimientos/nuevo";
   const balancesBase = document.body.dataset.financeBalancesUrl || "/finanzas/saldos";
   const hasPending = pending > 0 && !["ANULADO", "PAGADO"].includes(status);
+  elements.edit.hidden = !canEditPurchase(purchase);
+  elements.edit.href = purchaseEditUrl(id);
+  elements.edit.dataset.purchaseEdit = String(id);
   elements.companyPayment.hidden = !hasPending;
   elements.providerCredit.hidden = !hasPending;
   elements.directPayment.hidden = !hasPending;
@@ -331,6 +358,7 @@ async function showPurchase(id, successMessage = "") {
   state.currentPurchase = null;
   elements.detailTitle.textContent = "Consultando compra...";
   elements.detailContent.innerHTML = "";
+  elements.edit.hidden = true;
   elements.companyPayment.hidden = true;
   elements.providerCredit.hidden = true;
   elements.directPayment.hidden = true;
