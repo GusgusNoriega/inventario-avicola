@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\Balanza;
 use App\Models\CuentaFinanciera;
 use App\Models\MovimientoCajaEfectivo;
 use App\Models\Pago;
+use App\Models\Pesada;
+use App\Models\TicketDespacho;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -64,6 +67,11 @@ class CashRegisterQueryService
             $from,
             $to,
         );
+        $retailStationTwoDispatch = $this->retailStationTwoDispatch(
+            $companyId,
+            $from,
+            $to,
+        );
         $income = '0.00';
         $expense = '0.00';
         foreach ($formatted as $movement) {
@@ -82,6 +90,7 @@ class CashRegisterQueryService
                 'egresos' => $expense,
                 'total' => FinancialMoney::subtract($income, $expense),
                 'neto' => FinancialMoney::subtract($income, $expense),
+                'despacho_minorista_2' => $retailStationTwoDispatch,
                 'moneda' => $cashRegister->moneda,
                 'fecha' => $filters['fecha'],
                 'timezone' => $timezone,
@@ -111,6 +120,56 @@ class CashRegisterQueryService
             $cashRegisterId,
             $this->companyTimezone($companyId),
         )[0];
+    }
+
+    /** @return array{importe: string, moneda: string, solo_informativo: true} */
+    private function retailStationTwoDispatch(int $companyId, string $from, string $to): array
+    {
+        $amount = DB::table('pesadas as pesada')
+            ->join('tickets_despacho as ticket', 'ticket.id', '=', 'pesada.ticket_id')
+            ->join('ticket_precios as precio', function ($join): void {
+                $join->on('precio.ticket_id', '=', 'ticket.id')
+                    ->on('precio.tipo_pollo_id', '=', 'pesada.tipo_pollo_id');
+            })
+            ->join('jornadas_operativas as jornada', 'jornada.id', '=', 'ticket.jornada_id')
+            ->join('sucursales as sucursal', 'sucursal.id', '=', 'jornada.sucursal_id')
+            ->where('sucursal.empresa_id', $companyId)
+            ->where('ticket.canal', TicketDespacho::CHANNEL_RETAIL)
+            ->where('ticket.tipo_operacion', TicketDespacho::OPERATION_DISPATCH)
+            ->where('ticket.estado', TicketDespacho::STATUS_CLOSED)
+            ->where('pesada.estado', Pesada::STATUS_ACTIVE)
+            ->whereRaw('COALESCE(ticket.cerrado_at, ticket.created_at) >= ?', [$from])
+            ->whereRaw('COALESCE(ticket.cerrado_at, ticket.created_at) < ?', [$to])
+            ->whereExists(function (Builder $marker) use ($companyId): void {
+                $marker->selectRaw('1')
+                    ->from('pesadas as marca')
+                    ->leftJoin(
+                        'ajustes_peso_minorista as ajuste',
+                        'ajuste.id',
+                        '=',
+                        'marca.ajuste_peso_minorista_id',
+                    )
+                    ->whereColumn('marca.ticket_id', 'ticket.id')
+                    ->where(function (Builder $station) use ($companyId): void {
+                        $station
+                            ->where('marca.origen_peso', Balanza::CODE_RETAIL_2)
+                            ->orWhere(function (Builder $adjustment) use ($companyId): void {
+                                $adjustment
+                                    ->where('ajuste.empresa_id', $companyId)
+                                    ->where('ajuste.estacion', 2);
+                            });
+                    });
+            })
+            ->selectRaw(
+                'COALESCE(SUM(ROUND(pesada.peso_neto_kg * precio.precio_kg, 2)), 0) as importe'
+            )
+            ->value('importe');
+
+        return [
+            'importe' => FinancialMoney::normalize(bcadd((string) ($amount ?? '0'), '0', 2)),
+            'moneda' => $this->companyCurrency($companyId),
+            'solo_informativo' => true,
+        ];
     }
 
     /** @return list<array{moneda: string, importe: string}> */
@@ -350,6 +409,14 @@ class CashRegisterQueryService
         return (string) (
             DB::table('empresas')->where('id', $companyId)->value('zona_horaria')
             ?: config('app.timezone', 'UTC')
+        );
+    }
+
+    private function companyCurrency(int $companyId): string
+    {
+        return (string) (
+            DB::table('empresas')->where('id', $companyId)->value('moneda')
+            ?: 'PEN'
         );
     }
 

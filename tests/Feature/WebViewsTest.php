@@ -181,6 +181,9 @@ class WebViewsTest extends TestCase
             ->assertSee('id="cashRegisterIncome"', false)
             ->assertSee('Centro')
             ->assertSee('id="cashRegisterAccountIncome"', false)
+            ->assertSee('Despacho minorista 2')
+            ->assertSee('solo informativo; no modifica la caja')
+            ->assertSee('id="cashRegisterRetailTwoDispatch"', false)
             ->assertSee('id="cashRegisterExpense"', false)
             ->assertSee('id="cashRegisterNet"', false)
             ->assertSee('id="cashRegisterList"', false)
@@ -380,6 +383,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('function reloadLedgerAfterMutation()', $cashRegisterJavascript);
         $this->assertStringContainsString('function accountIncomeText(', $cashRegisterJavascript);
         $this->assertStringContainsString('summary.ingresos_cuentas', $cashRegisterJavascript);
+        $this->assertStringContainsString('summary.despacho_minorista_2', $cashRegisterJavascript);
+        $this->assertStringContainsString('retailTwoDispatch.importe', $cashRegisterJavascript);
+        $this->assertStringContainsString('.fin-cash-summary-retail-two', $financeStylesheet);
         $this->assertStringContainsString('BroadcastChannel', $cashRegisterJavascript);
         $this->assertStringContainsString('aria-activedescendant', $cashRegisterJavascript);
         $this->assertMatchesRegularExpression(

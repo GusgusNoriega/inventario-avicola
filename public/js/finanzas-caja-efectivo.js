@@ -18,6 +18,7 @@ const elements = {
   configMessage: byId("cashRegisterConfigMessage"),
   income: byId("cashRegisterIncome"),
   accountIncome: byId("cashRegisterAccountIncome"),
+  retailTwoDispatch: byId("cashRegisterRetailTwoDispatch"),
   expense: byId("cashRegisterExpense"),
   net: byId("cashRegisterNet"),
   refresh: byId("cashRegisterRefresh"),
@@ -64,6 +65,7 @@ const channel = "BroadcastChannel" in window
 const state = {
   companyId: null,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima",
+  retailTwoDispatchCurrency: "PEN",
   cashRegisters: [],
   clients: [],
   records: new Map(),
@@ -207,6 +209,7 @@ function resetSummary() {
   const currency = selectedCashRegister()?.moneda || "PEN";
   elements.income.textContent = formatMoney(0, currency);
   elements.accountIncome.textContent = accountIncomeText([], currency);
+  elements.retailTwoDispatch.textContent = formatMoney(0, state.retailTwoDispatchCurrency);
   elements.expense.textContent = formatMoney(0, currency);
   elements.net.textContent = formatMoney(0, currency);
 }
@@ -269,8 +272,14 @@ function renderLedger(records) {
 
 function applySummary(summary = {}) {
   const currency = summary.moneda || selectedCashRegister()?.moneda || "PEN";
+  const retailTwoDispatch = summary.despacho_minorista_2 || {};
+  state.retailTwoDispatchCurrency = retailTwoDispatch.moneda || state.retailTwoDispatchCurrency;
   elements.income.textContent = formatMoney(summary.ingresos || 0, currency);
   elements.accountIncome.textContent = accountIncomeText(summary.ingresos_cuentas, currency);
+  elements.retailTwoDispatch.textContent = formatMoney(
+    retailTwoDispatch.importe || 0,
+    state.retailTwoDispatchCurrency
+  );
   elements.expense.textContent = formatMoney(summary.egresos || 0, currency);
   elements.net.textContent = formatMoney(summary.total || 0, currency);
   elements.net.classList.toggle("is-negative", Number(summary.total || 0) < 0);

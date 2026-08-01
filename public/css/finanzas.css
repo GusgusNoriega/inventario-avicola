@@ -2241,6 +2241,17 @@ body.fin-page {
   text-align: right;
 }
 
+.fin-cash-summary {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.fin-cash-summary-retail-two {
+  border-color: rgba(242, 194, 48, .38);
+  background: linear-gradient(145deg, rgba(73, 54, 15, .72), rgba(25, 19, 8, .98));
+}
+
+.fin-cash-summary-retail-two > strong { color: #f8d865; }
+
 .fin-cash-summary-income {
   border-color: rgba(54, 216, 128, .36);
   background: linear-gradient(145deg, rgba(15, 61, 42, .68), rgba(8, 21, 18, .98));

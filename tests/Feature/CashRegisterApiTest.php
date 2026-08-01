@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Balanza;
 use App\Models\Permission;
+use App\Models\Pesada;
 use App\Models\Role;
+use App\Models\TicketDespacho;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -479,6 +482,124 @@ class CashRegisterApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '50.25')
             ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
+    }
+
+    public function test_daily_summary_reports_station_two_retail_dispatch_without_changing_cash_totals(): void
+    {
+        $context = $this->retailDispatchSummaryContext($this->user);
+
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'INGRESO',
+                'contraparte_tipo' => 'OTRO',
+                'fecha_hora' => '2026-07-31 09:00:00',
+                'importe' => '150.25',
+                'detalle' => 'Ingreso que sí pertenece a la caja',
+            ],
+        ))->assertCreated();
+        $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            [
+                'direccion' => 'EGRESO',
+                'contraparte_tipo' => 'ADMINISTRATIVO',
+                'fecha_hora' => '2026-07-31 10:00:00',
+                'importe' => '40.10',
+                'detalle' => 'Gasto que sí pertenece a la caja',
+            ],
+        ))->assertCreated();
+
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M2-BALANZA',
+            '2026-07-31 11:00:00',
+            station: 2,
+            weightSource: Balanza::CODE_RETAIL_2,
+        );
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M2-MANUAL',
+            '2026-07-31 12:00:00',
+            station: 2,
+            weightSource: 'MANUAL',
+        );
+
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M1-CONTROL',
+            '2026-07-31 13:00:00',
+            station: 1,
+            weightSource: 'MANUAL',
+        );
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M2-ANULADO',
+            '2026-07-31 14:00:00',
+            station: 2,
+            weightSource: 'MANUAL',
+            ticketStatus: TicketDespacho::STATUS_VOIDED,
+        );
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M2-DEVOLUCION',
+            '2026-07-31 15:00:00',
+            station: 2,
+            weightSource: 'MANUAL',
+            operationType: TicketDespacho::OPERATION_RETURN,
+        );
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M2-PESADA-ANULADA',
+            '2026-07-31 16:00:00',
+            station: 2,
+            weightSource: 'MANUAL',
+            weighingStatus: Pesada::STATUS_VOIDED,
+        );
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'MAYORISTA-CONTROL',
+            '2026-07-31 17:00:00',
+            station: 2,
+            weightSource: Balanza::CODE_RETAIL_2,
+            channel: TicketDespacho::CHANNEL_WHOLESALE,
+        );
+        $this->createRetailDispatchSummaryTicket(
+            $context,
+            'M2-DIA-SIGUIENTE',
+            '2026-08-01 11:00:00',
+            station: 2,
+            weightSource: 'MANUAL',
+        );
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('resumen.ingresos', '150.25')
+            ->assertJsonPath('resumen.egresos', '40.10')
+            ->assertJsonPath('resumen.total', '110.15')
+            ->assertJsonPath('resumen.neto', '110.15')
+            ->assertJsonCount(0, 'resumen.ingresos_cuentas')
+            ->assertJsonPath('resumen.despacho_minorista_2.importe', '2.46')
+            ->assertJsonPath('resumen.despacho_minorista_2.moneda', 'PEN')
+            ->assertJsonPath('resumen.despacho_minorista_2.solo_informativo', true);
+
+        $usdCashRegisterId = $this->financialAccount(
+            $this->cashEntityId,
+            $this->user->id,
+            'Caja USD para resumen minorista',
+            'CAJA',
+            'ACTIVO',
+            'USD',
+        );
+        $this->getJson($this->dailyUrl($usdCashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonPath('resumen.moneda', 'USD')
+            ->assertJsonPath('resumen.despacho_minorista_2.importe', '2.46')
+            ->assertJsonPath('resumen.despacho_minorista_2.moneda', 'PEN');
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonPath('resumen.despacho_minorista_2.importe', '1.23');
     }
 
     public function test_a_cash_transfer_is_an_expense_in_the_source_and_income_in_the_destination(): void
@@ -989,6 +1110,176 @@ class CashRegisterApiTest extends TestCase
             'caja_id' => $cashRegisterId,
             'fecha' => $date,
         ]);
+    }
+
+    /**
+     * @return array{
+     *     company_id: int,
+     *     user_id: int,
+     *     branch_id: int,
+     *     chicken_type_id: int,
+     *     tray_type_id: int,
+     *     price_history_id: int,
+     *     adjustments: array<int, int>
+     * }
+     */
+    private function retailDispatchSummaryContext(User $user): array
+    {
+        $companyId = (int) $user->empresa_id;
+        $userId = (int) $user->id;
+        $branchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $companyId,
+            'codigo' => "CAJA-{$companyId}",
+            'nombre' => 'Sucursal para resumen de caja',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $chickenTypeId = DB::table('tipos_pollo')->insertGetId([
+            'codigo' => "POLLO_CAJA_{$companyId}",
+            'nombre' => 'Pollo para resumen de caja',
+            'permite_despacho' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $priceListId = DB::table('listas_precios')->insertGetId([
+            'empresa_id' => $companyId,
+            'tercero_id' => null,
+            'codigo' => "LISTA-CAJA-{$companyId}",
+            'nombre' => 'Lista para resumen de caja',
+            'operacion' => 'VENTA',
+            'estado' => 'ACTIVO',
+            'created_by' => $userId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $priceHistoryId = DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $priceListId,
+            'tipo_pollo_id' => $chickenTypeId,
+            'precio_kg' => '1.2300',
+            'vigente_desde' => '2026-07-01 00:00:00',
+            'vigente_hasta' => null,
+            'motivo_cambio' => 'Precio para probar el indicador informativo',
+            'reemplaza_precio_id' => null,
+            'registrado_por' => $userId,
+            'created_at' => now(),
+        ]);
+        $adjustments = [];
+
+        foreach ([1, 2] as $station) {
+            $adjustments[$station] = DB::table('ajustes_peso_minorista')->insertGetId([
+                'empresa_id' => $companyId,
+                'estacion' => $station,
+                'codigo' => 'CAJA_RESUMEN',
+                'nombre' => "Ajuste caja puesto {$station}",
+                'sexo' => 'MACHO',
+                'presentacion' => 'CERRADO',
+                'gramos_adicionales' => 0,
+                'predeterminado' => true,
+                'estado' => 'ACTIVO',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return [
+            'company_id' => $companyId,
+            'user_id' => $userId,
+            'branch_id' => $branchId,
+            'chicken_type_id' => $chickenTypeId,
+            'tray_type_id' => (int) DB::table('tipos_bandeja')->value('id'),
+            'price_history_id' => (int) $priceHistoryId,
+            'adjustments' => $adjustments,
+        ];
+    }
+
+    /** @param array<string, mixed> $context */
+    private function createRetailDispatchSummaryTicket(
+        array $context,
+        string $code,
+        string $closedAt,
+        int $station = 2,
+        string $weightSource = 'MANUAL',
+        string $ticketStatus = TicketDespacho::STATUS_CLOSED,
+        string $operationType = TicketDespacho::OPERATION_DISPATCH,
+        string $weighingStatus = Pesada::STATUS_ACTIVE,
+        string $channel = TicketDespacho::CHANNEL_RETAIL,
+        string $weight = '1.004',
+        string $price = '1.2300',
+    ): int {
+        $operatingDate = substr($closedAt, 0, 10);
+        $journeyId = DB::table('jornadas_operativas')
+            ->where('sucursal_id', $context['branch_id'])
+            ->whereDate('fecha_operativa', $operatingDate)
+            ->value('id');
+
+        if (! $journeyId) {
+            $journeyId = DB::table('jornadas_operativas')->insertGetId([
+                'sucursal_id' => $context['branch_id'],
+                'fecha_operativa' => $operatingDate,
+                'estado' => 'ABIERTA',
+                'abierta_por' => $context['user_id'],
+                'inicio_at' => "{$operatingDate} 06:00:00",
+                'cierre_programado_at' => "{$operatingDate} 21:00:00",
+            ]);
+        }
+
+        $ticketId = DB::table('tickets_despacho')->insertGetId([
+            'jornada_id' => $journeyId,
+            'codigo' => $code,
+            'canal' => $channel,
+            'tipo_operacion' => $operationType,
+            'cliente_destino_id' => null,
+            'almacen_destino_id' => null,
+            'estado' => $ticketStatus,
+            'cerrado_por' => $context['user_id'],
+            'cerrado_at' => $closedAt,
+            'created_by' => $context['user_id'],
+            'created_at' => $closedAt,
+            'updated_at' => $closedAt,
+        ]);
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $context['chicken_type_id'],
+            'precio_historial_id' => $context['price_history_id'],
+            'precio_kg' => $price,
+            'origen_precio' => 'GENERAL',
+            'congelado_por' => $context['user_id'],
+            'created_at' => $closedAt,
+        ]);
+        DB::table('pesadas')->insert([
+            'ticket_id' => $ticketId,
+            'numero' => 1,
+            'tipo_pollo_id' => $context['chicken_type_id'],
+            'condicion_pollo' => Pesada::CHICKEN_CONDITION_LIVE,
+            'sexo' => Pesada::SEX_MALE,
+            'presentacion_pollo' => 'CERRADO',
+            'tipo_java_id' => null,
+            'tipo_bandeja_id' => $context['tray_type_id'],
+            'ajuste_peso_minorista_id' => $context['adjustments'][$station],
+            'origen_peso' => $weightSource,
+            'aves_por_java' => null,
+            'aves_por_bandeja' => 5,
+            'cantidad_javas' => null,
+            'cantidad_bandejas' => 1,
+            'cantidad_aves' => 5,
+            'peso_java_kg_snapshot' => null,
+            'peso_bandeja_kg_snapshot' => '0.000',
+            'peso_leido_kg' => $weight,
+            'ajuste_peso_gramos' => 0,
+            'peso_bruto_kg' => $weight,
+            'tara_total_kg' => '0.000',
+            'peso_neto_kg' => $weight,
+            'pesada_at' => $closedAt,
+            'estado' => $weighingStatus,
+            'created_by' => $context['user_id'],
+            'created_at' => $closedAt,
+            'updated_at' => $closedAt,
+        ]);
+
+        return (int) $ticketId;
     }
 
     private function financialEntity(
