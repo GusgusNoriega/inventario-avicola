@@ -113,6 +113,12 @@ function dateTimeInput(value = new Date()) {
   return Number.isNaN(date.getTime()) ? "" : dateParts(date, true);
 }
 
+function dateTimeInputForFilteredDay(day, value = new Date()) {
+  const currentDateTime = dateTimeInput(value);
+  if (!currentDateTime || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return currentDateTime;
+  return `${day}${currentDateTime.slice(10)}`;
+}
+
 function formatMovementTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value || "");
@@ -465,7 +471,7 @@ function openCreateDialog() {
   elements.dialogTitle.textContent = "Registrar efectivo";
   elements.submit.textContent = "Guardar movimiento";
   elements.direction.value = "INGRESO";
-  elements.movementDate.value = dateTimeInput();
+  elements.movementDate.value = dateTimeInputForFilteredDay(elements.date.value);
   elements.counterpartType.value = "CLIENTE";
   elements.detail.value = "";
   clearClient();

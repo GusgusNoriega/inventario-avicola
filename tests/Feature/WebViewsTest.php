@@ -361,6 +361,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/caja-efectivo?', $cashRegisterJavascript);
         $this->assertStringContainsString('localStorage.setItem', $cashRegisterJavascript);
         $this->assertStringContainsString('POLL_INTERVAL = 3000', $cashRegisterJavascript);
+        $this->assertStringContainsString('function dateTimeInputForFilteredDay(', $cashRegisterJavascript);
+        $this->assertStringContainsString('dateTimeInputForFilteredDay(elements.date.value)', $cashRegisterJavascript);
         $this->assertStringContainsString('function reloadLedgerAfterMutation()', $cashRegisterJavascript);
         $this->assertStringContainsString('function accountIncomeText(', $cashRegisterJavascript);
         $this->assertStringContainsString('summary.ingresos_cuentas', $cashRegisterJavascript);
