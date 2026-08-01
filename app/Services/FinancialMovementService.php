@@ -6,6 +6,7 @@ use App\Models\Pago;
 use App\Models\User;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -100,13 +101,7 @@ class FinancialMovementService
                 ]);
             }
 
-            $collectionDetail = DB::table('cobranza_detalles as detalle')
-                ->join('cobranzas as cobranza', 'cobranza.id', '=', 'detalle.cobranza_id')
-                ->where('cobranza.empresa_id', $companyId)
-                ->where('detalle.pago_id', $paymentId)
-                ->lockForUpdate()
-                ->first(['detalle.id']);
-            if ($collectionDetail) {
+            if ($this->collectionForPayment($companyId, $paymentId)) {
                 throw ValidationException::withMessages([
                     'movimiento' => 'Este movimiento pertenece a una cobranza consolidada y no puede editarse por separado.',
                 ]);
@@ -453,19 +448,14 @@ class FinancialMovementService
                 ->first();
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
 
-            $collectionDetail = DB::table('cobranza_detalles as detalle')
-                ->join('cobranzas as cobranza', 'cobranza.id', '=', 'detalle.cobranza_id')
-                ->where('cobranza.empresa_id', $companyId)
-                ->where('detalle.pago_id', $paymentId)
-                ->lockForUpdate()
-                ->first(['detalle.cobranza_id']);
-            if ($collectionDetail
-                && (int) $collectionDetail->cobranza_id !== (int) $collectionContextId) {
+            $collectionLink = $this->collectionForPayment($companyId, $paymentId);
+            if ($collectionLink
+                && (int) $collectionLink->cobranza_id !== (int) $collectionContextId) {
                 throw ValidationException::withMessages([
                     'movimiento' => 'Este movimiento pertenece a una cobranza consolidada. Anula el voucher completo desde Cobranzas.',
                 ]);
             }
-            if ($collectionContextId !== null && ! $collectionDetail) {
+            if ($collectionContextId !== null && ! $collectionLink) {
                 throw ValidationException::withMessages([
                     'movimiento' => 'El movimiento no pertenece a la cobranza indicada.',
                 ]);
@@ -839,6 +829,22 @@ class FinancialMovementService
                 $this->assertEmpty($data, ['cuenta_origen_id']);
                 $this->assertExternalForProvider($destination, (int) $data['proveedor_id'], 'cuenta_destino_id');
                 $this->assertOnlySides($data, ['CXC', 'CXP']);
+                break;
+
+            case Pago::TYPE_UNASSIGNED_DEPOSIT:
+                $this->required($data, ['cuenta_destino_id', 'metodo_pago_id']);
+                $this->assertEmpty($data, ['cliente_id', 'cuenta_origen_id']);
+                if (empty($data['proveedor_id'])) {
+                    $this->assertOwn($destination, 'cuenta_destino_id');
+                    $this->assertNoApplications($data);
+                } else {
+                    $this->assertExternalForProvider(
+                        $destination,
+                        (int) $data['proveedor_id'],
+                        'cuenta_destino_id',
+                    );
+                    $this->assertOnlySides($data, ['CXP']);
+                }
                 break;
 
             case Pago::TYPE_PROVIDER_PAYMENT:
@@ -1266,6 +1272,9 @@ class FinancialMovementService
         if ($data['tipo'] === 'PAGO_DIRECTO') {
             return 'DIRECTO';
         }
+        if ($data['tipo'] === Pago::TYPE_UNASSIGNED_DEPOSIT) {
+            return empty($data['proveedor_id']) ? Pago::DIRECTION_INCOME : 'DIRECTO';
+        }
         if ($data['tipo'] === 'TRANSFERENCIA_INTERNA') {
             return 'TRANSFERENCIA';
         }
@@ -1332,6 +1341,20 @@ class FinancialMovementService
         if (! $account || $account->entidad_tipo !== 'PROPIA') {
             throw ValidationException::withMessages([$field => 'Debe seleccionar una cuenta de una entidad propia.']);
         }
+    }
+
+    private function collectionForPayment(int $companyId, int $paymentId): ?object
+    {
+        return DB::table('cobranzas as cobranza')
+            ->leftJoin('cobranza_detalles as detalle', 'detalle.cobranza_id', '=', 'cobranza.id')
+            ->leftJoin('cobranza_pendientes as pendiente', 'pendiente.cobranza_id', '=', 'cobranza.id')
+            ->where('cobranza.empresa_id', $companyId)
+            ->where(function (Builder $query) use ($paymentId): void {
+                $query->where('detalle.pago_id', $paymentId)
+                    ->orWhere('pendiente.pago_id', $paymentId);
+            })
+            ->lockForUpdate()
+            ->first(['cobranza.id as cobranza_id']);
     }
 
     private function assertExternalForProvider(?object $account, int $providerId, string $field): void

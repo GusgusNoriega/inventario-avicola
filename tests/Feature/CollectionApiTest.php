@@ -214,6 +214,155 @@ class CollectionApiTest extends TestCase
             ->assertJsonFragment(['reference' => 'VOUCHER-PROV-001']);
     }
 
+    public function test_an_own_account_collection_can_keep_the_undisclosed_remainder_pending_without_affecting_customer_receivables(): void
+    {
+        $collector = $this->collector('Cobrador con pendiente propio');
+        [, $account] = $this->financialAccount('PROPIA', null, 'Banco con pendiente propio');
+        $client = $this->thirdParty('CLIENTE', 'Cliente parcialmente identificado', '10444448');
+        $receivable = $this->document('VENTA', $client, '400.00', 'CXC-PENDIENTE-PROPIO', '2026-07-01');
+
+        $response = $this->postJson('/api/v1/finanzas/cobranzas', $this->collectionPayload(
+            (string) Str::uuid(),
+            $collector,
+            $account,
+            '500.00',
+            [['cliente_id' => $client, 'fecha_recepcion' => '2026-07-30', 'importe' => '200.00']],
+            ['referencia' => 'VOUCHER-PENDIENTE-PROPIO'],
+        ))->assertCreated()
+            ->assertJsonPath('data.importe_total', '500.00')
+            ->assertJsonPath('data.importe_asignado', '200.00')
+            ->assertJsonPath('data.importe_pendiente', '300.00')
+            ->assertJsonPath('data.conciliacion', 'PENDIENTE')
+            ->assertJsonPath('data.pendiente.importe', '300.00')
+            ->assertJsonPath('data.pendiente.pago.tipo', 'DEPOSITO_NO_ASIGNADO');
+        $collectionId = (int) $response->json('data.id');
+
+        $detailPaymentId = (int) DB::table('cobranza_detalles')
+            ->where('cobranza_id', $collectionId)
+            ->value('pago_id');
+        $pending = DB::table('cobranza_pendientes')
+            ->where('cobranza_id', $collectionId)
+            ->first();
+        $this->assertNotNull($pending);
+        $this->assertSame('300.00', $this->money($pending->importe));
+        $this->assertNotSame($detailPaymentId, (int) $pending->pago_id);
+
+        $this->assertDatabaseHas('pagos', [
+            'id' => $detailPaymentId,
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $client,
+            'cuenta_destino_id' => $account,
+            'importe' => 200,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $pending->pago_id,
+            'tipo' => 'DEPOSITO_NO_ASIGNADO',
+            'cliente_id' => null,
+            'proveedor_id' => null,
+            'cuenta_destino_id' => $account,
+            'importe' => 300,
+        ]);
+        $this->assertDatabaseMissing('pago_aplicaciones', ['pago_id' => $pending->pago_id]);
+        $this->assertSame('200.00', $this->money(DB::table('pago_aplicaciones')
+            ->where('pago_id', $detailPaymentId)
+            ->where('lado', 'CXC')
+            ->sum('importe_aplicado')));
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $receivable,
+            'saldo_pendiente' => 200,
+            'estado' => 'PARCIAL',
+        ]);
+        $this->assertSame('500.00', app(FinancialAccountBalanceService::class)->forAccount($account)['saldo']);
+        $this->assertDatabaseCount('pagos', 2);
+
+        $this->getJson("/api/v1/finanzas/cobranzas/{$collectionId}")
+            ->assertOk()
+            ->assertJsonPath('data.importe_asignado', '200.00')
+            ->assertJsonPath('data.importe_pendiente', '300.00')
+            ->assertJsonPath('data.conciliacion', 'PENDIENTE')
+            ->assertJsonPath('data.pendiente.importe', '300.00')
+            ->assertJsonPath('data.pendiente.pago.id', (int) $pending->pago_id)
+            ->assertJsonPath('data.pendiente.pago.cliente', null);
+    }
+
+    public function test_a_provider_collection_uses_the_full_deposit_for_payables_while_only_the_breakdown_affects_customer_receivables(): void
+    {
+        $collector = $this->collector('Cobrador con pendiente proveedor');
+        $provider = $this->thirdParty('PROVEEDOR', 'Proveedor con depósito pendiente', '20444444445');
+        [, $providerAccount] = $this->financialAccount('EXTERNA', $provider, 'Cuenta proveedor con pendiente');
+        $client = $this->thirdParty('CLIENTE', 'Cliente identificado parcialmente', '10444449');
+        $receivable = $this->document('VENTA', $client, '400.00', 'CXC-PENDIENTE-PROVEEDOR', '2026-07-01');
+        $payable = $this->document('COMPRA', $provider, '450.00', 'CXP-PENDIENTE-PROVEEDOR', '2026-06-01');
+
+        $response = $this->postJson('/api/v1/finanzas/cobranzas', $this->collectionPayload(
+            (string) Str::uuid(),
+            $collector,
+            $providerAccount,
+            '500.00',
+            [['cliente_id' => $client, 'fecha_recepcion' => '2026-07-30', 'importe' => '200.00']],
+            ['referencia' => 'VOUCHER-PENDIENTE-PROVEEDOR'],
+        ))->assertCreated()
+            ->assertJsonPath('data.importe_asignado', '200.00')
+            ->assertJsonPath('data.importe_pendiente', '300.00')
+            ->assertJsonPath('data.conciliacion', 'PENDIENTE')
+            ->assertJsonPath('data.importe_aplicado_cxp', '450.00')
+            ->assertJsonPath('data.saldo_favor_proveedor', '50.00')
+            ->assertJsonPath('data.pendiente.pago.tipo', 'DEPOSITO_NO_ASIGNADO');
+        $collectionId = (int) $response->json('data.id');
+
+        $detailPaymentId = (int) DB::table('cobranza_detalles')
+            ->where('cobranza_id', $collectionId)
+            ->value('pago_id');
+        $pendingPaymentId = (int) DB::table('cobranza_pendientes')
+            ->where('cobranza_id', $collectionId)
+            ->value('pago_id');
+
+        $this->assertDatabaseHas('pagos', [
+            'id' => $detailPaymentId,
+            'tipo' => 'PAGO_DIRECTO',
+            'cliente_id' => $client,
+            'proveedor_id' => $provider,
+            'importe' => 200,
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $pendingPaymentId,
+            'tipo' => 'DEPOSITO_NO_ASIGNADO',
+            'cliente_id' => null,
+            'proveedor_id' => $provider,
+            'cuenta_destino_id' => $providerAccount,
+            'importe' => 300,
+        ]);
+        $this->assertSame('200.00', $this->money(DB::table('pago_aplicaciones')
+            ->where('pago_id', $detailPaymentId)
+            ->where('lado', 'CXC')
+            ->sum('importe_aplicado')));
+        $this->assertSame('0.00', $this->money(DB::table('pago_aplicaciones')
+            ->where('pago_id', $pendingPaymentId)
+            ->where('lado', 'CXC')
+            ->sum('importe_aplicado')));
+        $this->assertSame('450.00', $this->money(DB::table('pago_aplicaciones')
+            ->whereIn('pago_id', [$detailPaymentId, $pendingPaymentId])
+            ->where('lado', 'CXP')
+            ->sum('importe_aplicado')));
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $receivable,
+            'saldo_pendiente' => 200,
+            'estado' => 'PARCIAL',
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $payable,
+            'saldo_pendiente' => 0,
+            'estado' => 'PAGADO',
+        ]);
+
+        $this->getJson("/api/v1/finanzas/proveedores/{$provider}/resumen")
+            ->assertOk()
+            ->assertJsonPath('data.payments', '500.00')
+            ->assertJsonPath('data.applied', '450.00')
+            ->assertJsonPath('data.unapplied', '50.00')
+            ->assertJsonPath('data.paid_directly_by_clients', '200.00');
+    }
+
     public function test_one_client_can_have_multiple_collection_rows_with_separate_dates_and_sequential_fifo_applications(): void
     {
         $collector = $this->collector('Cobrador entregas separadas');
@@ -461,6 +610,80 @@ class CollectionApiTest extends TestCase
             ->assertJsonPath('data.detalles.0.aplicaciones.CXP', []);
     }
 
+    public function test_collections_can_be_filtered_by_pending_or_complete_reconciliation(): void
+    {
+        $collector = $this->collector('Cobrador filtro conciliación');
+        [, $account] = $this->financialAccount('PROPIA', null, 'Banco filtro conciliación');
+        $client = $this->thirdParty('CLIENTE', 'Cliente filtro conciliación', '10444450');
+
+        $pendingId = $this->postJson('/api/v1/finanzas/cobranzas', $this->collectionPayload(
+            (string) Str::uuid(),
+            $collector,
+            $account,
+            '100.00',
+            [['cliente_id' => $client, 'fecha_recepcion' => '2026-07-30', 'importe' => '40.00']],
+            ['referencia' => 'VOUCHER-FILTRO-PENDIENTE'],
+        ))->assertCreated()->json('data.id');
+
+        $completeId = $this->postJson('/api/v1/finanzas/cobranzas', $this->collectionPayload(
+            (string) Str::uuid(),
+            $collector,
+            $account,
+            '75.00',
+            [['cliente_id' => $client, 'fecha_recepcion' => '2026-07-31', 'importe' => '75.00']],
+            ['referencia' => 'VOUCHER-FILTRO-COMPLETA'],
+        ))->assertCreated()->json('data.id');
+
+        $this->getJson('/api/v1/finanzas/cobranzas?conciliacion=PENDIENTE&per_page=20')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $pendingId)
+            ->assertJsonPath('data.0.conciliacion', 'PENDIENTE')
+            ->assertJsonPath('data.0.importe_pendiente', '60.00');
+
+        $this->getJson('/api/v1/finanzas/cobranzas?conciliacion=COMPLETA&per_page=20')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $completeId)
+            ->assertJsonPath('data.0.conciliacion', 'COMPLETA')
+            ->assertJsonPath('data.0.importe_pendiente', '0.00')
+            ->assertJsonPath('data.0.pendiente', null);
+
+        $this->getJson('/api/v1/finanzas/cobranzas?conciliacion=DESCONOCIDA')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('conciliacion');
+    }
+
+    public function test_a_breakdown_greater_than_the_voucher_total_is_rejected_atomically(): void
+    {
+        $collector = $this->collector('Cobrador desglose excedido');
+        [, $account] = $this->financialAccount('PROPIA', null, 'Banco desglose excedido');
+        $client = $this->thirdParty('CLIENTE', 'Cliente desglose excedido', '10444451');
+        $receivable = $this->document('VENTA', $client, '150.00', 'CXC-DESGLOSE-EXCEDIDO', '2026-07-01');
+
+        $this->postJson('/api/v1/finanzas/cobranzas', $this->collectionPayload(
+            (string) Str::uuid(),
+            $collector,
+            $account,
+            '100.00',
+            [['cliente_id' => $client, 'fecha_recepcion' => '2026-07-30', 'importe' => '100.01']],
+            ['referencia' => 'VOUCHER-DESGLOSE-EXCEDIDO'],
+        ))->assertUnprocessable()
+            ->assertJsonValidationErrors('importe_total');
+
+        $this->assertDatabaseCount('cobranzas', 0);
+        $this->assertDatabaseCount('cobranza_detalles', 0);
+        $this->assertDatabaseCount('cobranza_pendientes', 0);
+        $this->assertDatabaseCount('pagos', 0);
+        $this->assertDatabaseCount('pago_aplicaciones', 0);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $receivable,
+            'saldo_pendiente' => 150,
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->assertSame('0.00', app(FinancialAccountBalanceService::class)->forAccount($account)['saldo']);
+    }
+
     public function test_the_voucher_total_must_equal_the_detail_sum_and_failures_are_atomic(): void
     {
         $collector = $this->collector('Elena Control');
@@ -698,6 +921,81 @@ class CollectionApiTest extends TestCase
         ]);
         $this->assertDatabaseMissing('pagos', ['reversa_de_pago_id' => $paymentId]);
         $this->assertDatabaseHas('comprobantes', ['id' => $document, 'saldo_pendiente' => 0]);
+    }
+
+    public function test_the_pending_payment_is_protected_and_is_reversed_with_the_complete_collection(): void
+    {
+        $collector = $this->collector('Cobrador pendiente protegido');
+        [, $account] = $this->financialAccount('PROPIA', null, 'Banco pendiente protegido');
+        $client = $this->thirdParty('CLIENTE', 'Cliente pendiente protegido', '10999995');
+        $receivable = $this->document('VENTA', $client, '40.00', 'CXC-PENDIENTE-PROTEGIDO', '2026-07-01');
+
+        $collectionId = $this->postJson('/api/v1/finanzas/cobranzas', $this->collectionPayload(
+            (string) Str::uuid(),
+            $collector,
+            $account,
+            '100.00',
+            [['cliente_id' => $client, 'fecha_recepcion' => '2026-07-30', 'importe' => '40.00']],
+            ['referencia' => 'VOUCHER-PENDIENTE-PROTEGIDO'],
+        ))->assertCreated()->json('data.id');
+        $detailPaymentId = (int) DB::table('cobranza_detalles')
+            ->where('cobranza_id', $collectionId)
+            ->value('pago_id');
+        $pendingPaymentId = (int) DB::table('cobranza_pendientes')
+            ->where('cobranza_id', $collectionId)
+            ->value('pago_id');
+
+        $this->putJson("/api/v1/finanzas/movimientos/{$pendingPaymentId}", [
+            'fecha_hora' => '2026-07-31 12:00:00',
+            'referencia' => 'REFERENCIA PENDIENTE ALTERADA',
+            'observaciones' => 'Intento de edición aislada del pendiente.',
+        ])->assertUnprocessable();
+        $this->postJson("/api/v1/finanzas/movimientos/{$pendingPaymentId}/anular", [
+            'motivo' => 'Intento de anulación aislada del pendiente',
+        ])->assertUnprocessable();
+
+        $this->assertDatabaseHas('pagos', [
+            'id' => $pendingPaymentId,
+            'estado' => 'REGISTRADO',
+            'referencia' => 'VOUCHER-PENDIENTE-PROTEGIDO',
+        ]);
+        $this->assertSame('100.00', app(FinancialAccountBalanceService::class)->forAccount($account)['saldo']);
+        $this->assertDatabaseHas('comprobantes', ['id' => $receivable, 'saldo_pendiente' => 0]);
+
+        $this->postJson("/api/v1/finanzas/cobranzas/{$collectionId}/anular", [
+            'motivo' => 'Voucher con excedente rechazado',
+        ])->assertOk()
+            ->assertJsonPath('data.estado', 'ANULADO')
+            ->assertJsonPath('meta.idempotent', false);
+
+        foreach ([$detailPaymentId, $pendingPaymentId] as $paymentId) {
+            $this->assertDatabaseHas('pagos', ['id' => $paymentId, 'estado' => 'ANULADO']);
+            $this->assertDatabaseHas('pagos', [
+                'reversa_de_pago_id' => $paymentId,
+                'estado' => 'REGISTRADO',
+            ]);
+        }
+        $this->assertSame(2, DB::table('pagos')
+            ->whereIn('reversa_de_pago_id', [$detailPaymentId, $pendingPaymentId])
+            ->count());
+        $this->assertDatabaseCount('pagos', 4);
+        $this->assertDatabaseHas('cobranza_pendientes', [
+            'cobranza_id' => $collectionId,
+            'pago_id' => $pendingPaymentId,
+            'importe' => 60,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $receivable,
+            'saldo_pendiente' => 40,
+            'estado' => 'PENDIENTE',
+        ]);
+        $this->assertSame('0.00', app(FinancialAccountBalanceService::class)->forAccount($account)['saldo']);
+
+        $this->postJson("/api/v1/finanzas/cobranzas/{$collectionId}/anular", [
+            'motivo' => 'Reintento de anulación con pendiente',
+        ])->assertOk()
+            ->assertJsonPath('meta.idempotent', true);
+        $this->assertDatabaseCount('pagos', 4);
     }
 
     public function test_voiding_a_collection_reverses_every_child_and_restores_customer_and_provider_debts_atomically(): void

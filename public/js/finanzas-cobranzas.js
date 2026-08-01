@@ -1,4 +1,5 @@
 import { apiRequest } from "./api-client.js";
+import { collectionReconciliation } from "./finanzas-cobranzas-calculos.js";
 import {
   createIdempotencyKey,
   dataRoot,
@@ -38,6 +39,9 @@ const elements = {
   differenceLine: byId("collectionDifferenceLine"),
   differenceLabel: byId("collectionDifferenceLabel"),
   summaryDifference: byId("collectionSummaryDifference"),
+  pendingConfirmationWrap: byId("collectionPendingConfirmationWrap"),
+  pendingConfirmation: byId("collectionPendingConfirmation"),
+  pendingConfirmationText: byId("collectionPendingConfirmationText"),
   summaryHint: byId("collectionSummaryHint"),
   message: byId("collectionMessage"),
   save: byId("collectionSave"),
@@ -48,6 +52,7 @@ const elements = {
   filterTo: byId("collectionFilterTo"),
   filterCollector: byId("collectionFilterCollector"),
   filterStatus: byId("collectionFilterStatus"),
+  filterReconciliation: byId("collectionFilterReconciliation"),
   filterSearch: byId("collectionFilterSearch"),
   clearFilters: byId("collectionClearFilters"),
   listMessage: byId("collectionListMessage"),
@@ -351,47 +356,83 @@ function requiredHeaderReady() {
   );
 }
 
+function pendingConfirmationCents() {
+  if (!elements.pendingConfirmation.checked) return null;
+  const value = Number(elements.pendingConfirmation.dataset.amount || "");
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function invalidatePendingConfirmation() {
+  elements.pendingConfirmation.checked = false;
+  delete elements.pendingConfirmation.dataset.amount;
+}
+
 function updateSummary() {
   const totalCents = parseMoneyCents(elements.total.value) ?? 0;
   const details = detailState();
-  const difference = totalCents - details.sumCents;
-  const balanced = totalCents > 0 && difference === 0 && details.complete;
+  let reconciliation = collectionReconciliation({
+    totalCents,
+    detailCents: details.sumCents,
+    detailsComplete: details.complete,
+    confirmedPendingCents: pendingConfirmationCents()
+  });
+  if (elements.pendingConfirmation.checked && !reconciliation.pendingConfirmed) {
+    invalidatePendingConfirmation();
+    reconciliation = collectionReconciliation({
+      totalCents,
+      detailCents: details.sumCents,
+      detailsComplete: details.complete
+    });
+  }
+  const balanced = reconciliation.status === "COMPLETA"
+    && totalCents > 0
+    && details.complete;
 
   elements.currencyPrefix.textContent = currencyPrefix();
   elements.summaryTotal.textContent = moneyFromCents(totalCents);
   elements.summaryDetails.textContent = moneyFromCents(details.sumCents);
   elements.summaryCount.textContent = String(state.details.filter((detail) => detail.cliente_id).length);
-  elements.summaryDifference.textContent = moneyFromCents(Math.abs(difference));
+  elements.summaryDifference.textContent = moneyFromCents(
+    reconciliation.pendingCents || reconciliation.excessCents
+  );
   elements.differenceLine.classList.toggle("is-balanced", balanced);
-  elements.differenceLine.classList.toggle("is-short", totalCents > 0 && difference > 0);
-  elements.differenceLine.classList.toggle("is-over", difference < 0);
-  elements.differenceLine.classList.toggle("is-pending", totalCents <= 0 || (difference === 0 && !balanced));
+  elements.differenceLine.classList.toggle("is-short", reconciliation.pendingCents > 0);
+  elements.differenceLine.classList.toggle("is-over", reconciliation.excessCents > 0);
+  elements.differenceLine.classList.toggle("is-pending", totalCents <= 0 || (!balanced
+    && reconciliation.pendingCents === 0
+    && reconciliation.excessCents === 0));
+  elements.pendingConfirmationWrap.hidden = reconciliation.pendingCents <= 0
+    || reconciliation.excessCents > 0
+    || !details.complete;
+  elements.pendingConfirmationText.textContent = `Registrar ${moneyFromCents(reconciliation.pendingCents)} como pendiente por identificar. Este importe no se aplicará a ningún cliente.`;
 
-  if (difference < 0) {
+  if (reconciliation.excessCents > 0) {
     elements.differenceLabel.textContent = "Excede el voucher";
   } else if (balanced) {
     elements.differenceLabel.textContent = "Diferencia";
   } else {
-    elements.differenceLabel.textContent = "Falta distribuir";
+    elements.differenceLabel.textContent = "Pendiente por identificar";
   }
 
   if (totalCents <= 0) {
     elements.summaryHint.textContent = "Ingresa el total del voucher y agrega al menos un cliente.";
-  } else if (difference > 0) {
-    elements.summaryHint.textContent = `Falta asignar ${moneyFromCents(difference)} a uno o más clientes.`;
-  } else if (difference < 0) {
-    elements.summaryHint.textContent = `El desglose supera el voucher por ${moneyFromCents(Math.abs(difference))}.`;
+  } else if (reconciliation.excessCents > 0) {
+    elements.summaryHint.textContent = `El desglose supera el voucher por ${moneyFromCents(reconciliation.excessCents)}.`;
   } else if (!details.complete) {
     elements.summaryHint.textContent = "Completa el cliente, la fecha y el importe de cada fila.";
+  } else if (reconciliation.requiresConfirmation && !reconciliation.pendingConfirmed) {
+    elements.summaryHint.textContent = `Confirma que ${moneyFromCents(reconciliation.pendingCents)} quedará pendiente por identificar.`;
   } else if (!requiredHeaderReady()) {
-    elements.summaryHint.textContent = "Los importes cuadran. Completa los datos obligatorios del depósito.";
+    elements.summaryHint.textContent = "Completa los datos obligatorios del depósito.";
+  } else if (reconciliation.pendingCents > 0) {
+    elements.summaryHint.textContent = "El depósito se registrará completo y el monto no desglosado quedará identificado como pendiente.";
   } else {
     elements.summaryHint.textContent = "El depósito y el desglose coinciden exactamente. Ya puedes registrar la cobranza.";
   }
 
   elements.save.disabled = !permissions.manage
     || state.saving
-    || !balanced
+    || !reconciliation.registrable
     || !requiredHeaderReady();
 }
 
@@ -524,6 +565,7 @@ async function loadCatalog({ preserveSelections = true } = {}) {
 
 function resetCollection({ preserveMessage = false } = {}) {
   elements.form.reset();
+  invalidatePendingConfirmation();
   elements.dateTime.value = dateTimeNow();
   elements.currency.value = state.defaultCurrency;
   elements.currency.disabled = false;
@@ -548,7 +590,11 @@ function validationIssue() {
   if (totalCents === null || totalCents <= 0) return ["Ingresa un importe total válido mayor a cero.", elements.total];
   if (!elements.reference.value.trim()) return ["Ingresa el número de operación o voucher.", elements.reference];
   if (!details.complete) return ["Completa correctamente el cliente, la fecha y el importe de cada fila.", elements.details.querySelector("select, input")];
-  if (totalCents !== details.sumCents) return ["La suma de los clientes debe coincidir exactamente con el importe del voucher.", elements.total];
+  if (details.sumCents > totalCents) return ["La suma de los clientes no puede superar el importe del voucher.", elements.total];
+  const pendingCents = totalCents - details.sumCents;
+  if (pendingCents > 0 && pendingConfirmationCents() !== pendingCents) {
+    return [`Confirma que ${moneyFromCents(pendingCents)} quedará pendiente por identificar.`, elements.pendingConfirmation];
+  }
   return null;
 }
 
@@ -562,6 +608,7 @@ async function saveCollection(event) {
   }
 
   const totalCents = parseMoneyCents(elements.total.value);
+  const pendingCents = totalCents - detailState().sumCents;
   state.saving = true;
   updateSummary();
   setMessage(elements.message, "Registrando el depósito y aplicando los abonos...");
@@ -588,7 +635,13 @@ async function saveCollection(event) {
 
     resetCollection({ preserveMessage: true });
     await loadCollections();
-    setMessage(elements.message, "Cobranza registrada. El depósito y todos sus abonos quedaron trazados correctamente.", "success");
+    setMessage(
+      elements.message,
+      pendingCents > 0
+        ? `Cobranza registrada con ${moneyFromCents(pendingCents)} pendiente por identificar.`
+        : "Cobranza registrada. El depósito y todos sus abonos quedaron trazados correctamente.",
+      "success"
+    );
   } catch (error) {
     setMessage(elements.message, errorMessage(error, "No se pudo registrar la cobranza."), "error");
   } finally {
@@ -680,6 +733,14 @@ function normalizeCollection(record) {
     referencia: String(firstDefined(record, ["referencia", "numero_operacion", "reference"], "") || ""),
     moneda: normalizedStatus(firstDefined(record, ["moneda", "currency"], state.defaultCurrency), state.defaultCurrency),
     importe: firstDefined(record, ["importe_total", "importe", "total", "amount"], "0.00"),
+    importeAsignado: firstDefined(record, ["importe_asignado", "importe_desglosado", "assigned_amount"], "0.00"),
+    importePendiente: firstDefined(record, ["importe_pendiente", "pending_amount"], "0.00"),
+    conciliacion: normalizedStatus(firstDefined(record, [
+      "conciliacion",
+      "estado_conciliacion",
+      "reconciliation_status"
+    ], "COMPLETA"), "COMPLETA"),
+    pendiente: firstDefined(record, ["pendiente", "pendiente_identificar", "unassigned"], null),
     estado: collectionStatus(record),
     cobradorNombre: String(firstDefined(record, [
       "cobrador_nombre_snapshot",
@@ -720,7 +781,8 @@ function statusLabel(status) {
   return {
     REGISTRADO: "Vigente",
     ANULADO: "Anulado",
-    PENDIENTE: "Pendiente"
+    PENDIENTE: "Pendiente por identificar",
+    COMPLETA: "Completa"
   }[status] || status;
 }
 
@@ -744,7 +806,12 @@ function renderCollections(records) {
         <td><strong>${escapeHtml(record.cobradorNombre)}</strong></td>
         <td><strong>${escapeHtml(destination)}</strong>${record.proveedorNombre ? `<small>Proveedor: ${escapeHtml(record.proveedorNombre)}</small>` : ""}</td>
         <td><strong>${escapeHtml(record.referencia || "Sin referencia")}</strong></td>
-        <td><strong>${escapeHtml(record.detailCount)}</strong><small>${record.detailCount === 1 ? "abono" : "abonos"}</small></td>
+        <td>
+          <strong>${escapeHtml(record.detailCount)} ${record.detailCount === 1 ? "abono" : "abonos"}</strong>
+          <small>${escapeHtml(formatMoney(record.importeAsignado, record.moneda))} desglosado</small>
+          ${Number(record.importePendiente) > 0 ? `<small>${escapeHtml(formatMoney(record.importePendiente, record.moneda))} por identificar</small>` : ""}
+          ${statusTag(record.conciliacion)}
+        </td>
         <td>${statusTag(record.estado)}</td>
         <td class="fin-text-right fin-table-amount">${escapeHtml(formatMoney(record.importe, record.moneda))}</td>
         <td>
@@ -764,6 +831,7 @@ function filterParams() {
     hasta: elements.filterTo.value,
     cobrador_id: elements.filterCollector.value,
     estado: elements.filterStatus.value,
+    conciliacion: elements.filterReconciliation.value,
     buscar: elements.filterSearch.value.trim(),
     per_page: "20",
     page: String(state.page)
@@ -858,6 +926,11 @@ function renderCollectionDetail(source, details) {
   const destination = [record.entidadNombre, record.cuentaNombre].filter(Boolean).join(" · ") || "Sin destino";
   const providerApplied = firstDefined(source, ["importe_aplicado_cxp", "aplicado_cxp", "cxp_aplicado"], null);
   const providerCredit = firstDefined(source, ["saldo_favor_proveedor", "provider_credit"], null);
+  const pendingPaymentCode = String(firstDefined(record.pendiente || {}, [
+    "pago.codigo",
+    "payment.code",
+    "movimiento_codigo"
+  ], "") || "");
 
   elements.detailTitle.textContent = record.codigo || "Detalle de cobranza";
   elements.detailContent.innerHTML = `
@@ -867,8 +940,17 @@ function renderCollectionDetail(source, details) {
       <article><span>Cuenta de destino</span><strong>${escapeHtml(destination)}</strong></article>
       <article><span>Número de operación</span><strong>${escapeHtml(record.referencia || "Sin referencia")}</strong></article>
       <article><span>Estado</span><strong>${statusTag(record.estado)}</strong></article>
+      <article><span>Conciliación</span><strong>${statusTag(record.conciliacion)}</strong></article>
+      <article><span>Importe desglosado</span><strong>${escapeHtml(formatMoney(record.importeAsignado, record.moneda))}</strong></article>
+      <article><span>Pendiente por identificar</span><strong>${escapeHtml(formatMoney(record.importePendiente, record.moneda))}</strong></article>
       <article class="is-total"><span>Total depositado</span><strong>${escapeHtml(formatMoney(record.importe, record.moneda))}</strong></article>
     </div>
+    ${Number(record.importePendiente) > 0 ? `
+      <div class="fin-collection-detail-note is-pending">
+        <strong>${escapeHtml(formatMoney(record.importePendiente, record.moneda))} pendiente por identificar</strong>
+        <p>Este importe forma parte del voucher y de su efecto financiero, pero no está atribuido a ningún cliente.${pendingPaymentCode ? ` Movimiento asociado: ${escapeHtml(pendingPaymentCode)}.` : ""}</p>
+      </div>
+    ` : ""}
     ${record.proveedorNombre ? `
       <div class="fin-collection-provider-result">
         <div><span>Proveedor beneficiario</span><strong>${escapeHtml(record.proveedorNombre)}</strong></div>
@@ -982,7 +1064,10 @@ function applyPermissions() {
   }
 }
 
-elements.total.addEventListener("input", updateSummary);
+elements.total.addEventListener("input", () => {
+  invalidatePendingConfirmation();
+  updateSummary();
+});
 elements.collector.addEventListener("change", updateSummary);
 elements.reference.addEventListener("input", updateSummary);
 elements.dateTime.addEventListener("change", () => {
@@ -990,8 +1075,22 @@ elements.dateTime.addEventListener("change", () => {
   updateSummary();
 });
 elements.destination.addEventListener("change", updateDestination);
-elements.currency.addEventListener("change", renderDetails);
+elements.currency.addEventListener("change", () => {
+  invalidatePendingConfirmation();
+  renderDetails();
+});
+elements.pendingConfirmation.addEventListener("change", () => {
+  if (elements.pendingConfirmation.checked) {
+    const totalCents = parseMoneyCents(elements.total.value) ?? 0;
+    const pendingCents = totalCents - detailState().sumCents;
+    elements.pendingConfirmation.dataset.amount = String(Math.max(0, pendingCents));
+  } else {
+    delete elements.pendingConfirmation.dataset.amount;
+  }
+  updateSummary();
+});
 elements.addDetail.addEventListener("click", () => {
+  invalidatePendingConfirmation();
   state.details.push(newDetail());
   renderDetails();
   elements.details.querySelector("[data-detail-key]:last-child select")?.focus();
@@ -1002,6 +1101,7 @@ elements.details.addEventListener("input", (event) => {
   const article = input.closest("[data-detail-key]");
   const detail = state.details.find((item) => String(item.key) === String(article?.dataset.detailKey));
   if (!detail) return;
+  invalidatePendingConfirmation();
   detail[input.dataset.detailField] = input.value;
   updateSummary();
 });
@@ -1011,6 +1111,7 @@ elements.details.addEventListener("change", (event) => {
   const article = input.closest("[data-detail-key]");
   const detail = state.details.find((item) => String(item.key) === String(article?.dataset.detailKey));
   if (!detail) return;
+  invalidatePendingConfirmation();
   detail[input.dataset.detailField] = input.value;
   if (input.dataset.detailField === "cliente_id") renderDetails();
   else updateSummary();
@@ -1018,6 +1119,7 @@ elements.details.addEventListener("change", (event) => {
 elements.details.addEventListener("click", (event) => {
   const button = event.target.closest("[data-detail-remove]");
   if (!button || state.details.length === 1 || !permissions.manage) return;
+  invalidatePendingConfirmation();
   state.details = state.details.filter((detail) => String(detail.key) !== String(button.dataset.detailRemove));
   renderDetails();
 });

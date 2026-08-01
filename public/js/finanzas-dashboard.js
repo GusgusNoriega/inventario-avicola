@@ -19,6 +19,7 @@ import {
 const MOVEMENT_LABELS = {
   COBRO_CLIENTE: "Cliente → empresa",
   PAGO_DIRECTO: "Cliente → proveedor",
+  DEPOSITO_NO_ASIGNADO: "Depósito pendiente de identificar",
   PAGO_PROVEEDOR: "Empresa → proveedor",
   SALDO_FAVOR_PROVEEDOR: "Saldo anterior con proveedor",
   COBRO_MINORISTA: "Cobro minorista",
@@ -32,7 +33,7 @@ const MOVEMENT_LABELS = {
   REVERSO: "Reverso"
 };
 
-const PROVIDER_CREDIT_TYPES = new Set(["PAGO_DIRECTO", "PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
+const PROVIDER_CREDIT_TYPES = new Set(["PAGO_DIRECTO", "DEPOSITO_NO_ASIGNADO", "PAGO_PROVEEDOR", "SALDO_FAVOR_PROVEEDOR"]);
 const requestedProviderId = new URLSearchParams(window.location.search).get("proveedor_id") || "";
 
 const elements = {

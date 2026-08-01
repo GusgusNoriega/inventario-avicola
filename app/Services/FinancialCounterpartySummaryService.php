@@ -109,6 +109,13 @@ class FinancialCounterpartySummaryService
                 [Pago::TYPE_DIRECT_PAYMENT],
                 $currency,
             ),
+            'unassigned_collection_deposits' => $this->sumPayments(
+                $companyId,
+                'proveedor_id',
+                $providerId,
+                [Pago::TYPE_UNASSIGNED_DEPOSIT],
+                $currency,
+            ),
             'paid_by_company' => $this->sumPayments(
                 $companyId,
                 'proveedor_id',

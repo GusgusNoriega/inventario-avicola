@@ -14,7 +14,7 @@ class StoreFinancialMovementRequest extends FinancialFormRequest
             'idempotency_key' => ['required', 'uuid'],
             'tipo' => ['required', Rule::in(array_values(array_diff(
                 Pago::TYPES,
-                [Pago::TYPE_COMPANY_EXPENSE],
+                [Pago::TYPE_COMPANY_EXPENSE, Pago::TYPE_UNASSIGNED_DEPOSIT],
             )))],
             'fecha_hora' => ['nullable', 'date'],
             'cliente_id' => ['nullable', 'prohibited_if:tipo,'.Pago::TYPE_PROVIDER_CREDIT, 'integer', 'min:1'],

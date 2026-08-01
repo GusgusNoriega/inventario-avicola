@@ -32,7 +32,7 @@
       </article>
       <article>
         <span>03</span>
-        <div><strong>Confirma la igualdad</strong><small>El depósito solo se registra cuando el total coincide exactamente con la suma de clientes.</small></div>
+        <div><strong>Revisa la conciliación</strong><small>Si falta identificar una parte, quedará separada y visible hasta que se determine su origen.</small></div>
       </article>
     </section>
 
@@ -113,12 +113,16 @@
         <p class="fin-eyebrow">Conciliación</p>
         <h2 id="collectionSummaryTitle">Comprobación del voucher</h2>
         <div class="fin-summary-line"><span>Total del depósito</span><strong id="collectionSummaryTotal">S/ 0.00</strong></div>
-        <div class="fin-summary-line"><span>Suma de clientes</span><strong id="collectionSummaryDetails">S/ 0.00</strong></div>
+        <div class="fin-summary-line"><span>Importe desglosado</span><strong id="collectionSummaryDetails">S/ 0.00</strong></div>
         <div class="fin-summary-line"><span>Abonos incluidos</span><strong id="collectionSummaryCount">0</strong></div>
         <div id="collectionDifferenceLine" class="fin-summary-line fin-summary-line-total fin-collection-difference is-pending">
           <span id="collectionDifferenceLabel">Falta distribuir</span>
           <strong id="collectionSummaryDifference">S/ 0.00</strong>
         </div>
+        <label id="collectionPendingConfirmationWrap" class="fin-collection-pending-confirmation" hidden>
+          <input id="collectionPendingConfirmation" type="checkbox">
+          <span id="collectionPendingConfirmationText">Registrar el importe pendiente por identificar.</span>
+        </label>
         <p id="collectionSummaryHint" class="fin-summary-hint">Ingresa el total del voucher y agrega al menos un cliente.</p>
         <p id="collectionMessage" class="fin-message" role="status" aria-live="polite"></p>
         <button id="collectionSave" class="fin-btn fin-btn-primary fin-btn-block" type="submit" disabled>Registrar cobranza</button>
@@ -157,6 +161,14 @@
             <option value="ANULADO">Anulados</option>
           </select>
         </label>
+        <label class="fin-field">
+          <span>Conciliación</span>
+          <select id="collectionFilterReconciliation">
+            <option value="">Todas</option>
+            <option value="PENDIENTE">Con monto por identificar</option>
+            <option value="COMPLETA">Totalmente desglosadas</option>
+          </select>
+        </label>
         <label class="fin-field fin-filter-search">
           <span>Buscar</span>
           <input id="collectionFilterSearch" type="search" maxlength="100" placeholder="Código, operación, cobrador o destino">
@@ -176,7 +188,7 @@
               <th>Cobrador</th>
               <th>Cuenta de destino</th>
               <th>Operación</th>
-              <th>Abonos</th>
+              <th>Desglose</th>
               <th>Estado</th>
               <th class="fin-text-right">Total</th>
               <th>Acciones</th>

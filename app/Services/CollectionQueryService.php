@@ -62,6 +62,13 @@ class CollectionQueryService
                 ->where('cobranza.cobrador_id', $id))
             ->when($filters['estado'] ?? null, fn (Builder $builder, string $status) => $builder
                 ->where('cobranza.estado', $status))
+            ->when($filters['conciliacion'] ?? null, function (Builder $builder, string $status): void {
+                if ($status === 'PENDIENTE') {
+                    $builder->whereNotNull('pendiente.id');
+                } elseif ($status === 'COMPLETA') {
+                    $builder->whereNull('pendiente.id');
+                }
+            })
             ->when(trim((string) ($filters['buscar'] ?? '')) !== '', function (Builder $builder) use ($filters): void {
                 $search = trim((string) $filters['buscar']);
                 $builder->where(function (Builder $nested) use ($search): void {
@@ -124,6 +131,9 @@ class CollectionQueryService
             ->join('cuentas_financieras as cuenta', 'cuenta.id', '=', 'cobranza.cuenta_destino_id')
             ->join('entidades_financieras as entidad', 'entidad.id', '=', 'cuenta.entidad_financiera_id')
             ->leftJoin('terceros as proveedor', 'proveedor.id', '=', 'cobranza.proveedor_id')
+            ->leftJoin('cobranza_pendientes as pendiente', 'pendiente.cobranza_id', '=', 'cobranza.id')
+            ->leftJoin('pagos as pago_pendiente', 'pago_pendiente.id', '=', 'pendiente.pago_id')
+            ->leftJoin('pagos as reversa_pendiente', 'reversa_pendiente.reversa_de_pago_id', '=', 'pago_pendiente.id')
             ->leftJoin('usuarios as creador', 'creador.id', '=', 'cobranza.created_by')
             ->leftJoin('usuarios as anulador', 'anulador.id', '=', 'cobranza.anulada_por')
             ->where('cobranza.empresa_id', $companyId)
@@ -143,6 +153,15 @@ class CollectionQueryService
                 'entidad.nombre_comercial as entidad_nombre_comercial',
                 'proveedor.numero_documento as proveedor_documento',
                 'proveedor.nombre_razon_social as proveedor_nombre',
+                'pendiente.id as pendiente_id',
+                'pendiente.importe as pendiente_importe',
+                'pendiente.pago_id as pendiente_pago_id',
+                'pago_pendiente.codigo as pendiente_pago_codigo',
+                'pago_pendiente.tipo as pendiente_pago_tipo',
+                'pago_pendiente.estado as pendiente_pago_estado',
+                'pago_pendiente.idempotency_key as pendiente_pago_idempotency_key',
+                'reversa_pendiente.id as pendiente_reversa_id',
+                'reversa_pendiente.codigo as pendiente_reversa_codigo',
                 'creador.nombre as creador_nombre',
                 'anulador.nombre as anulador_nombre',
             ])
@@ -153,6 +172,12 @@ class CollectionQueryService
                 'detalles_count',
             )
             ->selectSub(
+                DB::table('cobranza_detalles as detalle_importe')
+                    ->whereColumn('detalle_importe.cobranza_id', 'cobranza.id')
+                    ->selectRaw('COALESCE(SUM(detalle_importe.importe), 0)'),
+                'importe_asignado',
+            )
+            ->selectSub(
                 DB::table('cobranza_detalles as detalle_cxp')
                     ->join('pago_aplicaciones as aplicacion_cxp', function ($join): void {
                         $join->on('aplicacion_cxp.pago_id', '=', 'detalle_cxp.pago_id')
@@ -160,7 +185,14 @@ class CollectionQueryService
                     })
                     ->whereColumn('detalle_cxp.cobranza_id', 'cobranza.id')
                     ->selectRaw('COALESCE(SUM(aplicacion_cxp.importe_aplicado), 0)'),
-                'importe_aplicado_cxp',
+                'importe_aplicado_cxp_detalles',
+            )
+            ->selectSub(
+                DB::table('pago_aplicaciones as aplicacion_pendiente_cxp')
+                    ->whereColumn('aplicacion_pendiente_cxp.pago_id', 'pendiente.pago_id')
+                    ->where('aplicacion_pendiente_cxp.lado', 'CXP')
+                    ->selectRaw('COALESCE(SUM(aplicacion_pendiente_cxp.importe_aplicado), 0)'),
+                'importe_aplicado_cxp_pendiente',
             );
     }
 
@@ -291,8 +323,15 @@ class CollectionQueryService
                 'nombre_comercial' => $collection->entidad_nombre_comercial,
             ],
         ];
-        $appliedPayable = FinancialMoney::normalize(
-            (string) ($collection->importe_aplicado_cxp ?? '0'),
+        $assignedAmount = FinancialMoney::normalize(
+            (string) ($collection->importe_asignado ?? '0'),
+        );
+        $pendingAmount = FinancialMoney::normalize(
+            (string) ($collection->pendiente_importe ?? '0'),
+        );
+        $appliedPayable = FinancialMoney::add(
+            (string) ($collection->importe_aplicado_cxp_detalles ?? '0'),
+            (string) ($collection->importe_aplicado_cxp_pendiente ?? '0'),
         );
         $providerCredit = $collection->proveedor_id === null
             ? '0.00'
@@ -303,6 +342,30 @@ class CollectionQueryService
         if (FinancialMoney::compare($providerCredit, '0.00') < 0) {
             $providerCredit = '0.00';
         }
+        $reconciliation = FinancialMoney::compare($pendingAmount, '0.00') > 0
+            ? 'PENDIENTE'
+            : 'COMPLETA';
+        $pending = $collection->pendiente_id === null ? null : [
+            'id' => (int) $collection->pendiente_id,
+            'importe' => $pendingAmount,
+            'pago' => [
+                'id' => (int) $collection->pendiente_pago_id,
+                'codigo' => $collection->pendiente_pago_codigo,
+                'tipo' => $collection->pendiente_pago_tipo,
+                'estado' => $collection->pendiente_pago_estado,
+                'cliente' => null,
+                'proveedor' => $collection->proveedor_id === null ? null : [
+                    'id' => (int) $collection->proveedor_id,
+                    'numero_documento' => $collection->proveedor_documento,
+                    'nombre' => $collection->proveedor_nombre,
+                ],
+                'idempotency_key' => $collection->pendiente_pago_idempotency_key,
+                'reversa' => $collection->pendiente_reversa_id === null ? null : [
+                    'id' => (int) $collection->pendiente_reversa_id,
+                    'codigo' => $collection->pendiente_reversa_codigo,
+                ],
+            ],
+        ];
 
         return [
             'id' => (int) $collection->id,
@@ -311,6 +374,13 @@ class CollectionQueryService
             'referencia' => $collection->referencia,
             'moneda' => $collection->moneda,
             'importe_total' => FinancialMoney::normalize((string) $collection->importe_total),
+            'importe_asignado' => $assignedAmount,
+            'importe_desglosado' => $assignedAmount,
+            'importe_pendiente' => $pendingAmount,
+            'conciliacion' => $reconciliation,
+            'estado_conciliacion' => $reconciliation,
+            'pendiente' => $pending,
+            'pendiente_identificar' => $pending,
             'importe_aplicado_cxp' => $appliedPayable,
             'saldo_favor_proveedor' => $providerCredit,
             'observaciones' => $collection->observaciones,

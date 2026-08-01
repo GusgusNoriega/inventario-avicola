@@ -17,6 +17,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
     public const TABLES_TO_CLEAN = [
         'compra_detalles',
         'compras',
+        'cobranza_pendientes',
         'cobranza_detalles',
         'cobranzas',
         'pago_aplicacion_operaciones',

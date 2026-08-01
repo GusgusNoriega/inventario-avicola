@@ -18,6 +18,7 @@ class ListCollectionsRequest extends FinancialFormRequest
                 Cobranza::STATUS_REGISTERED,
                 Cobranza::STATUS_VOIDED,
             ])],
+            'conciliacion' => ['nullable', Rule::in(['PENDIENTE', 'COMPLETA'])],
             'buscar' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -29,6 +30,9 @@ class ListCollectionsRequest extends FinancialFormRequest
         $this->merge([
             'estado' => $this->filled('estado')
                 ? strtoupper(trim((string) $this->input('estado')))
+                : null,
+            'conciliacion' => $this->filled('conciliacion')
+                ? strtoupper(trim((string) $this->input('conciliacion')))
                 : null,
             'buscar' => $this->trimmedNullable('buscar'),
         ]);

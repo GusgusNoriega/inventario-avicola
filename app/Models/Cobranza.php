@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'empresa_id',
@@ -82,6 +83,12 @@ class Cobranza extends Model
     public function detalles(): HasMany
     {
         return $this->hasMany(CobranzaDetalle::class)->orderBy('orden');
+    }
+
+    /** @return HasOne<CobranzaPendiente, $this> */
+    public function pendiente(): HasOne
+    {
+        return $this->hasOne(CobranzaPendiente::class);
     }
 
     protected function casts(): array

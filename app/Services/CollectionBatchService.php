@@ -107,10 +107,18 @@ class CollectionBatchService
                 ->orderBy('orden')
                 ->lockForUpdate()
                 ->get();
+            $pending = DB::table('cobranza_pendientes')
+                ->where('cobranza_id', $collectionId)
+                ->lockForUpdate()
+                ->first();
 
             if ($collection->estado === Cobranza::STATUS_VOIDED) {
+                $paymentIds = $details->pluck('pago_id');
+                if ($pending) {
+                    $paymentIds->push($pending->pago_id);
+                }
                 $reverseIds = DB::table('pagos')
-                    ->whereIn('reversa_de_pago_id', $details->pluck('pago_id')->all())
+                    ->whereIn('reversa_de_pago_id', $paymentIds->all())
                     ->orderBy('id')
                     ->pluck('id')
                     ->map(fn ($id): int => (int) $id)
@@ -127,7 +135,7 @@ class CollectionBatchService
                     'cobranza' => 'La cobranza no está vigente y no puede anularse.',
                 ]);
             }
-            if ($details->isEmpty()) {
+            if ($details->isEmpty() && ! $pending) {
                 throw ValidationException::withMessages([
                     'cobranza' => 'La cobranza no tiene movimientos financieros para revertir.',
                 ]);
@@ -140,6 +148,18 @@ class CollectionBatchService
                     $companyId,
                     $actor,
                     (int) $detail->pago_id,
+                    $fullReason,
+                    $ip,
+                    null,
+                    $collectionId,
+                );
+                $reverseIds[] = (int) $result['reversa_id'];
+            }
+            if ($pending) {
+                $result = $this->movements->void(
+                    $companyId,
+                    $actor,
+                    (int) $pending->pago_id,
                     $fullReason,
                     $ip,
                     null,
@@ -315,8 +335,60 @@ class CollectionBatchService
             ];
         }
 
+        $pendingRecord = null;
+        if (FinancialMoney::compare($payload['importe_pendiente'], '0.00') > 0) {
+            $applications = $context['proveedor_id'] === null
+                ? []
+                : $this->allocateApplications(
+                    $payablePool,
+                    $payload['importe_pendiente'],
+                    'CXP',
+                );
+            $movement = $this->movements->register(
+                $companyId,
+                $actor,
+                [
+                    'idempotency_key' => $this->pendingIdempotencyKey(
+                        $payload['idempotency_key'],
+                    ),
+                    'tipo' => Pago::TYPE_UNASSIGNED_DEPOSIT,
+                    'fecha_hora' => $payload['fecha_hora'],
+                    'cliente_id' => null,
+                    'proveedor_id' => $context['proveedor_id'],
+                    'cuenta_origen_id' => null,
+                    'cuenta_destino_id' => (int) $context['cuenta']->id,
+                    'metodo_pago_id' => (int) $context['metodo']->id,
+                    'moneda' => $payload['moneda'],
+                    'importe' => $payload['importe_pendiente'],
+                    'referencia' => $payload['referencia'],
+                    'observaciones' => $this->pendingMovementNotes(
+                        $code,
+                        (string) $context['cobrador']->nombre,
+                        $payload['observaciones'],
+                    ),
+                    'aplicaciones' => $applications,
+                ],
+                $ip,
+            );
+            $pendingId = DB::table('cobranza_pendientes')->insertGetId([
+                'cobranza_id' => $collectionId,
+                'pago_id' => $movement['pago_id'],
+                'importe' => $payload['importe_pendiente'],
+                'created_at' => $now,
+            ]);
+            $pendingRecord = [
+                'id' => $pendingId,
+                'pago_id' => $movement['pago_id'],
+                'importe' => $payload['importe_pendiente'],
+                'aplicaciones' => $applications,
+            ];
+        }
+
         $collection = (array) DB::table('cobranzas')->where('id', $collectionId)->first();
         $collection['detalles'] = $registeredDetails;
+        $collection['importe_asignado'] = $payload['importe_asignado'];
+        $collection['importe_pendiente'] = $payload['importe_pendiente'];
+        $collection['pendiente'] = $pendingRecord;
         $this->audit->record(
             $companyId,
             $actor->id,
@@ -597,11 +669,12 @@ class CollectionBatchService
                 'detalles' => 'Agrega al menos un abono de cliente.',
             ]);
         }
-        if (FinancialMoney::compare($detailTotal, $total) !== 0) {
+        if (FinancialMoney::compare($detailTotal, $total) > 0) {
             throw ValidationException::withMessages([
-                'importe_total' => "El total del voucher ({$total}) debe coincidir exactamente con la suma de clientes ({$detailTotal}).",
+                'importe_total' => "La suma de clientes ({$detailTotal}) no puede superar el total del voucher ({$total}).",
             ]);
         }
+        $pendingAmount = FinancialMoney::subtract($total, $detailTotal);
 
         $reference = trim((string) ($data['referencia'] ?? ''));
         if ($reference === '') {
@@ -619,6 +692,8 @@ class CollectionBatchService
             'cuenta_destino_id' => (int) ($data['cuenta_destino_id'] ?? 0),
             'moneda' => strtoupper(trim((string) ($data['moneda'] ?? 'PEN'))),
             'importe_total' => $total,
+            'importe_asignado' => $detailTotal,
+            'importe_pendiente' => $pendingAmount,
             'referencia' => $reference,
             'observaciones' => isset($data['observaciones']) && trim((string) $data['observaciones']) !== ''
                 ? trim((string) $data['observaciones'])
@@ -659,10 +734,26 @@ class CollectionBatchService
         )->toString();
     }
 
+    private function pendingIdempotencyKey(string $collectionKey): string
+    {
+        return Uuid::uuid5(
+            Uuid::NAMESPACE_URL,
+            "sistema-pollos:cobranza:{$collectionKey}:pendiente-identificar",
+        )->toString();
+    }
+
     private function movementNotes(string $code, string $collector, ?string $notes): string
     {
         return mb_substr(implode(' ', array_filter([
             "Cobranza {$code}. Efectivo recibido por {$collector}.",
+            $notes,
+        ])), 0, 2000);
+    }
+
+    private function pendingMovementNotes(string $code, string $collector, ?string $notes): string
+    {
+        return mb_substr(implode(' ', array_filter([
+            "Cobranza {$code}. Importe del voucher pendiente de identificar. Efectivo recibido por {$collector}.",
             $notes,
         ])), 0, 2000);
     }

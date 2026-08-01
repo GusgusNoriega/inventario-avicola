@@ -247,11 +247,15 @@ class FinancialQueryService
                 'moneda' => $summaryCurrency,
                 'disponible' => $providerCredit['disponible'],
                 'originado_en_pagos' => FinancialMoney::add(
-                    $providerCredit[Pago::TYPE_DIRECT_PAYMENT],
-                    $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
+                    FinancialMoney::add(
+                        $providerCredit[Pago::TYPE_DIRECT_PAYMENT],
+                        $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
+                    ),
+                    $providerCredit[Pago::TYPE_UNASSIGNED_DEPOSIT],
                 ),
                 'originado_en_pagos_directos' => $providerCredit[Pago::TYPE_DIRECT_PAYMENT],
                 'originado_en_pagos_empresa' => $providerCredit[Pago::TYPE_PROVIDER_PAYMENT],
+                'originado_en_depositos_no_asignados' => $providerCredit[Pago::TYPE_UNASSIGNED_DEPOSIT],
                 'registrado_manualmente' => $providerCredit[Pago::TYPE_PROVIDER_CREDIT],
             ],
         ];
@@ -293,13 +297,18 @@ class FinancialQueryService
             ->leftJoin('cuentas_financieras as cuenta_destino', 'cuenta_destino.id', '=', 'pago.cuenta_destino_id')
             ->leftJoin('entidades_financieras as entidad_destino', 'entidad_destino.id', '=', 'cuenta_destino.entidad_financiera_id')
             ->leftJoin('cobranza_detalles as cobranza_detalle', 'cobranza_detalle.pago_id', '=', 'pago.id')
-            ->leftJoin('cobranzas as cobranza', 'cobranza.id', '=', 'cobranza_detalle.cobranza_id')
+            ->leftJoin('cobranza_pendientes as cobranza_pendiente', 'cobranza_pendiente.pago_id', '=', 'pago.id')
+            ->leftJoin('cobranzas as cobranza', function ($join): void {
+                $join->on('cobranza.id', '=', 'cobranza_detalle.cobranza_id')
+                    ->orOn('cobranza.id', '=', 'cobranza_pendiente.cobranza_id');
+            })
             ->where('pago.empresa_id', $companyId)
             ->when($filters['tipo'] ?? null, fn (Builder $query, string $type) => $query->where('pago.tipo', $type))
             ->when($filters['estado'] ?? null, fn (Builder $query, string $status) => $query->where('pago.estado', $status))
             ->when($filters['aplicacion_estado'] ?? null, function (Builder $query, string $status): void {
                 $appliedSql = "(SELECT COALESCE(SUM(pa.importe_aplicado), 0) FROM pago_aplicaciones pa WHERE pa.pago_id = pago.id AND pa.lado = 'CXP')";
                 $query->whereIn('pago.tipo', Pago::PROVIDER_CREDIT_SOURCE_TYPES)
+                    ->whereNotNull('pago.proveedor_id')
                     ->where('pago.estado', 'REGISTRADO')
                     ->whereNull('pago.reversa_de_pago_id');
 
@@ -417,7 +426,8 @@ class FinancialQueryService
             })->all();
 
             $providerApplication = null;
-            if (in_array($payment->tipo, Pago::PROVIDER_CREDIT_SOURCE_TYPES, true)) {
+            if ($payment->proveedor_id !== null
+                && in_array($payment->tipo, Pago::PROVIDER_CREDIT_SOURCE_TYPES, true)) {
                 $applied = collect($items)
                     ->where('lado', 'CXP')
                     ->reduce(
@@ -618,7 +628,7 @@ class FinancialQueryService
     }
 
     /**
-     * @return array{disponible: string, PAGO_DIRECTO: string, PAGO_PROVEEDOR: string, SALDO_FAVOR_PROVEEDOR: string}
+     * @return array{disponible: string, PAGO_DIRECTO: string, DEPOSITO_NO_ASIGNADO: string, PAGO_PROVEEDOR: string, SALDO_FAVOR_PROVEEDOR: string}
      */
     private function providerCreditSummary(int $companyId, string $currency): array
     {
@@ -629,6 +639,7 @@ class FinancialQueryService
             })
             ->where('pago.empresa_id', $companyId)
             ->whereIn('pago.tipo', Pago::PROVIDER_CREDIT_SOURCE_TYPES)
+            ->whereNotNull('pago.proveedor_id')
             ->where('pago.moneda', $currency)
             ->where('pago.estado', Pago::STATUS_REGISTERED)
             ->whereNull('pago.reversa_de_pago_id')
@@ -643,6 +654,7 @@ class FinancialQueryService
         $totals = [
             'disponible' => '0.00',
             Pago::TYPE_DIRECT_PAYMENT => '0.00',
+            Pago::TYPE_UNASSIGNED_DEPOSIT => '0.00',
             Pago::TYPE_PROVIDER_PAYMENT => '0.00',
             Pago::TYPE_PROVIDER_CREDIT => '0.00',
         ];

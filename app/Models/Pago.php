@@ -40,6 +40,8 @@ class Pago extends Model
 
     public const TYPE_DIRECT_PAYMENT = 'PAGO_DIRECTO';
 
+    public const TYPE_UNASSIGNED_DEPOSIT = 'DEPOSITO_NO_ASIGNADO';
+
     public const TYPE_PROVIDER_PAYMENT = 'PAGO_PROVEEDOR';
 
     public const TYPE_PROVIDER_CREDIT = 'SALDO_FAVOR_PROVEEDOR';
@@ -61,6 +63,7 @@ class Pago extends Model
     public const TYPES = [
         self::TYPE_CUSTOMER_COLLECTION,
         self::TYPE_DIRECT_PAYMENT,
+        self::TYPE_UNASSIGNED_DEPOSIT,
         self::TYPE_PROVIDER_PAYMENT,
         self::TYPE_PROVIDER_CREDIT,
         self::TYPE_RETAIL_COLLECTION,
@@ -78,6 +81,7 @@ class Pago extends Model
      */
     public const PROVIDER_CREDIT_SOURCE_TYPES = [
         self::TYPE_DIRECT_PAYMENT,
+        self::TYPE_UNASSIGNED_DEPOSIT,
         self::TYPE_PROVIDER_PAYMENT,
         self::TYPE_PROVIDER_CREDIT,
     ];
@@ -202,6 +206,16 @@ class Pago extends Model
     public function cobranzaDetalle(): HasOne
     {
         return $this->hasOne(CobranzaDetalle::class);
+    }
+
+    /**
+     * Parte del voucher de cobranza cuyo cliente todavía no fue identificado.
+     *
+     * @return HasOne<CobranzaPendiente, $this>
+     */
+    public function cobranzaPendiente(): HasOne
+    {
+        return $this->hasOne(CobranzaPendiente::class);
     }
 
     /**

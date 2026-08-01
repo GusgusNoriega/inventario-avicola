@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(93, $migrationFiles);
+        $this->assertCount(94, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -115,6 +115,7 @@ class DatabaseSchemaTest extends TestCase
             'cobradores',
             'cobranzas',
             'cobranza_detalles',
+            'cobranza_pendientes',
         ];
 
         foreach ($tables as $table) {
@@ -161,6 +162,7 @@ class DatabaseSchemaTest extends TestCase
             'cobradores' => ['empresa_id', 'nombre', 'estado', 'created_by', 'created_at', 'updated_at'],
             'cobranzas' => ['empresa_id', 'cobrador_id', 'cobrador_nombre_snapshot', 'codigo', 'idempotency_key', 'payload_hash', 'cuenta_destino_id', 'proveedor_id', 'metodo_pago_id', 'fecha_hora', 'referencia', 'moneda', 'importe_total', 'observaciones', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'cobranza_detalles' => ['cobranza_id', 'pago_id', 'cliente_id', 'fecha_recepcion', 'medio_recepcion', 'importe', 'orden', 'created_at'],
+            'cobranza_pendientes' => ['cobranza_id', 'pago_id', 'importe', 'created_at'],
         ];
 
         foreach ($expectations as $table => $columns) {

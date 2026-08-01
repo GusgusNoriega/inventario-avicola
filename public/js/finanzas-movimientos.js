@@ -16,6 +16,7 @@ import {
 const TYPE_LABELS = {
   COBRO_CLIENTE: "Cobro de cliente",
   PAGO_DIRECTO: "Pago directo a proveedor",
+  DEPOSITO_NO_ASIGNADO: "Depósito pendiente de identificar",
   PAGO_PROVEEDOR: "Pago a proveedor",
   SALDO_FAVOR_PROVEEDOR: "Saldo anterior con proveedor",
   COBRO_MINORISTA: "Cobro minorista",

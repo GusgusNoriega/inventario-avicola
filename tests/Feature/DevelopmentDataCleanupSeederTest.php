@@ -325,7 +325,7 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'fecha_hora' => $now,
             'referencia' => 'VOUCHER-PRUEBA',
             'moneda' => 'PEN',
-            'importe_total' => 100,
+            'importe_total' => 110,
             'estado' => 'REGISTRADO',
             'created_by' => $user->id,
             'created_at' => $now,
@@ -339,6 +339,28 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'medio_recepcion' => 'EFECTIVO',
             'importe' => 100,
             'orden' => 1,
+            'created_at' => $now,
+        ]);
+        $pendingPaymentId = DB::table('pagos')->insertGetId([
+            'empresa_id' => $companyId,
+            'codigo' => 'PAG-PENDIENTE-PRUEBA',
+            'tipo' => 'DEPOSITO_NO_ASIGNADO',
+            'cuenta_destino_id' => $accountId,
+            'metodo_pago_id' => DB::table('metodos_pago')->where('codigo', 'DEPOSITO')->value('id'),
+            'direccion' => 'INGRESO',
+            'fecha_hora' => $now,
+            'metodo' => 'DEPOSITO',
+            'referencia' => 'VOUCHER-PRUEBA',
+            'moneda' => 'PEN',
+            'importe' => 10,
+            'estado' => 'REGISTRADO',
+            'created_by' => $user->id,
+            'created_at' => $now,
+        ]);
+        DB::table('cobranza_pendientes')->insert([
+            'cobranza_id' => $collectionId,
+            'pago_id' => $pendingPaymentId,
+            'importe' => 10,
             'created_at' => $now,
         ]);
         DB::table('pagos')->insert([
