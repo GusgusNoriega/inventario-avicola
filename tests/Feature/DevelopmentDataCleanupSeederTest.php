@@ -363,7 +363,7 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'importe' => 10,
             'created_at' => $now,
         ]);
-        DB::table('pagos')->insert([
+        $reversePaymentId = DB::table('pagos')->insertGetId([
             'empresa_id' => $companyId,
             'tercero_id' => $provider->id,
             'codigo' => 'REV-PRUEBA',
@@ -380,6 +380,23 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_by' => $user->id,
             'created_at' => $now,
         ]);
+        $collectionAssignmentId = DB::table('cobranza_asignaciones')->insertGetId([
+            'empresa_id' => $companyId,
+            'cobranza_id' => $collectionId,
+            'idempotency_key' => (string) Str::uuid(),
+            'payload_hash' => hash('sha256', 'asignacion-cobranza-prueba'),
+            'importe_pendiente_antes' => 10,
+            'importe_asignado' => 10,
+            'importe_pendiente_despues' => 0,
+            'pago_pendiente_anterior_id' => $pendingPaymentId,
+            'pago_reversa_id' => $reversePaymentId,
+            'pago_pendiente_nuevo_id' => null,
+            'created_by' => $user->id,
+            'created_at' => $now,
+        ]);
+        DB::table('cobranza_detalles')
+            ->where('cobranza_id', $collectionId)
+            ->update(['asignacion_id' => $collectionAssignmentId]);
         DB::table('gastos_empresa')->insert([
             'empresa_id' => $companyId,
             'pago_id' => $paymentId,

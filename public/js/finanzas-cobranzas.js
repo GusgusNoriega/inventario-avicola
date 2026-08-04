@@ -1,5 +1,11 @@
 import { apiRequest } from "./api-client.js";
-import { collectionReconciliation } from "./finanzas-cobranzas-calculos.js";
+import {
+  collectionReconciliation,
+  createPendingAssignmentRetrySnapshot,
+  isDeterministicAssignmentErrorStatus,
+  MAX_PENDING_ASSIGNMENT_DETAILS,
+  pendingAssignmentReconciliation
+} from "./finanzas-cobranzas-calculos.js";
 import {
   createIdempotencyKey,
   dataRoot,
@@ -76,6 +82,20 @@ const elements = {
   detailTitle: byId("collectionDetailTitle"),
   detailMessage: byId("collectionDetailMessage"),
   detailContent: byId("collectionDetailContent"),
+  assignDialog: byId("collectionAssignDialog"),
+  assignForm: byId("collectionAssignForm"),
+  assignTitle: byId("collectionAssignTitle"),
+  assignIntro: byId("collectionAssignIntro"),
+  assignFacts: byId("collectionAssignFacts"),
+  assignAddDetail: byId("collectionAssignAddDetail"),
+  assignDetails: byId("collectionAssignDetails"),
+  assignAvailable: byId("collectionAssignAvailable"),
+  assignTotal: byId("collectionAssignTotal"),
+  assignRemainingLine: byId("collectionAssignRemainingLine"),
+  assignRemaining: byId("collectionAssignRemaining"),
+  assignHint: byId("collectionAssignHint"),
+  assignMessage: byId("collectionAssignMessage"),
+  assignSubmit: byId("collectionAssignSubmit"),
   voidDialog: byId("collectionVoidDialog"),
   voidForm: byId("collectionVoidForm"),
   voidDescription: byId("collectionVoidDescription"),
@@ -99,12 +119,26 @@ const state = {
   nextDetailKey: 1,
   idempotencyKey: createIdempotencyKey(),
   collections: new Map(),
+  collectionRevision: 0,
   page: 1,
   lastPage: 1,
   loadingList: false,
+  listLoadPromise: null,
+  listReloadPromise: null,
+  listReloadRequested: false,
+  listReloadSilent: true,
   saving: false,
   collectorSaving: false,
   collectorUpdatingId: null,
+  assignId: null,
+  assignRecord: null,
+  assignAvailableCents: 0,
+  assignDetails: [],
+  nextAssignDetailKey: 1,
+  assignIdempotencyKey: null,
+  assignRetryLocked: false,
+  assignRetryAttempts: new Map(),
+  assigning: false,
   voidId: null,
   voiding: false
 };
@@ -384,7 +418,7 @@ function updateSummary() {
       detailsComplete: details.complete
     });
   }
-  const balanced = reconciliation.status === "COMPLETA"
+  const balanced = reconciliation.differenceCents === 0
     && totalCents > 0
     && details.complete;
 
@@ -483,7 +517,9 @@ function updateDestination() {
     return;
   }
 
+  const previousCurrency = elements.currency.value;
   if (account.moneda) elements.currency.value = account.moneda;
+  if (elements.currency.value !== previousCurrency) invalidatePendingConfirmation();
   elements.currency.disabled = Boolean(account.moneda) || !permissions.manage;
   elements.destinationHelp.textContent = `${account.tipo} · ${account.moneda}${account.numero ? ` · ${account.numero}` : ""}`;
 
@@ -634,6 +670,7 @@ async function saveCollection(event) {
     });
 
     resetCollection({ preserveMessage: true });
+    state.page = 1;
     await loadCollections();
     setMessage(
       elements.message,
@@ -781,6 +818,7 @@ function statusLabel(status) {
   return {
     REGISTRADO: "Vigente",
     ANULADO: "Anulado",
+    ANULADA: "Anulada",
     PENDIENTE: "Pendiente por identificar",
     COMPLETA: "Completa"
   }[status] || status;
@@ -788,6 +826,367 @@ function statusLabel(status) {
 
 function statusTag(status) {
   return `<span class="fin-collection-status is-${escapeHtml(String(status).toLowerCase())}">${escapeHtml(statusLabel(status))}</span>`;
+}
+
+function assignmentRetryAttempt(id = state.assignId) {
+  if (id === null || id === undefined || id === "") return null;
+  return state.assignRetryAttempts.get(String(id)) || null;
+}
+
+function assignmentPayloadFromState() {
+  return {
+    idempotency_key: state.assignIdempotencyKey,
+    detalles: state.assignDetails.map((detail) => ({
+      cliente_id: Number(detail.cliente_id),
+      fecha_recepcion: detail.fecha_recepcion,
+      importe: centsToDecimal(parseMoneyCents(detail.importe))
+    }))
+  };
+}
+
+function assignmentDetailsFromPayload(payload) {
+  return (payload?.detalles || []).map((detail) => ({
+    key: state.nextAssignDetailKey++,
+    cliente_id: String(detail.cliente_id),
+    fecha_recepcion: String(detail.fecha_recepcion),
+    importe: String(detail.importe)
+  }));
+}
+
+function rememberAssignmentRetry(collectionId, payload, message) {
+  const attempt = createPendingAssignmentRetrySnapshot({
+    availableCents: state.assignAvailableCents,
+    message,
+    payload
+  });
+  state.assignRetryAttempts.set(String(collectionId), attempt);
+  state.assignRetryLocked = true;
+  return attempt;
+}
+
+function clearAssignmentRetry(collectionId = state.assignId) {
+  if (collectionId !== null && collectionId !== undefined && collectionId !== "") {
+    state.assignRetryAttempts.delete(String(collectionId));
+  }
+  state.assignRetryLocked = false;
+}
+
+function canAssignCollection(record) {
+  const retryPending = Boolean(record?.id && assignmentRetryAttempt(record.id));
+  const apiPermission = firstDefined(record || {}, [
+    "puede_asignar_pendiente",
+    "can_assign_pending"
+  ], null);
+  const apiAllowsAssignment = apiPermission === null
+    || apiPermission === undefined
+    || apiPermission === true
+    || apiPermission === 1
+    || ["1", "TRUE", "SI", "SÍ"].includes(String(apiPermission).trim().toUpperCase());
+
+  return permissions.manage && (retryPending || (
+    apiAllowsAssignment
+    && record?.estado === "REGISTRADO"
+    && amountCents(record.importePendiente) > 0
+  ));
+}
+
+function assignmentMaximumDate() {
+  const value = String(state.assignRecord?.fechaHora || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : todayValue();
+}
+
+function newAssignmentDetail() {
+  return {
+    key: state.nextAssignDetailKey++,
+    cliente_id: "",
+    fecha_recepcion: assignmentMaximumDate(),
+    importe: ""
+  };
+}
+
+function assignmentDetailState() {
+  const detailCents = state.assignDetails.map((detail) => parseMoneyCents(detail.importe));
+  const maximumDate = assignmentMaximumDate();
+  const complete = state.assignDetails.length > 0
+    && state.assignDetails.every((detail, index) => Boolean(detail.cliente_id)
+      && Boolean(detail.fecha_recepcion)
+      && detail.fecha_recepcion <= maximumDate
+      && detailCents[index] !== null
+      && detailCents[index] > 0);
+
+  return {
+    complete,
+    sumCents: detailCents.reduce((sum, cents) => sum + (cents || 0), 0)
+  };
+}
+
+function renderAssignmentFacts() {
+  const record = state.assignRecord;
+  if (!record) {
+    elements.assignFacts.innerHTML = "";
+    return;
+  }
+  const destination = [record.entidadNombre, record.cuentaNombre].filter(Boolean).join(" · ") || "Sin destino";
+
+  elements.assignFacts.innerHTML = `
+    <article><span>Cobranza</span><strong>${escapeHtml(record.codigo)}</strong></article>
+    <article><span>Número de operación</span><strong>${escapeHtml(record.referencia || "Sin referencia")}</strong></article>
+    <article><span>Cuenta de destino</span><strong>${escapeHtml(destination)}</strong></article>
+    <article class="is-total"><span>Saldo disponible</span><strong>${escapeHtml(moneyFromCents(state.assignAvailableCents, record.moneda))}</strong></article>
+  `;
+}
+
+function renderAssignmentDetails() {
+  if (!state.assignDetails.length) state.assignDetails = [newAssignmentDetail()];
+  const record = state.assignRecord;
+  const disabled = !permissions.manage || state.assigning || state.assignRetryLocked ? "disabled" : "";
+  const maximumDate = assignmentMaximumDate();
+  const currency = record?.moneda || state.defaultCurrency;
+
+  elements.assignDetails.innerHTML = state.assignDetails.map((detail, index) => `
+    <article class="fin-purchase-line fin-collection-line" data-assignment-key="${detail.key}">
+      <header>
+        <div>
+          <span class="fin-purchase-line-number">${String(index + 1).padStart(2, "0")}</span>
+          <strong>Asignación ${index + 1}</strong>
+        </div>
+        <button class="fin-btn fin-btn-danger fin-btn-small" type="button" data-assignment-remove="${detail.key}" aria-label="Quitar asignación ${index + 1}" ${state.assignDetails.length === 1 || disabled ? "disabled" : ""}>Quitar</button>
+      </header>
+      <div class="fin-collection-assign-line-grid">
+        <label class="fin-field">
+          <span>Cliente identificado <b>*</b></span>
+          <select data-assignment-field="cliente_id" required ${disabled}>
+            <option value="">Selecciona un cliente</option>
+            ${clientOptions(detail.cliente_id)}
+          </select>
+        </label>
+        <label class="fin-field">
+          <span>Fecha de recepción <b>*</b></span>
+          <input data-assignment-field="fecha_recepcion" type="date" min="1970-01-01" max="${escapeHtml(maximumDate)}" value="${escapeHtml(detail.fecha_recepcion)}" required ${disabled}>
+        </label>
+        <label class="fin-field">
+          <span>Importe a identificar <b>*</b></span>
+          <div class="fin-money-input">
+            <span>${escapeHtml(currencyPrefix(currency))}</span>
+            <input data-assignment-field="importe" type="number" min="0.01" step="0.01" inputmode="decimal" value="${escapeHtml(detail.importe)}" required placeholder="0.00" ${disabled}>
+          </div>
+        </label>
+      </div>
+    </article>
+  `).join("");
+
+  updateAssignmentSummary();
+}
+
+function updateAssignmentSummary() {
+  const record = state.assignRecord;
+  const details = assignmentDetailState();
+  const retryAttempt = assignmentRetryAttempt();
+  const atDetailLimit = state.assignDetails.length >= MAX_PENDING_ASSIGNMENT_DETAILS;
+  const reconciliation = pendingAssignmentReconciliation({
+    availableCents: state.assignAvailableCents,
+    detailCents: details.sumCents,
+    detailsComplete: details.complete
+  });
+  const currency = record?.moneda || state.defaultCurrency;
+
+  elements.assignAvailable.textContent = moneyFromCents(reconciliation.availableCents, currency);
+  elements.assignTotal.textContent = moneyFromCents(reconciliation.assignedCents, currency);
+  elements.assignRemaining.textContent = moneyFromCents(
+    reconciliation.excessCents || reconciliation.remainingCents,
+    currency
+  );
+  elements.assignRemainingLine.classList.toggle("is-over", reconciliation.excessCents > 0);
+  elements.assignRemainingLine.classList.toggle("is-complete", reconciliation.complete);
+  elements.assignRemainingLine.querySelector("span").textContent = reconciliation.excessCents > 0
+    ? "Excede el saldo"
+    : reconciliation.complete
+      ? "Saldo restante"
+      : "Quedará pendiente";
+
+  let hint;
+  if (!record) {
+    hint = "Selecciona una cobranza vigente con saldo pendiente.";
+  } else if (state.assignRetryLocked) {
+    hint = "El resultado anterior no pudo confirmarse. Reintenta exactamente la misma asignación; los campos permanecen bloqueados para evitar duplicados.";
+  } else if (reconciliation.excessCents > 0) {
+    hint = `La asignación supera el saldo disponible por ${moneyFromCents(reconciliation.excessCents, currency)}.`;
+  } else if (!details.complete) {
+    hint = "Completa el cliente, la fecha y el importe de cada fila.";
+  } else if (reconciliation.complete) {
+    hint = "El saldo pendiente quedará completamente identificado.";
+  } else if (reconciliation.registrable) {
+    hint = `Después de guardar quedarán ${moneyFromCents(reconciliation.remainingCents, currency)} pendientes por identificar.`;
+  } else {
+    hint = "Agrega un importe mayor a cero para continuar.";
+  }
+  if (atDetailLimit && !state.assignRetryLocked) {
+    hint += ` Alcanzaste el máximo de ${MAX_PENDING_ASSIGNMENT_DETAILS} clientes por operación.`;
+  }
+  elements.assignHint.textContent = hint;
+
+  elements.assignAddDetail.disabled = !permissions.manage
+    || state.assigning
+    || state.assignRetryLocked
+    || !record
+    || atDetailLimit;
+  elements.assignSubmit.disabled = !permissions.manage
+    || state.assigning
+    || !record
+    || (state.assignRetryLocked ? !retryAttempt : !reconciliation.registrable);
+  elements.assignSubmit.textContent = state.assigning
+    ? state.assignRetryLocked ? "Reintentando..." : "Asignando..."
+    : state.assignRetryLocked ? "Reintentar asignación" : "Asignar saldo";
+  elements.assignForm.querySelectorAll("[data-collection-dialog-close]").forEach((button) => {
+    button.disabled = state.assigning;
+  });
+}
+
+function resetAssignmentState() {
+  state.assignId = null;
+  state.assignRecord = null;
+  state.assignAvailableCents = 0;
+  state.assignDetails = [];
+  state.assignIdempotencyKey = null;
+  state.assignRetryLocked = false;
+  state.assigning = false;
+  elements.assignFacts.innerHTML = "";
+  elements.assignDetails.innerHTML = "";
+  setMessage(elements.assignMessage, "");
+}
+
+function openAssignmentDialog(id) {
+  const record = state.collections.get(String(id));
+  if (!canAssignCollection(record)) return;
+  const retryAttempt = assignmentRetryAttempt(record.id);
+
+  state.assignId = record.id;
+  state.assignRecord = record;
+  state.assignAvailableCents = retryAttempt?.availableCents ?? amountCents(record.importePendiente);
+  state.assignIdempotencyKey = retryAttempt?.payload?.idempotency_key || createIdempotencyKey();
+  state.assignRetryLocked = Boolean(retryAttempt);
+  state.assigning = false;
+  state.assignDetails = retryAttempt
+    ? assignmentDetailsFromPayload(retryAttempt.payload)
+    : [newAssignmentDetail()];
+
+  elements.assignTitle.textContent = retryAttempt ? "Reintentar asignación pendiente" : "Asignar saldo pendiente";
+  elements.assignIntro.textContent = retryAttempt
+    ? `Confirma la operación pendiente de ${record.codigo} sin cambiar sus clientes ni importes.`
+    : `Identifica el saldo restante de ${record.codigo} sin modificar los abonos ya aplicados.`;
+  setMessage(elements.assignMessage, retryAttempt?.message || "", retryAttempt ? "error" : "");
+  renderAssignmentFacts();
+  renderAssignmentDetails();
+
+  if (elements.detailDialog.open) elements.detailDialog.close();
+  if (!elements.assignDialog.open) elements.assignDialog.showModal();
+  window.setTimeout(() => {
+    (retryAttempt ? elements.assignSubmit : elements.assignDetails.querySelector("select"))?.focus();
+  }, 40);
+}
+
+function assignmentValidationIssue() {
+  if (!permissions.manage) return ["No tienes permiso para asignar el saldo pendiente.", null];
+  if (state.assignRetryLocked) {
+    return assignmentRetryAttempt()
+      ? null
+      : ["La operación pendiente ya no está disponible para reintentar.", null];
+  }
+  if (!canAssignCollection(state.assignRecord)) {
+    return ["La cobranza ya no está vigente o no tiene saldo pendiente.", null];
+  }
+  if (state.assignDetails.length > MAX_PENDING_ASSIGNMENT_DETAILS) {
+    return [`Solo se permiten ${MAX_PENDING_ASSIGNMENT_DETAILS} clientes por asignación.`, null];
+  }
+
+  const maximumDate = assignmentMaximumDate();
+  for (const detail of state.assignDetails) {
+    const article = elements.assignDetails.querySelector(`[data-assignment-key="${detail.key}"]`);
+    if (!detail.cliente_id) {
+      return ["Selecciona el cliente de cada asignación.", article?.querySelector('[data-assignment-field="cliente_id"]')];
+    }
+    if (!detail.fecha_recepcion) {
+      return ["Indica la fecha de recepción de cada asignación.", article?.querySelector('[data-assignment-field="fecha_recepcion"]')];
+    }
+    if (detail.fecha_recepcion > maximumDate) {
+      return ["La recepción del efectivo no puede ser posterior al depósito.", article?.querySelector('[data-assignment-field="fecha_recepcion"]')];
+    }
+    const cents = parseMoneyCents(detail.importe);
+    if (cents === null || cents <= 0) {
+      return ["Ingresa un importe válido mayor a cero en cada asignación.", article?.querySelector('[data-assignment-field="importe"]')];
+    }
+  }
+
+  const details = assignmentDetailState();
+  if (details.sumCents > state.assignAvailableCents) {
+    const amountFields = elements.assignDetails.querySelectorAll('[data-assignment-field="importe"]');
+    return [
+      "La suma de las asignaciones no puede superar el saldo pendiente.",
+      amountFields[amountFields.length - 1] || null
+    ];
+  }
+  return null;
+}
+
+async function saveAssignment(event) {
+  event.preventDefault();
+  if (state.assigning) return;
+  const issue = assignmentValidationIssue();
+  if (issue) {
+    setMessage(elements.assignMessage, issue[0], "error");
+    issue[1]?.focus();
+    return;
+  }
+
+  const collectionId = state.assignId;
+  const record = state.assignRecord;
+  const retryAttempt = state.assignRetryLocked ? assignmentRetryAttempt(collectionId) : null;
+  const payload = retryAttempt?.payload || assignmentPayloadFromState();
+  const assignedCents = payload.detalles.reduce(
+    (sum, detail) => sum + (parseMoneyCents(detail.importe) || 0),
+    0
+  );
+
+  state.assigning = true;
+  renderAssignmentDetails();
+  setMessage(elements.assignMessage, "Asignando el saldo a los clientes...");
+
+  let response;
+  try {
+    response = await apiRequest(`/finanzas/cobranzas/${encodeURIComponent(collectionId)}/asignaciones`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    state.assigning = false;
+    const message = errorMessage(error, "No se pudo asignar el saldo pendiente.");
+    if (isDeterministicAssignmentErrorStatus(error?.status)) {
+      clearAssignmentRetry(collectionId);
+      state.assignIdempotencyKey = createIdempotencyKey();
+      renderAssignmentDetails();
+      setMessage(elements.assignMessage, message, "error");
+      return;
+    }
+
+    const retryMessage = `${message} El resultado no se pudo confirmar; reintenta esta misma operación sin cambiar sus datos.`;
+    rememberAssignmentRetry(collectionId, payload, retryMessage);
+    renderAssignmentDetails();
+    setMessage(elements.assignMessage, retryMessage, "error");
+    return;
+  }
+
+  state.assigning = false;
+  clearAssignmentRetry(collectionId);
+  const savedRecord = normalizeCollection(detailCollectionFromResponse(response));
+  const remainingCents = amountCents(savedRecord.importePendiente);
+  const savedCurrency = savedRecord.moneda || record.moneda;
+  const successMessage = remainingCents > 0
+    ? `${moneyFromCents(assignedCents, savedCurrency)} asignados. Quedan ${moneyFromCents(remainingCents, savedCurrency)} por identificar.`
+    : `Saldo pendiente de ${moneyFromCents(assignedCents, savedCurrency)} asignado completamente.`;
+  state.collectionRevision += 1;
+  elements.assignDialog.close();
+  renderCollectionDetailResponse(response, { successMessage });
+  void loadCollections({ silent: true, force: true });
 }
 
 function renderCollections(records) {
@@ -799,6 +1198,8 @@ function renderCollections(records) {
 
   elements.rows.innerHTML = records.map((record) => {
     const canVoid = permissions.void && record.estado === "REGISTRADO";
+    const canAssign = canAssignCollection(record);
+    const retryPending = Boolean(assignmentRetryAttempt(record.id));
     const destination = [record.entidadNombre, record.cuentaNombre].filter(Boolean).join(" · ") || "Sin destino";
     return `
       <tr class="${record.estado === "ANULADO" ? "is-muted" : ""}">
@@ -817,6 +1218,7 @@ function renderCollections(records) {
         <td>
           <div class="fin-collection-row-actions">
             <button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-collection-detail="${record.id}">Ver detalle</button>
+            ${canAssign ? `<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-collection-assign="${record.id}">${retryPending ? "Reintentar asignación" : "Asignar saldo"}</button>` : ""}
             ${canVoid ? `<button class="fin-btn fin-btn-danger fin-btn-small" type="button" data-collection-void="${record.id}">Anular</button>` : ""}
           </div>
         </td>
@@ -846,19 +1248,62 @@ function updatePagination(currentPage = state.page, lastPage = state.lastPage) {
   elements.next.disabled = state.loadingList || state.page >= state.lastPage;
 }
 
-async function loadCollections({ silent = false } = {}) {
-  if (state.loadingList) return;
+function startCollectionsLoad({ silent = false } = {}) {
+  let request;
+  request = performCollectionsLoad({ silent }).finally(() => {
+    if (state.listLoadPromise === request) state.listLoadPromise = null;
+  });
+  state.listLoadPromise = request;
+  return request;
+}
+
+function loadCollections({ silent = false, force = false } = {}) {
+  if (!state.listLoadPromise) return startCollectionsLoad({ silent });
+  if (!force) return state.listLoadPromise;
+
+  state.listReloadSilent = state.listReloadRequested
+    ? state.listReloadSilent && silent
+    : silent;
+  state.listReloadRequested = true;
+
+  if (!state.listReloadPromise) {
+    let queuedReload;
+    queuedReload = (async () => {
+      while (state.listLoadPromise) {
+        await state.listLoadPromise.catch(() => undefined);
+      }
+      while (state.listReloadRequested) {
+        const queuedSilent = state.listReloadSilent;
+        state.listReloadRequested = false;
+        state.listReloadSilent = true;
+        await startCollectionsLoad({ silent: queuedSilent });
+        while (state.listLoadPromise) {
+          await state.listLoadPromise.catch(() => undefined);
+        }
+      }
+    })().finally(() => {
+      if (state.listReloadPromise === queuedReload) state.listReloadPromise = null;
+    });
+    state.listReloadPromise = queuedReload;
+  }
+
+  return state.listReloadPromise;
+}
+
+async function performCollectionsLoad({ silent = false } = {}) {
   if (elements.filterFrom.value && elements.filterTo.value && elements.filterFrom.value > elements.filterTo.value) {
     setMessage(elements.listMessage, "La fecha inicial no puede ser posterior a la fecha final.", "error");
     return;
   }
 
+  const requestedRevision = state.collectionRevision;
   state.loadingList = true;
   updatePagination();
   if (!silent) setMessage(elements.listMessage, "Cargando cobranzas...");
 
   try {
     const response = await apiRequest(`/finanzas/cobranzas?${filterParams().toString()}`);
+    if (requestedRevision !== state.collectionRevision) return;
     const records = responseCollection(response, ["cobranzas", "records", "items"])
       .map(normalizeCollection)
       .filter((record) => record.id);
@@ -879,8 +1324,14 @@ async function loadCollections({ silent = false } = {}) {
     setMessage(elements.listMessage, records.length ? `${records.length} cobranza${records.length === 1 ? "" : "s"} en esta página.` : "");
     markFinanceAccessReady();
   } catch (error) {
-    renderCollections([]);
-    setMessage(elements.listMessage, errorMessage(error, "No se pudo cargar el historial de cobranzas."), "error");
+    if (!silent && state.collections.size === 0) renderCollections([]);
+    setMessage(
+      elements.listMessage,
+      silent
+        ? "La asignación se guardó, pero no se pudo actualizar el historial. Usa Actualizar para volver a intentarlo."
+        : errorMessage(error, "No se pudo cargar el historial de cobranzas."),
+      "error"
+    );
   } finally {
     state.loadingList = false;
     updatePagination();
@@ -922,6 +1373,8 @@ function detailMoney(value, currency) {
 
 function renderCollectionDetail(source, details) {
   const record = normalizeCollection(source);
+  if (record.id) state.collections.set(String(record.id), record);
+  const retryAttempt = assignmentRetryAttempt(record.id);
   const normalizedDetails = details.map(normalizeDetail);
   const destination = [record.entidadNombre, record.cuentaNombre].filter(Boolean).join(" · ") || "Sin destino";
   const providerApplied = firstDefined(source, ["importe_aplicado_cxp", "aplicado_cxp", "cxp_aplicado"], null);
@@ -945,10 +1398,17 @@ function renderCollectionDetail(source, details) {
       <article><span>Pendiente por identificar</span><strong>${escapeHtml(formatMoney(record.importePendiente, record.moneda))}</strong></article>
       <article class="is-total"><span>Total depositado</span><strong>${escapeHtml(formatMoney(record.importe, record.moneda))}</strong></article>
     </div>
-    ${Number(record.importePendiente) > 0 ? `
+    ${retryAttempt ? `
+      <div class="fin-collection-detail-note is-pending">
+        <strong>Asignación pendiente de confirmar</strong>
+        <p>El servidor no confirmó la respuesta anterior. Reintenta exactamente la misma operación para comprobarla sin duplicarla.</p>
+        <div class="fin-collection-detail-note-actions"><button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-collection-assign="${record.id}">Reintentar asignación</button></div>
+      </div>
+    ` : Number(record.importePendiente) > 0 ? `
       <div class="fin-collection-detail-note is-pending">
         <strong>${escapeHtml(formatMoney(record.importePendiente, record.moneda))} pendiente por identificar</strong>
         <p>Este importe forma parte del voucher y de su efecto financiero, pero no está atribuido a ningún cliente.${pendingPaymentCode ? ` Movimiento asociado: ${escapeHtml(pendingPaymentCode)}.` : ""}</p>
+        ${canAssignCollection(record) ? `<div class="fin-collection-detail-note-actions"><button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-collection-assign="${record.id}">Asignar saldo</button></div>` : ""}
       </div>
     ` : ""}
     ${record.proveedorNombre ? `
@@ -984,7 +1444,16 @@ function renderCollectionDetail(source, details) {
   elements.detailContent.hidden = false;
 }
 
-async function openCollectionDetail(id) {
+function renderCollectionDetailResponse(response, { successMessage = "" } = {}) {
+  const source = detailCollectionFromResponse(response);
+  const details = responseCollection(response, ["detalles", "details", "cobranza.detalles", "collection.details"]);
+  renderCollectionDetail(source, details);
+  setMessage(elements.detailMessage, successMessage, successMessage ? "success" : undefined);
+  if (!elements.detailDialog.open) elements.detailDialog.showModal();
+  markFinanceAccessReady();
+}
+
+async function openCollectionDetail(id, { successMessage = "" } = {}) {
   elements.detailTitle.textContent = "Detalle de cobranza";
   elements.detailContent.hidden = true;
   elements.detailContent.innerHTML = "";
@@ -993,13 +1462,11 @@ async function openCollectionDetail(id) {
 
   try {
     const response = await apiRequest(`/finanzas/cobranzas/${encodeURIComponent(id)}`);
-    const source = detailCollectionFromResponse(response);
-    const details = responseCollection(response, ["detalles", "details", "cobranza.detalles", "collection.details"]);
-    renderCollectionDetail(source, details);
-    setMessage(elements.detailMessage, "");
-    markFinanceAccessReady();
+    renderCollectionDetailResponse(response, { successMessage });
+    return true;
   } catch (error) {
     setMessage(elements.detailMessage, errorMessage(error, "No se pudo cargar el detalle de la cobranza."), "error");
+    return false;
   }
 }
 
@@ -1057,6 +1524,8 @@ function applyPermissions() {
   elements.manageCollectors.disabled = !permissions.manage;
   elements.addDetail.disabled = !permissions.manage;
   elements.reset.disabled = !permissions.manage;
+  elements.assignAddDetail.disabled = !permissions.manage;
+  elements.assignSubmit.disabled = true;
   elements.collectorForm.querySelectorAll("input, button").forEach((field) => { field.disabled = !permissions.manage; });
   if (!permissions.manage) {
     elements.form.querySelectorAll("input, select, textarea, button").forEach((field) => { field.disabled = true; });
@@ -1159,9 +1628,63 @@ elements.next.addEventListener("click", () => {
 });
 elements.rows.addEventListener("click", (event) => {
   const detail = event.target.closest("[data-collection-detail]");
+  const assign = event.target.closest("[data-collection-assign]");
   const voidButton = event.target.closest("[data-collection-void]");
   if (detail) void openCollectionDetail(detail.dataset.collectionDetail);
+  if (assign) openAssignmentDialog(assign.dataset.collectionAssign);
   if (voidButton) openVoidDialog(voidButton.dataset.collectionVoid);
+});
+elements.detailContent.addEventListener("click", (event) => {
+  const assign = event.target.closest("[data-collection-assign]");
+  if (assign) openAssignmentDialog(assign.dataset.collectionAssign);
+});
+elements.assignAddDetail.addEventListener("click", () => {
+  if (!permissions.manage
+    || state.assigning
+    || state.assignRetryLocked
+    || !state.assignRecord
+    || state.assignDetails.length >= MAX_PENDING_ASSIGNMENT_DETAILS) return;
+  state.assignDetails.push(newAssignmentDetail());
+  renderAssignmentDetails();
+  elements.assignDetails.querySelector("[data-assignment-key]:last-child select")?.focus();
+});
+elements.assignDetails.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-assignment-field]");
+  if (!input || state.assigning || state.assignRetryLocked) return;
+  const article = input.closest("[data-assignment-key]");
+  const detail = state.assignDetails.find((item) => String(item.key) === String(article?.dataset.assignmentKey));
+  if (!detail) return;
+  detail[input.dataset.assignmentField] = input.value;
+  setMessage(elements.assignMessage, "");
+  updateAssignmentSummary();
+});
+elements.assignDetails.addEventListener("change", (event) => {
+  const input = event.target.closest("[data-assignment-field]");
+  if (!input || state.assigning || state.assignRetryLocked) return;
+  const article = input.closest("[data-assignment-key]");
+  const detail = state.assignDetails.find((item) => String(item.key) === String(article?.dataset.assignmentKey));
+  if (!detail) return;
+  detail[input.dataset.assignmentField] = input.value;
+  setMessage(elements.assignMessage, "");
+  updateAssignmentSummary();
+});
+elements.assignDetails.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-assignment-remove]");
+  if (!button
+    || state.assignDetails.length === 1
+    || state.assigning
+    || state.assignRetryLocked
+    || !permissions.manage) return;
+  state.assignDetails = state.assignDetails.filter((detail) => String(detail.key) !== String(button.dataset.assignmentRemove));
+  setMessage(elements.assignMessage, "");
+  renderAssignmentDetails();
+});
+elements.assignForm.addEventListener("submit", saveAssignment);
+elements.assignDialog.addEventListener("cancel", (event) => {
+  if (state.assigning) event.preventDefault();
+});
+elements.assignDialog.addEventListener("close", () => {
+  if (!state.assigning) resetAssignmentState();
 });
 elements.voidForm.addEventListener("submit", voidCollection);
 document.querySelectorAll("[data-collection-dialog-close]").forEach((button) => {

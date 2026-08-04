@@ -85,6 +85,12 @@ class Cobranza extends Model
         return $this->hasMany(CobranzaDetalle::class)->orderBy('orden');
     }
 
+    /** @return HasMany<CobranzaAsignacion, $this> */
+    public function asignaciones(): HasMany
+    {
+        return $this->hasMany(CobranzaAsignacion::class)->orderBy('id');
+    }
+
     /** @return HasOne<CobranzaPendiente, $this> */
     public function pendiente(): HasOne
     {

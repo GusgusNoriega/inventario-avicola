@@ -288,6 +288,8 @@ class FinancialQueryService
     /** @param array<string, mixed> $filters */
     private function movementQuery(int $companyId, array $filters, bool $trace = false): Builder
     {
+        $assignmentPaymentLinks = $this->collectionAssignmentPaymentLinks($companyId);
+
         return DB::table('pagos as pago')
             ->leftJoin('terceros as cliente', 'cliente.id', '=', 'pago.cliente_id')
             ->leftJoin('terceros as proveedor', 'proveedor.id', '=', 'pago.proveedor_id')
@@ -298,9 +300,20 @@ class FinancialQueryService
             ->leftJoin('entidades_financieras as entidad_destino', 'entidad_destino.id', '=', 'cuenta_destino.entidad_financiera_id')
             ->leftJoin('cobranza_detalles as cobranza_detalle', 'cobranza_detalle.pago_id', '=', 'pago.id')
             ->leftJoin('cobranza_pendientes as cobranza_pendiente', 'cobranza_pendiente.pago_id', '=', 'pago.id')
-            ->leftJoin('cobranzas as cobranza', function ($join): void {
-                $join->on('cobranza.id', '=', 'cobranza_detalle.cobranza_id')
-                    ->orOn('cobranza.id', '=', 'cobranza_pendiente.cobranza_id');
+            ->leftJoinSub(
+                $assignmentPaymentLinks,
+                'cobranza_asignacion_pago',
+                'cobranza_asignacion_pago.pago_id',
+                '=',
+                'pago.id',
+            )
+            ->leftJoin('cobranzas as cobranza', function ($join) use ($companyId): void {
+                $join->on(function ($links): void {
+                    $links->on('cobranza.id', '=', 'cobranza_detalle.cobranza_id')
+                        ->orOn('cobranza.id', '=', 'cobranza_pendiente.cobranza_id')
+                        ->orOn('cobranza.id', '=', 'cobranza_asignacion_pago.cobranza_id');
+                })
+                    ->where('cobranza.empresa_id', $companyId);
             })
             ->where('pago.empresa_id', $companyId)
             ->when($filters['tipo'] ?? null, fn (Builder $query, string $type) => $query->where('pago.tipo', $type))
@@ -381,6 +394,33 @@ class FinancialQueryService
                 'cobranza.cobrador_id as cobranza_cobrador_id',
                 'cobranza.cobrador_nombre_snapshot as cobranza_cobrador_nombre',
             ]);
+    }
+
+    private function collectionAssignmentPaymentLinks(int $companyId): Builder
+    {
+        $previousPending = DB::table('cobranza_asignaciones')
+            ->where('empresa_id', $companyId)
+            ->select([
+                'pago_pendiente_anterior_id as pago_id',
+                'cobranza_id',
+            ]);
+        $reversals = DB::table('cobranza_asignaciones')
+            ->where('empresa_id', $companyId)
+            ->select([
+                'pago_reversa_id as pago_id',
+                'cobranza_id',
+            ]);
+        $newPending = DB::table('cobranza_asignaciones')
+            ->where('empresa_id', $companyId)
+            ->whereNotNull('pago_pendiente_nuevo_id')
+            ->select([
+                'pago_pendiente_nuevo_id as pago_id',
+                'cobranza_id',
+            ]);
+
+        return $previousPending
+            ->union($reversals)
+            ->union($newPending);
     }
 
     /** @param Collection<int, object> $payments @return list<array<string, mixed>> */

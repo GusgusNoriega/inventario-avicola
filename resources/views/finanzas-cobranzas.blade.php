@@ -252,6 +252,41 @@
     </div>
   </dialog>
 
+  <dialog id="collectionAssignDialog" class="fin-purchase-dialog fin-collection-assign-dialog" aria-labelledby="collectionAssignTitle">
+    <form id="collectionAssignForm" class="fin-purchase-dialog-card" novalidate>
+      <header class="fin-purchase-dialog-head">
+        <div><p class="fin-eyebrow">Conciliación posterior</p><h2 id="collectionAssignTitle">Asignar saldo pendiente</h2></div>
+        <button class="fin-dialog-close" type="button" data-collection-dialog-close aria-label="Cerrar">×</button>
+      </header>
+      <p id="collectionAssignIntro" class="fin-section-copy">Agrega la identificación faltante sin modificar los abonos que ya fueron aplicados.</p>
+      <div id="collectionAssignFacts" class="fin-collection-detail-facts fin-collection-assign-facts" aria-live="polite"></div>
+
+      <section class="fin-collection-assign-workspace" aria-labelledby="collectionAssignBreakdownTitle">
+        <div class="fin-section-head fin-section-head-wrap">
+          <div>
+            <p class="fin-eyebrow">Nuevo desglose</p>
+            <h2 id="collectionAssignBreakdownTitle">Clientes identificados</h2>
+            <p class="fin-section-copy">Puedes distribuir todo el saldo o solo una parte; el remanente seguirá pendiente.</p>
+          </div>
+          <button id="collectionAssignAddDetail" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Agregar cliente</button>
+        </div>
+        <div id="collectionAssignDetails" class="fin-purchase-lines fin-collection-lines" aria-live="polite"></div>
+      </section>
+
+      <div class="fin-collection-assign-summary" aria-live="polite">
+        <div><span>Saldo disponible</span><strong id="collectionAssignAvailable">S/ 0.00</strong></div>
+        <div><span>A asignar ahora</span><strong id="collectionAssignTotal">S/ 0.00</strong></div>
+        <div id="collectionAssignRemainingLine"><span>Quedará pendiente</span><strong id="collectionAssignRemaining">S/ 0.00</strong></div>
+      </div>
+      <p id="collectionAssignHint" class="fin-summary-hint">Agrega al menos un cliente para continuar.</p>
+      <p id="collectionAssignMessage" class="fin-message" role="status" aria-live="polite"></p>
+      <footer class="fin-purchase-dialog-actions">
+        <button class="fin-btn fin-btn-ghost" type="button" data-collection-dialog-close>Cancelar</button>
+        <button id="collectionAssignSubmit" class="fin-btn fin-btn-primary" type="submit" disabled>Asignar saldo</button>
+      </footer>
+    </form>
+  </dialog>
+
   <dialog id="collectionVoidDialog" class="fin-purchase-dialog fin-void-dialog" aria-labelledby="collectionVoidTitle">
     <form id="collectionVoidForm" class="fin-purchase-dialog-card" novalidate>
       <header class="fin-purchase-dialog-head">

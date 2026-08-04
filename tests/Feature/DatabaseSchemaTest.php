@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(94, $migrationFiles);
+        $this->assertCount(95, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -38,6 +38,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php' => 2,
                 '2026_07_22_000001_add_station_to_retail_weight_adjustments.php' => 2,
                 '2026_08_01_000003_create_cobranzas_tables.php' => 3,
+                '2026_08_04_000001_create_cobranza_asignaciones_table.php' => 2,
                 default => 1,
             };
 
@@ -116,6 +117,7 @@ class DatabaseSchemaTest extends TestCase
             'cobranzas',
             'cobranza_detalles',
             'cobranza_pendientes',
+            'cobranza_asignaciones',
         ];
 
         foreach ($tables as $table) {
@@ -161,8 +163,9 @@ class DatabaseSchemaTest extends TestCase
             'movimientos_caja_efectivo' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'caja_id', 'direccion', 'contraparte_tipo', 'cliente_id', 'otra_caja_id', 'detalle', 'estado', 'created_by'],
             'cobradores' => ['empresa_id', 'nombre', 'estado', 'created_by', 'created_at', 'updated_at'],
             'cobranzas' => ['empresa_id', 'cobrador_id', 'cobrador_nombre_snapshot', 'codigo', 'idempotency_key', 'payload_hash', 'cuenta_destino_id', 'proveedor_id', 'metodo_pago_id', 'fecha_hora', 'referencia', 'moneda', 'importe_total', 'observaciones', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
-            'cobranza_detalles' => ['cobranza_id', 'pago_id', 'cliente_id', 'fecha_recepcion', 'medio_recepcion', 'importe', 'orden', 'created_at'],
+            'cobranza_detalles' => ['cobranza_id', 'asignacion_id', 'pago_id', 'cliente_id', 'fecha_recepcion', 'medio_recepcion', 'importe', 'orden', 'created_at'],
             'cobranza_pendientes' => ['cobranza_id', 'pago_id', 'importe', 'created_at'],
+            'cobranza_asignaciones' => ['empresa_id', 'cobranza_id', 'idempotency_key', 'payload_hash', 'importe_pendiente_antes', 'importe_asignado', 'importe_pendiente_despues', 'pago_pendiente_anterior_id', 'pago_reversa_id', 'pago_pendiente_nuevo_id', 'created_by', 'created_at'],
         ];
 
         foreach ($expectations as $table => $columns) {

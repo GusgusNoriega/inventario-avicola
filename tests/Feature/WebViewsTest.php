@@ -211,6 +211,9 @@ class WebViewsTest extends TestCase
             ->assertSee('id="collectionHistoryTitle"', false)
             ->assertSee('id="collectorDialog"', false)
             ->assertSee('id="collectionDetailDialog"', false)
+            ->assertSee('id="collectionAssignDialog"', false)
+            ->assertSee('id="collectionAssignDetails"', false)
+            ->assertSee('id="collectionAssignSubmit"', false)
             ->assertSee('id="collectionVoidDialog"', false)
             ->assertSee(asset('js/finanzas-cobranzas.js'), false);
 

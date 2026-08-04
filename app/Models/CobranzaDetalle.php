@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'cobranza_id',
+    'asignacion_id',
     'pago_id',
     'cliente_id',
     'fecha_recepcion',
@@ -27,6 +28,12 @@ class CobranzaDetalle extends Model
     public function cobranza(): BelongsTo
     {
         return $this->belongsTo(Cobranza::class);
+    }
+
+    /** @return BelongsTo<CobranzaAsignacion, $this> */
+    public function asignacion(): BelongsTo
+    {
+        return $this->belongsTo(CobranzaAsignacion::class, 'asignacion_id');
     }
 
     /** @return BelongsTo<Pago, $this> */

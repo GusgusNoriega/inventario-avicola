@@ -70,6 +70,27 @@ entre cajas como `TRANSFERENCIA_INTERNA`; y un ingreso de otro origen o un gasto
 administrativo, de transporte o depósito como `AJUSTE`. Una transferencia se
 muestra como gasto en la caja de origen e ingreso en la caja de destino.
 
+### Cobranzas consolidadas
+
+Una cobranza consolidada representa un solo depósito o número de operación que
+puede reunir efectivo de varios clientes. La cabecera conserva el cobrador, la
+cuenta de destino, la moneda, el importe total y la referencia del voucher; cada
+fila del desglose genera un movimiento trazable para el cliente correspondiente
+y aplica su importe a las CXC más antiguas.
+
+Si el voucher no se identifica por completo, la diferencia se registra como
+`DEPOSITO_NO_ASIGNADO`. Ese importe forma parte del movimiento de dinero, pero
+no reduce la cartera de ningún cliente. Desde el historial de cobranzas puede
+asignarse posteriormente, de forma parcial o total, a uno o varios clientes.
+
+La asignación posterior es acumulativa e idempotente: no modifica los abonos ya
+registrados ni vuelve a sumar el depósito a la cuenta. El movimiento pendiente
+anterior se reemplaza mediante una reversa trazable y nuevos movimientos cuya
+suma es exactamente igual al pendiente anterior. Cuando el destino pertenece a
+un proveedor, se conservan también las aplicaciones CXP y el saldo a favor del
+proveedor. Si el remanente llega a cero, la cobranza queda conciliada como
+completa.
+
 Un `PAGO_PROVEEDOR` puede registrarse sin aplicarlo de inmediato. En ese caso
 el dinero sale una sola vez de la cuenta propia y el importe pendiente de
 aplicar queda como saldo a nuestro favor con ese proveedor. Cuando se usa en
@@ -109,6 +130,8 @@ UUID de idempotencia.
 - `/finanzas`: menú del módulo con acceso a saldos, compras, cuentas y movimientos.
 - `/finanzas/saldos`: saldos por cuenta, cartera, pagos a proveedores y trazabilidad.
 - `/finanzas/entidades`: entidades propias/externas y sus cuentas.
+- `/finanzas/cobranzas`: registro de un voucher para varios clientes, historial,
+  detalle, asignación posterior del saldo por identificar y anulación trazable.
 - `/finanzas/caja-efectivo`: lista diaria por caja, ingresos, gastos, neto,
   total ingresado a bancos y billeteras propias por moneda (sin sumar cajas,
   saldos iniciales ni transferencias internas),
@@ -142,6 +165,9 @@ Los recursos principales son:
   `DELETE /caja-efectivo/{id}`.
 - `POST /movimientos`, `POST /movimientos/{id}/aplicaciones` y
   `POST /movimientos/{id}/anular`.
+- `GET /cobranzas/catalogo`, `GET /cobranzas`, `GET /cobranzas/{id}`,
+  `POST /cobranzas`, `POST /cobranzas/{id}/asignaciones` y
+  `POST /cobranzas/{id}/anular`.
 - `GET /clientes/{id}/resumen` y `/proveedores/{id}/resumen`.
 
 El pago inicial generado por una compra al contado no admite anulación aislada

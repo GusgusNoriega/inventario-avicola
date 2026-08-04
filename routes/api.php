@@ -104,6 +104,9 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:PAGOS_REGISTRAR');
         Route::post('/cobranzas', [CollectionController::class, 'store'])
             ->middleware('permission:PAGOS_REGISTRAR');
+        Route::post('/cobranzas/{cobranza}/asignaciones', [CollectionController::class, 'assignPending'])
+            ->whereNumber('cobranza')
+            ->middleware('permission:PAGOS_REGISTRAR');
         Route::post('/cobranzas/{cobranza}/anular', [CollectionController::class, 'void'])
             ->whereNumber('cobranza')
             ->middleware('permission:PAGOS_ANULAR');

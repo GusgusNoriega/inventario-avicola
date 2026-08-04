@@ -19,6 +19,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'compras',
         'cobranza_pendientes',
         'cobranza_detalles',
+        'cobranza_asignaciones',
         'cobranzas',
         'pago_aplicacion_operaciones',
         'ticket_precio_ajuste_operaciones',

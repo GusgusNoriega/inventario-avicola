@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\AssignCollectionPendingRequest;
 use App\Http\Requests\Finance\ListCollectionsRequest;
 use App\Http\Requests\Finance\StoreCollectionRequest;
 use App\Http\Requests\Finance\VoidCollectionRequest;
@@ -61,6 +62,33 @@ class CollectionController extends Controller
                 $result['cobranza_id'],
             ),
             'meta' => ['idempotent' => $result['idempotent']],
+        ], $result['idempotent'] ? 200 : 201);
+    }
+
+    public function assignPending(
+        AssignCollectionPendingRequest $request,
+        int $cobranza,
+    ): JsonResponse {
+        $result = $this->collections->assignPending(
+            (int) $request->user()->empresa_id,
+            $request->user(),
+            $cobranza,
+            $request->validated(),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => $result['idempotent']
+                ? 'Esta asignación del saldo pendiente ya había sido procesada.'
+                : 'El saldo pendiente fue asignado correctamente.',
+            'data' => $this->queries->find(
+                (int) $request->user()->empresa_id,
+                $result['cobranza_id'],
+            ),
+            'meta' => [
+                'idempotent' => $result['idempotent'],
+                'asignacion_id' => $result['asignacion_id'],
+            ],
         ], $result['idempotent'] ? 200 : 201);
     }
 
