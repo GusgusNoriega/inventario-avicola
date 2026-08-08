@@ -211,7 +211,7 @@ function resetSummary() {
   const currency = selectedCashRegister()?.moneda || "PEN";
   elements.income.textContent = formatMoney(0, currency);
   elements.accountIncome.textContent = accountIncomeText([], currency);
-  elements.collectionsByCollector.innerHTML = '<li class="is-empty">Sin cobranzas para el día seleccionado</li>';
+  elements.collectionsByCollector.innerHTML = '<li class="is-empty">Sin deuda pendiente hasta la fecha seleccionada</li>';
   elements.expense.textContent = formatMoney(0, currency);
   elements.net.textContent = formatMoney(0, currency);
 }
@@ -313,11 +313,13 @@ function collectionReceiptMarkup(record, renderedCollections) {
       ? "Recepción sin confirmar"
       : `Entrega física pendiente${receivedTrace ? ` · ${receivedTrace}` : ""}`;
   const disabled = !canManage || receipt.puede_actualizar === false || updating;
+  const collectorId = Number(collection?.cobrador?.id || 0);
 
   return `<label class="fin-cash-received ${received ? "is-received" : "is-pending"}">
     <input
       type="checkbox"
       data-collection-cash-received="${collectionId}"
+      data-collection-collector-id="${collectorId}"
       ${received ? "checked" : ""}
       ${disabled ? "disabled" : ""}
     >
@@ -327,7 +329,7 @@ function collectionReceiptMarkup(record, renderedCollections) {
 
 function collectionsByCollectorMarkup(collections, fallbackCurrency) {
   if (!Array.isArray(collections) || !collections.length) {
-    return '<li class="is-empty">Sin cobranzas para el día seleccionado</li>';
+    return '<li class="is-empty">Sin deuda pendiente hasta la fecha seleccionada</li>';
   }
 
   return collections.map((item) => {
@@ -335,19 +337,39 @@ function collectionsByCollectorMarkup(collections, fallbackCurrency) {
     const vouchers = Number(item.cobranzas_count || 0);
     const pending = Number(item.importe_pendiente || 0);
     const unconfirmed = Number(item.importe_sin_confirmar || 0);
-    const received = Number(item.importe_recibido || 0);
-    const pendingCopy = pending > 0
-      ? `<em>Pendiente de entrega ${escapeHtml(formatMoney(item.importe_pendiente, currency))}</em>`
-      : '<em class="is-received">Sin dinero pendiente</em>';
+    const debt = item.importe_adeudado ?? pending + unconfirmed;
+    const oldestDate = String(item.fecha_pendiente_mas_antigua || "");
+    const dateMatch = oldestDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const dateLabel = dateMatch ? `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}` : "";
+    const collectorId = Number(item.cobrador?.id || 0);
+    const collectorName = item.cobrador?.nombre || "Cobrador";
     const unknownCopy = unconfirmed > 0
-      ? `<small>Sin confirmar ${escapeHtml(formatMoney(item.importe_sin_confirmar, currency))}</small>`
+      ? `<small>Incluye ${escapeHtml(formatMoney(item.importe_sin_confirmar, currency))} históricos sin confirmar</small>`
+      : "";
+    const openDate = dateMatch
+      ? `<button class="fin-cash-collector-open" type="button" data-open-collection-date="${oldestDate}" data-open-collection-collector="${collectorId}" aria-label="Ver cobranzas pendientes de ${escapeHtml(collectorName)} del ${dateLabel}">Ver ${dateLabel}</button>`
       : "";
 
     return `<li>
-      <span><b>${escapeHtml(item.cobrador?.nombre || "Cobrador")}</b><small>${vouchers} voucher${vouchers === 1 ? "" : "s"} · recibido ${escapeHtml(formatMoney(received, currency))}</small></span>
-      <span>${pendingCopy}${unknownCopy}</span>
+      <span><b>${escapeHtml(collectorName)}</b><small>${vouchers} cobranza${vouchers === 1 ? "" : "s"} pendiente${vouchers === 1 ? "" : "s"}${dateLabel ? ` · desde ${dateLabel}` : ""}</small></span>
+      <span><em>Debe entregar ${escapeHtml(formatMoney(debt, currency))}</em>${unknownCopy}${openDate}</span>
     </li>`;
   }).join("");
+}
+
+async function openPendingCollectionDate(button) {
+  const date = String(button?.dataset.openCollectionDate || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+
+  const collectorId = Number(button.dataset.openCollectionCollector || 0);
+  elements.date.value = date;
+  setMessage(elements.listMessage, "Mostrando las cobranzas pendientes de la fecha indicada…");
+  await reloadLedgerAfterMutation();
+  const receiptInput = collectorId
+    ? elements.list.querySelector(`[data-collection-collector-id="${collectorId}"]`)
+    : null;
+  if (receiptInput) receiptInput.focus();
+  elements.list.scrollIntoView({ block: "start" });
 }
 
 function renderLedger(records) {
@@ -811,6 +833,10 @@ elements.account.addEventListener("change", async () => {
 });
 elements.date.addEventListener("change", () => void loadLedger());
 elements.refresh.addEventListener("click", () => void loadLedger());
+elements.collectionsByCollector.addEventListener("click", (event) => {
+  const openButton = event.target.closest("[data-open-collection-date]");
+  if (openButton) void openPendingCollectionDate(openButton);
+});
 elements.add.addEventListener("click", openCreateDialog);
 elements.direction.addEventListener("change", updateConditionalFields);
 elements.counterpartType.addEventListener("change", updateConditionalFields);

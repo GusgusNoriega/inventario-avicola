@@ -2254,7 +2254,7 @@ body.fin-page {
   position: relative;
   z-index: 1;
   display: grid;
-  max-height: 94px;
+  max-height: 148px;
   margin: 10px 0 0;
   padding: 0 4px 0 0;
   overflow: auto;
@@ -2296,6 +2296,29 @@ body.fin-page {
 }
 
 .fin-cash-collector-summary em.is-received { color: #75efad; }
+
+.fin-cash-collector-open {
+  justify-self: end;
+  margin-top: 4px;
+  padding: 2px 0;
+  color: #9fd7ff;
+  border: 0;
+  border-bottom: 1px solid rgba(159, 215, 255, .42);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.fin-cash-collector-open:hover { color: #d8efff; }
+
+.fin-cash-collector-open:focus-visible,
+.fin-cash-received:focus-within {
+  outline: 2px solid var(--fin-blue);
+  outline-offset: 3px;
+}
 
 .fin-cash-collector-summary .is-empty {
   display: block;

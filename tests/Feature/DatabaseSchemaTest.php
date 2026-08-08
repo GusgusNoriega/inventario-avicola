@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(97, $migrationFiles);
+        $this->assertCount(98, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -219,6 +219,15 @@ class DatabaseSchemaTest extends TestCase
             $collectionReceiptIndex['columns'],
         );
         $this->assertFalse($collectionReceiptIndex['unique']);
+        $pendingReceiptIndex = collect(Schema::getIndexes('cobranzas'))
+            ->keyBy('name')
+            ->get('cobranza_recepcion_pendiente_fecha_index');
+        $this->assertNotNull($pendingReceiptIndex);
+        $this->assertSame(
+            ['empresa_id', 'cuenta_destino_id', 'estado', 'recibido_en_caja', 'fecha_hora'],
+            $pendingReceiptIndex['columns'],
+        );
+        $this->assertFalse($pendingReceiptIndex['unique']);
     }
 
     public function test_financial_catalogs_and_permissions_are_created_by_migrations(): void
@@ -374,6 +383,7 @@ class DatabaseSchemaTest extends TestCase
             database_path('migrations/2026_07_12_000009_add_financial_permissions.php'),
             database_path('migrations/2026_08_08_000001_add_cash_ledger_indexes_to_pagos_table.php'),
             database_path('migrations/2026_08_08_000002_add_cash_receipt_tracking_to_cobranzas_table.php'),
+            database_path('migrations/2026_08_08_000003_add_pending_cash_receipt_lookup_index_to_cobranzas_table.php'),
         ];
         $migrations = collect($paths)->map(fn (string $path) => require $path);
 

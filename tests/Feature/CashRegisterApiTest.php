@@ -605,9 +605,18 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobrador.id', $collectorId)
             ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobranzas_count', 1)
             ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_total', '100.00')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_recibido', '0.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '100.00')
             ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_pendiente', '100.00')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_sin_confirmar', '0.00');
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_sin_confirmar', '0.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.fecha_pendiente_mas_antigua', '2026-07-31');
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.neto', '0.00')
+            ->assertJsonCount(1, 'resumen.cobranzas_por_cobrador')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '100.00');
 
         $auditCount = DB::table('auditoria_eventos')->count();
         $this->putJson("/api/v1/finanzas/cobranzas/{$collection['id']}/recepcion-caja", [
@@ -661,11 +670,13 @@ class CashRegisterApiTest extends TestCase
         )->assertOk()
             ->assertJsonPath('resumen.ingresos', '100.00')
             ->assertJsonPath('resumen.neto', '100.00')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_recibido', '100.00')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_pendiente', '0.00');
+            ->assertJsonCount(0, 'resumen.cobranzas_por_cobrador');
         $this->assertTrue(collect($afterReceipt->json('data'))->every(
             fn (array $movement): bool => $movement['cobranza']['recibido_en_caja'] === true,
         ));
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonCount(0, 'resumen.cobranzas_por_cobrador');
 
         $this->putJson("/api/v1/finanzas/cobranzas/{$collection['id']}/recepcion-caja", [
             'recibido' => false,
@@ -682,6 +693,9 @@ class CashRegisterApiTest extends TestCase
             'entidad_id' => (string) $collection['id'],
             'accion' => 'MARCAR_PENDIENTE_CAJA',
         ]);
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '100.00');
         $this->putJson("/api/v1/finanzas/cobranzas/{$collection['id']}/recepcion-caja", [
             'recibido' => true,
             'estado_esperado' => false,
@@ -705,10 +719,7 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('resumen.ingresos', '100.00')
             ->assertJsonPath('resumen.egresos', '0.00')
             ->assertJsonPath('resumen.neto', '100.00')
-            ->assertJsonCount(1, 'resumen.cobranzas_por_cobrador')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobranzas_count', 1)
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_total', '100.00')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_recibido', '100.00');
+            ->assertJsonCount(0, 'resumen.cobranzas_por_cobrador');
         $this->assertEqualsCanonicalizing(
             [$clientOne, $clientTwo],
             collect($afterAssignment->json('data'))->pluck('cliente.id')->filter()->all(),
@@ -877,7 +888,7 @@ class CashRegisterApiTest extends TestCase
         }
     }
 
-    public function test_collection_summary_groups_each_voucher_once_by_collector(): void
+    public function test_collection_summary_accumulates_only_unreceived_vouchers_by_collector(): void
     {
         $collectorOne = DB::table('cobradores')->insertGetId([
             'empresa_id' => $this->user->empresa_id,
@@ -910,15 +921,17 @@ class CashRegisterApiTest extends TestCase
 
         $registerCollection = function (
             int $collectorId,
+            string $date,
             string $total,
             string $reference,
             array $details,
+            ?int $cashRegisterId = null,
         ): array {
             return $this->postJson('/api/v1/finanzas/cobranzas', [
                 'idempotency_key' => (string) Str::uuid(),
                 'cobrador_id' => $collectorId,
-                'fecha_hora' => '2026-07-31 18:00:00',
-                'cuenta_destino_id' => $this->cashRegisterId,
+                'fecha_hora' => $date.' 18:00:00',
+                'cuenta_destino_id' => $cashRegisterId ?? $this->cashRegisterId,
                 'moneda' => 'PEN',
                 'importe_total' => $total,
                 'referencia' => $reference,
@@ -928,24 +941,42 @@ class CashRegisterApiTest extends TestCase
 
         $receivedCollection = $registerCollection(
             $collectorOne,
+            '2026-07-29',
             '100.00',
             'RESUMEN-COBRADOR-A-1',
             [
-                ['cliente_id' => $clientOne, 'fecha_recepcion' => '2026-07-31', 'importe' => '40.00'],
-                ['cliente_id' => $clientTwo, 'fecha_recepcion' => '2026-07-31', 'importe' => '60.00'],
+                ['cliente_id' => $clientOne, 'fecha_recepcion' => '2026-07-29', 'importe' => '40.00'],
+                ['cliente_id' => $clientTwo, 'fecha_recepcion' => '2026-07-29', 'importe' => '60.00'],
             ],
         );
-        $registerCollection(
+        $pendingCollection = $registerCollection(
             $collectorOne,
+            '2026-07-30',
             '50.00',
             'RESUMEN-COBRADOR-A-2',
-            [['cliente_id' => $clientOne, 'fecha_recepcion' => '2026-07-31', 'importe' => '50.00']],
+            [['cliente_id' => $clientOne, 'fecha_recepcion' => '2026-07-30', 'importe' => '50.00']],
         );
         $registerCollection(
             $collectorTwo,
+            '2026-07-31',
             '80.00',
             'RESUMEN-COBRADOR-B-1',
             [['cliente_id' => $clientTwo, 'fecha_recepcion' => '2026-07-31', 'importe' => '80.00']],
+        );
+        $registerCollection(
+            $collectorOne,
+            '2026-08-01',
+            '25.00',
+            'RESUMEN-COBRADOR-A-FUTURA',
+            [['cliente_id' => $clientOne, 'fecha_recepcion' => '2026-08-01', 'importe' => '25.00']],
+        );
+        $registerCollection(
+            $collectorOne,
+            '2026-07-28',
+            '60.00',
+            'RESUMEN-OTRA-CAJA',
+            [['cliente_id' => $clientOne, 'fecha_recepcion' => '2026-07-28', 'importe' => '60.00']],
+            $this->otherCashRegisterId,
         );
 
         $this->putJson("/api/v1/finanzas/cobranzas/{$receivedCollection['id']}/recepcion-caja", [
@@ -955,18 +986,40 @@ class CashRegisterApiTest extends TestCase
 
         $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
             ->assertOk()
-            ->assertJsonCount(4, 'data')
+            ->assertJsonCount(1, 'data')
             ->assertJsonCount(2, 'resumen.cobranzas_por_cobrador')
-            ->assertJsonPath('resumen.ingresos', '230.00')
+            ->assertJsonPath('resumen.ingresos', '80.00')
             ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobrador.nombre', 'Ana Ruta')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobranzas_count', 2)
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_total', '150.00')
-            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_recibido', '100.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobranzas_count', 1)
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_total', '50.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '50.00')
             ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_pendiente', '50.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.fecha_pendiente_mas_antigua', '2026-07-30')
             ->assertJsonPath('resumen.cobranzas_por_cobrador.1.cobrador.nombre', 'Beto Ruta')
             ->assertJsonPath('resumen.cobranzas_por_cobrador.1.cobranzas_count', 1)
             ->assertJsonPath('resumen.cobranzas_por_cobrador.1.importe_total', '80.00')
             ->assertJsonPath('resumen.cobranzas_por_cobrador.1.importe_pendiente', '80.00');
+        $this->getJson($this->dailyUrl($this->otherCashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonCount(1, 'resumen.cobranzas_por_cobrador')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '60.00');
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '75.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.1.importe_adeudado', '80.00');
+
+        $this->putJson("/api/v1/finanzas/cobranzas/{$pendingCollection['id']}/recepcion-caja", [
+            'recibido' => true,
+            'estado_esperado' => false,
+        ])->assertOk();
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(1, 'resumen.cobranzas_por_cobrador')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.cobrador.nombre', 'Beto Ruta')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '80.00');
     }
 
     public function test_legacy_cash_collection_recorded_as_deposit_can_still_assign_its_pending_balance(): void
@@ -1062,6 +1115,19 @@ class CashRegisterApiTest extends TestCase
         $this->assertSame('20.00', $updatedPending['importe']);
         $this->assertSame('PENDIENTE_REASIGNADO', $updatedPending['cobranza']['rol_pago']);
         $this->assertSame($assignmentId, $updatedPending['cobranza']['asignacion']['id']);
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_adeudado', '100.00')
+            ->assertJsonPath('resumen.cobranzas_por_cobrador.0.importe_sin_confirmar', '100.00');
+        $this->putJson("/api/v1/finanzas/cobranzas/{$collection['id']}/recepcion-caja", [
+            'recibido' => true,
+            'estado_esperado' => null,
+        ])->assertOk();
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-08-01'))
+            ->assertOk()
+            ->assertJsonCount(0, 'resumen.cobranzas_por_cobrador');
     }
 
     public function test_daily_summary_omits_the_removed_station_two_dispatch_card_without_changing_cash_totals(): void

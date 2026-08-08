@@ -112,21 +112,29 @@ test("una cobranza expandida en varios pagos conserva una sola casilla de recibi
   assert.match(renderFlow, /collectionReceiptMarkup\(record, renderedCollections\)/);
 });
 
-test("el resumen por cobrador distingue recibido pendiente y datos historicos", () => {
+test("el resumen por cobrador muestra la deuda acumulada y permite abrir su fecha", () => {
   const markup = helpers.collectionsByCollectorMarkup([{
-    cobrador: { nombre: '<Cobrador "Uno">' },
+    cobrador: { id: 9, nombre: '<Cobrador "Uno">' },
     moneda: "PEN",
     cobranzas_count: 2,
-    importe_recibido: "40.00",
+    importe_adeudado: "70.00",
     importe_pendiente: "60.00",
-    importe_sin_confirmar: "10.00"
+    importe_sin_confirmar: "10.00",
+    fecha_pendiente_mas_antigua: "2026-07-29"
   }], "PEN");
 
   assert.match(markup, /&lt;Cobrador &quot;Uno&quot;&gt;/);
-  assert.match(markup, /2 vouchers/);
-  assert.match(markup, /recibido PEN:40\.00/);
-  assert.match(markup, /Pendiente de entrega PEN:60\.00/);
-  assert.match(markup, /Sin confirmar PEN:10\.00/);
+  assert.match(markup, /2 cobranzas pendientes/);
+  assert.match(markup, /Debe entregar PEN:70\.00/);
+  assert.match(markup, /Incluye PEN:10\.00 históricos sin confirmar/);
+  assert.match(markup, /desde 29\/07\/2026/);
+  assert.match(markup, /data-open-collection-date="2026-07-29"/);
+  assert.doesNotMatch(markup, /recibido PEN:/);
+
+  const openFlow = sourceBetween("async function openPendingCollectionDate", "function renderLedger");
+  assert.match(openFlow, /elements\.date\.value = date/);
+  assert.match(openFlow, /await reloadLedgerAfterMutation\(\)/);
+  assert.match(openFlow, /receiptInput\.focus\(\)/);
 });
 
 test("la casilla actualiza el voucher completo mediante una operacion PUT", () => {

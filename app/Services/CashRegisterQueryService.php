@@ -68,8 +68,8 @@ class CashRegisterQueryService
         $collectionsByCollector = $this->collectionsByCollector(
             $companyId,
             (int) $cashRegister->id,
-            $from,
             $to,
+            $timezone,
         );
         $income = '0.00';
         $expense = '0.00';
@@ -125,15 +125,18 @@ class CashRegisterQueryService
     private function collectionsByCollector(
         int $companyId,
         int $cashRegisterId,
-        string $from,
         string $to,
+        string $timezone,
     ): array {
         return DB::table('cobranzas as cobranza')
             ->where('cobranza.empresa_id', $companyId)
             ->where('cobranza.cuenta_destino_id', $cashRegisterId)
             ->where('cobranza.estado', Cobranza::STATUS_REGISTERED)
-            ->where('cobranza.fecha_hora', '>=', $from)
             ->where('cobranza.fecha_hora', '<', $to)
+            ->where(function (Builder $query): void {
+                $query->where('cobranza.recibido_en_caja', false)
+                    ->orWhereNull('cobranza.recibido_en_caja');
+            })
             ->groupBy(
                 'cobranza.cobrador_id',
                 'cobranza.moneda',
@@ -145,12 +148,11 @@ class CashRegisterQueryService
                 'cobranza.moneda',
                 DB::raw('COUNT(*) as cobranzas_count'),
                 DB::raw('COALESCE(SUM(cobranza.importe_total), 0) as importe_total'),
-                DB::raw('COALESCE(SUM(CASE WHEN cobranza.recibido_en_caja = 1 THEN cobranza.importe_total ELSE 0 END), 0) as importe_recibido'),
                 DB::raw('COALESCE(SUM(CASE WHEN cobranza.recibido_en_caja = 0 THEN cobranza.importe_total ELSE 0 END), 0) as importe_pendiente'),
                 DB::raw('COALESCE(SUM(CASE WHEN cobranza.recibido_en_caja IS NULL THEN cobranza.importe_total ELSE 0 END), 0) as importe_sin_confirmar'),
-                DB::raw('SUM(CASE WHEN cobranza.recibido_en_caja = 1 THEN 1 ELSE 0 END) as recibidas_count'),
                 DB::raw('SUM(CASE WHEN cobranza.recibido_en_caja = 0 THEN 1 ELSE 0 END) as pendientes_count'),
                 DB::raw('SUM(CASE WHEN cobranza.recibido_en_caja IS NULL THEN 1 ELSE 0 END) as sin_confirmar_count'),
+                DB::raw('MIN(cobranza.fecha_hora) as fecha_pendiente_mas_antigua'),
             ])
             ->map(fn (object $row): array => [
                 'cobrador' => [
@@ -159,13 +161,16 @@ class CashRegisterQueryService
                 ],
                 'moneda' => $row->moneda,
                 'cobranzas_count' => (int) $row->cobranzas_count,
-                'recibidas_count' => (int) $row->recibidas_count,
                 'pendientes_count' => (int) $row->pendientes_count,
                 'sin_confirmar_count' => (int) $row->sin_confirmar_count,
                 'importe_total' => FinancialMoney::normalize((string) $row->importe_total),
-                'importe_recibido' => FinancialMoney::normalize((string) $row->importe_recibido),
+                'importe_adeudado' => FinancialMoney::normalize((string) $row->importe_total),
                 'importe_pendiente' => FinancialMoney::normalize((string) $row->importe_pendiente),
                 'importe_sin_confirmar' => FinancialMoney::normalize((string) $row->importe_sin_confirmar),
+                'fecha_pendiente_mas_antigua' => CarbonImmutable::parse(
+                    (string) $row->fecha_pendiente_mas_antigua,
+                    $this->databaseTimezone(),
+                )->setTimezone($timezone)->toDateString(),
             ])
             ->values()
             ->all();

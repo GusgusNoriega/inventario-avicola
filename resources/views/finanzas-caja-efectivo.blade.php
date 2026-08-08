@@ -55,9 +55,9 @@
       </article>
       <article class="fin-summary-card fin-cash-summary-collections">
         <span>Cobranza por cobrador</span>
-        <small>Día seleccionado. Pendiente de entrega = recepción física aún no confirmada; el asiento financiero ya está registrado</small>
+        <small>Pendiente acumulado hasta la fecha seleccionada; incluye días anteriores hasta confirmar «Recibido». El asiento contable ya está registrado</small>
         <ul id="cashRegisterCollectionsByCollector" class="fin-cash-collector-summary" aria-live="polite">
-          <li class="is-empty">Sin cobranzas para el día seleccionado</li>
+          <li class="is-empty">Sin deuda pendiente hasta la fecha seleccionada</li>
         </ul>
       </article>
       <article class="fin-summary-card fin-cash-summary-income">
