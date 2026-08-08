@@ -1244,6 +1244,93 @@ class FinancialTicketApiTest extends TestCase
         );
     }
 
+    public function test_void_and_restore_reconcile_java_returns_that_were_registered_before_cancellation(): void
+    {
+        $ticket = $this->createTicket(
+            'CICLO-JAVAS-DEVUELTAS',
+            CarbonImmutable::parse('2026-07-20 20:05:00'),
+            $this->sourceClientId,
+            [
+                $this->firstChickenTypeId => [
+                    'price' => '8.5000',
+                    'weight' => '30.000',
+                    'cages' => 3,
+                ],
+            ],
+        );
+        $this->createJavaMovement($ticket['id'], $this->sourceClientId);
+        $javaMovementId = (int) DB::table('movimientos_javas')
+            ->where('ticket_despacho_id', $ticket['id'])
+            ->value('id');
+        DB::table('movimientos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $this->journeyId,
+            'cliente_id' => $this->sourceClientId,
+            'tipo' => MovimientoJava::TYPE_RECEIPT,
+            'cantidad' => 2,
+            'cantidad_bandejas' => 0,
+            'ticket_despacho_id' => null,
+            'vehiculo_id' => null,
+            'conductor_id' => null,
+            'fecha_movimiento' => '2026-07-20 20:06:00',
+            'observaciones' => 'Devolucion previa a la anulacion',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->makeAdministrator($this->user);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+            'motivo' => 'Ticket emitido por error',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_VOIDED);
+
+        $this->assertDatabaseHas('movimientos_javas', [
+            'id' => $javaMovementId,
+            'ticket_despacho_id' => $ticket['id'],
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 2,
+            'cantidad_bandejas' => 0,
+        ]);
+        $this->assertSame(0, $this->javaBalanceForClient($this->sourceClientId));
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'movimientos_javas',
+            'accion' => 'NEUTRALIZAR_POR_TICKET_ANULADO',
+        ]);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")
+            ->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_CLOSED);
+
+        $this->assertDatabaseHas('movimientos_javas', [
+            'id' => $javaMovementId,
+            'ticket_despacho_id' => $ticket['id'],
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 3,
+            'cantidad_bandejas' => 0,
+            'observaciones' => null,
+        ]);
+        $this->assertSame(
+            1,
+            DB::table('movimientos_javas')
+                ->where('ticket_despacho_id', $ticket['id'])
+                ->count(),
+        );
+        $this->assertSame(1, $this->javaBalanceForClient($this->sourceClientId));
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'movimientos_javas',
+            'accion' => 'RESTABLECER_POR_TICKET',
+        ]);
+        $restoreAudit = DB::table('auditoria_eventos')
+            ->where('entidad', 'movimientos_javas')
+            ->where('accion', 'RESTABLECER_POR_TICKET')
+            ->firstOrFail();
+        $this->assertSame(2, (int) json_decode($restoreAudit->datos_antes, true)['cantidad']);
+        $this->assertSame(3, (int) json_decode($restoreAudit->datos_despues, true)['cantidad']);
+    }
+
     public function test_restore_keeps_a_weighing_that_was_voided_individually_before_the_ticket(): void
     {
         $ticket = $this->createTicket(
@@ -1644,6 +1731,17 @@ class FinancialTicketApiTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function javaBalanceForClient(int $clientId): int
+    {
+        return (int) DB::table('movimientos_javas')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('cliente_id', $clientId)
+            ->selectRaw(
+                "SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE -cantidad END) AS saldo"
+            )
+            ->value('saldo');
     }
 
     /** @param  Collection<int, int>  $ticketIds */

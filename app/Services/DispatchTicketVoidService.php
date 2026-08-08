@@ -136,15 +136,20 @@ class DispatchTicketVoidService
             $ticket->refresh();
 
             $this->javaControl->syncDispatchMovement($ticket, $companyId, $branchId);
-            if ($movement) {
+            $movementAfter = DB::table('movimientos_javas')
+                ->where('ticket_despacho_id', $ticket->id)
+                ->first();
+            if ($movement || $movementAfter) {
                 $this->audit->record(
                     $companyId,
                     $actor->id,
                     'movimientos_javas',
-                    (int) $movement->id,
-                    'RETIRAR_POR_TICKET_ANULADO',
-                    (array) $movement,
-                    null,
+                    (int) ($movementAfter?->id ?? $movement?->id),
+                    $movementAfter
+                        ? 'NEUTRALIZAR_POR_TICKET_ANULADO'
+                        : 'RETIRAR_POR_TICKET_ANULADO',
+                    $movement ? (array) $movement : null,
+                    $movementAfter ? (array) $movementAfter : null,
                     $ip,
                 );
             }

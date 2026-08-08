@@ -133,6 +133,10 @@ class FinancialTicketLifecycleService
             $ticket->refresh();
             $ticket->loadMissing('jornada:id,sucursal_id');
 
+            $javaMovementBefore = DB::table('movimientos_javas')
+                ->where('ticket_despacho_id', $ticket->id)
+                ->lockForUpdate()
+                ->first();
             $this->javaControl->syncDispatchMovement(
                 $ticket,
                 $companyId,
@@ -147,8 +151,10 @@ class FinancialTicketLifecycleService
                     (int) $actor->id,
                     'movimientos_javas',
                     (int) $restoredJavaMovement->id,
-                    'RECREAR_POR_TICKET_RESTABLECIDO',
-                    null,
+                    $javaMovementBefore
+                        ? 'RESTABLECER_POR_TICKET'
+                        : 'RECREAR_POR_TICKET_RESTABLECIDO',
+                    $javaMovementBefore ? (array) $javaMovementBefore : null,
                     (array) $restoredJavaMovement,
                     $ip,
                 );

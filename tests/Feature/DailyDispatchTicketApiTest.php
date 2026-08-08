@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\MovimientoJava;
 use App\Models\Permission;
 use App\Models\Pesada;
 use App\Models\Role;
@@ -959,6 +960,122 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.access.is_administrator', false)
             ->assertJsonPath('data.summary.tickets', 0)
             ->assertJsonCount(0, 'data.tickets');
+    }
+
+    public function test_administrator_can_void_after_client_already_returned_trays_without_creating_negative_balance(): void
+    {
+        $administrator = Role::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'ADMINISTRADOR',
+            'nombre' => 'Administrador',
+        ]);
+        $this->user->roles()->attach($administrator);
+
+        $ticketId = $this->createTicket(
+            'M-20260807-055',
+            '2026-08-07',
+            [[
+                'type_id' => $this->liveTypeId,
+                'birds_per_tray' => 5,
+                'trays' => 4,
+                'read_weight' => 24,
+                'gross_weight' => 24,
+                'tare_weight' => 0,
+                'net_weight' => 24,
+                'weighed_at' => '2026-08-07 10:15:00',
+            ]],
+            channel: TicketDespacho::CHANNEL_RETAIL,
+        );
+        $journeyId = (int) DB::table('tickets_despacho')
+            ->where('id', $ticketId)
+            ->value('jornada_id');
+
+        DB::table('movimientos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $journeyId,
+            'cliente_id' => $this->clientId,
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 0,
+            'cantidad_bandejas' => 4,
+            'ticket_despacho_id' => $ticketId,
+            'vehiculo_id' => $this->vehicleId,
+            'conductor_id' => null,
+            'fecha_movimiento' => '2026-08-07 10:15:00',
+            'observaciones' => null,
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('movimientos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $journeyId,
+            'cliente_id' => $this->clientId,
+            'tipo' => MovimientoJava::TYPE_RECEIPT,
+            'cantidad' => 0,
+            'cantidad_bandejas' => 3,
+            'ticket_despacho_id' => null,
+            'vehiculo_id' => $this->vehicleId,
+            'conductor_id' => null,
+            'fecha_movimiento' => '2026-08-07 12:00:00',
+            'observaciones' => 'Devolucion parcial previa a la anulacion',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson("/api/v1/operacion/tickets/{$ticketId}/anular", [
+            'motivo' => 'Devolucion del pedido',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', TicketDespacho::STATUS_VOIDED)
+            ->assertJsonPath('meta.idempotent', false);
+
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticketId,
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 0,
+            'cantidad_bandejas' => 3,
+        ]);
+        $this->assertSame(
+            0,
+            (int) DB::table('movimientos_javas')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('cliente_id', $this->clientId)
+                ->selectRaw(
+                    "SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad_bandejas ELSE -cantidad_bandejas END) AS saldo"
+                )
+                ->value('saldo'),
+        );
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'usuario_id' => $this->user->id,
+            'entidad' => 'movimientos_javas',
+            'accion' => 'NEUTRALIZAR_POR_TICKET_ANULADO',
+        ]);
+        $movementAudit = DB::table('auditoria_eventos')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('entidad', 'movimientos_javas')
+            ->where('accion', 'NEUTRALIZAR_POR_TICKET_ANULADO')
+            ->firstOrFail();
+        $this->assertSame(4, (int) json_decode($movementAudit->datos_antes, true)['cantidad_bandejas']);
+        $this->assertSame(3, (int) json_decode($movementAudit->datos_despues, true)['cantidad_bandejas']);
+
+        $this->postJson("/api/v1/operacion/tickets/{$ticketId}/anular", [
+            'motivo' => 'Reintento de anulacion',
+        ])
+            ->assertOk()
+            ->assertJsonPath('meta.idempotent', true);
+        $this->assertDatabaseCount('movimientos_javas', 2);
+        $this->assertSame(
+            1,
+            DB::table('auditoria_eventos')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('entidad', 'movimientos_javas')
+                ->where('accion', 'NEUTRALIZAR_POR_TICKET_ANULADO')
+                ->count(),
+        );
     }
 
     private function createParty(string $name, string $document): int

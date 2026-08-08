@@ -190,7 +190,7 @@
         Vas a anular el ticket <strong id="voidTicketCode">--</strong>. El registro se conservará para auditoría, pero dejará de tener efecto operativo y financiero.
       </p>
       <div class="daily-ticket-void-warning">
-        También se anularán sus pesadas, se retirará su efecto en el control de javas y se neutralizará su cuenta por cobrar. Los cobros exclusivos del ticket se reversarán automáticamente.
+        También se anularán sus pesadas, se conciliará su saldo de javas y bandejas conservando las devoluciones ya registradas, y se neutralizará su cuenta por cobrar. Los cobros exclusivos del ticket se reversarán automáticamente.
       </div>
       <form id="voidTicketForm">
         <label class="field">

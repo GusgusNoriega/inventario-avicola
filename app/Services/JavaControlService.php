@@ -312,17 +312,18 @@ class JavaControlService
             ->selectRaw('COALESCE(SUM(cantidad_javas), 0) AS javas')
             ->selectRaw('COALESCE(SUM(cantidad_bandejas), 0) AS trays')
             ->first();
-        $javaQuantity = $ticket->estado === TicketDespacho::STATUS_VOIDED
-            ? 0
-            : (int) ($quantities?->javas ?? 0);
-        $trayQuantity = $ticket->estado === TicketDespacho::STATUS_VOIDED
-            ? 0
-            : (int) ($quantities?->trays ?? 0);
+        $isVoided = $ticket->estado === TicketDespacho::STATUS_VOIDED;
+        $javaQuantity = $isVoided ? 0 : (int) ($quantities?->javas ?? 0);
+        $trayQuantity = $isVoided ? 0 : (int) ($quantities?->trays ?? 0);
         $clientMovements = MovimientoJava::query()
             ->where('empresa_id', $companyId)
             ->where('cliente_id', $ticket->cliente_destino_id)
             ->lockForUpdate()
             ->get(['tipo', 'cantidad', 'cantidad_bandejas', 'ticket_despacho_id']);
+        $ticketMovement = $clientMovements->first(
+            fn (MovimientoJava $movement): bool => $movement->tipo === MovimientoJava::TYPE_DISPATCH
+                && (int) $movement->ticket_despacho_id === (int) $ticket->id
+        );
         $otherJavaDispatches = (int) $clientMovements
             ->where('tipo', MovimientoJava::TYPE_DISPATCH)
             ->where('ticket_despacho_id', '!=', $ticket->id)
@@ -338,13 +339,35 @@ class JavaControlService
             ->where('tipo', MovimientoJava::TYPE_RECEIPT)
             ->sum('cantidad_bandejas');
 
-        if ($javaQuantity + $otherJavaDispatches < $javaReceipts) {
+        if ($isVoided && $ticketMovement) {
+            // Las devoluciones no están vinculadas a un ticket concreto. Al anular,
+            // se conserva solo la porción del despacho que ya fue devuelta y que no
+            // puede respaldarse con otros tickets del cliente. Así el saldo queda en
+            // cero, la devolución no reduce futuros despachos y la trazabilidad sigue
+            // disponible para una eventual restauración del ticket.
+            $javaQuantity = max(0, $javaReceipts - $otherJavaDispatches);
+            $trayQuantity = max(0, $trayReceipts - $otherTrayDispatches);
+
+            if ($javaQuantity > (int) $ticketMovement->cantidad) {
+                throw ValidationException::withMessages([
+                    'cages' => 'No se puede conciliar la anulación porque el saldo previo de javas es inconsistente. Revisa los movimientos del cliente.',
+                ]);
+            }
+
+            if ($trayQuantity > (int) $ticketMovement->cantidad_bandejas) {
+                throw ValidationException::withMessages([
+                    'trays' => 'No se puede conciliar la anulación porque el saldo previo de bandejas es inconsistente. Revisa los movimientos del cliente.',
+                ]);
+            }
+        }
+
+        if (! $isVoided && $javaQuantity + $otherJavaDispatches < $javaReceipts) {
             throw ValidationException::withMessages([
                 'cages' => 'No se puede reducir esta cantidad porque el cliente ya devolvió javas asociadas a su saldo.',
             ]);
         }
 
-        if ($trayQuantity + $otherTrayDispatches < $trayReceipts) {
+        if (! $isVoided && $trayQuantity + $otherTrayDispatches < $trayReceipts) {
             throw ValidationException::withMessages([
                 'trays' => 'No se puede reducir esta cantidad porque el cliente ya devolvio bandejas asociadas a su saldo.',
             ]);
@@ -371,7 +394,9 @@ class JavaControlService
                 'vehiculo_id' => $ticket->vehiculo_entrega_id,
                 'conductor_id' => $ticket->conductor_entrega_id,
                 'fecha_movimiento' => $ticket->cerrado_at ?: $ticket->created_at ?: now(),
-                'observaciones' => null,
+                'observaciones' => $isVoided
+                    ? "Saldo neutralizado por anulación del ticket {$ticket->codigo}; conserva devoluciones ya registradas."
+                    : null,
                 'created_by' => $ticket->created_by,
             ]
         );

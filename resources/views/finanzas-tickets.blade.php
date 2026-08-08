@@ -182,7 +182,7 @@
       </header>
       <p id="financeTicketVoidDescription" class="fin-section-copy"></p>
       <p class="fin-ticket-lifecycle-warning">
-        Se anularán sus pesadas, se retirará su efecto en javas y se neutralizará la cuenta por cobrar. Los cobros exclusivos se reversarán automáticamente.
+        Se anularán sus pesadas, se conciliará su saldo de javas y bandejas conservando las devoluciones ya registradas, y se neutralizará la cuenta por cobrar. Los cobros exclusivos se reversarán automáticamente.
       </p>
       <label class="fin-field">
         <span>Motivo de anulación <b>*</b></span>
