@@ -104,6 +104,21 @@ const elements = {
   balanceHint: byId("javaClientBalanceHint"),
   submit: byId("javaReceiptSubmit"),
   receiptMessage: byId("javaReceiptMessage"),
+  balanceEditModal: byId("javaBalanceEditModal"),
+  balanceEditDialog: byId("javaBalanceEditDialog"),
+  balanceEditClose: byId("javaBalanceEditClose"),
+  balanceEditCancel: byId("javaBalanceEditCancel"),
+  balanceEditForm: byId("javaBalanceEditForm"),
+  balanceEditClientName: byId("javaBalanceEditClientName"),
+  balanceEditClientDocument: byId("javaBalanceEditClientDocument"),
+  balanceCurrentJavas: byId("javaBalanceCurrentJavas"),
+  balanceCurrentTrays: byId("javaBalanceCurrentTrays"),
+  balanceNewJavas: byId("javaBalanceNewJavas"),
+  balanceNewTrays: byId("javaBalanceNewTrays"),
+  balanceEditReason: byId("javaBalanceEditReason"),
+  balanceEditSubmit: byId("javaBalanceEditSubmit"),
+  balanceEditTraceLink: byId("javaBalanceEditTraceLink"),
+  balanceEditMessage: byId("javaBalanceEditMessage"),
   historyClient: byId("javaHistoryClient"),
   truckActivityRows: byId("javaTruckActivityRows"),
   movementRows: byId("javaMovementRows"),
@@ -126,6 +141,7 @@ const state = {
   requiresReload: false,
   truckActivity: [],
   movements: [],
+  balanceEdit: null,
   pagination: {
     current_page: 1,
     last_page: 1,
@@ -1054,7 +1070,12 @@ function renderClients() {
         <td data-label="Documento">${escapeHtml(client.document_number || "Sin documento")}</td>
         <td data-label="Javas"><span class="java-balance ${hasJavaBalance ? "has-balance" : "is-clear"}">${hasJavaBalance ? `${client.java_balance} javas` : "Sin pendientes"}</span></td>
         <td data-label="Bandejas"><span class="java-balance ${hasTrayBalance ? "has-balance" : "is-clear"}">${hasTrayBalance ? `${client.tray_balance} bandejas` : "Sin pendientes"}</span></td>
-        <td class="java-action-cell"><button class="java-receive-btn" type="button" data-receive-client="${client.id}" ${hasBalance ? "" : "disabled"}>Recibir</button></td>
+        <td class="java-action-cell">
+          <span class="java-row-actions">
+            <button class="java-receive-btn" type="button" data-receive-client="${client.id}" ${hasBalance ? "" : "disabled"}>Recibir</button>
+            <button class="java-edit-balance-btn" type="button" data-edit-balance-client="${client.id}">Editar saldo</button>
+          </span>
+        </td>
       </tr>`;
   }).join("");
 }
@@ -1075,25 +1096,36 @@ function renderClientPagination() {
 function renderMovements() {
   if (!elements.movementRows) return;
   if (!state.movements.length) {
-    elements.movementRows.innerHTML = '<tr><td colspan="7" class="java-empty-cell">No hay movimientos en esta jornada.</td></tr>';
+    elements.movementRows.innerHTML = '<tr><td colspan="8" class="java-empty-cell">No hay movimientos ni correcciones en esta jornada.</td></tr>';
     return;
   }
 
   elements.movementRows.innerHTML = state.movements.map((movement) => {
+    const isAdjustment = Boolean(movement.is_adjustment);
     const isReceipt = movement.type === "RECEPCION";
-    const reference = movement.ticket?.code ? `Ticket ${escapeHtml(movement.ticket.code)}` : escapeHtml(movement.observations || "Entrada manual");
+    const movementLabel = isAdjustment ? "Corrección" : (isReceipt ? "Entrada" : "Salida");
+    const movementTone = isAdjustment ? "is-adjustment" : (isReceipt ? "is-receipt" : "is-dispatch");
+    const quantities = isAdjustment
+      ? assetStack(signedQuantity(movement.java_delta), signedQuantity(movement.tray_delta), "is-adjustment")
+      : assetStack(
+        `${isReceipt ? "−" : "+"}${movement.java_quantity}`,
+        `${isReceipt ? "−" : "+"}${movement.tray_quantity}`,
+        isReceipt ? "is-receipt" : "is-dispatch"
+      );
+    const reference = isAdjustment
+      ? `Saldo: ${escapeHtml(assetPairText(movement.balance_before?.javas, movement.balance_before?.trays))} → ${escapeHtml(assetPairText(movement.balance_after?.javas, movement.balance_after?.trays))}. Motivo: ${escapeHtml(movement.observations)}`
+      : (movement.ticket?.code
+        ? `Ticket ${escapeHtml(movement.ticket.code)}`
+        : escapeHtml(movement.observations || "Entrada manual"));
     return `
       <tr>
         <td data-label="Fecha">${formatDate(movement.occurred_at)}</td>
-        <td data-label="Camión"><strong>${escapeHtml(movement.truck?.plate || "—")}</strong></td>
+        <td data-label="Camión"><strong>${escapeHtml(isAdjustment ? "No aplica" : (movement.truck?.plate || "—"))}</strong></td>
         <td data-label="Cliente"><strong>${escapeHtml(movement.client?.name)}</strong></td>
-        <td data-label="Movimiento"><span class="java-movement-badge ${isReceipt ? "is-receipt" : "is-dispatch"}">${isReceipt ? "Entrada" : "Salida"}</span></td>
-        <td data-label="Javas / Bandejas">${assetStack(
-          `${isReceipt ? "−" : "+"}${movement.java_quantity}`,
-          `${isReceipt ? "−" : "+"}${movement.tray_quantity}`,
-          isReceipt ? "is-receipt" : "is-dispatch"
-        )}</td>
-        <td data-label="Chofer">${escapeHtml(movement.driver?.name || "—")}</td>
+        <td data-label="Movimiento"><span class="java-movement-badge ${movementTone}">${movementLabel}</span></td>
+        <td data-label="Javas / Bandejas">${quantities}</td>
+        <td data-label="Chofer">${escapeHtml(isAdjustment ? "No aplica" : (movement.driver?.name || "—"))}</td>
+        <td data-label="Registrado por">${escapeHtml(movement.created_by?.name || "—")}</td>
         <td data-label="Referencia">${reference}</td>
       </tr>`;
   }).join("");
@@ -1141,6 +1173,159 @@ function chooseClientForReceipt(clientId) {
   (Number(client?.java_balance) > 0 ? elements.quantity : elements.trayQuantity).focus();
   if (window.matchMedia("(max-width: 1050px)").matches) {
     elements.form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function balanceClientById(clientId) {
+  return state.clientOptions.find((client) => Number(client.id) === Number(clientId));
+}
+
+function openBalanceEditModal(clientId) {
+  if (!elements.balanceEditModal) return;
+  const client = balanceClientById(clientId);
+  if (!client) {
+    setMessage(elements.balanceMessage, "No se encontró el cliente. Actualiza la pantalla e inténtalo nuevamente.", true);
+    return;
+  }
+
+  state.balanceEdit = {
+    clientId: Number(client.id),
+    javaBalance: Number(client.java_balance),
+    trayBalance: Number(client.tray_balance)
+  };
+  setText(elements.balanceEditClientName, client.name);
+  setText(elements.balanceEditClientDocument, client.document_number || "Sin documento");
+  setText(elements.balanceCurrentJavas, state.balanceEdit.javaBalance);
+  setText(elements.balanceCurrentTrays, state.balanceEdit.trayBalance);
+  elements.balanceNewJavas.value = String(state.balanceEdit.javaBalance);
+  elements.balanceNewTrays.value = String(state.balanceEdit.trayBalance);
+  elements.balanceEditReason.value = "";
+  setMessage(elements.balanceEditMessage);
+  elements.balanceEditModal.hidden = false;
+  document.body.classList.add("java-inventory-modal-open");
+  elements.balanceNewJavas.focus();
+  elements.balanceNewJavas.select();
+}
+
+function closeBalanceEditModal({ restoreFocus = true } = {}) {
+  if (!elements.balanceEditModal || elements.balanceEditModal.hidden) return;
+  if (state.balanceEdit?.submitting) return;
+  const clientId = state.balanceEdit?.clientId;
+  elements.balanceEditModal.hidden = true;
+  document.body.classList.remove("java-inventory-modal-open");
+  state.balanceEdit = null;
+
+  if (restoreFocus && clientId) {
+    const trigger = document.querySelector(`[data-edit-balance-client="${clientId}"]`);
+    (trigger || elements.balanceMessage)?.focus({ preventScroll: true });
+  }
+}
+
+function setBalanceEditBusy(isBusy) {
+  [
+    elements.balanceEditClose,
+    elements.balanceEditCancel,
+    elements.balanceEditSubmit,
+    elements.balanceNewJavas,
+    elements.balanceNewTrays,
+    elements.balanceEditReason
+  ].forEach((control) => {
+    if (control) control.disabled = isBusy;
+  });
+  elements.balanceEditDialog?.setAttribute("aria-busy", String(isBusy));
+  if (elements.balanceEditTraceLink) {
+    elements.balanceEditTraceLink.tabIndex = isBusy ? -1 : 0;
+    elements.balanceEditTraceLink.setAttribute("aria-disabled", String(isBusy));
+  }
+  if (isBusy) elements.balanceEditDialog?.focus({ preventScroll: true });
+}
+
+function trapBalanceEditFocus(event) {
+  if (event.key !== "Tab" || !elements.balanceEditModal || elements.balanceEditModal.hidden) return;
+  const focusable = Array.from(elements.balanceEditModal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href]:not([aria-disabled="true"]), [tabindex]:not([tabindex="-1"])'
+  ));
+  if (!focusable.length) {
+    event.preventDefault();
+    elements.balanceEditDialog?.focus({ preventScroll: true });
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+async function submitBalanceEdit(event) {
+  event.preventDefault();
+  setMessage(elements.balanceEditMessage);
+  const edit = state.balanceEdit;
+  const javaValue = elements.balanceNewJavas.value.trim();
+  const trayValue = elements.balanceNewTrays.value.trim();
+  if (javaValue === "" || trayValue === "") {
+    setMessage(elements.balanceEditMessage, "Completa los dos nuevos saldos antes de guardar.", true);
+    return;
+  }
+  const javaBalance = Number(javaValue);
+  const trayBalance = Number(trayValue);
+  const reason = elements.balanceEditReason.value.trim();
+
+  if (!edit) {
+    setMessage(elements.balanceEditMessage, "Vuelve a seleccionar el cliente que deseas corregir.", true);
+    return;
+  }
+  if (![javaBalance, trayBalance].every((quantity) => Number.isInteger(quantity) && quantity >= 0 && quantity <= 100000)) {
+    setMessage(elements.balanceEditMessage, "Los nuevos saldos deben ser números enteros entre 0 y 100000.", true);
+    return;
+  }
+  if (javaBalance === edit.javaBalance && trayBalance === edit.trayBalance) {
+    setMessage(elements.balanceEditMessage, "Cambia al menos uno de los dos saldos antes de guardar.", true);
+    return;
+  }
+  if (reason.length < 5) {
+    setMessage(elements.balanceEditMessage, "Explica el motivo de la corrección con al menos 5 caracteres.", true);
+    elements.balanceEditReason.focus();
+    return;
+  }
+
+  edit.submitting = true;
+  setBalanceEditBusy(true);
+  try {
+    const response = await apiRequest(`/control-javas/clientes/${edit.clientId}/saldo`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        expected_java_balance: edit.javaBalance,
+        expected_tray_balance: edit.trayBalance,
+        java_balance: javaBalance,
+        tray_balance: trayBalance,
+        reason
+      })
+    });
+    const refreshed = await loadControl({ keepMessages: true });
+    if (!refreshed) {
+      setMessage(
+        elements.balanceEditMessage,
+        `${response.message} No se pudo actualizar la lista; recarga la pantalla antes de hacer otra corrección.`,
+        true
+      );
+      return;
+    }
+    edit.submitting = false;
+    setBalanceEditBusy(false);
+    closeBalanceEditModal();
+    setMessage(elements.balanceMessage, response.message);
+  } catch (error) {
+    setMessage(elements.balanceEditMessage, errorMessage(error), true);
+  } finally {
+    if (state.balanceEdit === edit) {
+      edit.submitting = false;
+      setBalanceEditBusy(false);
+    }
   }
 }
 
@@ -1481,14 +1666,30 @@ on(elements.dailyForm, "submit", submitDailyCount);
 on(elements.journey, "change", handleJourneySelectionChange);
 on(elements.historyClient, "change", () => loadControl());
 on(elements.clientRows, "click", (event) => {
-  const button = event.target.closest("[data-receive-client]");
-  if (button) chooseClientForReceipt(button.dataset.receiveClient);
+  const receiptButton = event.target.closest("[data-receive-client]");
+  if (receiptButton) {
+    chooseClientForReceipt(receiptButton.dataset.receiveClient);
+    return;
+  }
+  const editButton = event.target.closest("[data-edit-balance-client]");
+  if (editButton) openBalanceEditModal(editButton.dataset.editBalanceClient);
 });
 on(elements.form, "submit", submitReceipt);
+on(elements.balanceEditClose, "click", () => closeBalanceEditModal());
+on(elements.balanceEditCancel, "click", () => closeBalanceEditModal());
+on(elements.balanceEditForm, "submit", submitBalanceEdit);
+on(elements.balanceEditModal, "click", (event) => {
+  if (event.target === elements.balanceEditModal) closeBalanceEditModal();
+});
+on(elements.balanceEditTraceLink, "click", (event) => {
+  if (state.balanceEdit?.submitting) event.preventDefault();
+});
 
 document.addEventListener("keydown", (event) => {
+  trapBalanceEditFocus(event);
   if (event.key !== "Escape") return;
   if (elements.inventoryModal && !elements.inventoryModal.hidden) closeInventoryModal();
+  if (elements.balanceEditModal && !elements.balanceEditModal.hidden) closeBalanceEditModal();
 });
 
 initializeTraceTabs();

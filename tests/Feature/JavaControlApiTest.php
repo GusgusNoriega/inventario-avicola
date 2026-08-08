@@ -202,6 +202,328 @@ class JavaControlApiTest extends TestCase
             ->assertJsonPath('data.inventory.trays.outside', 5);
     }
 
+    public function test_client_balance_can_be_corrected_in_mixed_directions_and_is_audited(): void
+    {
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 14,
+            'tray_balance' => 3,
+            'reason' => 'La devolución anterior fue digitada con cantidades equivocadas.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.type', 'AJUSTE_SALDO')
+            ->assertJsonPath('data.is_adjustment', true)
+            ->assertJsonPath('data.java_delta', 4)
+            ->assertJsonPath('data.tray_delta', -5)
+            ->assertJsonPath('data.balance_before.javas', 10)
+            ->assertJsonPath('data.balance_before.trays', 8)
+            ->assertJsonPath('data.balance_after.javas', 14)
+            ->assertJsonPath('data.balance_after.trays', 3)
+            ->assertJsonPath('data.created_by.id', $this->user->id)
+            ->assertJsonPath('data.created_by.name', $this->user->nombre);
+
+        $this->assertDatabaseCount('movimientos_javas', 1);
+        $this->assertDatabaseHas('ajustes_saldos_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'cliente_id' => $this->client->id,
+            'saldo_anterior_javas' => 10,
+            'saldo_nuevo_javas' => 14,
+            'diferencia_javas' => 4,
+            'saldo_anterior_bandejas' => 8,
+            'saldo_nuevo_bandejas' => 3,
+            'diferencia_bandejas' => -5,
+            'created_by' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'usuario_id' => $this->user->id,
+            'entidad' => 'ajustes_saldos_javas',
+            'accion' => 'AJUSTAR_SALDO_CLIENTE',
+            'direccion_ip' => '127.0.0.1',
+        ]);
+
+        $audit = DB::table('auditoria_eventos')
+            ->where('entidad', 'ajustes_saldos_javas')
+            ->sole();
+        $before = json_decode((string) $audit->datos_antes, true, 512, JSON_THROW_ON_ERROR);
+        $after = json_decode((string) $audit->datos_despues, true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame([
+            'cliente_id' => $this->client->id,
+            'cliente' => $this->client->nombre_razon_social,
+            'saldo_javas' => 10,
+            'saldo_bandejas' => 8,
+        ], $before);
+        $this->assertSame(14, $after['saldo_javas']);
+        $this->assertSame(3, $after['saldo_bandejas']);
+        $this->assertSame(4, $after['diferencia_javas']);
+        $this->assertSame(-5, $after['diferencia_bandejas']);
+        $this->assertSame(
+            'La devolución anterior fue digitada con cantidades equivocadas.',
+            $after['motivo']
+        );
+
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.summary.java_total_pending', 14)
+            ->assertJsonPath('data.summary.tray_total_pending', 3)
+            ->assertJsonPath('data.summary.java_received_today', 0)
+            ->assertJsonPath('data.summary.tray_received_today', 0)
+            ->assertJsonPath('data.summary.java_dispatched', 0)
+            ->assertJsonPath('data.summary.java_received', 0)
+            ->assertJsonPath('data.summary.tray_dispatched', 0)
+            ->assertJsonPath('data.summary.tray_received', 0)
+            ->assertJsonPath('data.clients.0.java_balance', 14)
+            ->assertJsonPath('data.clients.0.tray_balance', 3)
+            ->assertJsonPath('data.movements.0.type', 'AJUSTE_SALDO')
+            ->assertJsonPath('data.movements.0.created_by.id', $this->user->id);
+    }
+
+    public function test_balance_correction_rejects_stale_or_unchanged_values_without_audit(): void
+    {
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 9,
+            'expected_tray_balance' => 8,
+            'java_balance' => 5,
+            'tray_balance' => 4,
+            'reason' => 'Corrección con una pantalla desactualizada.',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('balance');
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 10,
+            'tray_balance' => 8,
+            'reason' => 'No existe ninguna diferencia real.',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('balance');
+
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    public function test_balance_correction_requires_valid_totals_and_a_real_reason(): void
+    {
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => -1,
+            'tray_balance' => 1.5,
+            'reason' => '     ',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['java_balance', 'tray_balance', 'reason']);
+
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    public function test_receipts_are_validated_against_the_corrected_balance(): void
+    {
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 2,
+            'tray_balance' => 1,
+            'reason' => 'Se corrigió la cantidad realmente pendiente.',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/control-javas/recepciones', [
+            'client_id' => $this->client->id,
+            'vehicle_id' => $this->truck->id,
+            'driver_id' => $this->driver->id,
+            'java_quantity' => 3,
+            'tray_quantity' => 0,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('java_quantity');
+
+        $this->postJson('/api/v1/control-javas/recepciones', [
+            'client_id' => $this->client->id,
+            'vehicle_id' => $this->truck->id,
+            'driver_id' => $this->driver->id,
+            'java_quantity' => 2,
+            'tray_quantity' => 1,
+        ])->assertCreated();
+
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.clients.0.java_balance', 0)
+            ->assertJsonPath('data.clients.0.tray_balance', 0)
+            ->assertJsonPath('data.summary.total_pending', 0)
+            ->assertJsonPath('data.summary.clients_with_balance', 0);
+    }
+
+    public function test_client_balance_can_be_corrected_directly_to_zero(): void
+    {
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 0,
+            'tray_balance' => 0,
+            'reason' => 'El cliente ya había devuelto todos los envases.',
+        ])->assertOk();
+
+        $this->getJson('/api/v1/control-javas')
+            ->assertOk()
+            ->assertJsonPath('data.summary.java_total_pending', 0)
+            ->assertJsonPath('data.summary.tray_total_pending', 0)
+            ->assertJsonPath('data.summary.clients_with_balance', 0)
+            ->assertJsonPath('data.clients.0.id', $this->client->id)
+            ->assertJsonPath('data.clients.0.java_balance', 0)
+            ->assertJsonPath('data.clients.0.tray_balance', 0)
+            ->assertJsonPath('data.client_options.0.id', $this->client->id);
+    }
+
+    public function test_balance_correction_is_restricted_to_active_clients_in_the_actor_company(): void
+    {
+        $otherUser = User::factory()->create();
+        $otherClient = Tercero::query()->create([
+            'empresa_id' => $otherUser->empresa_id,
+            'tipo_documento' => 'NIT',
+            'numero_documento' => '901999999',
+            'nombre_razon_social' => 'CLIENTE DE OTRA EMPRESA',
+            'direccion' => 'Otra ciudad',
+            'estado' => Tercero::STATUS_ACTIVE,
+        ]);
+        TerceroRole::query()->create([
+            'tercero_id' => $otherClient->id,
+            'rol' => TerceroRole::CLIENT,
+        ]);
+
+        $payload = [
+            'expected_java_balance' => 0,
+            'expected_tray_balance' => 0,
+            'java_balance' => 2,
+            'tray_balance' => 1,
+            'reason' => 'Intento de corrección fuera de la empresa.',
+        ];
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$otherClient->id}/saldo", $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('client_id');
+
+        $this->client->update(['estado' => Tercero::STATUS_INACTIVE]);
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            ...$payload,
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('client_id');
+
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    public function test_balance_correction_always_requires_an_authenticated_user(): void
+    {
+        config()->set('directory.public_access', true);
+        $this->app['auth']->forgetGuards();
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 9,
+            'tray_balance' => 7,
+            'reason' => 'Intento sin un usuario autenticado.',
+        ])->assertUnauthorized();
+
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    public function test_balance_correction_requires_access_to_the_java_control_module(): void
+    {
+        $userWithoutAccess = User::factory()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+        ]);
+        Sanctum::actingAs($userWithoutAccess, ['api']);
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 9,
+            'tray_balance' => 7,
+            'reason' => 'Intento de un usuario sin acceso al módulo.',
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    public function test_balance_correction_cannot_exceed_the_configured_inventory(): void
+    {
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'java_quantity' => 12,
+            'tray_quantity' => 9,
+        ])->assertCreated();
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 13,
+            'tray_balance' => 8,
+            'reason' => 'Cantidad de javas superior al inventario.',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('java_balance');
+
+        $this->postJson('/api/v1/control-javas/inventario', [
+            'java_quantity' => 20,
+            'tray_quantity' => 9,
+        ])->assertCreated();
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$this->client->id}/saldo", [
+            'expected_java_balance' => 10,
+            'expected_tray_balance' => 8,
+            'java_balance' => 10,
+            'tray_balance' => 10,
+            'reason' => 'Cantidad de bandejas superior al inventario.',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('tray_balance');
+
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertDatabaseCount('auditoria_eventos', 0);
+    }
+
+    public function test_client_without_movements_can_receive_an_initial_corrected_balance(): void
+    {
+        $client = Tercero::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'tipo_documento' => 'NIT',
+            'numero_documento' => '900000001',
+            'nombre_razon_social' => 'CLIENTE SIN MOVIMIENTOS',
+            'direccion' => 'Dirección de prueba',
+            'estado' => Tercero::STATUS_ACTIVE,
+        ]);
+        TerceroRole::query()->create([
+            'tercero_id' => $client->id,
+            'rol' => TerceroRole::CLIENT,
+        ]);
+
+        $this->patchJson("/api/v1/control-javas/clientes/{$client->id}/saldo", [
+            'expected_java_balance' => 0,
+            'expected_tray_balance' => 0,
+            'java_balance' => 5,
+            'tray_balance' => 2,
+            'reason' => 'Se omitió el saldo inicial del cliente.',
+        ])->assertOk();
+
+        $this->getJson('/api/v1/control-javas?search=CLIENTE%20SIN%20MOVIMIENTOS')
+            ->assertOk()
+            ->assertJsonPath('data.clients.0.id', $client->id)
+            ->assertJsonPath('data.clients.0.java_balance', 5)
+            ->assertJsonPath('data.clients.0.tray_balance', 2);
+    }
+
     public function test_receipt_cannot_exceed_the_client_balance(): void
     {
         $this->postJson('/api/v1/control-javas/recepciones', [

@@ -996,6 +996,11 @@ body.java-control-page {
   border-top: 4px solid #f0ae20;
 }
 
+.java-balance-edit-modal-card {
+  width: min(600px, 100%);
+  border-top-color: #9b7ded;
+}
+
 .java-inventory-modal-head {
   display: flex;
   align-items: flex-start;
@@ -1168,6 +1173,7 @@ body.java-inventory-modal-open { overflow: hidden; }
   color: #dce7f5;
   text-align: left;
   vertical-align: middle;
+  overflow-wrap: anywhere;
 }
 
 .java-table th {
@@ -1244,6 +1250,13 @@ body.java-inventory-modal-open { overflow: hidden; }
 
 .java-action-cell { text-align: right !important; }
 
+.java-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .java-receive-btn {
   padding: 8px 11px;
   border: 1px solid #49698f;
@@ -1263,6 +1276,23 @@ body.java-inventory-modal-open { overflow: hidden; }
 .java-receive-btn:disabled {
   opacity: .42;
   cursor: not-allowed;
+}
+
+.java-edit-balance-btn {
+  padding: 8px 11px;
+  border: 1px solid rgba(155, 125, 237, .6);
+  border-radius: 8px;
+  background: rgba(155, 125, 237, .12);
+  color: #d7caff;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.java-edit-balance-btn:hover {
+  border-color: #bca8f6;
+  background: rgba(155, 125, 237, .22);
+  color: #fff;
 }
 
 .java-entry-badge {
@@ -1316,6 +1346,49 @@ body.java-inventory-modal-open { overflow: hidden; }
   color: #9eb4d1;
   font-size: 13px;
 }
+
+.java-balance-edit-client {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid #354c6c;
+  border-radius: 9px;
+  background: #0d192a;
+}
+
+.java-balance-edit-client strong { color: #fff; }
+.java-balance-edit-client small { color: #91a9c8; }
+
+.java-balance-edit-current {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.java-balance-edit-current > span {
+  padding: 11px 13px;
+  border: 1px solid rgba(155, 125, 237, .35);
+  border-radius: 9px;
+  background: rgba(155, 125, 237, .08);
+}
+
+.java-balance-edit-current small,
+.java-balance-edit-current strong { display: block; }
+.java-balance-edit-current small { color: #a9bdd8; }
+.java-balance-edit-current strong { margin-top: 4px; color: #fff; font-size: 24px; }
+
+.java-balance-edit-note {
+  margin: -2px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid #9b7ded;
+  border-radius: 7px;
+  background: rgba(155, 125, 237, .08);
+  color: #a9bdd8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.java-balance-edit-note a { color: #d7caff; font-weight: 800; }
 
 .java-resource-hint {
   margin: -4px 0 0;
@@ -1372,6 +1445,14 @@ body.java-inventory-modal-open { overflow: hidden; }
   background: rgba(42, 182, 110, 0.12);
   color: #82dfaa;
 }
+
+.java-movement-badge.is-adjustment {
+  border: 1px solid rgba(155, 125, 237, .5);
+  background: rgba(155, 125, 237, .14);
+  color: #d7caff;
+}
+
+.java-asset-stack.is-adjustment strong { color: #d7caff; }
 
 .java-quantity.is-positive { color: #f8dd5a; }
 .java-quantity.is-negative { color: #82dfaa; }
@@ -1767,6 +1848,7 @@ body.java-inventory-modal-open { overflow: hidden; }
   .java-history-filter,
   .java-journey-filter { width: 100%; min-width: 0; }
   .java-form-row { grid-template-columns: 1fr; }
+  .java-balance-edit-current { grid-template-columns: 1fr; }
   .java-table-wrap { border: 0; overflow: visible; }
   .java-table-viewport { max-height: none; }
   .java-table thead { display: none; }
@@ -1799,7 +1881,9 @@ body.java-inventory-modal-open { overflow: hidden; }
   .java-action-cell { display: block !important; text-align: left !important; }
   .java-action-cell::before,
   .java-empty-cell::before { display: none; }
-  .java-receive-btn { width: 100%; }
+  .java-row-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .java-receive-btn,
+  .java-edit-balance-btn { width: 100%; }
   .java-pagination { align-items: stretch; flex-direction: column; }
   .java-pagination-actions { justify-content: space-between; }
 }

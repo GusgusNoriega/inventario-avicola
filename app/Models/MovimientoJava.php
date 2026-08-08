@@ -54,6 +54,11 @@ class MovimientoJava extends Model
         return $this->belongsTo(Conductor::class, 'conductor_id');
     }
 
+    public function creador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     protected function casts(): array
     {
         return [

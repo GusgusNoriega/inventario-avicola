@@ -76,7 +76,7 @@
       <div data-java-trace-panel="movements" hidden>
         <div class="java-table-wrap java-table-viewport java-trace-table-viewport">
           <table class="java-table java-history-table">
-            <thead><tr><th>Fecha</th><th>Camión</th><th>Cliente</th><th>Movimiento</th><th>Javas / Bandejas</th><th>Chofer</th><th>Referencia</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Camión</th><th>Cliente</th><th>Movimiento</th><th>Javas / Bandejas</th><th>Chofer</th><th>Registrado por</th><th>Referencia</th></tr></thead>
             <tbody id="javaMovementRows"></tbody>
           </table>
         </div>

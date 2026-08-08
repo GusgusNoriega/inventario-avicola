@@ -34,6 +34,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'costos_compra_pesadas',
         'movimiento_detalles',
         'movimientos_inventario',
+        'ajustes_saldos_javas',
         'movimientos_javas',
         'conteos_diarios_javas_camiones',
         'conteos_diarios_javas',

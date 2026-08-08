@@ -1455,6 +1455,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="trayReceiptQuantity"', false)
             ->assertSee('id="trayTotalPending"', false)
             ->assertSee('id="javaClientPagination"', false)
+            ->assertSee('id="javaBalanceEditModal"', false)
+            ->assertSee('id="javaBalanceEditForm"', false)
+            ->assertSee('id="javaBalanceNewJavas"', false)
+            ->assertSee('id="javaBalanceNewTrays"', false)
+            ->assertSee('id="javaBalanceEditReason"', false)
+            ->assertSee('Guardar corrección')
             ->assertDontSee('id="javaReceiptDate"', false)
             ->assertDontSee('id="javaInventoryOpen"', false)
             ->assertDontSee('id="javaJourneyFilter"', false)
@@ -1471,6 +1477,7 @@ class WebViewsTest extends TestCase
             ->assertSee('id="javaJourneyFilter"', false)
             ->assertSee('id="javaTruckActivityRows"', false)
             ->assertSee('<th>Chofer</th>', false)
+            ->assertSee('<th>Registrado por</th>', false)
             ->assertSee('id="javaMovementRows"', false)
             ->assertSee('data-java-trace-tab="activity"', false)
             ->assertSee('data-java-trace-tab="movements"', false)
@@ -1496,6 +1503,12 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('tray_balance: numericValue', $javascript);
         $this->assertStringContainsString('javaQuantity === 0 && trayQuantity === 0', $javascript);
         $this->assertStringContainsString('movement?.java_quantity, movement?.quantity', $javascript);
+        $this->assertStringContainsString('data-edit-balance-client', $javascript);
+        $this->assertStringContainsString('expected_java_balance: edit.javaBalance', $javascript);
+        $this->assertStringContainsString('expected_tray_balance: edit.trayBalance', $javascript);
+        $this->assertStringContainsString('method: "PATCH"', $javascript);
+        $this->assertStringContainsString('movement.is_adjustment', $javascript);
+        $this->assertStringContainsString('movement.created_by?.name', $javascript);
     }
 
     public function test_daily_tickets_view_is_available_without_database_queries(): void

@@ -655,6 +655,22 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        DB::table('ajustes_saldos_javas')->insert([
+            'empresa_id' => $companyId,
+            'sucursal_id' => $branchId,
+            'jornada_id' => $journeyId,
+            'cliente_id' => $client->id,
+            'saldo_anterior_javas' => 1,
+            'saldo_nuevo_javas' => 2,
+            'diferencia_javas' => 1,
+            'saldo_anterior_bandejas' => 0,
+            'saldo_nuevo_bandejas' => 0,
+            'diferencia_bandejas' => 0,
+            'motivo' => 'Corrección de prueba para limpieza.',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         DB::table('inventarios_javas')->insert([
             'empresa_id' => $companyId,
             'cantidad_total' => 100,

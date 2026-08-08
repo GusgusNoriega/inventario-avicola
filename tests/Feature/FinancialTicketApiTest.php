@@ -1331,6 +1331,62 @@ class FinancialTicketApiTest extends TestCase
         $this->assertSame(3, (int) json_decode($restoreAudit->datos_despues, true)['cantidad']);
     }
 
+    public function test_void_and_restore_preserve_a_corrected_java_balance(): void
+    {
+        $ticket = $this->createTicket(
+            'CICLO-JAVAS-AJUSTADAS',
+            CarbonImmutable::parse('2026-07-20 20:07:00'),
+            $this->sourceClientId,
+            [
+                $this->firstChickenTypeId => [
+                    'price' => '8.5000',
+                    'weight' => '30.000',
+                    'cages' => 3,
+                ],
+            ],
+        );
+        $this->createJavaMovement($ticket['id'], $this->sourceClientId);
+        DB::table('ajustes_saldos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $this->journeyId,
+            'cliente_id' => $this->sourceClientId,
+            'saldo_anterior_javas' => 3,
+            'saldo_nuevo_javas' => 1,
+            'diferencia_javas' => -2,
+            'saldo_anterior_bandejas' => 0,
+            'saldo_nuevo_bandejas' => 0,
+            'diferencia_bandejas' => 0,
+            'motivo' => 'Corrección previa al ciclo del ticket.',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $adjustedBalance = fn (): int => $this->javaBalanceForClient($this->sourceClientId)
+            + (int) DB::table('ajustes_saldos_javas')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('cliente_id', $this->sourceClientId)
+                ->sum('diferencia_javas');
+        $this->makeAdministrator($this->user);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+            'motivo' => 'Prueba de saldo corregido',
+        ])->assertOk();
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticket['id'],
+            'cantidad' => 2,
+        ]);
+        $this->assertSame(0, $adjustedBalance());
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")
+            ->assertOk();
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticket['id'],
+            'cantidad' => 3,
+        ]);
+        $this->assertSame(1, $adjustedBalance());
+    }
+
     public function test_restore_keeps_a_weighing_that_was_voided_individually_before_the_ticket(): void
     {
         $ticket = $this->createTicket(

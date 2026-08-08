@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\JavaControl\StoreDailyJavaCountRequest;
 use App\Http\Requests\JavaControl\StoreJavaInventoryRequest;
 use App\Http\Requests\JavaControl\StoreJavaReceiptRequest;
+use App\Http\Requests\JavaControl\UpdateJavaClientBalanceRequest;
+use App\Models\AjusteSaldoJava;
 use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
 use App\Models\TerceroRole;
@@ -79,15 +81,7 @@ class JavaControlController extends Controller
         $search = trim((string) ($filters['search'] ?? ''));
         $page = (int) ($filters['page'] ?? 1);
         $perPage = 12;
-        $balanceQuery = DB::table('movimientos_javas')
-            ->where('empresa_id', $companyId)
-            ->groupBy('cliente_id')
-            ->selectRaw(
-                "cliente_id, SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad ELSE -cantidad END) AS saldo"
-            )
-            ->selectRaw(
-                "SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad_bandejas ELSE -cantidad_bandejas END) AS saldo_bandejas"
-            );
+        $balanceQuery = $this->javaControl->clientBalancesQuery($companyId);
 
         $clientBaseQuery = DB::table('terceros')
             ->join('tercero_roles', function ($join): void {
@@ -106,14 +100,14 @@ class JavaControlController extends Controller
                         ->orWhere('terceros.numero_documento', 'like', "%{$search}%");
                 });
             })
-            ->orderByDesc(DB::raw('COALESCE(saldos_javas.saldo, 0) + COALESCE(saldos_javas.saldo_bandejas, 0)'))
+            ->orderByDesc(DB::raw('COALESCE(saldos_javas.saldo_javas, 0) + COALESCE(saldos_javas.saldo_bandejas, 0)'))
             ->orderBy('terceros.nombre_razon_social')
             ->paginate($perPage, [
                 'terceros.id',
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
                 'terceros.es_cliente_interno',
-                DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
+                DB::raw('COALESCE(saldos_javas.saldo_javas, 0) AS saldo'),
                 DB::raw('COALESCE(saldos_javas.saldo_bandejas, 0) AS saldo_bandejas'),
             ], 'page', $page);
         $clients = $clientPaginator->getCollection()
@@ -134,7 +128,7 @@ class JavaControlController extends Controller
                 'terceros.nombre_razon_social',
                 'terceros.numero_documento',
                 'terceros.es_cliente_interno',
-                DB::raw('COALESCE(saldos_javas.saldo, 0) AS saldo'),
+                DB::raw('COALESCE(saldos_javas.saldo_javas, 0) AS saldo'),
                 DB::raw('COALESCE(saldos_javas.saldo_bandejas, 0) AS saldo_bandejas'),
             ])
             ->map(fn (object $client): array => [
@@ -159,12 +153,33 @@ class JavaControlController extends Controller
                 'ticketDespacho:id,codigo',
                 'vehiculo:id,placa',
                 'conductor:id,nombre_completo',
+                'creador:id,nombre',
             ])
             ->orderByDesc('fecha_movimiento')
             ->orderByDesc('id')
             ->limit(250)
             ->get()
             ->map(fn (MovimientoJava $movement): array => $this->formatMovement($movement))
+            ->values();
+        $balanceAdjustments = AjusteSaldoJava::query()
+            ->where('empresa_id', $companyId)
+            ->where('sucursal_id', $branch->id)
+            ->when($selectedJourneyId, fn ($query) => $query->where('jornada_id', $selectedJourneyId))
+            ->when($clientId, fn ($query) => $query->where('cliente_id', $clientId))
+            ->with([
+                'jornada:id,fecha_operativa,estado',
+                'cliente:id,nombre_razon_social',
+                'creador:id,nombre',
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(250)
+            ->get()
+            ->map(fn (AjusteSaldoJava $adjustment): array => $this->formatBalanceAdjustment($adjustment));
+        $movements = $movements
+            ->concat($balanceAdjustments)
+            ->sortByDesc(fn (array $movement): string => (string) $movement['occurred_at'])
+            ->take(250)
             ->values();
         $journeyTotals = MovimientoJava::query()
             ->where('empresa_id', $companyId)
@@ -403,12 +418,34 @@ class JavaControlController extends Controller
             'cliente:id,nombre_razon_social',
             'vehiculo:id,placa',
             'conductor:id,nombre_completo',
+            'creador:id,nombre',
         ]);
 
         return response()->json([
             'message' => 'La entrada de envases fue registrada correctamente.',
             'data' => $this->formatMovement($movement),
         ], 201);
+    }
+
+    public function updateClientBalance(
+        UpdateJavaClientBalanceRequest $request,
+        int $cliente
+    ): JsonResponse {
+        $branch = $this->context->branch($request);
+        $adjustment = $this->javaControl->adjustClientBalance(
+            $this->context->companyId($request),
+            (int) $branch->id,
+            $branch->zona_horaria,
+            $this->context->actor($request, (int) $branch->id),
+            $cliente,
+            $request->validated(),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => 'El saldo del cliente fue corregido y la trazabilidad quedó registrada.',
+            'data' => $this->formatBalanceAdjustment($adjustment),
+        ]);
     }
 
     public function storeInventory(StoreJavaInventoryRequest $request): JsonResponse
@@ -474,6 +511,52 @@ class JavaControlController extends Controller
                 ? ['id' => (int) $movement->conductor->id, 'name' => $movement->conductor->nombre_completo]
                 : null,
             'observations' => $movement->observaciones,
+            'is_adjustment' => false,
+            'created_by' => $movement->creador
+                ? ['id' => (int) $movement->creador->id, 'name' => $movement->creador->nombre]
+                : null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function formatBalanceAdjustment(AjusteSaldoJava $adjustment): array
+    {
+        return [
+            'id' => 'ajuste-'.$adjustment->id,
+            'adjustment_id' => (int) $adjustment->id,
+            'type' => 'AJUSTE_SALDO',
+            'is_adjustment' => true,
+            'java_quantity' => abs((int) $adjustment->diferencia_javas),
+            'tray_quantity' => abs((int) $adjustment->diferencia_bandejas),
+            'java_delta' => (int) $adjustment->diferencia_javas,
+            'tray_delta' => (int) $adjustment->diferencia_bandejas,
+            'occurred_at' => $adjustment->created_at?->toISOString(),
+            'journey' => $adjustment->jornada
+                ? [
+                    'id' => (int) $adjustment->jornada->id,
+                    'operating_date' => $adjustment->jornada->fecha_operativa?->format('Y-m-d'),
+                    'status' => $adjustment->jornada->estado,
+                ]
+                : null,
+            'client' => [
+                'id' => (int) $adjustment->cliente_id,
+                'name' => $adjustment->cliente?->nombre_razon_social,
+            ],
+            'ticket' => null,
+            'truck' => null,
+            'driver' => null,
+            'observations' => $adjustment->motivo,
+            'balance_before' => [
+                'javas' => (int) $adjustment->saldo_anterior_javas,
+                'trays' => (int) $adjustment->saldo_anterior_bandejas,
+            ],
+            'balance_after' => [
+                'javas' => (int) $adjustment->saldo_nuevo_javas,
+                'trays' => (int) $adjustment->saldo_nuevo_bandejas,
+            ],
+            'created_by' => $adjustment->creador
+                ? ['id' => (int) $adjustment->creador->id, 'name' => $adjustment->creador->nombre]
+                : null,
         ];
     }
 }

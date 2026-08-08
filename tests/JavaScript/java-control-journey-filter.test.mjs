@@ -375,6 +375,103 @@ test("el modo histórico queda protegido contra escrituras", () => {
   assert.match(loadSource, /return false/);
 });
 
+test("cada cliente puede abrir la edición de saldo aunque no tenga pendientes", () => {
+  const elements = { clientRows: { innerHTML: "" } };
+  const state = {
+    clients: [
+      { id: 1, name: "CON SALDO", document_number: "100", java_balance: 3, tray_balance: 2 },
+      { id: 2, name: "SIN SALDO", document_number: "200", java_balance: 0, tray_balance: 0 }
+    ]
+  };
+  const render = new Function(
+    "state",
+    "elements",
+    "escapeHtml",
+    `${sourceBetween("function renderClients", "function renderClientPagination")}
+     return renderClients;`
+  )(
+    state,
+    elements,
+    (value) => String(value)
+  );
+
+  render();
+
+  assert.equal((elements.clientRows.innerHTML.match(/data-edit-balance-client=/g) || []).length, 2);
+  assert.match(elements.clientRows.innerHTML, /data-edit-balance-client="2">Editar saldo/);
+  assert.match(elements.clientRows.innerHTML, /data-receive-client="2" disabled/);
+});
+
+test("la edición no interpreta campos vacíos como saldo cero", () => {
+  const submitSource = sourceBetween("async function submitBalanceEdit", "async function loadControl");
+
+  assert.match(submitSource, /javaValue === "" \|\| trayValue === ""/);
+  assert.match(submitSource, /Completa los dos nuevos saldos/);
+  assert.match(submitSource, /const javaBalance = Number\(javaValue\)/);
+  assert.match(submitSource, /const trayBalance = Number\(trayValue\)/);
+});
+
+test("la edición bloquea cierre y navegación mientras guarda y conserva el foco", () => {
+  const closeSource = sourceBetween("function closeBalanceEditModal", "function setBalanceEditBusy");
+  const busySource = sourceBetween("function setBalanceEditBusy", "function trapBalanceEditFocus");
+  const focusSource = sourceBetween("function trapBalanceEditFocus", "async function submitBalanceEdit");
+  const submitSource = sourceBetween("async function submitBalanceEdit", "async function loadControl");
+
+  assert.match(closeSource, /state\.balanceEdit\?\.submitting/);
+  assert.match(closeSource, /trigger \|\| elements\.balanceMessage/);
+  assert.match(busySource, /balanceEditTraceLink\.tabIndex = isBusy \? -1 : 0/);
+  assert.match(busySource, /balanceEditDialog\?\.focus/);
+  assert.match(focusSource, /event\.key !== "Tab"/);
+  assert.match(focusSource, /event\.preventDefault\(\)/);
+  assert.match(submitSource, /edit\.submitting = true/);
+  assert.match(submitSource, /setBalanceEditBusy\(true\)/);
+});
+
+test("la trazabilidad presenta la corrección con responsable, motivo y saldos", () => {
+  const elements = { movementRows: { innerHTML: "" } };
+  const state = {
+    movements: [{
+      type: "AJUSTE_SALDO",
+      is_adjustment: true,
+      occurred_at: "2026-08-08T10:00:00Z",
+      client: { name: "CLIENTE AJUSTADO" },
+      java_delta: 4,
+      tray_delta: -5,
+      balance_before: { javas: 10, trays: 8 },
+      balance_after: { javas: 14, trays: 3 },
+      observations: "Error de digitación",
+      created_by: { name: "Operador Uno" }
+    }]
+  };
+  const render = new Function(
+    "state",
+    "elements",
+    "formatDate",
+    "escapeHtml",
+    "assetStack",
+    "signedQuantity",
+    "assetPairText",
+    `${sourceBetween("function renderMovements", "function renderTruckActivity")}
+     return renderMovements;`
+  )(
+    state,
+    elements,
+    (value) => value,
+    (value) => String(value ?? ""),
+    (javas, trays, tone) => `${tone}:${javas}/${trays}`,
+    (value) => value > 0 ? `+${value}` : String(value),
+    (javas, trays) => `${javas} javas · ${trays} bandejas`
+  );
+
+  render();
+
+  assert.match(elements.movementRows.innerHTML, /Corrección/);
+  assert.match(elements.movementRows.innerHTML, /is-adjustment:\+4\/-5/);
+  assert.match(elements.movementRows.innerHTML, /Operador Uno/);
+  assert.match(elements.movementRows.innerHTML, /10 javas · 8 bandejas.*14 javas · 3 bandejas/);
+  assert.match(elements.movementRows.innerHTML, /Error de digitación/);
+});
+
 test("si falla el cambio de jornada se restaura el último estado utilizable", () => {
   const calls = [];
   const state = { countJourneyId: 27, countJourneyFilterId: 19 };

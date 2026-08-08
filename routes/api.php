@@ -243,6 +243,12 @@ Route::prefix('v1')->group(function (): void {
     $javaControlWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_CONTROL_JAVAS'];
+    $javaBalanceAdjustmentMiddleware = [
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_CONTROL_JAVAS',
+    ];
     $priceMiddleware = config('directory.public_access')
         ? []
         : ['permission:PRECIOS_GESTIONAR'];
@@ -322,6 +328,9 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($javaControlReadMiddleware);
     Route::post('/control-javas/recepciones', [JavaControlController::class, 'store'])
         ->middleware($javaControlWriteMiddleware);
+    Route::patch('/control-javas/clientes/{cliente}/saldo', [JavaControlController::class, 'updateClientBalance'])
+        ->whereNumber('cliente')
+        ->middleware($javaBalanceAdjustmentMiddleware);
     Route::post('/control-javas/inventario', [JavaControlController::class, 'storeInventory'])
         ->middleware($javaControlWriteMiddleware);
     Route::post('/control-javas/conteo-diario', [JavaControlController::class, 'storeDailyCount'])

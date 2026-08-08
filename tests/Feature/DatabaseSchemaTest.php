@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(98, $migrationFiles);
+        $this->assertCount(99, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -102,6 +102,7 @@ class DatabaseSchemaTest extends TestCase
             'ticket_precio_ajuste_operaciones',
             'auditoria_eventos',
             'movimientos_javas',
+            'ajustes_saldos_javas',
             'inventarios_javas',
             'conteos_diarios_javas',
             'conteos_diarios_javas_camiones',
@@ -138,6 +139,7 @@ class DatabaseSchemaTest extends TestCase
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
             'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id', 'asignacion_transporte_posterior', 'estado', 'anulado_por', 'anulado_at', 'motivo_anulacion'],
             'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'cantidad_bandejas', 'vehiculo_id', 'fecha_movimiento'],
+            'ajustes_saldos_javas' => ['empresa_id', 'sucursal_id', 'jornada_id', 'cliente_id', 'saldo_anterior_javas', 'saldo_nuevo_javas', 'diferencia_javas', 'saldo_anterior_bandejas', 'saldo_nuevo_bandejas', 'diferencia_bandejas', 'motivo', 'created_by'],
             'inventarios_javas' => ['empresa_id', 'cantidad_total', 'cantidad_total_bandejas', 'updated_by'],
             'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_en_local', 'cantidad_esperada', 'diferencia', 'cantidad_en_empresa_bandejas', 'cantidad_en_local_bandejas', 'cantidad_esperada_bandejas', 'cantidad_clientes_externos', 'cantidad_clientes_externos_bandejas', 'cantidad_clientes_internos', 'cantidad_clientes_internos_bandejas', 'cantidad_total_inventario', 'cantidad_total_inventario_bandejas', 'diferencia_bandejas', 'contado_at', 'contado_por'],
             'conteos_diarios_javas_camiones' => ['conteo_diario_java_id', 'vehiculo_id', 'placa_snapshot', 'cantidad_javas', 'cantidad_bandejas'],

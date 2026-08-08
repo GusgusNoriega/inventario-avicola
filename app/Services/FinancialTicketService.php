@@ -800,28 +800,34 @@ class FinancialTicketService
             ->where('cliente_id', $oldClientId)
             ->lockForUpdate()
             ->get();
-        $otherJavaDispatches = (int) $movements
+        $adjustmentDeltas = $this->javaControl->lockedAdjustmentDeltas(
+            $companyId,
+            $oldClientId
+        );
+        $otherJavaNet = (int) $movements
             ->where('tipo', MovimientoJava::TYPE_DISPATCH)
             ->where('ticket_despacho_id', '!=', $ticketId)
-            ->sum('cantidad');
-        $javaReceipts = (int) $movements
-            ->where('tipo', MovimientoJava::TYPE_RECEIPT)
-            ->sum('cantidad');
-        $otherTrayDispatches = (int) $movements
+            ->sum('cantidad')
+            - (int) $movements
+                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
+                ->sum('cantidad')
+            + $adjustmentDeltas['javas'];
+        $otherTrayNet = (int) $movements
             ->where('tipo', MovimientoJava::TYPE_DISPATCH)
             ->where('ticket_despacho_id', '!=', $ticketId)
-            ->sum('cantidad_bandejas');
-        $trayReceipts = (int) $movements
-            ->where('tipo', MovimientoJava::TYPE_RECEIPT)
-            ->sum('cantidad_bandejas');
+            ->sum('cantidad_bandejas')
+            - (int) $movements
+                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
+                ->sum('cantidad_bandejas')
+            + $adjustmentDeltas['trays'];
 
-        if ($otherJavaDispatches < $javaReceipts) {
+        if ($otherJavaNet < 0) {
             throw ValidationException::withMessages([
                 'cliente_id' => 'No se puede cambiar el cliente porque el cliente actual ya devolvió javas asociadas a este ticket.',
             ]);
         }
 
-        if ($otherTrayDispatches < $trayReceipts) {
+        if ($otherTrayNet < 0) {
             throw ValidationException::withMessages([
                 'cliente_id' => 'No se puede cambiar el cliente porque el cliente actual ya devolvió bandejas asociadas a este ticket.',
             ]);

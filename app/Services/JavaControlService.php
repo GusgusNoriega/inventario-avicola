@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AjusteSaldoJava;
 use App\Models\Conductor;
 use App\Models\ConteoDiarioJava;
 use App\Models\InventarioJava;
@@ -14,11 +15,43 @@ use App\Models\TicketDespacho;
 use App\Models\User;
 use App\Models\Vehiculo;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class JavaControlService
 {
+    public function __construct(
+        private readonly AccessAuditService $audit
+    ) {}
+
+    public function clientBalancesQuery(int $companyId): QueryBuilder
+    {
+        $movementBalances = DB::table('movimientos_javas')
+            ->where('empresa_id', $companyId)
+            ->groupBy('cliente_id')
+            ->select('cliente_id')
+            ->selectRaw(
+                "SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad WHEN tipo = 'RECEPCION' THEN -cantidad ELSE 0 END) AS saldo_javas"
+            )
+            ->selectRaw(
+                "SUM(CASE WHEN tipo = 'DESPACHO' THEN cantidad_bandejas WHEN tipo = 'RECEPCION' THEN -cantidad_bandejas ELSE 0 END) AS saldo_bandejas"
+            );
+        $adjustmentBalances = DB::table('ajustes_saldos_javas')
+            ->where('empresa_id', $companyId)
+            ->groupBy('cliente_id')
+            ->select('cliente_id')
+            ->selectRaw('SUM(diferencia_javas) AS saldo_javas')
+            ->selectRaw('SUM(diferencia_bandejas) AS saldo_bandejas');
+
+        return DB::query()
+            ->fromSub($movementBalances->unionAll($adjustmentBalances), 'saldos_envases')
+            ->groupBy('cliente_id')
+            ->select('cliente_id')
+            ->selectRaw('SUM(saldo_javas) AS saldo_javas')
+            ->selectRaw('SUM(saldo_bandejas) AS saldo_bandejas');
+    }
+
     /** @return array<string, mixed> */
     public function currentInventory(int $companyId, ?int $journeyId = null): array
     {
@@ -78,6 +111,10 @@ class JavaControlService
     public function saveInventoryTotal(int $companyId, User $actor, array $data): array
     {
         return DB::transaction(function () use ($companyId, $actor, $data): array {
+            $inventory = InventarioJava::query()
+                ->where('empresa_id', $companyId)
+                ->lockForUpdate()
+                ->first();
             $clientHolders = $this->clientHolders($companyId);
             $outsideJavaQuantity = (int) $clientHolders['totals']['all_clients_javas'];
             $outsideTrayQuantity = (int) $clientHolders['totals']['all_clients_trays'];
@@ -109,10 +146,14 @@ class JavaControlService
                 $values['cantidad_total_bandejas'] = $trayQuantity;
             }
 
-            $inventory = InventarioJava::query()->updateOrCreate(
-                ['empresa_id' => $companyId],
-                $values
-            );
+            if ($inventory) {
+                $inventory->update($values);
+            } else {
+                $inventory = InventarioJava::query()->create([
+                    'empresa_id' => $companyId,
+                    ...$values,
+                ]);
+            }
 
             return $this->currentInventory($companyId);
         }, 3);
@@ -294,6 +335,157 @@ class JavaControlService
         }, 3);
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function adjustClientBalance(
+        int $companyId,
+        int $branchId,
+        string $timezone,
+        User $actor,
+        int $clientId,
+        array $data,
+        ?string $ip
+    ): AjusteSaldoJava {
+        return DB::transaction(function () use (
+            $companyId,
+            $branchId,
+            $timezone,
+            $actor,
+            $clientId,
+            $data,
+            $ip
+        ): AjusteSaldoJava {
+            if ((int) $actor->empresa_id !== $companyId) {
+                throw ValidationException::withMessages([
+                    'actor' => 'El usuario que realiza la corrección no pertenece a la empresa.',
+                ]);
+            }
+
+            $inventory = InventarioJava::query()
+                ->where('empresa_id', $companyId)
+                ->lockForUpdate()
+                ->first();
+            $client = Tercero::query()
+                ->where('empresa_id', $companyId)
+                ->where('estado', Tercero::STATUS_ACTIVE)
+                ->conRol(TerceroRole::CLIENT)
+                ->lockForUpdate()
+                ->find($clientId);
+
+            if (! $client) {
+                throw ValidationException::withMessages([
+                    'client_id' => 'El cliente seleccionado no está activo o no pertenece a la empresa.',
+                ]);
+            }
+
+            $adjustedAt = CarbonImmutable::now($timezone);
+            $journey = $this->currentJourney(
+                $companyId,
+                $branchId,
+                $timezone,
+                $actor,
+                $adjustedAt
+            );
+            $current = $this->lockedClientBalance($companyId, (int) $client->id);
+            $visibleCurrentJava = max(0, $current['javas']);
+            $visibleCurrentTrays = max(0, $current['trays']);
+
+            if (
+                (int) $data['expected_java_balance'] !== $visibleCurrentJava
+                || (int) $data['expected_tray_balance'] !== $visibleCurrentTrays
+            ) {
+                throw ValidationException::withMessages([
+                    'balance' => 'El saldo cambió mientras lo estabas editando. Recarga la pantalla y vuelve a intentarlo.',
+                ]);
+            }
+
+            $newJavaBalance = (int) $data['java_balance'];
+            $newTrayBalance = (int) $data['tray_balance'];
+            $javaDifference = $newJavaBalance - $current['javas'];
+            $trayDifference = $newTrayBalance - $current['trays'];
+
+            if ($javaDifference === 0 && $trayDifference === 0) {
+                throw ValidationException::withMessages([
+                    'balance' => 'Indica un saldo diferente al actual para guardar la corrección.',
+                ]);
+            }
+
+            if ($inventory) {
+                $holderTotals = $this->clientHolders($companyId)['totals'];
+                $nextOutsideJavas = (int) $holderTotals['all_clients_javas']
+                    - max(0, $current['javas'])
+                    + $newJavaBalance;
+                $nextOutsideTrays = (int) $holderTotals['all_clients_trays']
+                    - max(0, $current['trays'])
+                    + $newTrayBalance;
+
+                if ($nextOutsideJavas > (int) $inventory->cantidad_total) {
+                    throw ValidationException::withMessages([
+                        'java_balance' => "El nuevo saldo dejaría {$nextOutsideJavas} javas con clientes, pero el inventario general es de {$inventory->cantidad_total}.",
+                    ]);
+                }
+
+                if (
+                    $inventory->cantidad_total_bandejas !== null
+                    && $nextOutsideTrays > (int) $inventory->cantidad_total_bandejas
+                ) {
+                    throw ValidationException::withMessages([
+                        'tray_balance' => "El nuevo saldo dejaría {$nextOutsideTrays} bandejas con clientes, pero el inventario general es de {$inventory->cantidad_total_bandejas}.",
+                    ]);
+                }
+            }
+
+            $reason = trim((string) $data['reason']);
+            $adjustment = AjusteSaldoJava::query()->create([
+                'empresa_id' => $companyId,
+                'sucursal_id' => $branchId,
+                'jornada_id' => $journey->id,
+                'cliente_id' => $client->id,
+                'saldo_anterior_javas' => $current['javas'],
+                'saldo_nuevo_javas' => $newJavaBalance,
+                'diferencia_javas' => $javaDifference,
+                'saldo_anterior_bandejas' => $current['trays'],
+                'saldo_nuevo_bandejas' => $newTrayBalance,
+                'diferencia_bandejas' => $trayDifference,
+                'motivo' => $reason,
+                'created_by' => $actor->id,
+            ]);
+
+            $before = [
+                'cliente_id' => (int) $client->id,
+                'cliente' => $client->nombre_razon_social,
+                'saldo_javas' => $current['javas'],
+                'saldo_bandejas' => $current['trays'],
+            ];
+            $after = [
+                'cliente_id' => (int) $client->id,
+                'cliente' => $client->nombre_razon_social,
+                'saldo_javas' => $newJavaBalance,
+                'saldo_bandejas' => $newTrayBalance,
+                'diferencia_javas' => $javaDifference,
+                'diferencia_bandejas' => $trayDifference,
+                'motivo' => $reason,
+            ];
+            $this->audit->record(
+                $companyId,
+                (int) $actor->id,
+                'ajustes_saldos_javas',
+                (int) $adjustment->id,
+                'AJUSTAR_SALDO_CLIENTE',
+                $before,
+                $after,
+                $ip,
+            );
+
+            return $adjustment->load([
+                'jornada:id,fecha_operativa,estado',
+                'cliente:id,nombre_razon_social',
+                'creador:id,nombre',
+            ]);
+        }, 3);
+    }
+
     public function syncDispatchMovement(
         TicketDespacho $ticket,
         int $companyId,
@@ -324,29 +516,34 @@ class JavaControlService
             fn (MovimientoJava $movement): bool => $movement->tipo === MovimientoJava::TYPE_DISPATCH
                 && (int) $movement->ticket_despacho_id === (int) $ticket->id
         );
-        $otherJavaDispatches = (int) $clientMovements
+        $adjustmentDeltas = $this->lockedAdjustmentDeltas(
+            $companyId,
+            (int) $ticket->cliente_destino_id
+        );
+        $otherJavaNet = (int) $clientMovements
             ->where('tipo', MovimientoJava::TYPE_DISPATCH)
             ->where('ticket_despacho_id', '!=', $ticket->id)
-            ->sum('cantidad');
-        $javaReceipts = (int) $clientMovements
-            ->where('tipo', MovimientoJava::TYPE_RECEIPT)
-            ->sum('cantidad');
-        $otherTrayDispatches = (int) $clientMovements
+            ->sum('cantidad')
+            - (int) $clientMovements
+                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
+                ->sum('cantidad')
+            + $adjustmentDeltas['javas'];
+        $otherTrayNet = (int) $clientMovements
             ->where('tipo', MovimientoJava::TYPE_DISPATCH)
             ->where('ticket_despacho_id', '!=', $ticket->id)
-            ->sum('cantidad_bandejas');
-        $trayReceipts = (int) $clientMovements
-            ->where('tipo', MovimientoJava::TYPE_RECEIPT)
-            ->sum('cantidad_bandejas');
+            ->sum('cantidad_bandejas')
+            - (int) $clientMovements
+                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
+                ->sum('cantidad_bandejas')
+            + $adjustmentDeltas['trays'];
 
         if ($isVoided && $ticketMovement) {
-            // Las devoluciones no están vinculadas a un ticket concreto. Al anular,
-            // se conserva solo la porción del despacho que ya fue devuelta y que no
-            // puede respaldarse con otros tickets del cliente. Así el saldo queda en
-            // cero, la devolución no reduce futuros despachos y la trazabilidad sigue
-            // disponible para una eventual restauración del ticket.
-            $javaQuantity = max(0, $javaReceipts - $otherJavaDispatches);
-            $trayQuantity = max(0, $trayReceipts - $otherTrayDispatches);
+            // Las devoluciones y correcciones no están vinculadas a un ticket concreto.
+            // Al anular se conserva solo la porción del despacho que las compensa y que
+            // no puede respaldarse con otros tickets del cliente. Así el saldo queda en
+            // cero y la trazabilidad sigue disponible para una eventual restauración.
+            $javaQuantity = max(0, -$otherJavaNet);
+            $trayQuantity = max(0, -$otherTrayNet);
 
             if ($javaQuantity > (int) $ticketMovement->cantidad) {
                 throw ValidationException::withMessages([
@@ -361,13 +558,13 @@ class JavaControlService
             }
         }
 
-        if (! $isVoided && $javaQuantity + $otherJavaDispatches < $javaReceipts) {
+        if (! $isVoided && $javaQuantity + $otherJavaNet < 0) {
             throw ValidationException::withMessages([
                 'cages' => 'No se puede reducir esta cantidad porque el cliente ya devolvió javas asociadas a su saldo.',
             ]);
         }
 
-        if (! $isVoided && $trayQuantity + $otherTrayDispatches < $trayReceipts) {
+        if (! $isVoided && $trayQuantity + $otherTrayNet < 0) {
             throw ValidationException::withMessages([
                 'trays' => 'No se puede reducir esta cantidad porque el cliente ya devolvio bandejas asociadas a su saldo.',
             ]);
@@ -462,21 +659,9 @@ class JavaControlService
                 $actor,
                 $receivedAt
             );
-            $movements = MovimientoJava::query()
-                ->where('empresa_id', $companyId)
-                ->where('cliente_id', $client->id)
-                ->lockForUpdate()
-                ->get(['tipo', 'cantidad', 'cantidad_bandejas']);
-            $javaBalance = (int) $movements->sum(
-                fn (MovimientoJava $movement): int => $movement->tipo === MovimientoJava::TYPE_DISPATCH
-                    ? $movement->cantidad
-                    : -$movement->cantidad
-            );
-            $trayBalance = (int) $movements->sum(
-                fn (MovimientoJava $movement): int => $movement->tipo === MovimientoJava::TYPE_DISPATCH
-                    ? $movement->cantidad_bandejas
-                    : -$movement->cantidad_bandejas
-            );
+            $balance = $this->lockedClientBalance($companyId, (int) $client->id);
+            $javaBalance = $balance['javas'];
+            $trayBalance = $balance['trays'];
             $javaQuantity = (int) ($data['java_quantity'] ?? $data['quantity'] ?? 0);
             $trayQuantity = (int) ($data['tray_quantity'] ?? 0);
             $javaField = array_key_exists('quantity', $data) ? 'quantity' : 'java_quantity';
@@ -509,6 +694,49 @@ class JavaControlService
                 'created_by' => $actor->id,
             ]);
         }, 3);
+    }
+
+    /** @return array{javas: int, trays: int} */
+    public function lockedAdjustmentDeltas(int $companyId, int $clientId): array
+    {
+        $adjustments = AjusteSaldoJava::query()
+            ->where('empresa_id', $companyId)
+            ->where('cliente_id', $clientId)
+            ->lockForUpdate()
+            ->get(['diferencia_javas', 'diferencia_bandejas']);
+
+        return [
+            'javas' => (int) $adjustments->sum('diferencia_javas'),
+            'trays' => (int) $adjustments->sum('diferencia_bandejas'),
+        ];
+    }
+
+    /** @return array{javas: int, trays: int} */
+    private function lockedClientBalance(int $companyId, int $clientId): array
+    {
+        $movements = MovimientoJava::query()
+            ->where('empresa_id', $companyId)
+            ->where('cliente_id', $clientId)
+            ->lockForUpdate()
+            ->get(['tipo', 'cantidad', 'cantidad_bandejas']);
+        $adjustments = $this->lockedAdjustmentDeltas($companyId, $clientId);
+
+        return [
+            'javas' => (int) $movements->sum(
+                fn (MovimientoJava $movement): int => match ($movement->tipo) {
+                    MovimientoJava::TYPE_DISPATCH => $movement->cantidad,
+                    MovimientoJava::TYPE_RECEIPT => -$movement->cantidad,
+                    default => 0,
+                }
+            ) + $adjustments['javas'],
+            'trays' => (int) $movements->sum(
+                fn (MovimientoJava $movement): int => match ($movement->tipo) {
+                    MovimientoJava::TYPE_DISPATCH => $movement->cantidad_bandejas,
+                    MovimientoJava::TYPE_RECEIPT => -$movement->cantidad_bandejas,
+                    default => 0,
+                }
+            ) + $adjustments['trays'],
+        ];
     }
 
     private function currentJourney(
@@ -555,20 +783,15 @@ class JavaControlService
     /** @return array<string, mixed> */
     public function clientHolders(int $companyId): array
     {
-        $holders = DB::table('movimientos_javas')
-            ->join('terceros', 'terceros.id', '=', 'movimientos_javas.cliente_id')
-            ->where('movimientos_javas.empresa_id', $companyId)
-            ->groupBy(
-                'terceros.id',
-                'terceros.nombre_razon_social',
-                'terceros.numero_documento',
-                'terceros.estado',
-                'terceros.es_cliente_interno'
-            )
-            ->havingRaw(
-                "SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad ELSE -movimientos_javas.cantidad END) > 0
-                OR SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad_bandejas ELSE -movimientos_javas.cantidad_bandejas END) > 0"
-            )
+        $holders = DB::table('terceros')
+            ->joinSub($this->clientBalancesQuery($companyId), 'saldos_envases', function ($join): void {
+                $join->on('saldos_envases.cliente_id', '=', 'terceros.id');
+            })
+            ->where('terceros.empresa_id', $companyId)
+            ->where(function ($query): void {
+                $query->where('saldos_envases.saldo_javas', '>', 0)
+                    ->orWhere('saldos_envases.saldo_bandejas', '>', 0);
+            })
             ->orderBy('terceros.es_cliente_interno')
             ->orderBy('terceros.nombre_razon_social')
             ->get([
@@ -577,8 +800,8 @@ class JavaControlService
                 'terceros.numero_documento',
                 'terceros.estado',
                 'terceros.es_cliente_interno',
-                DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad ELSE -movimientos_javas.cantidad END) AS saldo_javas"),
-                DB::raw("SUM(CASE WHEN movimientos_javas.tipo = 'DESPACHO' THEN movimientos_javas.cantidad_bandejas ELSE -movimientos_javas.cantidad_bandejas END) AS saldo_bandejas"),
+                'saldos_envases.saldo_javas',
+                'saldos_envases.saldo_bandejas',
             ])
             ->map(fn (object $holder): array => [
                 'id' => (int) $holder->id,

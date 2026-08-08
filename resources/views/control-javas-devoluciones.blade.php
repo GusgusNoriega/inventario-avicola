@@ -44,10 +44,10 @@
             <input id="javaClientSearch" type="search" placeholder="Buscar cliente o documento">
           </label>
         </div>
-        <p id="javaBalanceMessage" class="java-message" role="status" aria-live="polite"></p>
+        <p id="javaBalanceMessage" class="java-message" role="status" aria-live="polite" tabindex="-1"></p>
         <div class="java-table-wrap java-table-viewport">
           <table class="java-table">
-            <thead><tr><th>Cliente</th><th>Documento</th><th>Javas</th><th>Bandejas</th><th></th></tr></thead>
+            <thead><tr><th>Cliente</th><th>Documento</th><th>Javas</th><th>Bandejas</th><th>Acciones</th></tr></thead>
             <tbody id="javaClientRows"></tbody>
           </table>
         </div>
@@ -91,6 +91,42 @@
       </section>
     </section>
   </main>
+
+  <div id="javaBalanceEditModal" class="java-inventory-modal" hidden>
+    <section id="javaBalanceEditDialog" class="java-inventory-modal-card java-balance-edit-modal-card card" role="dialog" aria-modal="true" aria-labelledby="javaBalanceEditTitle" tabindex="-1">
+      <div class="java-inventory-modal-head">
+        <div><p class="eyebrow">Corrección auditada</p><h2 id="javaBalanceEditTitle">Editar saldo del cliente</h2></div>
+        <button id="javaBalanceEditClose" class="java-inventory-close" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <form id="javaBalanceEditForm" class="java-receipt-form" novalidate>
+        <div class="java-balance-edit-client">
+          <strong id="javaBalanceEditClientName">Cliente</strong>
+          <small id="javaBalanceEditClientDocument">Sin documento</small>
+        </div>
+        <div class="java-balance-edit-current" aria-label="Saldo actual">
+          <span><small>Javas actuales</small><strong id="javaBalanceCurrentJavas">0</strong></span>
+          <span><small>Bandejas actuales</small><strong id="javaBalanceCurrentTrays">0</strong></span>
+        </div>
+        <div class="java-form-row">
+          <label class="field">Nuevo total de javas <span class="java-required">*</span>
+            <input id="javaBalanceNewJavas" type="number" min="0" max="100000" step="1" inputmode="numeric" required>
+          </label>
+          <label class="field">Nuevo total de bandejas <span class="java-required">*</span>
+            <input id="javaBalanceNewTrays" type="number" min="0" max="100000" step="1" inputmode="numeric" required>
+          </label>
+        </div>
+        <label class="field">Motivo de la corrección <span class="java-required">*</span>
+          <textarea id="javaBalanceEditReason" rows="3" minlength="5" maxlength="500" placeholder="Explica qué ocurrió y por qué se cambia el saldo" required></textarea>
+        </label>
+        <p class="java-balance-edit-note">Se conservarán los movimientos originales. Esta corrección registrará los valores anteriores y nuevos, tu usuario, fecha, hora e IP. También aparecerá en <a id="javaBalanceEditTraceLink" href="{{ route('control-javas.trazabilidad') }}">Trazabilidad</a>.</p>
+        <div class="java-inventory-actions">
+          <button id="javaBalanceEditCancel" class="java-receive-btn" type="button">Cancelar</button>
+          <button id="javaBalanceEditSubmit" class="btn btn-success" type="submit">Guardar corrección</button>
+        </div>
+        <p id="javaBalanceEditMessage" class="java-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </div>
 
   <script type="module" src="{{ asset('js/control-javas.js') }}"></script>
 </body>
