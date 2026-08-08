@@ -26,7 +26,7 @@ class JavaControlController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters = $request->validate([
-            'journey_id' => ['nullable', 'integer'],
+            'journey_id' => ['nullable', 'integer', 'min:1'],
             'client_id' => ['nullable', 'integer'],
             'search' => ['nullable', 'string', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -49,6 +49,7 @@ class JavaControlController extends Controller
         $activeJourneyId = (int) ($journeys
             ->first(fn (JornadaOperativa $journey): bool => $journey->fecha_operativa?->format('Y-m-d') === $currentOperatingDate)
             ?->id ?? 0);
+        $hasJourneyFilter = isset($filters['journey_id']);
         $selectedJourneyId = isset($filters['journey_id'])
             ? (int) $filters['journey_id']
             : (int) ($journeys->first()?->id ?? 0);
@@ -57,6 +58,22 @@ class JavaControlController extends Controller
         if ($selectedJourneyId && ! $journeys->contains('id', $selectedJourneyId)) {
             abort(404, 'La jornada seleccionada no pertenece a esta sucursal.');
         }
+
+        $countJourneyId = $hasJourneyFilter ? $selectedJourneyId : $activeJourneyId;
+        $countJourney = $countJourneyId
+            ? $journeys->firstWhere('id', $countJourneyId)
+            : null;
+        $countIsHistorical = $hasJourneyFilter && (
+            $countJourneyId !== $activeJourneyId
+            || $countJourney?->estado !== JornadaOperativa::STATUS_OPEN
+        );
+        $countCanEdit = ! $countIsHistorical
+            && (! $countJourney || $countJourney->estado === JornadaOperativa::STATUS_OPEN);
+        $journeyCountIds = DB::table('conteos_diarios_javas')
+            ->where('empresa_id', $companyId)
+            ->whereIn('jornada_id', $journeys->pluck('id'))
+            ->pluck('jornada_id')
+            ->mapWithKeys(fn (mixed $id): array => [(int) $id => true]);
 
         $clientId = isset($filters['client_id']) ? (int) $filters['client_id'] : null;
         $search = trim((string) ($filters['search'] ?? ''));
@@ -275,7 +292,7 @@ class JavaControlController extends Controller
         $traysReceivedToday = (int) ($receivedToday?->trays ?? 0);
         $inventory = $this->javaControl->currentInventory(
             $companyId,
-            $activeJourneyId ?: null
+            $countJourneyId ?: null
         );
         $clientHolders = $inventory['client_holders'];
         $holderTotals = $clientHolders['totals'];
@@ -335,9 +352,13 @@ class JavaControlController extends Controller
                 'status' => $journey->estado,
                 'starts_at' => $journey->inicio_at?->toISOString(),
                 'ends_at' => ($journey->cerrada_at ?: $journey->cierre_programado_at)?->toISOString(),
+                'has_count' => $journeyCountIds->has((int) $journey->id),
             ])->values(),
             'active_journey_id' => $activeJourneyId ?: null,
             'selected_journey_id' => $selectedJourneyId ?: null,
+            'count_journey_id' => $countJourneyId ?: null,
+            'count_is_historical' => $countIsHistorical,
+            'count_can_edit' => $countCanEdit,
             'clients' => $clients,
             'client_options' => $clientOptions,
             'clients_pagination' => [

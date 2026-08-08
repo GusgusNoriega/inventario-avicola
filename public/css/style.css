@@ -10081,6 +10081,23 @@ body.journey-page {
   border-left: 5px solid #4f9ae8;
 }
 
+.java-count-journey > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.java-count-journey-controls {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.java-count-journey-controls .java-journey-filter {
+  min-width: min(330px, 40vw);
+}
+
 .java-count-journey strong,
 .java-count-journey small {
   display: block;
@@ -10118,6 +10135,12 @@ body.journey-page {
   border-color: #b47c24;
   background: rgba(240, 174, 32, .12);
   color: #f8dd5a;
+}
+
+.java-inventory-open:disabled,
+.java-daily-actions .btn:disabled {
+  opacity: .52;
+  cursor: not-allowed;
 }
 
 .java-summary-card .java-inline-number {
@@ -10497,6 +10520,21 @@ body.journey-page {
 }
 
 @media (max-width: 1050px) {
+  .java-count-journey {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .java-count-journey-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .java-count-journey-controls .java-journey-filter {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .java-summary.java-company-summary.java-summary-four {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -10535,6 +10573,17 @@ body.journey-page {
 
   .java-count-state {
     align-self: flex-start;
+  }
+
+  .java-count-journey-controls {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .java-count-journey-controls .java-journey-filter {
+    width: 100%;
+    min-width: 0;
   }
 
   .java-holder-section,

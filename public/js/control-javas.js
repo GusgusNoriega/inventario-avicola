@@ -31,6 +31,9 @@ const elements = {
   internalCompanyJavas: byId("javaInternalCompanyJavas"),
   internalCompanyTrays: byId("trayInternalCompanyQuantity"),
   internalClientsCount: byId("javaInternalClientsCount"),
+  externalClientsCaption: byId("javaExternalClientsCaption"),
+  internalClientsCaption: byId("javaInternalClientsCaption"),
+  countJourneyEyebrow: byId("javaCountJourneyEyebrow"),
   countJourneyTitle: byId("javaCountJourneyTitle"),
   countJourneyWindow: byId("javaCountJourneyWindow"),
   countJourneyState: byId("javaCountJourneyState"),
@@ -74,6 +77,11 @@ const elements = {
   trayDailyPropertyTotal: byId("trayDailyPropertyTotal"),
   dailySubmit: byId("javaDailySubmit"),
   dailyMessage: byId("javaDailyMessage"),
+  dailyTruckHelp: byId("javaDailyTruckHelp"),
+  reconciliationEyebrow: byId("javaReconciliationEyebrow"),
+  dailyActionHelp: byId("javaDailyActionHelp"),
+  holderTitle: byId("javaHolderTitle"),
+  holderNote: byId("javaHolderNote"),
   externalHolderCount: byId("javaExternalHolderCount"),
   externalHolderJavas: byId("javaExternalHolderJavas"),
   externalHolderTrays: byId("trayExternalHolderQuantity"),
@@ -111,6 +119,11 @@ const state = {
   trucks: [],
   journeys: [],
   activeJourneyId: null,
+  countJourneyId: null,
+  countJourneyFilterId: null,
+  countIsHistorical: false,
+  countCanEdit: true,
+  requiresReload: false,
   truckActivity: [],
   movements: [],
   pagination: {
@@ -389,7 +402,9 @@ function renderJourneys(selectedJourneyId) {
   if (!elements.journey) return;
 
   if (!state.journeys.length) {
-    elements.journey.innerHTML = '<option value="">Sin jornadas registradas</option>';
+    elements.journey.innerHTML = page === "inventory"
+      ? '<option value="">Jornada actual · pendiente de apertura</option>'
+      : '<option value="">Sin jornadas registradas</option>';
     elements.journey.disabled = true;
     setText(elements.journeyTitle, "Sin jornada operativa");
     setText(elements.journeyWindow, "Los movimientos aparecerán cuando exista una jornada operativa.");
@@ -397,10 +412,36 @@ function renderJourneys(selectedJourneyId) {
   }
 
   elements.journey.disabled = false;
-  elements.journey.innerHTML = state.journeys.map((journey) => `
-    <option value="${journey.id}">${escapeHtml(formatOperatingDate(journey.operating_date))} · ${escapeHtml(journey.status)}</option>
-  `).join("");
-  elements.journey.value = String(selectedJourneyId || state.journeys[0].id);
+  const options = [];
+  if (page === "inventory") {
+    const currentOption = state.activeJourneyId
+      ? "Jornada actual · vista operativa"
+      : "Jornada actual · pendiente de apertura";
+    options.push('<option value="">' + currentOption + '</option>');
+  }
+  state.journeys.forEach((journey) => {
+    if (
+      page === "inventory"
+      && Number(journey.id) === Number(state.activeJourneyId)
+      && journey.status === "ABIERTA"
+    ) {
+      return;
+    }
+    const currentLabel = Number(journey.id) === Number(state.activeJourneyId)
+      ? "Conteo cerrado de la jornada actual"
+      : "Histórica";
+    const countLabel = journey.has_count ? "Conteo registrado" : "Sin conteo";
+    const suffix = page === "inventory"
+      ? `${currentLabel} · ${journey.status} · ${countLabel}`
+      : journey.status;
+    options.push(`
+      <option value="${journey.id}">${escapeHtml(formatOperatingDate(journey.operating_date))} · ${escapeHtml(suffix)}</option>
+    `);
+  });
+  elements.journey.innerHTML = options.join("");
+  elements.journey.value = page === "inventory"
+    ? String(selectedJourneyId || "")
+    : String(selectedJourneyId || state.journeys[0].id);
   const selected = state.journeys.find((journey) => Number(journey.id) === Number(elements.journey.value));
   setText(elements.journeyTitle, selected
     ? `Jornada del ${formatOperatingDate(selected.operating_date)}`
@@ -408,15 +449,34 @@ function renderJourneys(selectedJourneyId) {
   setText(elements.journeyWindow, selected
     ? `${formatDate(selected.starts_at)} a ${formatDate(selected.ends_at)} · Estado: ${selected.status}`
     : "Selecciona la jornada que deseas consultar.");
+  if (page === "inventory" && !selected) {
+    const active = state.journeys.find(
+      (journey) => Number(journey.id) === Number(state.activeJourneyId)
+    );
+    setText(
+      elements.journeyTitle,
+      active
+        ? "Jornada del " + formatOperatingDate(active.operating_date)
+        : "Jornada actual pendiente de apertura"
+    );
+    setText(
+      elements.journeyWindow,
+      active
+        ? formatDate(active.starts_at) + " a " + formatDate(active.ends_at) + " · Estado: " + active.status + " · Vista operativa"
+        : "Selecciona una jornada anterior para consultar su conteo."
+    );
+  }
 }
 
 function renderCountJourney() {
   if (!elements.countJourneyTitle) return;
   const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
   const journey = state.journeys.find(
-    (item) => Number(item.id) === Number(state.activeJourneyId || breakdown.journey_id)
+    (item) => Number(item.id) === Number(state.countJourneyId || breakdown.journey_id)
   );
+  const historical = state.countIsHistorical;
 
+  setText(elements.countJourneyEyebrow, historical ? "Jornada consultada" : "Jornada actual");
   setText(
     elements.countJourneyTitle,
     journey ? `Jornada del ${formatOperatingDate(journey.operating_date)}` : "Jornada pendiente de apertura"
@@ -424,18 +484,18 @@ function renderCountJourney() {
   setText(
     elements.countJourneyWindow,
     journey
-      ? `${formatDate(journey.starts_at)} a ${formatDate(journey.ends_at)} · Estado: ${journey.status}`
+      ? `${formatDate(journey.starts_at)} a ${formatDate(journey.ends_at)} · Estado: ${journey.status}${historical ? " · Consulta histórica" : ""}`
       : "La jornada vigente se creará automáticamente al guardar el primer conteo."
   );
 
-  const stateLabel = breakdown.stale
+  const stateLabel = !historical && breakdown.stale
     ? "Requiere recuento"
     : breakdown.configured
       ? "Conteo registrado"
       : "Sin conteo";
   setText(elements.countJourneyState, stateLabel);
-  elements.countJourneyState?.classList.toggle("is-counted", breakdown.configured && !breakdown.stale);
-  elements.countJourneyState?.classList.toggle("is-stale", breakdown.stale);
+  elements.countJourneyState?.classList.toggle("is-counted", breakdown.configured && (historical || !breakdown.stale));
+  elements.countJourneyState?.classList.toggle("is-stale", !historical && breakdown.stale);
 }
 
 function renderHolderGroup(group, countElement, javaElement, trayElement, listElement) {
@@ -468,12 +528,76 @@ function renderClientHolders() {
   const external = holders.external;
   const internal = holders.internal;
 
+  if (state.countIsHistorical) {
+    const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
+    const hasCount = breakdown.configured;
+    const hasSnapshot = breakdown.configured && breakdown.detailed;
+    const externalJavas = hasSnapshot ? breakdown.external_clients.javas : null;
+    const externalTrays = hasSnapshot ? breakdown.external_clients.trays : null;
+    const internalJavas = hasSnapshot ? breakdown.internal_clients.javas : null;
+    const internalTrays = hasSnapshot ? breakdown.internal_clients.trays : null;
+    const value = (quantity) => quantity === null ? "—" : quantity;
+    const detailMessage = hasSnapshot
+      ? "El conteo guardó este total por tipo de cliente. El detalle individual no forma parte del registro histórico."
+      : hasCount
+        ? "Este conteo anterior no conserva un detalle histórico por cliente."
+        : "No se registró un conteo en esta jornada, por lo que no existe un resumen histórico de clientes.";
+
+    setText(
+      elements.holderTitle,
+      hasSnapshot
+        ? "Clientes incluidos en el conteo guardado"
+        : hasCount
+          ? "Clientes del conteo anterior"
+          : "Clientes de la jornada consultada"
+    );
+    setText(
+      elements.holderNote,
+      hasSnapshot
+        ? "Se muestran los totales registrados en esa jornada, no los saldos actuales de los clientes."
+        : hasCount
+          ? "Este conteo anterior no conserva totales históricos por tipo de cliente."
+          : "No hay totales históricos de clientes porque esta jornada quedó sin conteo."
+    );
+    setText(elements.externalCompanyJavas, value(externalJavas));
+    setText(elements.externalCompanyTrays, value(externalTrays));
+    setText(elements.externalClientsCount, "—");
+    setText(
+      elements.externalClientsCaption,
+      hasSnapshot ? " saldo registrado en el conteo" : (hasCount ? " sin saldo histórico" : " sin conteo registrado")
+    );
+    setText(elements.internalCompanyJavas, value(internalJavas));
+    setText(elements.internalCompanyTrays, value(internalTrays));
+    setText(elements.internalClientsCount, "—");
+    setText(
+      elements.internalClientsCaption,
+      hasSnapshot ? " saldo registrado en el conteo" : (hasCount ? " sin saldo histórico" : " sin conteo registrado")
+    );
+    setText(elements.externalHolderCount, hasSnapshot ? "Resumen guardado" : (hasCount ? "Sin detalle" : "Sin conteo"));
+    setText(elements.externalHolderJavas, value(externalJavas));
+    setText(elements.externalHolderTrays, value(externalTrays));
+    setText(elements.internalHolderCount, hasSnapshot ? "Resumen guardado" : (hasCount ? "Sin detalle" : "Sin conteo"));
+    setText(elements.internalHolderJavas, value(internalJavas));
+    setText(elements.internalHolderTrays, value(internalTrays));
+    if (elements.externalHolderList) {
+      elements.externalHolderList.innerHTML = `<p class="java-holder-empty">${detailMessage}</p>`;
+    }
+    if (elements.internalHolderList) {
+      elements.internalHolderList.innerHTML = `<p class="java-holder-empty">${detailMessage}</p>`;
+    }
+    return;
+  }
+
+  setText(elements.holderTitle, "Clientes que tienen javas o bandejas");
+  setText(elements.holderNote, "El resumen incluye cualquier cliente con saldo, incluso si actualmente está inactivo.");
   setText(elements.externalCompanyJavas, external.java_quantity);
   setText(elements.externalCompanyTrays, external.tray_quantity);
   setText(elements.externalClientsCount, external.clients_count);
+  setText(elements.externalClientsCaption, " con activos pendientes");
   setText(elements.internalCompanyJavas, internal.java_quantity);
   setText(elements.internalCompanyTrays, internal.tray_quantity);
   setText(elements.internalClientsCount, internal.clients_count);
+  setText(elements.internalClientsCaption, " dentro de la avícola");
   renderHolderGroup(
     external,
     elements.externalHolderCount,
@@ -494,6 +618,46 @@ function renderInventory() {
   const inventory = state.inventory || normalizeInventory(null);
   const javas = inventory.javas;
   const trays = inventory.trays;
+
+  if (state.countIsHistorical) {
+    const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
+    const hasCount = breakdown.configured;
+    const hasSnapshot = hasCount && breakdown.detailed;
+    const propertyJavas = hasSnapshot ? breakdown.property_total.javas : null;
+    const propertyTrays = hasSnapshot ? breakdown.property_total.trays : null;
+    const expectedJavas = hasCount ? breakdown.expected_direct.javas : null;
+    const expectedTrays = hasCount ? breakdown.expected_direct.trays : null;
+    const assignedJavas = hasSnapshot
+      ? numericValue(breakdown.external_clients.javas) + numericValue(breakdown.internal_clients.javas)
+      : null;
+    const assignedTrays = hasSnapshot
+      ? numericValue(breakdown.external_clients.trays) + numericValue(breakdown.internal_clients.trays)
+      : null;
+    const value = (quantity) => quantity === null ? "—" : quantity;
+
+    setText(elements.companyTotal, value(propertyJavas));
+    setText(elements.trayCompanyTotal, value(propertyTrays));
+    setText(elements.companyInside, value(expectedJavas));
+    setText(elements.trayCompanyInside, value(expectedTrays));
+    setText(elements.companyOutside, value(assignedJavas));
+    setText(elements.trayCompanyOutside, value(assignedTrays));
+    setText(elements.inventoryOutsideHint, value(assignedJavas));
+    setText(elements.trayInventoryOutsideHint, value(assignedTrays));
+    elements.companyInside?.classList.toggle("is-negative-stock", expectedJavas !== null && expectedJavas < 0);
+    elements.trayCompanyInside?.classList.toggle("is-negative-stock", expectedTrays !== null && expectedTrays < 0);
+    if (elements.inventoryOpen) elements.inventoryOpen.disabled = true;
+
+    if (!hasCount) {
+      setText(elements.inventoryStatus, "No se registró un conteo en la jornada seleccionada.");
+    } else if (!hasSnapshot) {
+      setText(elements.inventoryStatus, "Este conteo anterior conserva el total contado, el esperado y la diferencia, pero no el desglose completo.");
+    } else {
+      setText(elements.inventoryStatus, `Valores de referencia guardados con el conteo del ${formatDate(breakdown.counted_at)}.`);
+    }
+    return;
+  }
+
+  if (elements.inventoryOpen) elements.inventoryOpen.disabled = false;
   const assetElements = [
     [javas, elements.companyTotal, elements.companyInside, elements.companyOutside, elements.inventoryOutsideHint],
     [trays, elements.trayCompanyTotal, elements.trayCompanyInside, elements.trayCompanyOutside, elements.trayInventoryOutsideHint]
@@ -525,27 +689,37 @@ function renderInventory() {
 function renderDailyTruckInputs() {
   if (!elements.dailyTruckInputs) return;
   const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
-  const activeTrucks = breakdown.trucks.filter((truck) => truck.active);
+  const visibleTrucks = state.countIsHistorical
+    ? breakdown.trucks.filter((truck) => truck.recorded)
+    : breakdown.trucks.filter((truck) => truck.active);
 
-  if (!activeTrucks.length) {
-    elements.dailyTruckInputs.innerHTML = '<tr><td colspan="4" class="java-empty-cell">No hay camiones activos en la flota de la empresa.</td></tr>';
+  if (!visibleTrucks.length) {
+    const message = state.countIsHistorical
+      ? "No se guardó un detalle de camiones en esta jornada."
+      : "No hay camiones activos en la flota de la empresa.";
+    elements.dailyTruckInputs.innerHTML = `<tr><td colspan="4" class="java-empty-cell">${message}</td></tr>`;
     return;
   }
 
-  elements.dailyTruckInputs.innerHTML = activeTrucks.map((truck) => `
+  elements.dailyTruckInputs.innerHTML = visibleTrucks.map((truck) => {
+    const plate = state.countIsHistorical ? truck.plate : (truck.current_plate || truck.plate);
+    const companyLabel = state.countIsHistorical ? "Placa registrada en la jornada" : "Flota de la empresa";
+    const recordLabel = state.countIsHistorical ? "Guardado" : (breakdown.detailed && truck.recorded ? "Registrado" : "Por contar");
+    return `
     <tr data-daily-truck-id="${truck.id}">
       <td data-label="Camión">
-        <strong>${escapeHtml(truck.current_plate || truck.plate)}</strong>
-        <small class="java-truck-company-label">Flota de la empresa</small>
+        <strong>${escapeHtml(plate)}</strong>
+        <small class="java-truck-company-label">${companyLabel}</small>
       </td>
       <td data-label="Javas que quedan">
-        <input class="java-truck-count-input" data-daily-truck-java type="number" min="0" step="1" inputmode="numeric" value="${breakdown.detailed ? truck.java_quantity : 0}" aria-label="Javas que quedan en el camión ${escapeHtml(truck.current_plate || truck.plate)}" required>
+        <input class="java-truck-count-input" data-daily-truck-java type="number" min="0" step="1" inputmode="numeric" value="${breakdown.detailed ? truck.java_quantity : 0}" aria-label="Javas que quedan en el camión ${escapeHtml(plate)}" required>
       </td>
       <td data-label="Bandejas que quedan">
-        <input class="java-truck-count-input" data-daily-truck-tray type="number" min="0" step="1" inputmode="numeric" value="${breakdown.detailed ? truck.tray_quantity : 0}" aria-label="Bandejas que quedan en el camión ${escapeHtml(truck.current_plate || truck.plate)}" required>
+        <input class="java-truck-count-input" data-daily-truck-tray type="number" min="0" step="1" inputmode="numeric" value="${breakdown.detailed ? truck.tray_quantity : 0}" aria-label="Bandejas que quedan en el camión ${escapeHtml(plate)}" required>
       </td>
-      <td data-label="Registro"><span class="java-truck-count-state ${breakdown.detailed && truck.recorded ? "is-recorded" : ""}">${breakdown.detailed && truck.recorded ? "Registrado" : "Por contar"}</span></td>
-    </tr>`).join("");
+      <td data-label="Registro"><span class="java-truck-count-state ${breakdown.detailed && truck.recorded ? "is-recorded" : ""}">${recordLabel}</span></td>
+    </tr>`;
+  }).join("");
 }
 
 function readNonNegativeInteger(input) {
@@ -585,8 +759,97 @@ function differenceDescription(javaDifference, trayDifference) {
   return `Revisa el conteo: ${describe(javaDifference, "javas")} y ${describe(trayDifference, "bandejas")}.`;
 }
 
+function renderHistoricalReconciliation() {
+  const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
+  const hasCount = breakdown.configured;
+  const detailed = hasCount && breakdown.detailed;
+  const pairValue = (pair, asset, available = true) => available && pair?.[asset] !== null
+    ? pair[asset]
+    : null;
+  const values = {
+    localJavas: pairValue(breakdown.local, "javas", detailed),
+    localTrays: pairValue(breakdown.local, "trays", detailed),
+    truckJavas: pairValue(breakdown.trucks_total, "javas", detailed),
+    truckTrays: pairValue(breakdown.trucks_total, "trays", detailed),
+    directJavas: pairValue(breakdown.direct_total, "javas", hasCount),
+    directTrays: pairValue(breakdown.direct_total, "trays", hasCount),
+    expectedJavas: pairValue(breakdown.expected_direct, "javas", hasCount),
+    expectedTrays: pairValue(breakdown.expected_direct, "trays", hasCount),
+    differenceJavas: pairValue(breakdown.difference, "javas", hasCount),
+    differenceTrays: pairValue(breakdown.difference, "trays", hasCount),
+    internalJavas: pairValue(breakdown.internal_clients, "javas", detailed),
+    internalTrays: pairValue(breakdown.internal_clients, "trays", detailed),
+    insideJavas: pairValue(breakdown.inside_avicola, "javas", detailed),
+    insideTrays: pairValue(breakdown.inside_avicola, "trays", detailed),
+    externalJavas: pairValue(breakdown.external_clients, "javas", detailed),
+    externalTrays: pairValue(breakdown.external_clients, "trays", detailed),
+    accountedJavas: pairValue(breakdown.accounted_total, "javas", detailed),
+    accountedTrays: pairValue(breakdown.accounted_total, "trays", detailed),
+    propertyJavas: pairValue(breakdown.property_total, "javas", detailed),
+    propertyTrays: pairValue(breakdown.property_total, "trays", detailed)
+  };
+  const display = (value, signed = false) => value === null ? "—" : (signed ? signedQuantity(value) : value);
+
+  setText(elements.dailyLocalTotal, display(values.localJavas));
+  setText(elements.trayDailyLocalTotal, display(values.localTrays));
+  setText(elements.dailyTruckTotal, display(values.truckJavas));
+  setText(elements.trayDailyTruckTotal, display(values.truckTrays));
+  setText(elements.dailyQuantity, display(values.directJavas));
+  setText(elements.trayDailyQuantity, display(values.directTrays));
+  setText(elements.dailyExpected, display(values.expectedJavas));
+  setText(elements.trayDailyExpected, display(values.expectedTrays));
+  setText(elements.dailyDifference, display(values.differenceJavas, true));
+  setText(elements.trayDailyDifference, display(values.differenceTrays, true));
+  setText(elements.dailyInternalTotal, display(values.internalJavas));
+  setText(elements.trayDailyInternalTotal, display(values.internalTrays));
+  setText(elements.dailyInsideTotal, display(values.insideJavas));
+  setText(elements.trayDailyInsideTotal, display(values.insideTrays));
+  setText(elements.dailyExternalTotal, display(values.externalJavas));
+  setText(elements.trayDailyExternalTotal, display(values.externalTrays));
+  setText(elements.dailyAccountedTotal, display(values.accountedJavas));
+  setText(elements.trayDailyAccountedTotal, display(values.accountedTrays));
+  setText(elements.dailyPropertyTotal, display(values.propertyJavas));
+  setText(elements.trayDailyPropertyTotal, display(values.propertyTrays));
+
+  [[elements.dailyDifference, values.differenceJavas], [elements.trayDailyDifference, values.differenceTrays]]
+    .forEach(([element, difference]) => {
+      element?.classList.toggle("is-negative-stock", difference !== null && difference !== 0);
+      element?.classList.toggle("is-positive-stock", difference === 0);
+    });
+
+  if (!hasCount) {
+    setText(elements.reconciliationEyebrow, "Sin conteo registrado");
+    setText(elements.dailyTruckHelp, "No hay un detalle de camiones guardado para esta jornada.");
+    setText(elements.dailyActionHelp, "Consulta histórica en modo solo lectura. Esta jornada no tiene un conteo guardado.");
+    setText(elements.dailyDifferenceLabel, "No se registró un conteo en esta jornada.");
+  } else if (!detailed) {
+    setText(elements.reconciliationEyebrow, "Conteo anterior");
+    setText(elements.dailyTruckHelp, "Este registro anterior no conserva el desglose de local y camiones.");
+    setText(elements.dailyActionHelp, "Consulta histórica en modo solo lectura. Solo se muestra la información que quedó guardada.");
+    setText(elements.dailyDifferenceLabel, "El registro conserva el contado, el esperado y la diferencia, sin desglose por ubicación.");
+  } else {
+    setText(elements.reconciliationEyebrow, "Cuadre registrado");
+    setText(elements.dailyTruckHelp, "Se muestran únicamente los camiones que quedaron guardados en el conteo de esta jornada.");
+    setText(elements.dailyActionHelp, "Consulta histórica en modo solo lectura. Los valores corresponden al último conteo guardado en esa jornada.");
+    setText(
+      elements.dailyDifferenceLabel,
+      values.differenceJavas !== null && values.differenceTrays !== null
+        ? differenceDescription(values.differenceJavas, values.differenceTrays)
+        : "Conteo histórico registrado con información parcial."
+    );
+  }
+}
+
 function updateDailyReconciliation() {
   if (!elements.dailyForm) return;
+  if (state.countIsHistorical) {
+    renderHistoricalReconciliation();
+    return;
+  }
+
+  setText(elements.reconciliationEyebrow, "Cuadre en tiempo real");
+  setText(elements.dailyTruckHelp, "Aparece toda la flota activa. Registra cero cuando el camión no tenga javas o bandejas.");
+  setText(elements.dailyActionHelp, "El servidor recalculará el total y validará que estén incluidos todos los camiones activos.");
   const inventory = state.inventory || normalizeInventory(null);
   const holders = state.clientHolders || normalizeClientHolders(null);
   const draft = readDailyDraft();
@@ -649,6 +912,7 @@ function updateDailyReconciliation() {
 }
 
 function handleDailyDraftInput(event) {
+  if (state.countIsHistorical || !state.countCanEdit) return;
   updateDailyReconciliation();
   setMessage(elements.dailyMessage);
   setText(elements.countJourneyState, "Cambios sin guardar");
@@ -668,20 +932,31 @@ function renderDailyCount() {
   const inventory = state.inventory || normalizeInventory(null);
   const breakdown = state.countBreakdown || normalizeCountBreakdown(null, state.trucks);
   const ready = inventory.javas.configured && inventory.trays.configured;
-  const activeJourney = state.journeys.find(
-    (journey) => Number(journey.id) === Number(state.activeJourneyId)
+  const countJourney = state.journeys.find(
+    (journey) => Number(journey.id) === Number(state.countJourneyId)
   );
-  const canEdit = ready && (!activeJourney || activeJourney.status === "ABIERTA");
+  const canEdit = state.countCanEdit
+    && ready
+    && (!countJourney || countJourney.status === "ABIERTA");
+  const emptyValue = state.countIsHistorical ? "" : "0";
 
-  elements.dailyLocalQuantity.value = breakdown.detailed ? String(breakdown.local.javas ?? 0) : "0";
-  elements.trayDailyLocalQuantity.value = breakdown.detailed ? String(breakdown.local.trays ?? 0) : "0";
+  elements.dailyLocalQuantity.value = breakdown.detailed ? String(breakdown.local.javas ?? 0) : emptyValue;
+  elements.trayDailyLocalQuantity.value = breakdown.detailed ? String(breakdown.local.trays ?? 0) : emptyValue;
   renderDailyTruckInputs();
   elements.dailyForm.querySelectorAll("input").forEach((input) => { input.disabled = !canEdit; });
   elements.dailySubmit.disabled = !canEdit;
 
-  if (!ready) {
+  if (state.countIsHistorical && !breakdown.configured) {
+    setText(elements.dailyStatus, "No se registró un conteo en la jornada seleccionada. Esta consulta permanece en modo solo lectura.");
+  } else if (state.countIsHistorical && breakdown.legacy) {
+    const actor = breakdown.counted_by?.name ? ` · Registrado por ${breakdown.counted_by.name}` : "";
+    setText(elements.dailyStatus, `Conteo histórico agregado: ${formatDate(breakdown.counted_at)}${actor}. No conserva el detalle de local y camiones.`);
+  } else if (state.countIsHistorical) {
+    const actor = breakdown.counted_by?.name ? ` · Registrado por ${breakdown.counted_by.name}` : "";
+    setText(elements.dailyStatus, `Conteo histórico: ${formatDate(breakdown.counted_at)}${actor} · Consulta solo lectura.`);
+  } else if (!ready) {
     setText(elements.dailyStatus, "El conteo se habilitará después de configurar ambos inventarios generales.");
-  } else if (activeJourney && activeJourney.status !== "ABIERTA") {
+  } else if (!state.countCanEdit || (countJourney && countJourney.status !== "ABIERTA")) {
     setText(elements.dailyStatus, "La jornada operativa está cerrada. El registro se conserva solo para consulta.");
   } else if (breakdown.legacy) {
     setText(elements.dailyStatus, "Existe un conteo agregado anterior. Completa local y camiones para convertirlo en un informe detallado.");
@@ -699,6 +974,14 @@ function renderDailyCount() {
 }
 
 function openInventoryModal() {
+  if (state.requiresReload) {
+    setText(elements.inventoryStatus, "Recarga la página para continuar con datos actualizados.");
+    return;
+  }
+  if (state.countIsHistorical) {
+    setText(elements.inventoryStatus, "Vuelve a la jornada actual para modificar el inventario general.");
+    return;
+  }
   const inventory = state.inventory || normalizeInventory(null);
   const javaTotal = inventory.javas.configured ? Number(inventory.javas.total) : null;
   const trayTotal = inventory.trays.configured ? Number(inventory.trays.total) : null;
@@ -864,7 +1147,8 @@ function chooseClientForReceipt(clientId) {
 async function loadControl({
   keepMessages = false,
   pageNumber = state.pagination.current_page,
-  journeyId = elements.journey?.value || ""
+  journeyId = elements.journey?.value || "",
+  restoreOnError = true
 } = {}) {
   const requestId = ++state.requestId;
   const query = new URLSearchParams({ page: String(pageNumber) });
@@ -881,7 +1165,7 @@ async function loadControl({
 
   try {
     const response = await apiRequest(`/control-javas?${query.toString()}`);
-    if (requestId !== state.requestId) return;
+    if (requestId !== state.requestId) return false;
     const data = response.data;
     state.clients = (data.clients || []).map(normalizeClient);
     state.clientOptions = (data.client_options || data.clients || []).map(normalizeClient);
@@ -895,14 +1179,19 @@ async function loadControl({
       state.trucks
     );
     state.journeys = data.journeys || [];
-    state.activeJourneyId = data.active_journey_id || state.countBreakdown.journey_id;
+    state.activeJourneyId = data.active_journey_id ? Number(data.active_journey_id) : null;
+    state.countJourneyId = data.count_journey_id ? Number(data.count_journey_id) : null;
+    state.countJourneyFilterId = page === "inventory" && journeyId ? Number(journeyId) : null;
+    state.countIsHistorical = Boolean(data.count_is_historical);
+    state.countCanEdit = data.count_can_edit !== false;
+    state.requiresReload = false;
     state.truckActivity = (data.truck_activity || []).map(normalizeActivity);
     state.movements = (data.movements || []).map(normalizeMovement);
     state.pagination = data.clients_pagination || state.pagination;
 
     renderSummary(data);
     renderInventory();
-    renderJourneys(data.selected_journey_id);
+    renderJourneys(page === "inventory" ? state.countJourneyFilterId : data.selected_journey_id);
     renderClientHolders();
     renderDailyCount();
     renderClientOptions();
@@ -913,16 +1202,46 @@ async function loadControl({
     renderMovements();
     setMessage(elements.balanceMessage);
     setMessage(elements.historyMessage);
+    return true;
   } catch (error) {
-    setMessage(elements.balanceMessage, errorMessage(error), true);
-    setMessage(elements.historyMessage, errorMessage(error), true);
-    setText(elements.inventoryStatus, errorMessage(error));
+    if (requestId !== state.requestId) return false;
+    const message = errorMessage(error);
+    if (restoreOnError) restoreInventoryAfterLoadFailure(message);
+    setMessage(elements.balanceMessage, message, true);
+    setMessage(elements.historyMessage, message, true);
+    setText(elements.inventoryStatus, message);
+    return false;
   }
+}
+
+function restoreInventoryAfterLoadFailure(message) {
+  if (page !== "inventory") return;
+  renderJourneys(state.countJourneyFilterId);
+  renderInventory();
+  renderClientHolders();
+  renderDailyCount();
+  setMessage(elements.dailyMessage, "No se pudo actualizar la pantalla. Conservamos los últimos datos visibles. " + message, true);
+}
+
+function lockInventoryUntilReload() {
+  state.requiresReload = true;
+  if (elements.journey) elements.journey.disabled = true;
+  if (elements.inventoryOpen) elements.inventoryOpen.disabled = true;
+  elements.inventoryForm?.querySelectorAll("input, button").forEach((control) => { control.disabled = true; });
+  elements.dailyForm?.querySelectorAll("input, button").forEach((control) => { control.disabled = true; });
 }
 
 async function submitInventory(event) {
   event.preventDefault();
   setMessage(elements.inventoryMessage);
+  if (state.requiresReload) {
+    setMessage(elements.inventoryMessage, "Recarga la página antes de modificar nuevamente el inventario.", true);
+    return;
+  }
+  if (state.countIsHistorical) {
+    setMessage(elements.inventoryMessage, "El inventario no se puede modificar desde una consulta histórica.", true);
+    return;
+  }
   const javaQuantity = Number(elements.inventoryQuantity.value);
   const trayQuantity = Number(elements.trayInventoryQuantity.value);
   if (![javaQuantity, trayQuantity].every((quantity) => Number.isInteger(quantity) && quantity >= 0)) {
@@ -940,7 +1259,12 @@ async function submitInventory(event) {
     return;
   }
 
-  elements.inventorySubmit.disabled = true;
+  const journeyWasDisabled = Boolean(elements.journey?.disabled);
+  const inventoryControls = [...(elements.inventoryForm?.querySelectorAll("input, button") || [])];
+  const inventoryDisabledStates = inventoryControls.map((control) => control.disabled);
+  inventoryControls.forEach((control) => { control.disabled = true; });
+  if (elements.journey) elements.journey.disabled = true;
+  let refreshRequired = false;
   try {
     const response = await apiRequest("/control-javas/inventario", {
       method: "POST",
@@ -950,26 +1274,61 @@ async function submitInventory(event) {
         tray_quantity: trayQuantity
       })
     });
-    await loadControl({ keepMessages: true });
+    const refreshed = await loadControl({
+      keepMessages: true,
+      journeyId: "",
+      restoreOnError: false
+    });
+    if (!refreshed) {
+      refreshRequired = true;
+      closeInventoryModal();
+      setText(
+        elements.inventoryStatus,
+        response.message + " No se pudo actualizar la pantalla; recárgala antes de continuar."
+      );
+      return;
+    }
     closeInventoryModal();
     setText(elements.inventoryStatus, response.message);
   } catch (error) {
     setMessage(elements.inventoryMessage, errorMessage(error), true);
   } finally {
-    elements.inventorySubmit.disabled = false;
+    if (refreshRequired) {
+      lockInventoryUntilReload();
+    } else {
+      inventoryControls.forEach((control, index) => {
+        control.disabled = inventoryDisabledStates[index];
+      });
+      if (elements.journey) elements.journey.disabled = journeyWasDisabled;
+    }
   }
 }
 
 async function submitDailyCount(event) {
   event.preventDefault();
   setMessage(elements.dailyMessage);
+  if (state.requiresReload) {
+    setMessage(elements.dailyMessage, "Recarga la página antes de registrar otro conteo.", true);
+    return;
+  }
+  if (state.countIsHistorical || !state.countCanEdit) {
+    setMessage(elements.dailyMessage, "Selecciona la jornada actual para registrar o actualizar el conteo.", true);
+    return;
+  }
   const draft = readDailyDraft();
   if (!draft.valid) {
     setMessage(elements.dailyMessage, "Completa el local y todos los camiones con números enteros iguales o mayores que cero.", true);
     return;
   }
 
-  elements.dailySubmit.disabled = true;
+  const journeyWasDisabled = Boolean(elements.journey?.disabled);
+  const dailyInputs = [...(elements.dailyForm?.querySelectorAll("input") || [])];
+  const dailyDisabledStates = dailyInputs.map((input) => input.disabled);
+  dailyInputs.forEach((input) => { input.disabled = true; });
+  if (elements.dailySubmit) elements.dailySubmit.disabled = true;
+  if (elements.journey) elements.journey.disabled = true;
+  let postSucceeded = false;
+  let refreshRequired = false;
   try {
     const response = await apiRequest("/control-javas/conteo-diario", {
       method: "POST",
@@ -979,18 +1338,44 @@ async function submitDailyCount(event) {
         truck_counts: draft.trucks
       })
     });
-    await loadControl({ keepMessages: true });
+    postSucceeded = true;
+    const refreshed = await loadControl({
+      keepMessages: true,
+      journeyId: "",
+      restoreOnError: false
+    });
+    if (!refreshed) {
+      refreshRequired = true;
+      setMessage(
+        elements.dailyMessage,
+        response.message + " No se pudo actualizar la pantalla; recárgala antes de continuar.",
+        true
+      );
+      return;
+    }
     setMessage(elements.dailyMessage, response.message);
   } catch (error) {
     setMessage(elements.dailyMessage, errorMessage(error), true);
   } finally {
-    const inventory = state.inventory || normalizeInventory(null);
-    const activeJourney = state.journeys.find(
-      (journey) => Number(journey.id) === Number(state.activeJourneyId)
-    );
-    elements.dailySubmit.disabled = !inventory.javas.configured
-      || !inventory.trays.configured
-      || Boolean(activeJourney && activeJourney.status !== "ABIERTA");
+    if (refreshRequired) {
+      lockInventoryUntilReload();
+    } else {
+      if (!postSucceeded) {
+        dailyInputs.forEach((input, index) => {
+          input.disabled = dailyDisabledStates[index];
+        });
+        if (elements.journey) elements.journey.disabled = journeyWasDisabled;
+      }
+      const inventory = state.inventory || normalizeInventory(null);
+      const countJourney = state.journeys.find(
+        (journey) => Number(journey.id) === Number(state.countJourneyId)
+      );
+      elements.dailySubmit.disabled = !state.countCanEdit
+        || state.countIsHistorical
+        || !inventory.javas.configured
+        || !inventory.trays.configured
+        || Boolean(countJourney && countJourney.status !== "ABIERTA");
+    }
   }
 }
 
@@ -1063,6 +1448,18 @@ function on(element, eventName, handler) {
   element?.addEventListener(eventName, handler);
 }
 
+function handleJourneySelectionChange() {
+  if (page === "inventory") {
+    elements.dailyForm?.querySelectorAll("input").forEach((input) => { input.disabled = true; });
+    if (elements.dailySubmit) elements.dailySubmit.disabled = true;
+    if (elements.inventoryOpen) elements.inventoryOpen.disabled = true;
+    setText(elements.dailyStatus, "Cargando el conteo de la jornada seleccionada.");
+    setText(elements.countJourneyState, "Cargando");
+    elements.countJourneyState?.classList.remove("is-counted", "is-stale");
+  }
+  loadControl({ pageNumber: 1 });
+}
+
 on(elements.search, "input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => loadControl({ pageNumber: 1 }), 300);
@@ -1081,7 +1478,7 @@ on(elements.inventoryModal, "click", (event) => {
 });
 on(elements.dailyForm, "input", handleDailyDraftInput);
 on(elements.dailyForm, "submit", submitDailyCount);
-on(elements.journey, "change", () => loadControl({ pageNumber: 1 }));
+on(elements.journey, "change", handleJourneySelectionChange);
 on(elements.historyClient, "change", () => loadControl());
 on(elements.clientRows, "click", (event) => {
   const button = event.target.closest("[data-receive-client]");

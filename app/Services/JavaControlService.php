@@ -698,8 +698,8 @@ class JavaControlService
         $expectedJava = $configured
             ? (int) $count->cantidad_esperada
             : ($propertyJava !== null ? $propertyJava - $externalJava - $internalJava : null);
-        $expectedTrays = $configured && $count->cantidad_esperada_bandejas !== null
-            ? (int) $count->cantidad_esperada_bandejas
+        $expectedTrays = $configured
+            ? ($count->cantidad_esperada_bandejas !== null ? (int) $count->cantidad_esperada_bandejas : null)
             : ($propertyTrays !== null ? $propertyTrays - $externalTrays - $internalTrays : null);
         $differenceJava = $configured ? (int) $count->diferencia : null;
         $differenceTrays = $configured && $count->diferencia_bandejas !== null

@@ -17,11 +17,18 @@
 
     <section class="java-count-journey card" aria-label="Jornada del conteo diario">
       <div>
-        <p class="eyebrow">Jornada actual</p>
+        <p id="javaCountJourneyEyebrow" class="eyebrow">Jornada actual</p>
         <strong id="javaCountJourneyTitle">Preparando la jornada operativa</strong>
         <small id="javaCountJourneyWindow">El conteo se guardará en la jornada vigente.</small>
       </div>
-      <span id="javaCountJourneyState" class="java-count-state">Sin conteo</span>
+      <div class="java-count-journey-controls">
+        <label class="java-history-filter java-journey-filter">Ver jornada
+          <select id="javaJourneyFilter" aria-label="Seleccionar jornada del conteo">
+            <option value="">Cargando jornadas...</option>
+          </select>
+        </label>
+        <span id="javaCountJourneyState" class="java-count-state">Sin conteo</span>
+      </div>
     </section>
 
     <section class="java-summary java-summary-four java-company-summary" aria-label="Ubicación general de javas y bandejas">
@@ -47,7 +54,7 @@
           <span><small>Javas</small><strong id="javaExternalCompanyJavas">0</strong></span>
           <span><small>Bandejas</small><strong id="trayExternalCompanyQuantity">0</strong></span>
         </div>
-        <small><strong id="javaExternalClientsCount" class="java-inline-number">0</strong> con activos pendientes</small>
+        <small><strong id="javaExternalClientsCount" class="java-inline-number">0</strong><span id="javaExternalClientsCaption"> con activos pendientes</span></small>
       </article>
       <article class="java-summary-card card">
         <span>Clientes internos</span>
@@ -55,7 +62,7 @@
           <span><small>Javas</small><strong id="javaInternalCompanyJavas">0</strong></span>
           <span><small>Bandejas</small><strong id="trayInternalCompanyQuantity">0</strong></span>
         </div>
-        <small><strong id="javaInternalClientsCount" class="java-inline-number">0</strong> dentro de la avícola</small>
+        <small><strong id="javaInternalClientsCount" class="java-inline-number">0</strong><span id="javaInternalClientsCaption"> dentro de la avícola</span></small>
       </article>
     </section>
 
@@ -74,7 +81,7 @@
           <p class="eyebrow">Activos asignados</p>
           <h2 id="javaHolderTitle">Clientes que tienen javas o bandejas</h2>
         </div>
-        <p>El resumen incluye cualquier cliente con saldo, incluso si actualmente está inactivo.</p>
+        <p id="javaHolderNote">El resumen incluye cualquier cliente con saldo, incluso si actualmente está inactivo.</p>
       </div>
       <div class="java-holder-grid">
         <article class="java-holder-panel is-external" aria-labelledby="javaExternalHolderTitle">
@@ -135,7 +142,7 @@
 
           <fieldset class="java-daily-truck-panel">
             <legend>Conteo en camiones</legend>
-            <p>Aparece toda la flota activa. Registra cero cuando el camión no tenga javas o bandejas.</p>
+            <p id="javaDailyTruckHelp">Aparece toda la flota activa. Registra cero cuando el camión no tenga javas o bandejas.</p>
             <div class="java-table-wrap java-daily-truck-viewport">
               <table class="java-table java-daily-truck-table">
                 <thead>
@@ -150,7 +157,7 @@
         <section class="java-reconciliation" aria-labelledby="javaReconciliationTitle">
           <div class="java-reconciliation-head">
             <div>
-              <p class="eyebrow">Cuadre en tiempo real</p>
+              <p id="javaReconciliationEyebrow" class="eyebrow">Cuadre en tiempo real</p>
               <h3 id="javaReconciliationTitle">Explicación completa del inventario</h3>
             </div>
             <p id="javaDailyDifferenceLabel">Completa el conteo para revisar la diferencia.</p>
@@ -200,7 +207,7 @@
         </section>
 
         <div class="java-daily-actions">
-          <p>El servidor recalculará el total y validará que estén incluidos todos los camiones activos.</p>
+          <p id="javaDailyActionHelp">El servidor recalculará el total y validará que estén incluidos todos los camiones activos.</p>
           <button id="javaDailySubmit" class="btn btn-success" type="submit">Guardar conteo de la jornada</button>
         </div>
         <p id="javaDailyMessage" class="java-message" role="status" aria-live="polite"></p>

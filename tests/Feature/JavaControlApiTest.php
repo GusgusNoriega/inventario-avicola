@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Conductor;
+use App\Models\ConteoDiarioJava;
 use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
 use App\Models\Permission;
@@ -11,6 +12,7 @@ use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\User;
 use App\Models\Vehiculo;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -627,6 +629,209 @@ class JavaControlApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data.clients')
             ->assertJsonPath('data.clients.0.name', 'CLIENTE PAGINADO ESPECIAL');
+    }
+
+    public function test_inventory_count_can_be_filtered_by_journey_and_preserves_its_snapshot(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-08-08 12:00:00', 'America/Lima'));
+
+        try {
+            DB::table('inventarios_javas')->insert([
+                'empresa_id' => $this->user->empresa_id,
+                'cantidad_total' => 99,
+                'cantidad_total_bandejas' => 88,
+                'updated_by' => $this->user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $historicalJourney = JornadaOperativa::query()->create([
+                'sucursal_id' => $this->branchId,
+                'fecha_operativa' => '2026-08-07',
+                'estado' => JornadaOperativa::STATUS_CLOSED,
+                'abierta_por' => $this->user->id,
+                'inicio_at' => '2026-08-06 21:00:00',
+                'cierre_programado_at' => '2026-08-07 21:00:00',
+                'cerrada_por' => $this->user->id,
+                'cerrada_at' => '2026-08-07 21:00:00',
+            ]);
+            $journeyWithoutCount = JornadaOperativa::query()->create([
+                'sucursal_id' => $this->branchId,
+                'fecha_operativa' => '2026-08-06',
+                'estado' => JornadaOperativa::STATUS_CLOSED,
+                'abierta_por' => $this->user->id,
+                'inicio_at' => '2026-08-05 21:00:00',
+                'cierre_programado_at' => '2026-08-06 21:00:00',
+                'cerrada_por' => $this->user->id,
+                'cerrada_at' => '2026-08-06 21:00:00',
+            ]);
+            $currentJourney = JornadaOperativa::query()->create([
+                'sucursal_id' => $this->branchId,
+                'fecha_operativa' => '2026-08-08',
+                'estado' => JornadaOperativa::STATUS_OPEN,
+                'abierta_por' => $this->user->id,
+                'inicio_at' => '2026-08-07 21:00:00',
+                'cierre_programado_at' => '2026-08-08 21:00:00',
+            ]);
+            $historicalCount = ConteoDiarioJava::query()->create([
+                'empresa_id' => $this->user->empresa_id,
+                'jornada_id' => $historicalJourney->id,
+                'cantidad_en_empresa' => 49,
+                'cantidad_en_local' => 42,
+                'cantidad_en_empresa_bandejas' => 34,
+                'cantidad_en_local_bandejas' => 30,
+                'cantidad_esperada' => 50,
+                'cantidad_esperada_bandejas' => 36,
+                'cantidad_clientes_externos' => 14,
+                'cantidad_clientes_externos_bandejas' => 9,
+                'cantidad_clientes_internos' => 6,
+                'cantidad_clientes_internos_bandejas' => 5,
+                'cantidad_total_inventario' => 70,
+                'cantidad_total_inventario_bandejas' => 50,
+                'diferencia' => -1,
+                'diferencia_bandejas' => -2,
+                'contado_at' => '2026-08-07 18:30:00',
+                'contado_por' => $this->user->id,
+            ]);
+            $historicalCount->camiones()->create([
+                'vehiculo_id' => $this->truck->id,
+                'placa_snapshot' => 'ANT-001',
+                'cantidad_javas' => 7,
+                'cantidad_bandejas' => 4,
+            ]);
+            $currentCount = ConteoDiarioJava::query()->create([
+                'empresa_id' => $this->user->empresa_id,
+                'jornada_id' => $currentJourney->id,
+                'cantidad_en_empresa' => 89,
+                'cantidad_en_local' => 80,
+                'cantidad_en_empresa_bandejas' => 80,
+                'cantidad_en_local_bandejas' => 70,
+                'cantidad_esperada' => 89,
+                'cantidad_esperada_bandejas' => 80,
+                'cantidad_clientes_externos' => 10,
+                'cantidad_clientes_externos_bandejas' => 8,
+                'cantidad_clientes_internos' => 0,
+                'cantidad_clientes_internos_bandejas' => 0,
+                'cantidad_total_inventario' => 99,
+                'cantidad_total_inventario_bandejas' => 88,
+                'diferencia' => 0,
+                'diferencia_bandejas' => 0,
+                'contado_at' => '2026-08-08 11:00:00',
+                'contado_por' => $this->user->id,
+            ]);
+            $currentCount->camiones()->create([
+                'vehiculo_id' => $this->truck->id,
+                'placa_snapshot' => 'JAV-001',
+                'cantidad_javas' => 9,
+                'cantidad_bandejas' => 10,
+            ]);
+            $this->truck->update([
+                'placa' => 'NUE-999',
+                'estado' => Vehiculo::STATUS_INACTIVE,
+            ]);
+
+            $this->getJson('/api/v1/control-javas')
+                ->assertOk()
+                ->assertJsonPath('data.active_journey_id', $currentJourney->id)
+                ->assertJsonPath('data.count_journey_id', $currentJourney->id)
+                ->assertJsonPath('data.count_is_historical', false)
+                ->assertJsonPath('data.count_can_edit', true)
+                ->assertJsonPath('data.inventory.count_breakdown.journey_id', $currentJourney->id)
+                ->assertJsonPath('data.inventory.count_breakdown.local.javas', 80);
+
+            $currentJourney->update(['estado' => JornadaOperativa::STATUS_CLOSED]);
+
+            $this->getJson("/api/v1/control-javas?journey_id={$currentJourney->id}")
+                ->assertOk()
+                ->assertJsonPath('data.active_journey_id', $currentJourney->id)
+                ->assertJsonPath('data.count_journey_id', $currentJourney->id)
+                ->assertJsonPath('data.count_is_historical', true)
+                ->assertJsonPath('data.count_can_edit', false)
+                ->assertJsonPath('data.inventory.count_breakdown.local.javas', 80);
+
+            $currentJourney->update(['estado' => JornadaOperativa::STATUS_OPEN]);
+
+            $this->getJson("/api/v1/control-javas?journey_id={$historicalJourney->id}")
+                ->assertOk()
+                ->assertJsonPath('data.active_journey_id', $currentJourney->id)
+                ->assertJsonPath('data.selected_journey_id', $historicalJourney->id)
+                ->assertJsonPath('data.count_journey_id', $historicalJourney->id)
+                ->assertJsonPath('data.count_is_historical', true)
+                ->assertJsonPath('data.count_can_edit', false)
+                ->assertJsonPath('data.journeys.0.has_count', true)
+                ->assertJsonPath('data.journeys.1.has_count', true)
+                ->assertJsonPath('data.journeys.2.has_count', false)
+                ->assertJsonPath('data.inventory.javas.total', 99)
+                ->assertJsonPath('data.inventory.count_breakdown.journey_id', $historicalJourney->id)
+                ->assertJsonPath('data.inventory.count_breakdown.local.javas', 42)
+                ->assertJsonPath('data.inventory.count_breakdown.local.trays', 30)
+                ->assertJsonPath('data.inventory.count_breakdown.trucks_total.javas', 7)
+                ->assertJsonPath('data.inventory.count_breakdown.trucks_total.trays', 4)
+                ->assertJsonPath('data.inventory.count_breakdown.direct_total.javas', 49)
+                ->assertJsonPath('data.inventory.count_breakdown.expected_direct.javas', 50)
+                ->assertJsonPath('data.inventory.count_breakdown.difference.javas', -1)
+                ->assertJsonPath('data.inventory.count_breakdown.external_clients.javas', 14)
+                ->assertJsonPath('data.inventory.count_breakdown.internal_clients.javas', 6)
+                ->assertJsonPath('data.inventory.count_breakdown.property_total.javas', 70)
+                ->assertJsonPath('data.inventory.count_breakdown.property_total.trays', 50)
+                ->assertJsonPath('data.inventory.count_breakdown.trucks.0.plate', 'ANT-001')
+                ->assertJsonPath('data.inventory.count_breakdown.trucks.0.current_plate', 'NUE-999')
+                ->assertJsonPath('data.inventory.count_breakdown.trucks.0.active', false)
+                ->assertJsonPath('data.inventory.count_breakdown.trucks.0.recorded', true);
+
+            $this->getJson("/api/v1/control-javas?journey_id={$journeyWithoutCount->id}")
+                ->assertOk()
+                ->assertJsonPath('data.count_journey_id', $journeyWithoutCount->id)
+                ->assertJsonPath('data.count_is_historical', true)
+                ->assertJsonPath('data.count_can_edit', false)
+                ->assertJsonPath('data.inventory.count_breakdown.configured', false)
+                ->assertJsonPath('data.inventory.count_breakdown.journey_id', null);
+
+            $this->getJson('/api/v1/control-javas?journey_id=0')
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('journey_id');
+        } finally {
+            $this->travelBack();
+        }
+    }
+
+    public function test_historical_legacy_count_does_not_infer_missing_tray_values_from_current_data(): void
+    {
+        $journey = JornadaOperativa::query()->create([
+            'sucursal_id' => $this->branchId,
+            'fecha_operativa' => '2026-08-05',
+            'estado' => JornadaOperativa::STATUS_CLOSED,
+            'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-08-04 21:00:00',
+            'cierre_programado_at' => '2026-08-05 21:00:00',
+            'cerrada_por' => $this->user->id,
+            'cerrada_at' => '2026-08-05 21:00:00',
+        ]);
+        ConteoDiarioJava::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'jornada_id' => $journey->id,
+            'cantidad_en_empresa' => 40,
+            'cantidad_esperada' => 45,
+            'diferencia' => -5,
+            'contado_at' => '2026-08-05 18:00:00',
+            'contado_por' => $this->user->id,
+        ]);
+        DB::table('inventarios_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_total' => 99,
+            'cantidad_total_bandejas' => 88,
+            'updated_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson("/api/v1/control-javas?journey_id={$journey->id}")
+            ->assertOk()
+            ->assertJsonPath('data.count_is_historical', true)
+            ->assertJsonPath('data.inventory.count_breakdown.legacy', true)
+            ->assertJsonPath('data.inventory.count_breakdown.expected_direct.javas', 45)
+            ->assertJsonPath('data.inventory.count_breakdown.expected_direct.trays', null)
+            ->assertJsonPath('data.inventory.count_breakdown.direct_total.trays', null)
+            ->assertJsonPath('data.inventory.count_breakdown.difference.trays', null);
     }
 
     public function test_traceability_is_filtered_and_summarized_by_journey(): void

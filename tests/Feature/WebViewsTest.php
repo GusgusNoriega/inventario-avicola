@@ -1436,9 +1436,11 @@ class WebViewsTest extends TestCase
             ->assertSee('id="javaDailyTruckInputs"', false)
             ->assertSee('id="javaDailyAccountedTotal"', false)
             ->assertSee('id="trayDailyDifference"', false)
+            ->assertSee('id="javaCountJourneyEyebrow"', false)
+            ->assertSee('id="javaJourneyFilter"', false)
+            ->assertSee('Seleccionar jornada del conteo')
             ->assertDontSee('id="javaDailyModal"', false)
             ->assertDontSee('id="javaClientRows"', false)
-            ->assertDontSee('id="javaJourneyFilter"', false)
             ->assertSee(route('control-javas'), false);
 
         $this->get('/control-javas/devoluciones')
