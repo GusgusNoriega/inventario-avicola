@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(96, $migrationFiles);
+        $this->assertCount(97, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -162,7 +162,7 @@ class DatabaseSchemaTest extends TestCase
             'gastos_empresa' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'categoria', 'concepto', 'destino', 'numero_documento', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'movimientos_caja_efectivo' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'caja_id', 'direccion', 'contraparte_tipo', 'cliente_id', 'otra_caja_id', 'detalle', 'estado', 'created_by'],
             'cobradores' => ['empresa_id', 'nombre', 'estado', 'created_by', 'created_at', 'updated_at'],
-            'cobranzas' => ['empresa_id', 'cobrador_id', 'cobrador_nombre_snapshot', 'codigo', 'idempotency_key', 'payload_hash', 'cuenta_destino_id', 'proveedor_id', 'metodo_pago_id', 'fecha_hora', 'referencia', 'moneda', 'importe_total', 'observaciones', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
+            'cobranzas' => ['empresa_id', 'cobrador_id', 'cobrador_nombre_snapshot', 'codigo', 'idempotency_key', 'payload_hash', 'cuenta_destino_id', 'proveedor_id', 'metodo_pago_id', 'fecha_hora', 'referencia', 'moneda', 'importe_total', 'observaciones', 'estado', 'recibido_en_caja', 'recepcion_caja_actualizada_at', 'recepcion_caja_actualizada_por', 'recepcion_caja_actualizada_por_nombre', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'cobranza_detalles' => ['cobranza_id', 'asignacion_id', 'pago_id', 'cliente_id', 'fecha_recepcion', 'medio_recepcion', 'importe', 'orden', 'created_at'],
             'cobranza_pendientes' => ['cobranza_id', 'pago_id', 'importe', 'created_at'],
             'cobranza_asignaciones' => ['empresa_id', 'cobranza_id', 'idempotency_key', 'payload_hash', 'importe_pendiente_antes', 'importe_asignado', 'importe_pendiente_despues', 'pago_pendiente_anterior_id', 'pago_reversa_id', 'pago_pendiente_nuevo_id', 'created_by', 'created_at'],
@@ -204,6 +204,21 @@ class DatabaseSchemaTest extends TestCase
         );
         $this->assertFalse($originIndex['unique']);
         $this->assertFalse($destinationIndex['unique']);
+
+        $collectionColumns = collect(Schema::getColumns('cobranzas'))->keyBy('name');
+        $this->assertTrue($collectionColumns->get('recibido_en_caja')['nullable']);
+        $this->assertTrue($collectionColumns->get('recepcion_caja_actualizada_at')['nullable']);
+        $this->assertTrue($collectionColumns->get('recepcion_caja_actualizada_por')['nullable']);
+        $this->assertTrue($collectionColumns->get('recepcion_caja_actualizada_por_nombre')['nullable']);
+        $collectionReceiptIndex = collect(Schema::getIndexes('cobranzas'))
+            ->keyBy('name')
+            ->get('cobranza_empresa_cuenta_estado_fecha_index');
+        $this->assertNotNull($collectionReceiptIndex);
+        $this->assertSame(
+            ['empresa_id', 'cuenta_destino_id', 'estado', 'fecha_hora'],
+            $collectionReceiptIndex['columns'],
+        );
+        $this->assertFalse($collectionReceiptIndex['unique']);
     }
 
     public function test_financial_catalogs_and_permissions_are_created_by_migrations(): void
@@ -358,6 +373,7 @@ class DatabaseSchemaTest extends TestCase
             database_path('migrations/2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php'),
             database_path('migrations/2026_07_12_000009_add_financial_permissions.php'),
             database_path('migrations/2026_08_08_000001_add_cash_ledger_indexes_to_pagos_table.php'),
+            database_path('migrations/2026_08_08_000002_add_cash_receipt_tracking_to_cobranzas_table.php'),
         ];
         $migrations = collect($paths)->map(fn (string $path) => require $path);
 
@@ -437,6 +453,7 @@ class DatabaseSchemaTest extends TestCase
         $this->assertFalse(Schema::hasColumn('comprobantes', 'naturaleza'));
         $this->assertFalse(Schema::hasColumn('pagos', 'idempotency_key'));
         $this->assertFalse(Schema::hasColumn('pago_aplicaciones', 'lado'));
+        $this->assertFalse(Schema::hasColumn('cobranzas', 'recibido_en_caja'));
 
         $migrations->each(fn ($migration) => $migration->up());
 
@@ -447,6 +464,7 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue(Schema::hasColumn('comprobantes', 'naturaleza'));
         $this->assertTrue(Schema::hasColumn('pagos', 'idempotency_key'));
         $this->assertTrue(Schema::hasColumn('pago_aplicaciones', 'lado'));
+        $this->assertTrue(Schema::hasColumn('cobranzas', 'recibido_en_caja'));
     }
 
     public function test_retail_schema_rolls_back_and_can_be_applied_again_on_sqlite(): void

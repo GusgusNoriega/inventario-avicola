@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Finance\AssignCollectionPendingRequest;
 use App\Http\Requests\Finance\ListCollectionsRequest;
 use App\Http\Requests\Finance\StoreCollectionRequest;
+use App\Http\Requests\Finance\UpdateCollectionCashReceiptRequest;
 use App\Http\Requests\Finance\VoidCollectionRequest;
 use App\Services\CollectionBatchService;
 use App\Services\CollectionQueryService;
@@ -111,6 +112,30 @@ class CollectionController extends Controller
                 $result['cobranza_id'],
             ),
             'reversa_ids' => $result['reversa_ids'],
+            'meta' => ['idempotent' => $result['idempotent']],
+        ]);
+    }
+
+    public function updateCashReceipt(
+        UpdateCollectionCashReceiptRequest $request,
+        int $cobranza,
+    ): JsonResponse {
+        $result = $this->collections->updateCashReceipt(
+            (int) $request->user()->empresa_id,
+            $request->user(),
+            $cobranza,
+            (bool) $request->validated('recibido'),
+            $request->validated('estado_esperado') === null
+                ? null
+                : (bool) $request->validated('estado_esperado'),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => $result['recibido']
+                ? 'La cobranza quedó confirmada como recibida en caja.'
+                : 'La cobranza quedó pendiente de entrega a caja.',
+            'data' => $result['data'],
             'meta' => ['idempotent' => $result['idempotent']],
         ]);
     }

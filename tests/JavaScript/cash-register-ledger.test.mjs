@@ -17,13 +17,20 @@ function sourceBetween(startMarker, endMarker) {
 
 const helpers = new Function(
   "escapeHtml",
+  "formatMoney",
   `${sourceBetween("function ledgerKey", "function renderLedger")}
-  return { ledgerKey, traceDescription, traceMarkup };`
+  return {
+    ledgerKey,
+    traceDescription,
+    traceMarkup,
+    shouldRenderCollectionReceipt,
+    collectionsByCollectorMarkup
+  };`
 )(value => String(value)
   .replaceAll("&", "&amp;")
   .replaceAll("<", "&lt;")
   .replaceAll(">", "&gt;")
-  .replaceAll('"', "&quot;"));
+  .replaceAll('"', "&quot;"), (amount, currency) => `${currency}:${Number(amount).toFixed(2)}`);
 
 test("las filas de caja y pagos genericos usan identificadores separados", () => {
   assert.equal(helpers.ledgerKey({ row_key: "caja:8", pago_id: 8 }), "caja:8");
@@ -91,4 +98,48 @@ test("editar y eliminar exigen un movimiento manual y permiso explicito", () => 
   assert.match(renderFlow, /record\.puede_anular && record\.movimiento_caja_id/);
   assert.match(editFlow, /!record\.puede_editar \|\| !record\.movimiento_caja_id/);
   assert.match(deleteFlow, /!record\.puede_anular \|\| !record\.movimiento_caja_id/);
+});
+
+test("una cobranza expandida en varios pagos conserva una sola casilla de recibido", () => {
+  const rendered = new Set();
+  assert.equal(helpers.shouldRenderCollectionReceipt({ cobranza: { id: 15 } }, rendered), true);
+  assert.equal(helpers.shouldRenderCollectionReceipt({ cobranza: { id: 15 } }, rendered), false);
+  assert.equal(helpers.shouldRenderCollectionReceipt({ cobranza: { id: 16 } }, rendered), true);
+  assert.deepEqual([...rendered], [15, 16]);
+
+  const renderFlow = sourceBetween("function renderLedger", "function applySummary");
+  assert.match(renderFlow, /const renderedCollections = new Set\(\)/);
+  assert.match(renderFlow, /collectionReceiptMarkup\(record, renderedCollections\)/);
+});
+
+test("el resumen por cobrador distingue recibido pendiente y datos historicos", () => {
+  const markup = helpers.collectionsByCollectorMarkup([{
+    cobrador: { nombre: '<Cobrador "Uno">' },
+    moneda: "PEN",
+    cobranzas_count: 2,
+    importe_recibido: "40.00",
+    importe_pendiente: "60.00",
+    importe_sin_confirmar: "10.00"
+  }], "PEN");
+
+  assert.match(markup, /&lt;Cobrador &quot;Uno&quot;&gt;/);
+  assert.match(markup, /2 vouchers/);
+  assert.match(markup, /recibido PEN:40\.00/);
+  assert.match(markup, /Pendiente de entrega PEN:60\.00/);
+  assert.match(markup, /Sin confirmar PEN:10\.00/);
+});
+
+test("la casilla actualiza el voucher completo mediante una operacion PUT", () => {
+  const receiptMarkup = sourceBetween(
+    "function collectionReceiptMarkup",
+    "function collectionsByCollectorMarkup"
+  );
+  const receiptFlow = sourceBetween("async function updateCollectionCashReceipt", "elements.saveDefault");
+  assert.match(receiptMarkup, /receipt\.usuario\?\.nombre/);
+  assert.match(receiptMarkup, /formatMovementTime\(receipt\.fecha_hora\)/);
+  assert.match(receiptMarkup, /escapeHtml\(stateLabel\)/);
+  assert.match(receiptFlow, /\/finanzas\/cobranzas\/\$\{encodeURIComponent\(collectionId\)\}\/recepcion-caja/);
+  assert.match(receiptFlow, /method: "PUT"/);
+  assert.match(receiptFlow, /JSON\.stringify\(\{ recibido: received, estado_esperado: expectedReceipt \}\)/);
+  assert.match(receiptFlow, /window\.confirm/);
 });

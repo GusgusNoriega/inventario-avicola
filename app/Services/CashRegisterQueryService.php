@@ -2,12 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\Balanza;
+use App\Models\Cobranza;
 use App\Models\CuentaFinanciera;
 use App\Models\MovimientoCajaEfectivo;
 use App\Models\Pago;
-use App\Models\Pesada;
-use App\Models\TicketDespacho;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -67,9 +65,11 @@ class CashRegisterQueryService
             $from,
             $to,
         );
-        $retailStationTwoDispatch = $this->retailStationTwoDispatch(
+        $collectionsByCollector = $this->collectionsByCollector(
             $companyId,
-            (string) $filters['fecha'],
+            (int) $cashRegister->id,
+            $from,
+            $to,
         );
         $income = '0.00';
         $expense = '0.00';
@@ -89,7 +89,7 @@ class CashRegisterQueryService
                 'egresos' => $expense,
                 'total' => FinancialMoney::subtract($income, $expense),
                 'neto' => FinancialMoney::subtract($income, $expense),
-                'despacho_minorista_2' => $retailStationTwoDispatch,
+                'cobranzas_por_cobrador' => $collectionsByCollector,
                 'moneda' => $cashRegister->moneda,
                 'fecha' => $filters['fecha'],
                 'timezone' => $timezone,
@@ -121,53 +121,54 @@ class CashRegisterQueryService
         )[0];
     }
 
-    /** @return array{importe: string, moneda: string, solo_informativo: true} */
-    private function retailStationTwoDispatch(int $companyId, string $operatingDate): array
-    {
-        $amount = DB::table('pesadas as pesada')
-            ->join('tickets_despacho as ticket', 'ticket.id', '=', 'pesada.ticket_id')
-            ->join('ticket_precios as precio', function ($join): void {
-                $join->on('precio.ticket_id', '=', 'ticket.id')
-                    ->on('precio.tipo_pollo_id', '=', 'pesada.tipo_pollo_id');
-            })
-            ->join('jornadas_operativas as jornada', 'jornada.id', '=', 'ticket.jornada_id')
-            ->join('sucursales as sucursal', 'sucursal.id', '=', 'jornada.sucursal_id')
-            ->where('sucursal.empresa_id', $companyId)
-            ->where('ticket.canal', TicketDespacho::CHANNEL_RETAIL)
-            ->where('ticket.tipo_operacion', TicketDespacho::OPERATION_DISPATCH)
-            ->where('ticket.estado', TicketDespacho::STATUS_CLOSED)
-            ->where('pesada.estado', Pesada::STATUS_ACTIVE)
-            ->where('jornada.fecha_operativa', $operatingDate)
-            ->whereExists(function (Builder $marker) use ($companyId): void {
-                $marker->selectRaw('1')
-                    ->from('pesadas as marca')
-                    ->leftJoin(
-                        'ajustes_peso_minorista as ajuste',
-                        'ajuste.id',
-                        '=',
-                        'marca.ajuste_peso_minorista_id',
-                    )
-                    ->whereColumn('marca.ticket_id', 'ticket.id')
-                    ->where(function (Builder $station) use ($companyId): void {
-                        $station
-                            ->where('marca.origen_peso', Balanza::CODE_RETAIL_2)
-                            ->orWhere(function (Builder $adjustment) use ($companyId): void {
-                                $adjustment
-                                    ->where('ajuste.empresa_id', $companyId)
-                                    ->where('ajuste.estacion', 2);
-                            });
-                    });
-            })
-            ->selectRaw(
-                'COALESCE(SUM(ROUND(pesada.peso_neto_kg * precio.precio_kg, 2)), 0) as importe'
+    /** @return list<array<string, mixed>> */
+    private function collectionsByCollector(
+        int $companyId,
+        int $cashRegisterId,
+        string $from,
+        string $to,
+    ): array {
+        return DB::table('cobranzas as cobranza')
+            ->where('cobranza.empresa_id', $companyId)
+            ->where('cobranza.cuenta_destino_id', $cashRegisterId)
+            ->where('cobranza.estado', Cobranza::STATUS_REGISTERED)
+            ->where('cobranza.fecha_hora', '>=', $from)
+            ->where('cobranza.fecha_hora', '<', $to)
+            ->groupBy(
+                'cobranza.cobrador_id',
+                'cobranza.moneda',
             )
-            ->value('importe');
-
-        return [
-            'importe' => FinancialMoney::normalize(bcadd((string) ($amount ?? '0'), '0', 2)),
-            'moneda' => $this->companyCurrency($companyId),
-            'solo_informativo' => true,
-        ];
+            ->orderBy('cobrador_nombre')
+            ->get([
+                'cobranza.cobrador_id',
+                DB::raw('MAX(cobranza.cobrador_nombre_snapshot) as cobrador_nombre'),
+                'cobranza.moneda',
+                DB::raw('COUNT(*) as cobranzas_count'),
+                DB::raw('COALESCE(SUM(cobranza.importe_total), 0) as importe_total'),
+                DB::raw('COALESCE(SUM(CASE WHEN cobranza.recibido_en_caja = 1 THEN cobranza.importe_total ELSE 0 END), 0) as importe_recibido'),
+                DB::raw('COALESCE(SUM(CASE WHEN cobranza.recibido_en_caja = 0 THEN cobranza.importe_total ELSE 0 END), 0) as importe_pendiente'),
+                DB::raw('COALESCE(SUM(CASE WHEN cobranza.recibido_en_caja IS NULL THEN cobranza.importe_total ELSE 0 END), 0) as importe_sin_confirmar'),
+                DB::raw('SUM(CASE WHEN cobranza.recibido_en_caja = 1 THEN 1 ELSE 0 END) as recibidas_count'),
+                DB::raw('SUM(CASE WHEN cobranza.recibido_en_caja = 0 THEN 1 ELSE 0 END) as pendientes_count'),
+                DB::raw('SUM(CASE WHEN cobranza.recibido_en_caja IS NULL THEN 1 ELSE 0 END) as sin_confirmar_count'),
+            ])
+            ->map(fn (object $row): array => [
+                'cobrador' => [
+                    'id' => (int) $row->cobrador_id,
+                    'nombre' => $row->cobrador_nombre,
+                ],
+                'moneda' => $row->moneda,
+                'cobranzas_count' => (int) $row->cobranzas_count,
+                'recibidas_count' => (int) $row->recibidas_count,
+                'pendientes_count' => (int) $row->pendientes_count,
+                'sin_confirmar_count' => (int) $row->sin_confirmar_count,
+                'importe_total' => FinancialMoney::normalize((string) $row->importe_total),
+                'importe_recibido' => FinancialMoney::normalize((string) $row->importe_recibido),
+                'importe_pendiente' => FinancialMoney::normalize((string) $row->importe_pendiente),
+                'importe_sin_confirmar' => FinancialMoney::normalize((string) $row->importe_sin_confirmar),
+            ])
+            ->values()
+            ->all();
     }
 
     /** @return list<array{moneda: string, importe: string}> */
@@ -251,6 +252,10 @@ class CashRegisterQueryService
                 $join->on('cobranza.id', '=', 'enlace_cobranza.cobranza_id')
                     ->where('cobranza.empresa_id', $companyId);
             })
+            ->leftJoin('usuarios as receptor_caja', function ($join) use ($companyId): void {
+                $join->on('receptor_caja.id', '=', 'cobranza.recepcion_caja_actualizada_por')
+                    ->where('receptor_caja.empresa_id', $companyId);
+            })
             ->leftJoin('usuarios as pago_creador', function ($join) use ($companyId): void {
                 $join->on('pago_creador.id', '=', 'pago.created_by')
                     ->where('pago_creador.empresa_id', $companyId);
@@ -333,6 +338,11 @@ class CashRegisterQueryService
                 'cobranza.referencia as cobranza_referencia',
                 'cobranza.cobrador_id as cobranza_cobrador_id',
                 'cobranza.cobrador_nombre_snapshot as cobranza_cobrador_nombre',
+                'cobranza.recibido_en_caja as cobranza_recibido_en_caja',
+                'cobranza.recepcion_caja_actualizada_at as cobranza_recepcion_caja_actualizada_at',
+                'cobranza.recepcion_caja_actualizada_por as cobranza_recepcion_caja_actualizada_por',
+                'cobranza.recepcion_caja_actualizada_por_nombre as cobranza_recepcion_caja_actualizada_por_nombre',
+                'receptor_caja.nombre as cobranza_receptor_caja_nombre',
                 'enlace_cobranza.fecha_recepcion as cobranza_fecha_recepcion',
                 'enlace_cobranza.asignacion_id as cobranza_asignacion_id',
                 'enlace_cobranza.rol_pago as cobranza_rol_pago',
@@ -425,6 +435,10 @@ class CashRegisterQueryService
                     'nombre' => $movement->proveedor_nombre,
                     'numero_documento' => $movement->proveedor_documento,
                 ];
+            $collectionCashReceipt = $movement->cobranza_id === null
+                || $movement->cobranza_recibido_en_caja === null
+                    ? null
+                    : (bool) $movement->cobranza_recibido_en_caja;
             $collection = $movement->cobranza_id === null
                 ? null
                 : [
@@ -434,6 +448,30 @@ class CashRegisterQueryService
                     'referencia' => $movement->cobranza_referencia,
                     'fecha_recepcion' => $movement->cobranza_fecha_recepcion,
                     'rol_pago' => $movement->cobranza_rol_pago,
+                    'recibido_en_caja' => $collectionCashReceipt,
+                    'recepcion_caja' => [
+                        'estado' => $collectionCashReceipt === true
+                            ? 'RECIBIDO'
+                            : ($collectionCashReceipt === false ? 'PENDIENTE' : 'SIN_CONFIRMAR'),
+                        'recibido' => $collectionCashReceipt,
+                        'fecha_hora' => $movement->cobranza_recepcion_caja_actualizada_at === null
+                            ? null
+                            : CarbonImmutable::parse(
+                                (string) $movement->cobranza_recepcion_caja_actualizada_at,
+                                $this->databaseTimezone(),
+                            )->setTimezone($timezone)->toIso8601String(),
+                        'usuario' => $movement->cobranza_recepcion_caja_actualizada_por === null
+                            && $movement->cobranza_recepcion_caja_actualizada_por_nombre === null
+                            ? null
+                            : [
+                                'id' => $movement->cobranza_recepcion_caja_actualizada_por === null
+                                    ? null
+                                    : (int) $movement->cobranza_recepcion_caja_actualizada_por,
+                                'nombre' => $movement->cobranza_recepcion_caja_actualizada_por_nombre
+                                    ?: $movement->cobranza_receptor_caja_nombre,
+                            ],
+                        'puede_actualizar' => $movement->cobranza_estado === Cobranza::STATUS_REGISTERED,
+                    ],
                     'asignacion' => $movement->cobranza_asignacion_id === null
                         ? null
                         : [
@@ -819,14 +857,6 @@ class CashRegisterQueryService
         return (string) (
             DB::table('empresas')->where('id', $companyId)->value('zona_horaria')
             ?: config('app.timezone', 'UTC')
-        );
-    }
-
-    private function companyCurrency(int $companyId): string
-    {
-        return (string) (
-            DB::table('empresas')->where('id', $companyId)->value('moneda')
-            ?: 'PEN'
         );
     }
 

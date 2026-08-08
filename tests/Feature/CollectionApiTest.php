@@ -89,7 +89,10 @@ class CollectionApiTest extends TestCase
             ],
             ['referencia' => 'VOUCHER-PROPIO-001'],
         ))->assertCreated()
-            ->assertJsonPath('meta.idempotent', false);
+            ->assertJsonPath('meta.idempotent', false)
+            ->assertJsonPath('data.recibido_en_caja', null)
+            ->assertJsonPath('data.recepcion_caja.estado', 'NO_APLICA')
+            ->assertJsonPath('data.recepcion_caja.puede_actualizar', false);
 
         $collection = DB::table('cobranzas')->where('idempotency_key', $key)->first();
         $this->assertNotNull($collection);
@@ -146,6 +149,12 @@ class CollectionApiTest extends TestCase
 
         // There is no aggregate Pago for the voucher: only the two traceable client rows.
         $this->assertDatabaseCount('pagos', 2);
+
+        $this->putJson("/api/v1/finanzas/cobranzas/{$collection->id}/recepcion-caja", [
+            'recibido' => true,
+            'estado_esperado' => null,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('recibido');
     }
 
     public function test_a_provider_account_collection_creates_direct_payments_and_applies_both_portfolios_fifo(): void
@@ -1394,6 +1403,18 @@ class CollectionApiTest extends TestCase
             ->json('data.id');
 
         try {
+            config()->set($permissionPath, array_values(array_diff($technicalPermissions, ['SALDOS_AJUSTAR'])));
+            Sanctum::actingAs($restricted, ['api']);
+
+            $this->putJson("/api/v1/finanzas/cobranzas/{$collectionId}/recepcion-caja", [
+                'recibido' => true,
+                'estado_esperado' => false,
+            ])->assertForbidden();
+        } finally {
+            config()->set($permissionPath, $technicalPermissions);
+        }
+
+        try {
             config()->set($permissionPath, array_values(array_diff($technicalPermissions, ['PAGOS_ANULAR'])));
             Sanctum::actingAs($restricted, ['api']);
 
@@ -1410,6 +1431,10 @@ class CollectionApiTest extends TestCase
         $this->getJson("/api/v1/finanzas/cobranzas/{$collectionId}")->assertNotFound();
         $this->postJson("/api/v1/finanzas/cobranzas/{$collectionId}/anular", [
             'motivo' => 'Intento desde otra empresa',
+        ])->assertNotFound();
+        $this->putJson("/api/v1/finanzas/cobranzas/{$collectionId}/recepcion-caja", [
+            'recibido' => true,
+            'estado_esperado' => false,
         ])->assertNotFound();
 
         $inactive = User::factory()->create([

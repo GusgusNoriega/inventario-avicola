@@ -53,10 +53,12 @@
         <small>Bancos y billeteras; no incluye cajas</small>
         <strong id="cashRegisterAccountIncome">S/ 0.00</strong>
       </article>
-      <article class="fin-summary-card fin-cash-summary-retail-two">
-        <span>Despacho minorista 2</span>
-        <small>Monto despachado de la jornada filtrada · solo informativo; no modifica la caja</small>
-        <strong id="cashRegisterRetailTwoDispatch">S/ 0.00</strong>
+      <article class="fin-summary-card fin-cash-summary-collections">
+        <span>Cobranza por cobrador</span>
+        <small>Día seleccionado. Pendiente de entrega = recepción física aún no confirmada; el asiento financiero ya está registrado</small>
+        <ul id="cashRegisterCollectionsByCollector" class="fin-cash-collector-summary" aria-live="polite">
+          <li class="is-empty">Sin cobranzas para el día seleccionado</li>
+        </ul>
       </article>
       <article class="fin-summary-card fin-cash-summary-income">
         <span>Ingresos del día</span>

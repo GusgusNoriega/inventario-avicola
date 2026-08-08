@@ -23,6 +23,7 @@ class CollectionBatchService
         private readonly FinancialMovementService $movements,
         private readonly FinancialAuditService $audit,
         private readonly FinancialAccountBalanceService $balances,
+        private readonly CollectionQueryService $queries,
     ) {}
 
     /**
@@ -134,6 +135,109 @@ class CollectionBatchService
                 ];
             }, 3);
         }
+    }
+
+    /**
+     * Confirm whether the complete collection voucher is physically held by
+     * the selected company cash register. This custody flag never changes the
+     * financial payments or balances created by the collection.
+     *
+     * @return array{cobranza_id: int, recibido: bool, idempotent: bool, data: array<string, mixed>}
+     */
+    public function updateCashReceipt(
+        int $companyId,
+        User $actor,
+        int $collectionId,
+        bool $received,
+        ?bool $expectedReceived,
+        ?string $ip = null,
+    ): array {
+        $this->assertActor($companyId, $actor, 'PAGOS_REGISTRAR');
+        $this->assertActor($companyId, $actor, 'SALDOS_AJUSTAR');
+
+        return DB::transaction(function () use (
+            $companyId,
+            $actor,
+            $collectionId,
+            $received,
+            $expectedReceived,
+            $ip,
+        ): array {
+            $collection = DB::table('cobranzas')
+                ->where('empresa_id', $companyId)
+                ->where('id', $collectionId)
+                ->lockForUpdate()
+                ->first();
+            abort_unless($collection, 404, 'Cobranza no encontrada.');
+
+            if ($collection->estado !== Cobranza::STATUS_REGISTERED) {
+                throw ValidationException::withMessages([
+                    'recibido' => 'Solo una cobranza vigente puede cambiar su recepción en caja.',
+                ]);
+            }
+
+            $isOwnCashRegister = DB::table('cuentas_financieras as cuenta')
+                ->join(
+                    'entidades_financieras as entidad',
+                    'entidad.id',
+                    '=',
+                    'cuenta.entidad_financiera_id',
+                )
+                ->where('cuenta.id', $collection->cuenta_destino_id)
+                ->where('cuenta.tipo', CuentaFinanciera::TYPE_CASH)
+                ->where('entidad.empresa_id', $companyId)
+                ->where('entidad.tipo', 'PROPIA')
+                ->exists();
+            if (! $isOwnCashRegister) {
+                throw ValidationException::withMessages([
+                    'recibido' => 'Esta confirmación solo aplica a cobranzas destinadas a una caja propia.',
+                ]);
+            }
+
+            $current = $collection->recibido_en_caja === null
+                ? null
+                : (bool) $collection->recibido_en_caja;
+            if ($current === $received) {
+                return [
+                    'cobranza_id' => $collectionId,
+                    'recibido' => $received,
+                    'idempotent' => true,
+                    'data' => $this->queries->find($companyId, $collectionId),
+                ];
+            }
+            abort_if(
+                $current !== $expectedReceived,
+                409,
+                'La recepción de esta cobranza cambió en otra pantalla. Actualiza la caja e inténtalo nuevamente.',
+            );
+
+            $now = now();
+            DB::table('cobranzas')->where('id', $collectionId)->update([
+                'recibido_en_caja' => $received,
+                'recepcion_caja_actualizada_at' => $now,
+                'recepcion_caja_actualizada_por' => $actor->id,
+                'recepcion_caja_actualizada_por_nombre' => $actor->nombre,
+                'updated_at' => $now,
+            ]);
+            $after = (array) DB::table('cobranzas')->where('id', $collectionId)->first();
+            $this->audit->record(
+                $companyId,
+                $actor->id,
+                'cobranzas',
+                $collectionId,
+                $received ? 'RECIBIR_EN_CAJA' : 'MARCAR_PENDIENTE_CAJA',
+                (array) $collection,
+                $after,
+                $ip,
+            );
+
+            return [
+                'cobranza_id' => $collectionId,
+                'recibido' => $received,
+                'idempotent' => false,
+                'data' => $this->queries->find($companyId, $collectionId),
+            ];
+        }, 3);
     }
 
     /**
@@ -305,6 +409,8 @@ class CollectionBatchService
             : $this->payablePool($companyId, $context['proveedor_id'], $payload['moneda']);
 
         $now = now();
+        $cashReceiptApplies = $context['cuenta']->tipo === CuentaFinanciera::TYPE_CASH
+            && $context['cuenta']->entidad_tipo === 'PROPIA';
         $collectionId = DB::table('cobranzas')->insertGetId([
             'empresa_id' => $companyId,
             'cobrador_id' => $context['cobrador']->id,
@@ -321,6 +427,10 @@ class CollectionBatchService
             'importe_total' => $payload['importe_total'],
             'observaciones' => $payload['observaciones'],
             'estado' => Cobranza::STATUS_REGISTERED,
+            'recibido_en_caja' => $cashReceiptApplies ? false : null,
+            'recepcion_caja_actualizada_at' => null,
+            'recepcion_caja_actualizada_por' => null,
+            'recepcion_caja_actualizada_por_nombre' => null,
             'created_by' => $actor->id,
             'anulada_por' => null,
             'anulada_at' => null,

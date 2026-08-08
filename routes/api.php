@@ -107,6 +107,9 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/cobranzas/{cobranza}/asignaciones', [CollectionController::class, 'assignPending'])
             ->whereNumber('cobranza')
             ->middleware('permission:PAGOS_REGISTRAR');
+        Route::put('/cobranzas/{cobranza}/recepcion-caja', [CollectionController::class, 'updateCashReceipt'])
+            ->whereNumber('cobranza')
+            ->middleware(['permission:PAGOS_REGISTRAR', 'permission:SALDOS_AJUSTAR']);
         Route::post('/cobranzas/{cobranza}/anular', [CollectionController::class, 'void'])
             ->whereNumber('cobranza')
             ->middleware('permission:PAGOS_ANULAR');

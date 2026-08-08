@@ -148,6 +148,10 @@ class CollectionQueryService
             ->leftJoin('pagos as reversa_pendiente', 'reversa_pendiente.reversa_de_pago_id', '=', 'pago_pendiente.id')
             ->leftJoin('usuarios as creador', 'creador.id', '=', 'cobranza.created_by')
             ->leftJoin('usuarios as anulador', 'anulador.id', '=', 'cobranza.anulada_por')
+            ->leftJoin('usuarios as receptor_caja', function ($join) use ($companyId): void {
+                $join->on('receptor_caja.id', '=', 'cobranza.recepcion_caja_actualizada_por')
+                    ->where('receptor_caja.empresa_id', $companyId);
+            })
             ->where('cobranza.empresa_id', $companyId)
             ->select([
                 'cobranza.*',
@@ -195,6 +199,7 @@ class CollectionQueryService
                 'reversa_pendiente.codigo as pendiente_reversa_codigo',
                 'creador.nombre as creador_nombre',
                 'anulador.nombre as anulador_nombre',
+                'receptor_caja.nombre as receptor_caja_nombre',
             ])
             ->selectSub(
                 DB::table('cobranza_detalles as detalle_conteo')
@@ -514,6 +519,11 @@ class CollectionQueryService
                 ],
             ],
         ];
+        $cashReceiptApplies = $collection->cuenta_tipo === CuentaFinanciera::TYPE_CASH
+            && $collection->entidad_tipo === 'PROPIA';
+        $cashReceipt = ! $cashReceiptApplies || $collection->recibido_en_caja === null
+            ? null
+            : (bool) $collection->recibido_en_caja;
 
         return [
             'id' => (int) $collection->id,
@@ -539,6 +549,30 @@ class CollectionQueryService
             'saldo_favor_proveedor' => $providerCredit,
             'observaciones' => $collection->observaciones,
             'estado' => $collection->estado,
+            'recibido_en_caja' => $cashReceipt,
+            'recepcion_caja' => [
+                'estado' => ! $cashReceiptApplies
+                    ? 'NO_APLICA'
+                    : ($cashReceipt === true
+                        ? 'RECIBIDO'
+                        : ($cashReceipt === false ? 'PENDIENTE' : 'SIN_CONFIRMAR')),
+                'recibido' => $cashReceipt,
+                'puede_actualizar' => $cashReceiptApplies
+                    && $collection->estado === Cobranza::STATUS_REGISTERED,
+                'fecha_hora' => $collection->recepcion_caja_actualizada_at === null
+                    ? null
+                    : $this->localDateTime($collection->recepcion_caja_actualizada_at, $timezone),
+                'usuario' => $collection->recepcion_caja_actualizada_por === null
+                    && $collection->recepcion_caja_actualizada_por_nombre === null
+                    ? null
+                    : [
+                        'id' => $collection->recepcion_caja_actualizada_por === null
+                            ? null
+                            : (int) $collection->recepcion_caja_actualizada_por,
+                        'nombre' => $collection->recepcion_caja_actualizada_por_nombre
+                            ?: $collection->receptor_caja_nombre,
+                    ],
+            ],
             'cobrador' => [
                 'id' => (int) $collection->cobrador_id,
                 'nombre' => $collection->cobrador_nombre_snapshot,

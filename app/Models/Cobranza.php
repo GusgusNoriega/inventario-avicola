@@ -24,6 +24,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'importe_total',
     'observaciones',
     'estado',
+    'recibido_en_caja',
+    'recepcion_caja_actualizada_at',
+    'recepcion_caja_actualizada_por',
+    'recepcion_caja_actualizada_por_nombre',
     'created_by',
     'anulada_por',
     'anulada_at',
@@ -79,6 +83,12 @@ class Cobranza extends Model
         return $this->belongsTo(User::class, 'anulada_por');
     }
 
+    /** @return BelongsTo<User, $this> */
+    public function recepcionCajaActualizadaPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recepcion_caja_actualizada_por');
+    }
+
     /** @return HasMany<CobranzaDetalle, $this> */
     public function detalles(): HasMany
     {
@@ -102,6 +112,8 @@ class Cobranza extends Model
         return [
             'fecha_hora' => 'datetime',
             'importe_total' => 'decimal:2',
+            'recibido_en_caja' => 'boolean',
+            'recepcion_caja_actualizada_at' => 'datetime',
             'anulada_at' => 'datetime',
         ];
     }

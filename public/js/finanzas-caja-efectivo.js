@@ -18,7 +18,7 @@ const elements = {
   configMessage: byId("cashRegisterConfigMessage"),
   income: byId("cashRegisterIncome"),
   accountIncome: byId("cashRegisterAccountIncome"),
-  retailTwoDispatch: byId("cashRegisterRetailTwoDispatch"),
+  collectionsByCollector: byId("cashRegisterCollectionsByCollector"),
   expense: byId("cashRegisterExpense"),
   net: byId("cashRegisterNet"),
   refresh: byId("cashRegisterRefresh"),
@@ -65,7 +65,6 @@ const channel = "BroadcastChannel" in window
 const state = {
   companyId: null,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Lima",
-  retailTwoDispatchCurrency: "PEN",
   cashRegisters: [],
   clients: [],
   records: new Map(),
@@ -76,7 +75,10 @@ const state = {
   activeSuggestion: -1,
   suggestionClients: [],
   saving: false,
-  deletingId: null
+  deletingId: null,
+  receivingCollectionId: null,
+  receivingCollectionValue: null,
+  ledgerContentSignature: null
 };
 
 function storageKey() {
@@ -209,7 +211,7 @@ function resetSummary() {
   const currency = selectedCashRegister()?.moneda || "PEN";
   elements.income.textContent = formatMoney(0, currency);
   elements.accountIncome.textContent = accountIncomeText([], currency);
-  elements.retailTwoDispatch.textContent = formatMoney(0, state.retailTwoDispatchCurrency);
+  elements.collectionsByCollector.innerHTML = '<li class="is-empty">Sin cobranzas para el día seleccionado</li>';
   elements.expense.textContent = formatMoney(0, currency);
   elements.net.textContent = formatMoney(0, currency);
 }
@@ -284,6 +286,70 @@ function traceMarkup(record) {
   return `<span class="fin-cash-item-trace">${description}</span>`;
 }
 
+function shouldRenderCollectionReceipt(record, renderedCollections) {
+  const collectionId = Number(record.cobranza?.id || 0);
+  if (!collectionId || renderedCollections.has(collectionId)) return false;
+  renderedCollections.add(collectionId);
+  return true;
+}
+
+function collectionReceiptMarkup(record, renderedCollections) {
+  const collection = record.cobranza;
+  const collectionId = Number(collection?.id || 0);
+  if (!shouldRenderCollectionReceipt(record, renderedCollections)) return "";
+
+  const receipt = collection.recepcion_caja || {};
+  const updating = Number(state.receivingCollectionId) === collectionId;
+  const received = updating
+    ? state.receivingCollectionValue === true
+    : receipt.recibido === true;
+  const receivedTrace = [
+    receipt.usuario?.nombre,
+    receipt.fecha_hora ? formatMovementTime(receipt.fecha_hora) : ""
+  ].filter(Boolean).join(" · ");
+  const stateLabel = received
+    ? `Dinero en caja${receivedTrace ? ` · ${receivedTrace}` : ""}`
+    : receipt.estado === "SIN_CONFIRMAR"
+      ? "Recepción sin confirmar"
+      : `Entrega física pendiente${receivedTrace ? ` · ${receivedTrace}` : ""}`;
+  const disabled = !canManage || receipt.puede_actualizar === false || updating;
+
+  return `<label class="fin-cash-received ${received ? "is-received" : "is-pending"}">
+    <input
+      type="checkbox"
+      data-collection-cash-received="${collectionId}"
+      ${received ? "checked" : ""}
+      ${disabled ? "disabled" : ""}
+    >
+    <span><b>Recibido</b><small>${updating ? "Guardando…" : escapeHtml(stateLabel)}</small></span>
+  </label>`;
+}
+
+function collectionsByCollectorMarkup(collections, fallbackCurrency) {
+  if (!Array.isArray(collections) || !collections.length) {
+    return '<li class="is-empty">Sin cobranzas para el día seleccionado</li>';
+  }
+
+  return collections.map((item) => {
+    const currency = item.moneda || fallbackCurrency;
+    const vouchers = Number(item.cobranzas_count || 0);
+    const pending = Number(item.importe_pendiente || 0);
+    const unconfirmed = Number(item.importe_sin_confirmar || 0);
+    const received = Number(item.importe_recibido || 0);
+    const pendingCopy = pending > 0
+      ? `<em>Pendiente de entrega ${escapeHtml(formatMoney(item.importe_pendiente, currency))}</em>`
+      : '<em class="is-received">Sin dinero pendiente</em>';
+    const unknownCopy = unconfirmed > 0
+      ? `<small>Sin confirmar ${escapeHtml(formatMoney(item.importe_sin_confirmar, currency))}</small>`
+      : "";
+
+    return `<li>
+      <span><b>${escapeHtml(item.cobrador?.nombre || "Cobrador")}</b><small>${vouchers} voucher${vouchers === 1 ? "" : "s"} · recibido ${escapeHtml(formatMoney(received, currency))}</small></span>
+      <span>${pendingCopy}${unknownCopy}</span>
+    </li>`;
+  }).join("");
+}
+
 function renderLedger(records) {
   state.records = new Map(records.map((record) => [ledgerKey(record), record]));
   if (!records.length) {
@@ -291,6 +357,7 @@ function renderLedger(records) {
     return;
   }
 
+  const renderedCollections = new Set();
   elements.list.innerHTML = records.map((record) => {
     const key = ledgerKey(record);
     const income = record.direccion === "INGRESO";
@@ -310,7 +377,9 @@ function renderLedger(records) {
           ${deleting ? 'disabled aria-busy="true"' : ""}
         >${deleting ? "Eliminando…" : "Eliminar"}</button>`
       : "";
-    return `<li class="fin-cash-item ${income ? "is-income" : "is-expense"}">
+    const receipt = collectionReceiptMarkup(record, renderedCollections);
+    const receiptState = record.cobranza?.recepcion_caja?.estado || "";
+    return `<li class="fin-cash-item ${income ? "is-income" : "is-expense"} ${receiptState === "RECIBIDO" ? "is-collection-received" : receiptState ? "is-collection-pending" : ""}">
       <span class="fin-cash-direction" aria-hidden="true">${sign}</span>
       <span class="fin-cash-item-copy">
         <h3 class="fin-cash-item-title">${escapeHtml(record.detalle)}</h3>
@@ -319,20 +388,18 @@ function renderLedger(records) {
         <small>${escapeHtml(formatMovementTime(record.fecha_hora))} · ${escapeHtml(code)}${record.creado_por ? ` · ${escapeHtml(record.creado_por)}` : ""}</small>
       </span>
       <strong class="fin-cash-amount">${sign}${escapeHtml(formatMoney(record.importe, record.moneda))}</strong>
-      <span class="fin-cash-item-action">${edit}${remove}</span>
+      <span class="fin-cash-item-action">${receipt}${edit}${remove}</span>
     </li>`;
   }).join("");
 }
 
 function applySummary(summary = {}) {
   const currency = summary.moneda || selectedCashRegister()?.moneda || "PEN";
-  const retailTwoDispatch = summary.despacho_minorista_2 || {};
-  state.retailTwoDispatchCurrency = retailTwoDispatch.moneda || state.retailTwoDispatchCurrency;
   elements.income.textContent = formatMoney(summary.ingresos || 0, currency);
   elements.accountIncome.textContent = accountIncomeText(summary.ingresos_cuentas, currency);
-  elements.retailTwoDispatch.textContent = formatMoney(
-    retailTwoDispatch.importe || 0,
-    state.retailTwoDispatchCurrency
+  elements.collectionsByCollector.innerHTML = collectionsByCollectorMarkup(
+    summary.cobranzas_por_cobrador,
+    currency
   );
   elements.expense.textContent = formatMoney(summary.egresos || 0, currency);
   elements.net.textContent = formatMoney(summary.total || 0, currency);
@@ -362,6 +429,7 @@ async function loadLedger({ silent = false } = {}) {
   const accountId = Number(elements.account.value || 0);
   const date = elements.date.value;
   if (!accountId || !date) {
+    state.ledgerContentSignature = null;
     resetSummary();
     renderLedger([]);
     setMessage(elements.listMessage, "Selecciona una caja y una fecha para consultar los movimientos.");
@@ -376,8 +444,13 @@ async function loadLedger({ silent = false } = {}) {
       const response = await apiRequest(`/finanzas/caja-efectivo?${params}`);
       if (`${elements.account.value}:${elements.date.value}` !== requestSignature) return;
       const records = Array.isArray(response?.data) ? response.data : [];
-      renderLedger(records);
-      applySummary(response?.resumen || {});
+      const summary = response?.resumen || {};
+      const contentSignature = JSON.stringify({ records, summary });
+      if (!silent || contentSignature !== state.ledgerContentSignature) {
+        renderLedger(records);
+        applySummary(summary);
+        state.ledgerContentSignature = contentSignature;
+      }
       const updatedAt = response?.meta?.actualizado_en;
       elements.liveStatus.textContent = updatedAt
         ? `Actualización automática activa · ${formatMovementTime(updatedAt)}`
@@ -671,6 +744,65 @@ async function deleteMovement(key) {
   }
 }
 
+async function updateCollectionCashReceipt(input) {
+  const collectionId = Number(input?.dataset.collectionCashReceived || 0);
+  const record = [...state.records.values()].find((item) =>
+    Number(item.cobranza?.id || 0) === collectionId
+  );
+  if (!collectionId || !record || !canManage || state.receivingCollectionId !== null) return;
+
+  const received = Boolean(input.checked);
+  const receiptState = record.cobranza?.recepcion_caja || {};
+  const expectedReceipt = receiptState.recibido === true
+    ? true
+    : receiptState.recibido === false ? false : null;
+  const wasReceived = expectedReceipt === true;
+  if (!received && wasReceived) {
+    const confirmed = window.confirm(
+      "¿Marcar esta cobranza nuevamente como pendiente?\n\nEl cambio quedará registrado en la auditoría.",
+    );
+    if (!confirmed) {
+      input.checked = true;
+      return;
+    }
+  }
+
+  state.receivingCollectionId = collectionId;
+  state.receivingCollectionValue = received;
+  renderLedger([...state.records.values()]);
+  setMessage(
+    elements.listMessage,
+    received ? "Confirmando recepción de la cobranza…" : "Marcando cobranza pendiente…",
+  );
+
+  try {
+    await apiRequest(`/finanzas/cobranzas/${encodeURIComponent(collectionId)}/recepcion-caja`, {
+      method: "PUT",
+      body: JSON.stringify({ recibido: received, estado_esperado: expectedReceipt })
+    });
+    state.receivingCollectionId = null;
+    state.receivingCollectionValue = null;
+    channel?.postMessage({ companyId: state.companyId, type: "collection-cash-receipt-updated" });
+    await reloadLedgerAfterMutation();
+    setMessage(
+      elements.listMessage,
+      received
+        ? "Cobranza confirmada como recibida en caja."
+        : "Cobranza marcada como pendiente de entrega.",
+      "success",
+    );
+  } catch (error) {
+    state.receivingCollectionId = null;
+    state.receivingCollectionValue = null;
+    renderLedger([...state.records.values()]);
+    setMessage(
+      elements.listMessage,
+      errorMessage(error, "No se pudo actualizar la recepción de la cobranza."),
+      "error",
+    );
+  }
+}
+
 elements.saveDefault.addEventListener("click", saveDefaultCashRegister);
 elements.account.addEventListener("change", async () => {
   updateCurrency();
@@ -688,6 +820,10 @@ elements.list.addEventListener("click", (event) => {
   const deleteButton = event.target.closest("[data-delete-cash]");
   if (editButton) openEditDialog(editButton.dataset.editCash);
   if (deleteButton) void deleteMovement(deleteButton.dataset.deleteCash);
+});
+elements.list.addEventListener("change", (event) => {
+  const receiptInput = event.target.closest("[data-collection-cash-received]");
+  if (receiptInput) void updateCollectionCashReceipt(receiptInput);
 });
 document.querySelectorAll("[data-cash-dialog-close]").forEach((button) => {
   button.addEventListener("click", () => elements.dialog.close());
