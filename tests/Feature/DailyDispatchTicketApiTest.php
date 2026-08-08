@@ -408,6 +408,231 @@ class DailyDispatchTicketApiTest extends TestCase
         $this->assertStringNotContainsString('VARIOS', $response->getContent());
     }
 
+    public function test_daily_summary_groups_anonymous_retail_dispatches_by_report_module_and_totals_printed_rows(): void
+    {
+        $stationTwoAdjustmentId = DB::table('ajustes_peso_minorista')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'estacion' => 2,
+            'codigo' => 'MACHO_CERRADO',
+            'nombre' => 'Macho cerrado',
+            'sexo' => Pesada::SEX_MALE,
+            'presentacion' => 'CERRADO',
+            'gramos_adicionales' => 0,
+            'predeterminado' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $clientDispatchId = $this->createTicket('T-20260701-CLIENT', '2026-07-01', [[
+            'type_id' => $this->liveTypeId,
+            'birds_per_cage' => 25,
+            'cages' => 2,
+            'gross_weight' => 114,
+            'tare_weight' => 14,
+            'net_weight' => 100,
+            'weighed_at' => '2026-07-01 09:00:00',
+        ]]);
+        $clientReturnId = $this->createTicket(
+            'D-20260701-CLIENT',
+            '2026-07-01',
+            [[
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 10,
+                'cages' => 1,
+                'gross_weight' => 37,
+                'tare_weight' => 7,
+                'net_weight' => 30,
+                'weighed_at' => '2026-07-01 09:30:00',
+            ]],
+            false,
+            TicketDespacho::OPERATION_RETURN
+        );
+        $moduleTwoId = $this->createTicket(
+            'M-20260701-MODULE-2',
+            '2026-07-01',
+            [[
+                'type_id' => $this->dressedTypeId,
+                'birds_per_tray' => 5,
+                'trays' => 2,
+                'gross_weight' => 12,
+                'tare_weight' => 1,
+                'net_weight' => 11,
+                'weighed_at' => '2026-07-01 10:00:00',
+            ]],
+            false,
+            TicketDespacho::OPERATION_DISPATCH,
+            TicketDespacho::CHANNEL_RETAIL
+        );
+        $moduleThreeId = $this->createTicket(
+            'M-20260701-MODULE-3',
+            '2026-07-01',
+            [[
+                'type_id' => $this->dressedTypeId,
+                'birds_per_tray' => 4,
+                'trays' => 3,
+                'gross_weight' => 18,
+                'tare_weight' => 1.5,
+                'net_weight' => 16.5,
+                'weighed_at' => '2026-07-01 10:30:00',
+            ]],
+            false,
+            TicketDespacho::OPERATION_DISPATCH,
+            TicketDespacho::CHANNEL_RETAIL
+        );
+        $warehouseTicketId = $this->createTicket('T-20260701-WAREHOUSE', '2026-07-01', [[
+            'type_id' => $this->liveTypeId,
+            'birds_per_cage' => 10,
+            'cages' => 1,
+            'gross_weight' => 27,
+            'tare_weight' => 7,
+            'net_weight' => 20,
+            'weighed_at' => '2026-07-01 11:00:00',
+        ]], true);
+
+        DB::table('tickets_despacho')
+            ->whereIn('id', [$moduleTwoId, $moduleThreeId])
+            ->update(['cliente_destino_id' => null]);
+        DB::table('pesadas')->where('ticket_id', $moduleTwoId)->update([
+            'origen_peso' => 'BALANZA_MINORISTA',
+            'ajuste_peso_minorista_id' => $this->retailAdjustmentId,
+        ]);
+        DB::table('pesadas')->where('ticket_id', $moduleThreeId)->update([
+            'origen_peso' => 'MANUAL',
+            'ajuste_peso_minorista_id' => $stationTwoAdjustmentId,
+        ]);
+        $this->attachTicketPrice($clientDispatchId, $this->liveTypeId, '8.5000');
+        $this->attachTicketPrice($clientReturnId, $this->liveTypeId, '8.5000');
+        $this->attachTicketPrice($moduleTwoId, $this->dressedTypeId, '10.0000');
+        $this->attachTicketPrice($moduleThreeId, $this->dressedTypeId, '12.0000');
+        $this->attachTicketPrice($warehouseTicketId, $this->liveTypeId, '100.0000');
+
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-07-01')
+            ->assertOk()
+            ->assertJsonCount(3, 'data.summary.by_client')
+            ->assertJsonMissingPath('data.summary.print_totals')
+            ->assertJsonMissingPath('data.summary.by_client.0.print_rows');
+
+        $response = $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-07-01')
+            ->assertOk()
+            ->assertJsonCount(3, 'data.summary.by_client')
+            ->assertJsonPath('data.summary.print_totals.cages', 2)
+            ->assertJsonPath('data.summary.print_totals.trays', 5)
+            ->assertJsonPath('data.summary.print_totals.birds', 72)
+            ->assertJsonPath('data.summary.print_totals.return_net_weight_kg', 30)
+            ->assertJsonPath('data.summary.print_totals.amount', '903.00')
+            ->assertJsonPath('data.summary.print_totals.amount_complete', true);
+
+        $groups = collect($response->json('data.summary.by_client'))->keyBy('client.name');
+        $client = $groups->get('Cliente destino');
+        $moduleTwo = $groups->get('Módulo 2');
+        $moduleThree = $groups->get('Módulo 3');
+
+        $this->assertIsArray($client);
+        $this->assertSame('CLIENT', $client['group_type']);
+        $this->assertNull($client['retail_station']);
+        $this->assertNull($client['report_module']);
+        $this->assertSame(70, $client['net_weight_kg']);
+        $this->assertSame('595.00', $client['print_rows'][0]['amount']);
+        $this->assertIsArray($moduleTwo);
+        $this->assertSame('RETAIL_MODULE', $moduleTwo['group_type']);
+        $this->assertSame(1, $moduleTwo['retail_station']);
+        $this->assertSame('Módulo 2', $moduleTwo['report_module']);
+        $this->assertSame(2, $moduleTwo['trays']);
+        $this->assertSame('110.00', $moduleTwo['print_rows'][0]['amount']);
+        $this->assertIsArray($moduleThree);
+        $this->assertSame('RETAIL_MODULE', $moduleThree['group_type']);
+        $this->assertSame(2, $moduleThree['retail_station']);
+        $this->assertSame('Módulo 3', $moduleThree['report_module']);
+        $this->assertSame(3, $moduleThree['trays']);
+        $this->assertSame('198.00', $moduleThree['print_rows'][0]['amount']);
+        $this->assertSame(144.0, (float) $response->json('data.summary.print_totals.gross_weight_kg'));
+        $this->assertSame(16.5, (float) $response->json('data.summary.print_totals.tare_weight_kg'));
+        $this->assertSame(97.5, (float) $response->json('data.summary.print_totals.net_weight_kg'));
+        $this->assertFalse($groups->has('Almacen principal'));
+    }
+
+    public function test_print_totals_mark_the_amount_incomplete_when_a_visible_row_has_no_price(): void
+    {
+        $ticketId = $this->createTicket(
+            'M-20260702-NO-PRICE',
+            '2026-07-02',
+            [[
+                'type_id' => $this->dressedTypeId,
+                'birds_per_tray' => 5,
+                'trays' => 2,
+                'gross_weight' => 12,
+                'tare_weight' => 1,
+                'net_weight' => 11,
+                'weighed_at' => '2026-07-02 10:00:00',
+            ]],
+            false,
+            TicketDespacho::OPERATION_DISPATCH,
+            TicketDespacho::CHANNEL_RETAIL
+        );
+        DB::table('tickets_despacho')->where('id', $ticketId)->update(['cliente_destino_id' => null]);
+        DB::table('pesadas')->where('ticket_id', $ticketId)->update([
+            'origen_peso' => 'BALANZA',
+            'ajuste_peso_minorista_id' => null,
+        ]);
+
+        $this->getJson('/api/v1/operacion/tickets-dia/impresion?date=2026-07-02')
+            ->assertOk()
+            ->assertJsonPath('data.summary.by_client.0.client.name', 'Módulo 2')
+            ->assertJsonPath('data.summary.by_client.0.print_rows.0.amount', null)
+            ->assertJsonPath('data.summary.print_totals.trays', 2)
+            ->assertJsonPath('data.summary.print_totals.net_weight_kg', 11)
+            ->assertJsonPath('data.summary.print_totals.amount', null)
+            ->assertJsonPath('data.summary.print_totals.amount_complete', false);
+    }
+
+    public function test_anonymous_retail_ticket_with_conflicting_station_sources_remains_visible(): void
+    {
+        $ticketId = $this->createTicket(
+            'M-20260703-CONFLICT',
+            '2026-07-03',
+            [
+                [
+                    'type_id' => $this->dressedTypeId,
+                    'birds_per_tray' => 5,
+                    'trays' => 1,
+                    'gross_weight' => 6,
+                    'tare_weight' => 0.5,
+                    'net_weight' => 5.5,
+                    'weighed_at' => '2026-07-03 10:00:00',
+                ],
+                [
+                    'type_id' => $this->dressedTypeId,
+                    'birds_per_tray' => 5,
+                    'trays' => 1,
+                    'gross_weight' => 7,
+                    'tare_weight' => 0.5,
+                    'net_weight' => 6.5,
+                    'weighed_at' => '2026-07-03 10:05:00',
+                ],
+            ],
+            false,
+            TicketDespacho::OPERATION_DISPATCH,
+            TicketDespacho::CHANNEL_RETAIL
+        );
+        DB::table('tickets_despacho')->where('id', $ticketId)->update(['cliente_destino_id' => null]);
+        DB::table('pesadas')->where('ticket_id', $ticketId)->where('numero', 1)->update([
+            'origen_peso' => 'BALANZA_MINORISTA',
+        ]);
+        DB::table('pesadas')->where('ticket_id', $ticketId)->where('numero', 2)->update([
+            'origen_peso' => 'BALANZA_MINORISTA_2',
+        ]);
+
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-07-03')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.summary.by_client')
+            ->assertJsonPath('data.summary.by_client.0.group_type', 'RETAIL_MODULE')
+            ->assertJsonPath('data.summary.by_client.0.retail_station', null)
+            ->assertJsonPath('data.summary.by_client.0.report_module', 'Módulo sin identificar')
+            ->assertJsonPath('data.summary.by_client.0.client.name', 'Módulo sin identificar')
+            ->assertJsonPath('data.summary.by_client.0.trays', 2)
+            ->assertJsonPath('data.summary.by_client.0.net_weight_kg', 12);
+    }
+
     public function test_daily_summary_defaults_to_current_operating_date(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-26 22:30:00', 'America/Lima'));

@@ -8346,6 +8346,21 @@ body.customer-history-page {
   color: var(--primary);
 }
 
+.daily-client-table tfoot td {
+  border-top: 2px solid rgba(43, 199, 255, 0.5);
+  border-bottom: 0;
+  background: rgba(43, 199, 255, 0.08);
+  font-weight: 800;
+}
+
+.daily-client-table .daily-summary-total td:first-child {
+  text-align: left;
+}
+
+.daily-client-table .daily-summary-total td:not(:first-child) {
+  text-align: right;
+}
+
 .daily-ticket-records {
   min-width: 1380px;
 }

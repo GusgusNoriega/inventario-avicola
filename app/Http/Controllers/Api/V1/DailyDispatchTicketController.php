@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Balanza;
 use App\Models\Pesada;
 use App\Models\TicketDespacho;
 use App\Services\OperationContextService;
@@ -98,6 +99,16 @@ class DailyDispatchTicketController extends Controller
             ->flatMap(fn (TicketDespacho $ticket) => $ticket->pesadas)
             ->filter(fn (Pesada $record) => $record->estado === Pesada::STATUS_ACTIVE)
             ->values();
+        $byClient = $this->summarizeByClient($effectiveTickets, $includePrintRows);
+        $summary = [
+            ...$this->summarizeRecords($records, $effectiveTickets->count()),
+            'by_operation' => $this->summarizeByOperation($effectiveTickets),
+            'by_client' => $byClient,
+        ];
+
+        if ($includePrintRows) {
+            $summary['print_totals'] = $this->summarizePrintTotals($byClient);
+        }
 
         return response()->json([
             'data' => [
@@ -118,11 +129,7 @@ class DailyDispatchTicketController extends Controller
                     'cutoff_time' => substr($cutoff, 0, 5),
                 ],
                 'generated_at' => now($branch->zona_horaria)->toISOString(),
-                'summary' => [
-                    ...$this->summarizeRecords($records, $effectiveTickets->count()),
-                    'by_operation' => $this->summarizeByOperation($effectiveTickets),
-                    'by_client' => $this->summarizeByClient($effectiveTickets, $includePrintRows),
-                ],
+                'summary' => $summary,
                 'tickets' => $tickets
                     ->map(fn (TicketDespacho $ticket) => $this->formatTicket($ticket, $isAdministrator))
                     ->values(),
@@ -277,11 +284,27 @@ class DailyDispatchTicketController extends Controller
     private function summarizeByClient(Collection $tickets, bool $includePrintRows = false): array
     {
         return $tickets
-            ->filter(fn (TicketDespacho $ticket) => $ticket->cliente_destino_id !== null)
-            ->groupBy('cliente_destino_id')
+            ->filter(fn (TicketDespacho $ticket): bool => $ticket->cliente_destino_id !== null
+                || $this->isAnonymousRetailDispatch($ticket))
+            ->groupBy(function (TicketDespacho $ticket): string {
+                if ($ticket->cliente_destino_id !== null) {
+                    return 'CLIENT:'.$ticket->cliente_destino_id;
+                }
+
+                $station = $this->retailStationFor($ticket);
+
+                return 'RETAIL_MODULE:'.($station ?? 'UNKNOWN');
+            })
             ->map(function (Collection $clientTickets) use ($includePrintRows): array {
                 /** @var TicketDespacho $firstTicket */
                 $firstTicket = $clientTickets->first();
+                $isRetailModule = $firstTicket->cliente_destino_id === null;
+                $retailStation = $isRetailModule
+                    ? $this->retailStationFor($firstTicket)
+                    : null;
+                $reportModule = $isRetailModule
+                    ? $this->reportModuleName($retailStation)
+                    : null;
                 $dispatchTickets = $clientTickets
                     ->filter(fn (TicketDespacho $ticket) => $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH)
                     ->values();
@@ -294,9 +317,14 @@ class DailyDispatchTicketController extends Controller
                 $dispatchNetWeight = (float) $dispatchRecords->sum('peso_neto_kg');
                 $returnNetWeight = (float) $returnRecords->sum('peso_neto_kg');
                 $summary = [
+                    'group_type' => $isRetailModule ? 'RETAIL_MODULE' : 'CLIENT',
+                    'retail_station' => $retailStation,
+                    'report_module' => $reportModule,
                     'client' => [
-                        'id' => $firstTicket->clienteDestino?->id,
-                        'name' => $firstTicket->clienteDestino?->nombre_razon_social ?? 'Cliente sin registrar',
+                        'id' => $isRetailModule ? null : $firstTicket->clienteDestino?->id,
+                        'name' => $reportModule
+                            ?? $firstTicket->clienteDestino?->nombre_razon_social
+                            ?? 'Cliente sin registrar',
                     ],
                     'chicken_types' => $allRecords
                         ->map(fn (Pesada $record) => [
@@ -327,6 +355,59 @@ class DailyDispatchTicketController extends Controller
             ->sortBy('client.name')
             ->values()
             ->all();
+    }
+
+    private function isAnonymousRetailDispatch(TicketDespacho $ticket): bool
+    {
+        return $ticket->canal === TicketDespacho::CHANNEL_RETAIL
+            && $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
+            && $ticket->cliente_destino_id === null;
+    }
+
+    private function retailStationFor(TicketDespacho $ticket): ?int
+    {
+        $sourceStations = $ticket->pesadas
+            ->map(fn (Pesada $record): ?int => match ($record->origen_peso) {
+                Balanza::CODE_RETAIL_1 => 1,
+                Balanza::CODE_RETAIL_2 => 2,
+                default => null,
+            })
+            ->filter(fn (?int $station): bool => $station !== null)
+            ->unique()
+            ->values();
+
+        if ($sourceStations->count() === 1) {
+            return (int) $sourceStations->first();
+        }
+
+        if ($sourceStations->count() > 1) {
+            return null;
+        }
+
+        $adjustmentStations = $ticket->pesadas
+            ->map(fn (Pesada $record): ?int => $record->ajustePesoMinorista?->estacion)
+            ->filter(fn (?int $station): bool => in_array($station, [1, 2], true))
+            ->unique()
+            ->values();
+
+        if ($adjustmentStations->count() === 1) {
+            return (int) $adjustmentStations->first();
+        }
+
+        if ($adjustmentStations->count() > 1) {
+            return null;
+        }
+
+        return 1;
+    }
+
+    private function reportModuleName(?int $station): string
+    {
+        return match ($station) {
+            1 => 'Módulo 2',
+            2 => 'Módulo 3',
+            default => 'Módulo sin identificar',
+        };
     }
 
     /**
@@ -433,6 +514,53 @@ class DailyDispatchTicketController extends Controller
     private function moneyProduct(string $quantity, string $unitPrice): string
     {
         return bcadd(bcmul($quantity, $unitPrice, 6), '0.005', 2);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $clientSummaries
+     * @return array<string, int|float|string|bool|null>
+     */
+    private function summarizePrintTotals(array $clientSummaries): array
+    {
+        $rows = collect($clientSummaries)
+            ->flatMap(fn (array $summary): array => is_array($summary['print_rows'] ?? null)
+                ? $summary['print_rows']
+                : [])
+            ->values();
+        $amountComplete = $rows->every(
+            fn (array $row): bool => array_key_exists('amount', $row) && $row['amount'] !== null
+        );
+        $amount = $amountComplete
+            ? $rows->reduce(
+                fn (string $sum, array $row): string => bcadd($sum, (string) $row['amount'], 2),
+                '0.00'
+            )
+            : null;
+
+        return [
+            'cages' => (int) $rows->sum('cages'),
+            'trays' => (int) $rows->sum('trays'),
+            'birds' => (int) $rows->sum('birds'),
+            'gross_weight_kg' => $this->sumPrintDecimal($rows, 'gross_weight_kg'),
+            'tare_weight_kg' => $this->sumPrintDecimal($rows, 'tare_weight_kg'),
+            'return_net_weight_kg' => $this->sumPrintDecimal($rows, 'return_net_weight_kg'),
+            'net_weight_kg' => $this->sumPrintDecimal($rows, 'net_weight_kg'),
+            'amount' => $amount,
+            'amount_complete' => $amountComplete,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     */
+    private function sumPrintDecimal(Collection $rows, string $field): float
+    {
+        $total = $rows->reduce(
+            fn (string $sum, array $row): string => bcadd($sum, (string) ($row[$field] ?? 0), 3),
+            '0.000'
+        );
+
+        return round((float) $total, 3);
     }
 
     /**

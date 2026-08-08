@@ -9,6 +9,7 @@ function escapePrintHtml(value) {
 
 const PRINT_COLUMN_LABELS = Object.freeze({
   "Num. javas": "Javas",
+  Bandejas: "Band.",
   "Cant. aves": "Aves",
   "Peso bruto": "P. bruto",
   Devoluciones: "Dev.",
@@ -40,6 +41,7 @@ function formatPrintPrice(value) {
 
 function formatPrintAmount(value) {
   const normalized = String(value ?? "").trim();
+  if (normalized === "SIN PRECIO") return normalized;
   if (!normalized) return "--";
 
   const numericValue = Number(normalized);
@@ -69,6 +71,7 @@ export function buildDailySummaryPrintTableHtml(tableHtml) {
       /(<thead[^>]*>[\s\S]*?<tr[^>]*>[\s\S]*?)(<\/tr>)/,
       "$1<th>Precio</th><th>Importe</th>$2"
     )
+    .replace(/colspan="9"/g, 'colspan="11"')
     .replace(/colspan="8"/g, 'colspan="10"');
 }
 
@@ -133,6 +136,10 @@ export function buildDailySummaryPrintHtml({ dateLabel, windowLabel, tableHtml }
       display: table-header-group;
     }
 
+    tfoot {
+      display: table-row-group;
+    }
+
     tr {
       break-inside: avoid;
       page-break-inside: avoid;
@@ -164,6 +171,19 @@ export function buildDailySummaryPrintHtml({ dateLabel, windowLabel, tableHtml }
 
     td:first-child {
       overflow-wrap: anywhere;
+    }
+
+    .daily-summary-total td {
+      border-top-width: 3px;
+      font-weight: 800;
+    }
+
+    .daily-summary-total td:first-child {
+      text-align: left;
+    }
+
+    .daily-summary-total td:not(:first-child) {
+      text-align: right;
     }
 
     .daily-client-types {

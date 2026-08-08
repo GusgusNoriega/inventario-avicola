@@ -1506,6 +1506,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="dailyJourneyPrint"', false)
             ->assertSee('Imprimir jornada')
             ->assertSee('dailyClientTotals', false)
+            ->assertSee('Bandejas')
+            ->assertSee('id="dailyClientGrandTotal"', false)
             ->assertSee(route('menu'), false)
             ->assertSee('Menú')
             ->assertSee(asset('js/tickets-dia.js'), false)
@@ -1528,7 +1530,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('data-print-price=', $javascript);
         $this->assertStringContainsString('item.print_rows', $javascript);
         $this->assertStringContainsString('cloneNode(true)', $javascript);
-        $this->assertStringContainsString('renderClientTotals(loadedClientSummaries)', $javascript);
+        $this->assertStringContainsString('renderClientTotals(loadedClientSummaries, loadedPrintTotals)', $javascript);
+        $this->assertStringContainsString('TOTAL GENERAL', $javascript);
+        $this->assertStringContainsString('data.summary?.print_totals', $javascript);
         $this->assertStringNotContainsString('"VARIOS"', $javascript);
         $this->assertStringContainsString('/operacion/tickets-dia/impresion?', $javascript);
     }

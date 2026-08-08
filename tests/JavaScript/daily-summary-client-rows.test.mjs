@@ -22,7 +22,10 @@ globalThis.sessionStorage = {
   removeItem() {}
 };
 
-const { renderClientPrintRows } = await import("../../public/js/tickets-dia.js");
+const {
+  renderClientPrintRows,
+  renderDailySummaryTotalRow
+} = await import("../../public/js/tickets-dia.js");
 
 test("genera una fila impresa por tipo y precio", () => {
   const html = renderClientPrintRows([{
@@ -36,6 +39,7 @@ test("genera una fila impresa por tipo y precio", () => {
       {
         chicken_type: { code: "POLLO_VIVO", name: "Pollo vivo" },
         cages: 2,
+        trays: 0,
         birds: 50,
         gross_weight_kg: 114,
         tare_weight_kg: 14,
@@ -47,6 +51,7 @@ test("genera una fila impresa por tipo y precio", () => {
       {
         chicken_type: { code: "POLLO_PELADO", name: "Pollo pelado" },
         cages: 1,
+        trays: 3,
         birds: 20,
         gross_weight_kg: 57,
         tare_weight_kg: 7,
@@ -64,6 +69,7 @@ test("genera una fila impresa por tipo y precio", () => {
   assert.match(html, /data-print-price="10\.0000" data-print-amount="500"/);
   assert.match(html, /title="Pollo vivo">P V<\/span>/);
   assert.match(html, /title="Pollo pelado">P P<\/span>/);
+  assert.match(html, /<td>3<\/td>\s*<td>20<\/td>/);
   assert.doesNotMatch(html, /VARIOS/);
 });
 
@@ -73,6 +79,7 @@ test("mantiene aislada una fila sin precio", () => {
     print_rows: [{
       chicken_type: { code: "POLLO_VIVO", name: "Pollo vivo" },
       cages: 1,
+      trays: 0,
       birds: 10,
       gross_weight_kg: 17,
       tare_weight_kg: 7,
@@ -84,4 +91,34 @@ test("mantiene aislada una fila sin precio", () => {
   }]);
 
   assert.match(html, /data-print-price="SIN PRECIO" data-print-amount=""/);
+});
+
+test("genera el total general con javas, bandejas, pesos e importe", () => {
+  const html = renderDailySummaryTotalRow({
+    cages: 3,
+    trays: 4,
+    birds: 80,
+    gross_weight_kg: 191,
+    tare_weight_kg: 28,
+    return_net_weight_kg: 30,
+    net_weight_kg: 133,
+    amount: "1095.00",
+    amount_complete: true
+  });
+
+  assert.match(html, /class="daily-summary-total"/);
+  assert.match(html, /data-print-price="" data-print-amount="1095"/);
+  assert.match(html, /colspan="2"><strong>TOTAL GENERAL<\/strong>/);
+  assert.match(html, /<td><strong>3<\/strong><\/td>\s*<td><strong>4<\/strong><\/td>\s*<td><strong>80<\/strong><\/td>/);
+  assert.match(html, /data-print-weight="30"><strong>30\.000 kg<\/strong>/);
+  assert.match(html, /data-print-weight="133"><strong>133\.000 kg<\/strong>/);
+});
+
+test("marca el importe total como incompleto cuando falta algún precio", () => {
+  const html = renderDailySummaryTotalRow({
+    amount: null,
+    amount_complete: false
+  });
+
+  assert.match(html, /data-print-amount="SIN PRECIO"/);
 });

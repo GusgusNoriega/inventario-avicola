@@ -3,6 +3,7 @@ import { printDailySummary } from "./daily-summary-printer.js";
 
 const root = document.querySelector("[data-daily-tickets]");
 const clientTotals = document.getElementById("dailyClientTotals");
+const clientGrandTotal = document.getElementById("dailyClientGrandTotal");
 const clientTable = document.querySelector(".daily-client-table");
 const journeyFilter = document.getElementById("dailyJourneyFilter");
 const journeyDate = document.getElementById("dailyJourneyDate");
@@ -35,6 +36,7 @@ let selectedTicket = null;
 let loadedJourneyDate = "";
 let loadedJourneyWindow = "";
 let loadedClientSummaries = [];
+let loadedPrintTotals = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -121,18 +123,51 @@ function renderClientTypes(types) {
 }
 
 function renderMessage(message) {
+  if (clientGrandTotal) {
+    clientGrandTotal.hidden = true;
+    clientGrandTotal.innerHTML = "";
+  }
+
   clientTotals.innerHTML = `
     <tr>
-      <td colspan="8" class="customer-history-empty-cell">${escapeHtml(message)}</td>
+      <td colspan="9" class="customer-history-empty-cell">${escapeHtml(message)}</td>
     </tr>
   `;
 }
 
-function renderClientTotals(clients) {
+export function renderDailySummaryTotalRow(totals = {}) {
+  const amountComplete = totals.amount_complete !== false && totals.amount !== null;
+  const printableAmount = amountComplete
+    ? printAmountValue(totals.amount)
+    : "SIN PRECIO";
+
+  return `
+    <tr class="daily-summary-total" data-print-price="" data-print-amount="${escapeHtml(printableAmount)}">
+      <td colspan="2"><strong>TOTAL GENERAL</strong></td>
+      <td><strong>${formatNumber(totals.cages)}</strong></td>
+      <td><strong>${formatNumber(totals.trays)}</strong></td>
+      <td><strong>${formatNumber(totals.birds)}</strong></td>
+      <td data-print-weight="${Number(totals.gross_weight_kg || 0)}"><strong>${formatWeight(totals.gross_weight_kg)}</strong></td>
+      <td data-print-weight="${Number(totals.tare_weight_kg || 0)}"><strong>${formatWeight(totals.tare_weight_kg)}</strong></td>
+      <td class="daily-client-return" data-print-weight="${Number(totals.return_net_weight_kg || 0)}"><strong>${formatWeight(totals.return_net_weight_kg)}</strong></td>
+      <td class="daily-client-net" data-print-weight="${Number(totals.net_weight_kg || 0)}"><strong>${formatWeight(totals.net_weight_kg)}</strong></td>
+    </tr>
+  `;
+}
+
+function renderGrandTotal(totals) {
+  if (!clientGrandTotal) return;
+
+  clientGrandTotal.innerHTML = renderDailySummaryTotalRow(totals || {});
+  clientGrandTotal.hidden = false;
+}
+
+function renderClientTotals(clients, printTotals) {
   const items = Array.isArray(clients) ? clients : [];
 
   if (!items.length) {
-    renderMessage("No hay movimientos de clientes para el día consultado.");
+    renderMessage("No hay movimientos para el día consultado.");
+    renderGrandTotal(printTotals);
     return;
   }
 
@@ -141,6 +176,7 @@ function renderClientTotals(clients) {
       <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
       <td><div class="daily-client-types">${renderClientTypes(item.chicken_types)}</div></td>
       <td>${formatNumber(item.cages)}</td>
+      <td>${formatNumber(item.trays)}</td>
       <td>${formatNumber(item.birds)}</td>
       <td data-print-weight="${Number(item.gross_weight_kg || 0)}">${formatWeight(item.gross_weight_kg)}</td>
       <td data-print-weight="${Number(item.tare_weight_kg || 0)}">${formatWeight(item.tare_weight_kg)}</td>
@@ -148,6 +184,8 @@ function renderClientTotals(clients) {
       <td class="daily-client-net" data-print-weight="${Number(item.net_weight_kg || 0)}"><strong>${formatWeight(item.net_weight_kg)}</strong></td>
     </tr>
   `).join("");
+
+  renderGrandTotal(printTotals);
 }
 
 export function renderClientPrintRows(clients) {
@@ -161,6 +199,7 @@ export function renderClientPrintRows(clients) {
         <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
         <td><div class="daily-client-types">${renderClientTypes([row.chicken_type])}</div></td>
         <td>${formatNumber(row.cages)}</td>
+        <td>${formatNumber(row.trays)}</td>
         <td>${formatNumber(row.birds)}</td>
         <td data-print-weight="${Number(row.gross_weight_kg || 0)}">${formatWeight(row.gross_weight_kg)}</td>
         <td data-print-weight="${Number(row.tare_weight_kg || 0)}">${formatWeight(row.tare_weight_kg)}</td>
@@ -179,7 +218,7 @@ function buildDailySummaryPrintTable() {
 
   printBody.innerHTML = renderClientPrintRows(loadedClientSummaries) || `
     <tr>
-      <td colspan="8" class="customer-history-empty-cell">No hay movimientos de clientes para el día consultado.</td>
+      <td colspan="9" class="customer-history-empty-cell">No hay movimientos para el día consultado.</td>
     </tr>
   `;
 
@@ -327,6 +366,7 @@ async function loadDailyClientTotals() {
   loadedJourneyDate = "";
   loadedJourneyWindow = "";
   loadedClientSummaries = [];
+  loadedPrintTotals = null;
   renderMessage("Cargando resultados del día...");
   if (ticketFeedback) ticketFeedback.textContent = "Cargando tickets...";
   setJourneyLoading(true);
@@ -337,11 +377,12 @@ async function loadDailyClientTotals() {
     const clients = data.summary?.by_client || [];
     updateJourneyContext(data);
     loadedClientSummaries = Array.isArray(clients) ? clients : [];
-    renderClientTotals(loadedClientSummaries);
+    loadedPrintTotals = data.summary?.print_totals || null;
+    renderClientTotals(loadedClientSummaries, loadedPrintTotals);
     renderAdminTickets(data);
     return true;
   } catch (error) {
-    renderMessage(error?.message || "No se pudo cargar el resumen por cliente.");
+    renderMessage(error?.message || "No se pudo cargar el resumen de la jornada.");
     if (ticketFeedback) ticketFeedback.textContent = errorMessage(error);
     return false;
   } finally {

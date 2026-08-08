@@ -47,6 +47,7 @@
               <th>Cliente</th>
               <th>Ave</th>
               <th>Num. javas</th>
+              <th>Bandejas</th>
               <th>Cant. aves</th>
               <th>Peso bruto</th>
               <th>Tara</th>
@@ -55,6 +56,7 @@
             </tr>
           </thead>
           <tbody id="dailyClientTotals"></tbody>
+          <tfoot id="dailyClientGrandTotal" hidden></tfoot>
         </table>
       </div>
     </section>
