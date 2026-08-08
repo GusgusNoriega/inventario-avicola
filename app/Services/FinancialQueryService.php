@@ -291,6 +291,18 @@ class FinancialQueryService
         $assignmentPaymentLinks = $this->collectionAssignmentPaymentLinks($companyId);
 
         return DB::table('pagos as pago')
+            ->leftJoin('movimientos_caja_efectivo as movimiento_caja', function ($join) use ($companyId): void {
+                $join->on('movimiento_caja.pago_id', '=', 'pago.id')
+                    ->where('movimiento_caja.empresa_id', $companyId);
+            })
+            ->leftJoin('gastos_empresa as gasto_empresa', function ($join) use ($companyId): void {
+                $join->on('gasto_empresa.pago_id', '=', 'pago.id')
+                    ->where('gasto_empresa.empresa_id', $companyId);
+            })
+            ->leftJoin('compras as compra', function ($join) use ($companyId): void {
+                $join->on('compra.pago_inicial_id', '=', 'pago.id')
+                    ->where('compra.empresa_id', $companyId);
+            })
             ->leftJoin('terceros as cliente', 'cliente.id', '=', 'pago.cliente_id')
             ->leftJoin('terceros as proveedor', 'proveedor.id', '=', 'pago.proveedor_id')
             ->leftJoin('metodos_pago as metodo_pago', 'metodo_pago.id', '=', 'pago.metodo_pago_id')
@@ -393,6 +405,19 @@ class FinancialQueryService
                 'cobranza.referencia as cobranza_referencia',
                 'cobranza.cobrador_id as cobranza_cobrador_id',
                 'cobranza.cobrador_nombre_snapshot as cobranza_cobrador_nombre',
+                'movimiento_caja.id as movimiento_caja_id',
+                'movimiento_caja.codigo as movimiento_caja_codigo',
+                'gasto_empresa.id as gasto_empresa_id',
+                'gasto_empresa.codigo as gasto_empresa_codigo',
+                'gasto_empresa.categoria as gasto_empresa_categoria',
+                'gasto_empresa.concepto as gasto_empresa_concepto',
+                'gasto_empresa.destino as gasto_empresa_destino',
+                'gasto_empresa.numero_documento as gasto_empresa_numero_documento',
+                'compra.id as compra_id',
+                'compra.codigo as compra_codigo',
+                'compra.tipo_documento as compra_tipo_documento',
+                'compra.numero_documento as compra_numero_documento',
+                'compra.fecha_compra as compra_fecha',
             ]);
     }
 
@@ -498,6 +523,49 @@ class FinancialQueryService
                 ];
             }
 
+            $expense = $payment->gasto_empresa_id === null ? null : [
+                'id' => (int) $payment->gasto_empresa_id,
+                'codigo' => $payment->gasto_empresa_codigo,
+                'categoria' => $payment->gasto_empresa_categoria,
+                'concepto' => $payment->gasto_empresa_concepto,
+                'destino' => $payment->gasto_empresa_destino,
+                'numero_documento' => $payment->gasto_empresa_numero_documento,
+            ];
+            $purchase = $payment->compra_id === null ? null : [
+                'id' => (int) $payment->compra_id,
+                'codigo' => $payment->compra_codigo,
+                'tipo_documento' => $payment->compra_tipo_documento,
+                'numero_documento' => $payment->compra_numero_documento,
+                'fecha' => $payment->compra_fecha,
+            ];
+            $origin = match (true) {
+                $payment->cobranza_id !== null => [
+                    'tipo' => 'COBRANZA',
+                    'id' => (int) $payment->cobranza_id,
+                    'codigo' => $payment->cobranza_codigo,
+                ],
+                $payment->movimiento_caja_id !== null => [
+                    'tipo' => 'CAJA_EFECTIVO',
+                    'id' => (int) $payment->movimiento_caja_id,
+                    'codigo' => $payment->movimiento_caja_codigo,
+                ],
+                $expense !== null => [
+                    'tipo' => 'GASTO_EMPRESA',
+                    'id' => $expense['id'],
+                    'codigo' => $expense['codigo'],
+                ],
+                $purchase !== null => [
+                    'tipo' => 'COMPRA',
+                    'id' => $purchase['id'],
+                    'codigo' => $purchase['codigo'],
+                ],
+                default => [
+                    'tipo' => 'MOVIMIENTO_FINANCIERO',
+                    'id' => (int) $payment->id,
+                    'codigo' => $payment->codigo,
+                ],
+            };
+
             return [
                 'id' => (int) $payment->id,
                 'codigo' => $payment->codigo,
@@ -544,12 +612,25 @@ class FinancialQueryService
                         'nombre' => $payment->cobranza_cobrador_nombre,
                     ],
                 ],
+                'movimiento_caja' => $payment->movimiento_caja_id === null ? null : [
+                    'id' => (int) $payment->movimiento_caja_id,
+                    'codigo' => $payment->movimiento_caja_codigo,
+                ],
+                'gasto_empresa' => $expense,
+                'compra' => $purchase,
+                'origen' => $origin,
                 'puede_editar' => $payment->estado === Pago::STATUS_REGISTERED
                     && $payment->reversa_de_pago_id === null
-                    && $payment->cobranza_id === null,
+                    && $payment->cobranza_id === null
+                    && $payment->movimiento_caja_id === null
+                    && $expense === null
+                    && $purchase === null,
                 'puede_anular' => $payment->estado === Pago::STATUS_REGISTERED
                     && $payment->reversa_de_pago_id === null
-                    && $payment->cobranza_id === null,
+                    && $payment->cobranza_id === null
+                    && $payment->movimiento_caja_id === null
+                    && $expense === null
+                    && $purchase === null,
                 'created_by' => (int) $payment->created_by,
                 'created_at' => $payment->created_at,
             ];

@@ -216,12 +216,12 @@ function resetSummary() {
 
 function counterpartDescription(record) {
   const counterpart = record.contraparte || {};
-  if (counterpart.tipo === "CLIENTE") {
+  if (["CLIENTE", "PROVEEDOR", "COBRANZA", "GASTO_EMPRESA"].includes(counterpart.tipo)) {
     return counterpart.documento
       ? `${counterpart.nombre} · ${counterpart.documento}`
       : counterpart.nombre;
   }
-  if (counterpart.tipo === "OTRA_CAJA") {
+  if (["OTRA_CAJA", "CUENTA"].includes(counterpart.tipo)) {
     return counterpart.entidad
       ? `${counterpart.nombre} · ${counterpart.entidad}`
       : counterpart.nombre;
@@ -232,26 +232,79 @@ function counterpartDescription(record) {
   return counterpart.nombre || (record.direccion === "INGRESO" ? "Otro origen" : "Otro destino");
 }
 
+function ledgerKey(record) {
+  if (record.row_key) return String(record.row_key);
+  if (record.movimiento_caja_id) return `caja:${record.movimiento_caja_id}`;
+  return `pago:${record.pago_id || record.id}`;
+}
+
+function traceDescription(record) {
+  const trace = record.trazabilidad || {};
+  const payment = trace.pago || {};
+  const collection = trace.cobranza || record.cobranza;
+  if (collection) {
+    const collectionRole = {
+      DETALLE_INICIAL: "detalle inicial",
+      DETALLE_REASIGNADO: "detalle identificado",
+      PENDIENTE_INICIAL: "saldo pendiente inicial",
+      PENDIENTE_REASIGNADO: "saldo pendiente actualizado"
+    }[collection.rol_pago] || "movimiento de cobranza";
+    return [
+      `Origen: Cobranza ${collection.codigo || `#${collection.id}`}`,
+      collection.asignacion?.id
+        ? `${collectionRole} · asignación #${collection.asignacion.id}`
+        : collectionRole,
+      collection.referencia ? `ref. ${collection.referencia}` : "",
+      collection.cobrador?.nombre ? `cobrador ${collection.cobrador.nombre}` : "",
+      payment.codigo ? `asiento ${payment.codigo}` : ""
+    ].filter(Boolean).join(" · ");
+  }
+
+  const origin = trace.origen || record.origen || {};
+  const originLabel = {
+    CAJA_EFECTIVO: "Registro manual de caja",
+    GASTO_EMPRESA: "Gasto de empresa",
+    COMPRA: "Compra",
+    MOVIMIENTO_FINANCIERO: "Movimiento financiero"
+  }[origin.tipo] || "Movimiento financiero";
+  return [
+    `Origen: ${originLabel}`,
+    origin.codigo || payment.codigo || "",
+    origin.referencia ? `ref. ${origin.referencia}` : ""
+  ].filter(Boolean).join(" · ");
+}
+
+function traceMarkup(record) {
+  const description = escapeHtml(traceDescription(record));
+  const url = String(record.origen?.url || "");
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return `<a class="fin-cash-item-trace" href="${escapeHtml(url)}" title="Abrir operacion de origen">${description}</a>`;
+  }
+
+  return `<span class="fin-cash-item-trace">${description}</span>`;
+}
+
 function renderLedger(records) {
-  state.records = new Map(records.map((record) => [String(record.id), record]));
+  state.records = new Map(records.map((record) => [ledgerKey(record), record]));
   if (!records.length) {
     elements.list.innerHTML = '<li class="fin-cash-empty">No hay ingresos ni gastos registrados para esta caja en el día seleccionado.</li>';
     return;
   }
 
   elements.list.innerHTML = records.map((record) => {
+    const key = ledgerKey(record);
     const income = record.direccion === "INGRESO";
     const sign = income ? "+" : "−";
-    const edit = canManage && record.puede_editar
-      ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-cash="${record.id}">Editar</button>`
+    const edit = canManage && record.puede_editar && record.movimiento_caja_id
+      ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-cash="${escapeHtml(key)}">Editar</button>`
       : "";
-    const deleting = state.deletingId === String(record.id);
-    const code = record.codigo || record.movimiento_codigo || `#${record.id}`;
-    const remove = canReverse && record.puede_anular !== false
+    const deleting = state.deletingId === key;
+    const code = record.codigo || record.movimiento_codigo || `#${record.pago_id || record.id}`;
+    const remove = canReverse && record.puede_anular && record.movimiento_caja_id
       ? `<button
           class="fin-btn fin-btn-danger fin-btn-small"
           type="button"
-          data-delete-cash="${record.id}"
+          data-delete-cash="${escapeHtml(key)}"
           aria-haspopup="dialog"
           aria-label="Eliminar movimiento ${escapeHtml(code)}"
           ${deleting ? 'disabled aria-busy="true"' : ""}
@@ -262,6 +315,7 @@ function renderLedger(records) {
       <span class="fin-cash-item-copy">
         <h3 class="fin-cash-item-title">${escapeHtml(record.detalle)}</h3>
         <span class="fin-cash-item-counterpart">${escapeHtml(counterpartDescription(record))}</span>
+        ${traceMarkup(record)}
         <small>${escapeHtml(formatMovementTime(record.fecha_hora))} · ${escapeHtml(code)}${record.creado_por ? ` · ${escapeHtml(record.creado_por)}` : ""}</small>
       </span>
       <strong class="fin-cash-amount">${sign}${escapeHtml(formatMoney(record.importe, record.moneda))}</strong>
@@ -491,12 +545,12 @@ function openCreateDialog() {
   window.setTimeout(() => elements.amount.focus(), 40);
 }
 
-function openEditDialog(id) {
-  const record = state.records.get(String(id));
-  if (!record || !canManage) return;
+function openEditDialog(key) {
+  const record = state.records.get(String(key));
+  if (!record || !canManage || !record.puede_editar || !record.movimiento_caja_id) return;
   state.pendingKey = null;
   elements.form.reset();
-  elements.movementId.value = String(record.id);
+  elements.movementId.value = String(record.movimiento_caja_id);
   elements.dialogEyebrow.textContent = "Corrección auditada";
   elements.dialogTitle.textContent = "Editar movimiento de efectivo";
   elements.submit.textContent = "Guardar cambios";
@@ -584,9 +638,9 @@ async function saveMovement(event) {
   }
 }
 
-async function deleteMovement(id) {
-  const record = state.records.get(String(id));
-  if (!record || !canReverse || state.deletingId !== null) return;
+async function deleteMovement(key) {
+  const record = state.records.get(String(key));
+  if (!record || !canReverse || !record.puede_anular || !record.movimiento_caja_id || state.deletingId !== null) return;
 
   const kind = record.direccion === "INGRESO" ? "ingreso" : "gasto";
   const amount = formatMoney(record.importe, record.moneda);
@@ -595,12 +649,12 @@ async function deleteMovement(id) {
   );
   if (!confirmed) return;
 
-  state.deletingId = String(record.id);
+  state.deletingId = ledgerKey(record);
   renderLedger([...state.records.values()]);
   setMessage(elements.listMessage, "Eliminando movimiento de efectivo…");
 
   try {
-    await apiRequest(`/finanzas/caja-efectivo/${encodeURIComponent(record.id)}`, {
+    await apiRequest(`/finanzas/caja-efectivo/${encodeURIComponent(record.movimiento_caja_id)}`, {
       method: "DELETE"
     });
     channel?.postMessage({ companyId: state.companyId, type: "cash-register-updated" });

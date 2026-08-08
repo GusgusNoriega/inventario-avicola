@@ -18,7 +18,7 @@
       'active' => 'caja-efectivo',
       'eyebrow' => 'Control de efectivo',
       'title' => 'Caja de efectivo',
-      'description' => 'Registra ingresos y gastos en efectivo, revisa el movimiento del día y trabaja siempre con tu caja habitual.'
+      'description' => 'Consulta todo ingreso y egreso que afectó la caja, incluida su procedencia, y registra ajustes manuales cuando sea necesario.'
     ])
 
     <section class="fin-card fin-cash-config" aria-labelledby="cashRegisterConfigTitle">
@@ -80,7 +80,7 @@
         <div>
           <p class="fin-eyebrow">Movimientos en efectivo</p>
           <h2 id="cashRegisterLedgerTitle">Lista del día</h2>
-          <p class="fin-section-copy">Los cambios aparecen automáticamente y las transferencias se reflejan en las dos cajas involucradas.</p>
+          <p class="fin-section-copy">Aquí aparecen automáticamente cobranzas, pagos, gastos, ajustes y transferencias que afectaron la caja. Cada fila conserva el vínculo con su operación de origen.</p>
         </div>
         <button id="cashRegisterRefresh" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Actualizar ahora</button>
       </div>

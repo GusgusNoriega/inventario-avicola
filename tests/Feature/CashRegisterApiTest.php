@@ -307,7 +307,43 @@ class CashRegisterApiTest extends TestCase
             ->assertJsonPath('data.1.id', $secondResponse->json('data.id'));
     }
 
-    public function test_daily_summary_shows_backdated_income_to_own_bank_and_wallet_accounts_without_counting_cash(): void
+    public function test_manual_cash_entries_can_only_be_changed_from_the_cash_register_workflow(): void
+    {
+        $movement = $this->postJson('/api/v1/finanzas/caja-efectivo', $this->payload(
+            (string) Str::uuid(),
+            ['detalle' => 'Movimiento protegido por su origen de caja'],
+        ))->assertCreated()->json('data');
+        $paymentId = (int) $movement['pago_id'];
+
+        $this->getJson("/api/v1/finanzas/movimientos/{$paymentId}")
+            ->assertOk()
+            ->assertJsonPath('data.movimiento_caja.id', $movement['id'])
+            ->assertJsonPath('data.puede_editar', false)
+            ->assertJsonPath('data.puede_anular', false);
+
+        $this->putJson("/api/v1/finanzas/movimientos/{$paymentId}", [
+            'fecha_hora' => '2026-07-31 11:00:00',
+            'observaciones' => 'Intento de edición fuera de Caja efectivo',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('movimiento');
+        $this->postJson("/api/v1/finanzas/movimientos/{$paymentId}/anular", [
+            'motivo' => 'Intento de anulación fuera de Caja efectivo',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('movimiento');
+
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'estado' => 'REGISTRADO',
+        ]);
+        $this->assertDatabaseHas('movimientos_caja_efectivo', [
+            'id' => $movement['id'],
+            'pago_id' => $paymentId,
+            'estado' => 'REGISTRADO',
+            'detalle' => 'Movimiento protegido por su origen de caja',
+        ]);
+    }
+
+    public function test_daily_summary_shows_account_income_and_every_movement_that_affects_the_selected_cash_register(): void
     {
         $clientId = $this->thirdParty(
             (int) $this->user->empresa_id,
@@ -447,10 +483,23 @@ class CashRegisterApiTest extends TestCase
 
         $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
             ->assertOk()
-            ->assertJsonCount(0, 'data')
-            ->assertJsonPath('resumen.ingresos', '0.00')
-            ->assertJsonPath('resumen.egresos', '0.00')
-            ->assertJsonPath('resumen.neto', '0.00')
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.row_key', "pago:{$cashPaymentId}")
+            ->assertJsonPath('data.0.pago_id', $cashPaymentId)
+            ->assertJsonPath('data.0.movimiento_caja_id', null)
+            ->assertJsonPath('data.0.direccion', 'INGRESO')
+            ->assertJsonPath('data.0.contraparte_tipo', 'CLIENTE')
+            ->assertJsonPath('data.0.origen.tipo', 'MOVIMIENTO_FINANCIERO')
+            ->assertJsonPath('data.0.puede_editar', false)
+            ->assertJsonPath('data.0.puede_anular', false)
+            ->assertJsonPath('data.1.row_key', "pago:{$internalTransferId}")
+            ->assertJsonPath('data.1.pago_id', $internalTransferId)
+            ->assertJsonPath('data.1.direccion', 'EGRESO')
+            ->assertJsonPath('data.1.contraparte_tipo', 'CUENTA')
+            ->assertJsonPath('data.1.contraparte.id', $bankAccountId)
+            ->assertJsonPath('resumen.ingresos', '800.00')
+            ->assertJsonPath('resumen.egresos', '70.00')
+            ->assertJsonPath('resumen.neto', '730.00')
             ->assertJsonPath('resumen.ingresos_cuentas.0.moneda', 'PEN')
             ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '150.35')
             ->assertJsonPath('resumen.ingresos_cuentas.1.moneda', 'USD')
@@ -482,6 +531,338 @@ class CashRegisterApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('resumen.ingresos_cuentas.0.importe', '50.25')
             ->assertJsonPath('resumen.ingresos_cuentas.1.importe', '75.00');
+    }
+
+    public function test_a_collection_sent_to_cash_stays_visible_and_traceable_through_assignment_and_voiding(): void
+    {
+        $collectorId = DB::table('cobradores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre' => 'Cobrador de caja',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $clientOne = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente cobrado uno',
+            '10888881',
+        );
+        $clientTwo = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente cobrado dos',
+            '10888882',
+        );
+
+        $collection = $this->postJson('/api/v1/finanzas/cobranzas', [
+            'idempotency_key' => (string) Str::uuid(),
+            'cobrador_id' => $collectorId,
+            'fecha_hora' => '2026-07-31 16:00:00',
+            'cuenta_destino_id' => $this->cashRegisterId,
+            'moneda' => 'PEN',
+            'importe_total' => '100.00',
+            'referencia' => 'COBRO-CAJA-001',
+            'observaciones' => 'Entrega de ruta a caja principal.',
+            'detalles' => [[
+                'cliente_id' => $clientOne,
+                'fecha_recepcion' => '2026-07-31',
+                'importe' => '60.00',
+            ]],
+        ])->assertCreated()->json('data');
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.direccion', 'INGRESO')
+            ->assertJsonPath('data.0.contraparte_tipo', 'CLIENTE')
+            ->assertJsonPath('data.0.cobranza.id', $collection['id'])
+            ->assertJsonPath('data.0.cobranza.codigo', $collection['codigo'])
+            ->assertJsonPath('data.0.cobranza.referencia', 'COBRO-CAJA-001')
+            ->assertJsonPath('data.0.cobranza.cobrador.nombre', 'Cobrador de caja')
+            ->assertJsonPath('data.0.cobranza.rol_pago', 'DETALLE_INICIAL')
+            ->assertJsonPath('data.0.cobranza.asignacion', null)
+            ->assertJsonPath('data.0.origen.tipo', 'COBRANZA')
+            ->assertJsonPath('data.0.metodo_pago.codigo', 'EFECTIVO')
+            ->assertJsonPath('data.0.movimiento_caja_id', null)
+            ->assertJsonPath('data.0.puede_editar', false)
+            ->assertJsonPath('data.0.puede_anular', false)
+            ->assertJsonPath('data.1.tipo', 'DEPOSITO_NO_ASIGNADO')
+            ->assertJsonPath('data.1.contraparte_tipo', 'COBRANZA')
+            ->assertJsonPath('data.1.cobranza.rol_pago', 'PENDIENTE_INICIAL')
+            ->assertJsonPath('data.1.cobranza.asignacion', null)
+            ->assertJsonPath('resumen.ingresos', '100.00')
+            ->assertJsonPath('resumen.egresos', '0.00')
+            ->assertJsonPath('resumen.neto', '100.00');
+
+        $assignmentResponse = $this->postJson("/api/v1/finanzas/cobranzas/{$collection['id']}/asignaciones", [
+            'idempotency_key' => (string) Str::uuid(),
+            'detalles' => [[
+                'cliente_id' => $clientTwo,
+                'fecha_recepcion' => '2026-07-31',
+                'importe' => '20.00',
+            ]],
+        ])->assertCreated();
+        $assignmentId = (int) $assignmentResponse->json('meta.asignacion_id');
+
+        $afterAssignment = $this->getJson(
+            $this->dailyUrl($this->cashRegisterId, '2026-07-31'),
+        )->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('resumen.ingresos', '100.00')
+            ->assertJsonPath('resumen.egresos', '0.00')
+            ->assertJsonPath('resumen.neto', '100.00');
+        $this->assertEqualsCanonicalizing(
+            [$clientOne, $clientTwo],
+            collect($afterAssignment->json('data'))->pluck('cliente.id')->filter()->all(),
+        );
+        $this->assertSame(
+            3,
+            collect($afterAssignment->json('data'))->pluck('pago_id')->unique()->count(),
+        );
+        $reassigned = collect($afterAssignment->json('data'))
+            ->firstWhere('cliente.id', $clientTwo);
+        $this->assertSame('DETALLE_REASIGNADO', $reassigned['cobranza']['rol_pago']);
+        $this->assertSame($assignmentId, $reassigned['cobranza']['asignacion']['id']);
+        $this->assertSame(
+            $assignmentId,
+            $reassigned['trazabilidad']['origen']['asignacion_id'],
+        );
+        $updatedPending = collect($afterAssignment->json('data'))
+            ->firstWhere('tipo', 'DEPOSITO_NO_ASIGNADO');
+        $this->assertSame('20.00', $updatedPending['importe']);
+        $this->assertSame('PENDIENTE_REASIGNADO', $updatedPending['cobranza']['rol_pago']);
+        $this->assertSame($assignmentId, $updatedPending['cobranza']['asignacion']['id']);
+
+        $this->postJson("/api/v1/finanzas/cobranzas/{$collection['id']}/anular", [
+            'motivo' => 'Entrega de cobranza registrada por error',
+        ])->assertOk();
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.egresos', '0.00')
+            ->assertJsonPath('resumen.neto', '0.00');
+    }
+
+    public function test_daily_list_identifies_expense_purchase_and_external_cash_account_origins(): void
+    {
+        $providerId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'PROVEEDOR',
+            'Proveedor con caja externa',
+            '20555555551',
+        );
+        $externalEntityId = $this->financialEntity(
+            (int) $this->user->empresa_id,
+            $this->user->id,
+            'EXTERNA',
+            'Caja externa del proveedor',
+        );
+        DB::table('entidades_financieras')
+            ->where('id', $externalEntityId)
+            ->update(['proveedor_id' => $providerId]);
+        $externalCashAccountId = $this->financialAccount(
+            $externalEntityId,
+            $this->user->id,
+            'Caja receptora del proveedor',
+        );
+
+        $expenseId = (int) $this->postJson('/api/v1/finanzas/gastos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'categoria' => 'SUMINISTROS',
+            'concepto' => 'Útiles para oficina',
+            'destino' => 'Administración',
+            'numero_documento' => 'B001-100',
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'metodo_pago_id' => $this->cashMethodId,
+            'fecha_hora' => '2026-07-31 10:00:00',
+            'moneda' => 'PEN',
+            'importe' => '30.00',
+            'observaciones' => 'Compra de útiles para oficina',
+        ])->assertCreated()->json('data.id');
+        $expensePaymentId = (int) DB::table('gastos_empresa')
+            ->where('id', $expenseId)
+            ->value('pago_id');
+        $expenseCode = (string) DB::table('gastos_empresa')
+            ->where('id', $expenseId)
+            ->value('codigo');
+
+        $purchasePaymentId = (int) $this->postJson('/api/v1/finanzas/movimientos', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'PAGO_PROVEEDOR',
+            'proveedor_id' => $providerId,
+            'cuenta_origen_id' => $this->cashRegisterId,
+            'cuenta_destino_id' => $externalCashAccountId,
+            'metodo_pago_id' => $this->cashMethodId,
+            'fecha_hora' => '2026-07-31 11:00:00',
+            'moneda' => 'PEN',
+            'importe' => '50.00',
+            'aplicaciones' => [],
+        ])->assertCreated()->json('data.id');
+        $purchaseId = DB::table('compras')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'proveedor_id' => $providerId,
+            'pago_inicial_id' => $purchasePaymentId,
+            'codigo' => 'COM-CAJA-001',
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo_documento' => 'FACTURA',
+            'numero_documento' => 'F001-200',
+            'fecha_compra' => '2026-07-31',
+            'condicion' => 'CONTADO',
+            'moneda' => 'PEN',
+            'subtotal' => 50,
+            'impuesto' => 0,
+            'total' => 50,
+            'estado' => 'REGISTRADA',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.pago_id', $expensePaymentId)
+            ->assertJsonPath('data.0.detalle', 'Útiles para oficina')
+            ->assertJsonPath('data.0.contraparte_tipo', 'GASTO_EMPRESA')
+            ->assertJsonPath('data.0.contraparte.nombre', 'Administración')
+            ->assertJsonPath('data.0.origen.tipo', 'GASTO_EMPRESA')
+            ->assertJsonPath('data.0.origen.id', $expenseId)
+            ->assertJsonPath('data.0.origen.codigo', $expenseCode)
+            ->assertJsonPath('data.0.origen.url', '/finanzas/gastos')
+            ->assertJsonPath('data.0.gasto_empresa.concepto', 'Útiles para oficina')
+            ->assertJsonPath('data.1.pago_id', $purchasePaymentId)
+            ->assertJsonPath('data.1.detalle', 'Compra COM-CAJA-001')
+            ->assertJsonPath('data.1.contraparte_tipo', 'CUENTA')
+            ->assertJsonPath('data.1.contraparte.id', $externalCashAccountId)
+            ->assertJsonPath('data.1.otra_caja', null)
+            ->assertJsonPath('data.1.origen.tipo', 'COMPRA')
+            ->assertJsonPath('data.1.origen.id', $purchaseId)
+            ->assertJsonPath('data.1.origen.codigo', 'COM-CAJA-001')
+            ->assertJsonPath('data.1.origen.url', "/compras?compra={$purchaseId}")
+            ->assertJsonPath('data.1.compra.numero_documento', 'F001-200')
+            ->assertJsonPath('resumen.ingresos', '0.00')
+            ->assertJsonPath('resumen.egresos', '80.00')
+            ->assertJsonPath('resumen.neto', '-80.00');
+
+        $this->getJson("/api/v1/finanzas/movimientos/{$expensePaymentId}")
+            ->assertOk()
+            ->assertJsonPath('data.origen.tipo', 'GASTO_EMPRESA')
+            ->assertJsonPath('data.gasto_empresa.id', $expenseId)
+            ->assertJsonPath('data.puede_editar', false)
+            ->assertJsonPath('data.puede_anular', false);
+        $this->getJson("/api/v1/finanzas/movimientos/{$purchasePaymentId}")
+            ->assertOk()
+            ->assertJsonPath('data.origen.tipo', 'COMPRA')
+            ->assertJsonPath('data.compra.id', $purchaseId)
+            ->assertJsonPath('data.puede_editar', false)
+            ->assertJsonPath('data.puede_anular', false);
+
+        foreach ([$expensePaymentId, $purchasePaymentId] as $ownedPaymentId) {
+            $this->putJson("/api/v1/finanzas/movimientos/{$ownedPaymentId}", [
+                'fecha_hora' => '2026-07-31 12:00:00',
+                'observaciones' => 'Intento de corrección fuera del módulo de origen',
+            ])->assertUnprocessable()
+                ->assertJsonValidationErrors('movimiento');
+            $this->postJson("/api/v1/finanzas/movimientos/{$ownedPaymentId}/anular", [
+                'motivo' => 'Intento de anulación fuera del módulo de origen',
+            ])->assertUnprocessable()
+                ->assertJsonValidationErrors('movimiento');
+        }
+    }
+
+    public function test_legacy_cash_collection_recorded_as_deposit_can_still_assign_its_pending_balance(): void
+    {
+        $collectorId = DB::table('cobradores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre' => 'Cobrador histórico',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $initialClientId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente histórico inicial',
+            '10888883',
+        );
+        $assignedClientId = $this->thirdParty(
+            (int) $this->user->empresa_id,
+            'CLIENTE',
+            'Cliente histórico identificado',
+            '10888884',
+        );
+
+        $collection = $this->postJson('/api/v1/finanzas/cobranzas', [
+            'idempotency_key' => (string) Str::uuid(),
+            'cobrador_id' => $collectorId,
+            'fecha_hora' => '2026-07-31 17:00:00',
+            'cuenta_destino_id' => $this->cashRegisterId,
+            'moneda' => 'PEN',
+            'importe_total' => '100.00',
+            'referencia' => 'COBRO-CAJA-LEGACY',
+            'detalles' => [[
+                'cliente_id' => $initialClientId,
+                'fecha_recepcion' => '2026-07-31',
+                'importe' => '60.00',
+            ]],
+        ])->assertCreated()->json('data');
+        $depositMethodId = (int) DB::table('metodos_pago')
+            ->where('codigo', 'DEPOSITO')
+            ->value('id');
+        $collectionPaymentIds = DB::table('cobranza_detalles')
+            ->where('cobranza_id', $collection['id'])
+            ->pluck('pago_id')
+            ->push(DB::table('cobranza_pendientes')
+                ->where('cobranza_id', $collection['id'])
+                ->value('pago_id'))
+            ->filter()
+            ->all();
+        DB::table('cobranzas')->where('id', $collection['id'])->update([
+            'metodo_pago_id' => $depositMethodId,
+        ]);
+        DB::table('pagos')->whereIn('id', $collectionPaymentIds)->update([
+            'metodo_pago_id' => $depositMethodId,
+            'metodo' => 'DEPOSITO',
+        ]);
+
+        $this->getJson("/api/v1/finanzas/cobranzas/{$collection['id']}")
+            ->assertOk()
+            ->assertJsonPath('data.metodo_pago.codigo', 'DEPOSITO')
+            ->assertJsonPath('data.puede_asignar_pendiente', true);
+
+        $assignment = $this->postJson(
+            "/api/v1/finanzas/cobranzas/{$collection['id']}/asignaciones",
+            [
+                'idempotency_key' => (string) Str::uuid(),
+                'detalles' => [[
+                    'cliente_id' => $assignedClientId,
+                    'fecha_recepcion' => '2026-07-31',
+                    'importe' => '20.00',
+                ]],
+            ],
+        )->assertCreated();
+        $assignmentId = (int) $assignment->json('meta.asignacion_id');
+
+        $daily = $this->getJson($this->dailyUrl($this->cashRegisterId, '2026-07-31'))
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('resumen.ingresos', '100.00')
+            ->assertJsonPath('resumen.neto', '100.00');
+        $this->assertTrue(
+            collect($daily->json('data'))->every(
+                fn (array $movement): bool => $movement['metodo_pago']['codigo'] === 'DEPOSITO',
+            ),
+        );
+        $updatedPending = collect($daily->json('data'))
+            ->firstWhere('tipo', 'DEPOSITO_NO_ASIGNADO');
+        $this->assertSame('20.00', $updatedPending['importe']);
+        $this->assertSame('PENDIENTE_REASIGNADO', $updatedPending['cobranza']['rol_pago']);
+        $this->assertSame($assignmentId, $updatedPending['cobranza']['asignacion']['id']);
     }
 
     public function test_daily_summary_reports_station_two_retail_dispatch_for_the_filtered_journey_without_changing_cash_totals(): void

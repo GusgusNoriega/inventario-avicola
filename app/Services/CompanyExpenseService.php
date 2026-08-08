@@ -129,6 +129,10 @@ class CompanyExpenseService
                     $paymentId,
                     'Corrección del gasto '.$expense->codigo,
                     $ip,
+                    null,
+                    null,
+                    null,
+                    $expenseId,
                 );
                 $replacement = $this->movements->register(
                     $companyId,
@@ -148,6 +152,8 @@ class CompanyExpenseService
                         'observaciones' => $data['observaciones'] ?? null,
                     ],
                     $ip,
+                    null,
+                    $expenseId,
                 );
             }
 
@@ -210,6 +216,10 @@ class CompanyExpenseService
                 (int) $expense->pago_id,
                 $reason,
                 $ip,
+                null,
+                null,
+                null,
+                $expenseId,
             );
             $voidedAt = now();
             DB::table('gastos_empresa')->where('id', $expenseId)->update([

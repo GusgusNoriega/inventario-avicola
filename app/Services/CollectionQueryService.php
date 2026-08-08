@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Cobranza;
+use App\Models\CuentaFinanciera;
 use App\Models\MetodoPago;
 use App\Models\Pago;
 use App\Support\FinancialMoney;
@@ -170,6 +171,7 @@ class CollectionQueryService
                 'proveedor.numero_documento as proveedor_documento',
                 'proveedor.nombre_razon_social as proveedor_nombre',
                 'metodo_cobranza.codigo as metodo_cobranza_codigo',
+                'metodo_cobranza.nombre as metodo_cobranza_nombre',
                 'metodo_cobranza.estado as metodo_cobranza_estado',
                 'pendiente.id as pendiente_id',
                 'pendiente.importe as pendiente_importe',
@@ -518,6 +520,11 @@ class CollectionQueryService
             'codigo' => $collection->codigo,
             'fecha_hora' => $this->localDateTime($collection->fecha_hora, $timezone),
             'referencia' => $collection->referencia,
+            'metodo_pago' => [
+                'id' => (int) $collection->metodo_pago_id,
+                'codigo' => $collection->metodo_cobranza_codigo,
+                'nombre' => $collection->metodo_cobranza_nombre,
+            ],
             'moneda' => $collection->moneda,
             'importe_total' => FinancialMoney::normalize((string) $collection->importe_total),
             'importe_asignado' => $assignedAmount,
@@ -573,6 +580,9 @@ class CollectionQueryService
         string $assignedAmount,
         string $pendingAmount,
     ): bool {
+        $allowedMethodCodes = $collection->cuenta_tipo === CuentaFinanciera::TYPE_CASH
+            ? [MetodoPago::CODE_CASH, MetodoPago::CODE_DEPOSIT]
+            : [MetodoPago::CODE_DEPOSIT];
         $providerId = $collection->proveedor_id === null
             ? null
             : (int) $collection->proveedor_id;
@@ -602,7 +612,7 @@ class CollectionQueryService
             && $collection->entidad_estado === 'ACTIVO'
             && $collection->cuenta_moneda_actual === $collection->moneda
             && $providerContextIsValid
-            && $collection->metodo_cobranza_codigo === MetodoPago::CODE_DEPOSIT
+            && in_array($collection->metodo_cobranza_codigo, $allowedMethodCodes, true)
             && $collection->metodo_cobranza_estado === MetodoPago::STATUS_ACTIVE
             && (int) ($collection->pendiente_pago_empresa_id ?? 0) === (int) $collection->empresa_id
             && $collection->pendiente_pago_estado === Pago::STATUS_REGISTERED

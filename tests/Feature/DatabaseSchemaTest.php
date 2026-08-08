@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(95, $migrationFiles);
+        $this->assertCount(96, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -188,6 +188,22 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue(collect(Schema::getColumns('ticket_precio_ajuste_operaciones'))->keyBy('name')->get('resultado')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('empresas'))->keyBy('name')->get('mensaje_ticket')['nullable']);
         $this->assertFalse(Schema::hasColumn('cuentas_financieras', 'saldo_actual'));
+
+        $paymentIndexes = collect(Schema::getIndexes('pagos'))->keyBy('name');
+        $originIndex = $paymentIndexes->get('pago_empresa_origen_estado_reversa_fecha_index');
+        $destinationIndex = $paymentIndexes->get('pago_empresa_destino_estado_reversa_fecha_index');
+        $this->assertNotNull($originIndex);
+        $this->assertNotNull($destinationIndex);
+        $this->assertSame(
+            ['empresa_id', 'cuenta_origen_id', 'estado', 'reversa_de_pago_id', 'fecha_hora'],
+            $originIndex['columns'],
+        );
+        $this->assertSame(
+            ['empresa_id', 'cuenta_destino_id', 'estado', 'reversa_de_pago_id', 'fecha_hora'],
+            $destinationIndex['columns'],
+        );
+        $this->assertFalse($originIndex['unique']);
+        $this->assertFalse($destinationIndex['unique']);
     }
 
     public function test_financial_catalogs_and_permissions_are_created_by_migrations(): void
@@ -341,6 +357,7 @@ class DatabaseSchemaTest extends TestCase
             database_path('migrations/2026_07_12_000007_extend_comprobantes_for_financial_control.php'),
             database_path('migrations/2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php'),
             database_path('migrations/2026_07_12_000009_add_financial_permissions.php'),
+            database_path('migrations/2026_08_08_000001_add_cash_ledger_indexes_to_pagos_table.php'),
         ];
         $migrations = collect($paths)->map(fn (string $path) => require $path);
 

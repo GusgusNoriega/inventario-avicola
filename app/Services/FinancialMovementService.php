@@ -78,6 +78,8 @@ class FinancialMovementService
         int $paymentId,
         array $data,
         ?string $ip = null,
+        ?int $cashMovementContextId = null,
+        ?int $expenseContextId = null,
     ): void {
         abort_unless(
             (int) $actor->empresa_id === $companyId
@@ -87,7 +89,15 @@ class FinancialMovementService
             'Se requiere el permiso PAGOS_REGISTRAR.',
         );
 
-        DB::transaction(function () use ($companyId, $actor, $paymentId, $data, $ip): void {
+        DB::transaction(function () use (
+            $companyId,
+            $actor,
+            $paymentId,
+            $data,
+            $ip,
+            $cashMovementContextId,
+            $expenseContextId,
+        ): void {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
                 ->where('id', $paymentId)
@@ -104,6 +114,46 @@ class FinancialMovementService
             if ($this->collectionForPayment($companyId, $paymentId)) {
                 throw ValidationException::withMessages([
                     'movimiento' => 'Este movimiento pertenece a una cobranza consolidada y no puede editarse por separado.',
+                ]);
+            }
+
+            $cashMovement = DB::table('movimientos_caja_efectivo')
+                ->where('empresa_id', $companyId)
+                ->where('pago_id', $paymentId)
+                ->first(['id']);
+            if ($cashMovement
+                && (int) $cashMovement->id !== (int) $cashMovementContextId) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este asiento pertenece a Caja de efectivo. Edítalo desde esa pantalla para conservar toda su trazabilidad.',
+                ]);
+            }
+            if ($cashMovementContextId !== null && ! $cashMovement) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'El asiento no pertenece al movimiento de caja indicado.',
+                ]);
+            }
+
+            $expense = DB::table('gastos_empresa')
+                ->where('empresa_id', $companyId)
+                ->where('pago_id', $paymentId)
+                ->first(['id']);
+            if ($expense && (int) $expense->id !== (int) $expenseContextId) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este asiento pertenece a un gasto de empresa. Edítalo desde Gastos para conservar toda su trazabilidad.',
+                ]);
+            }
+            if ($expenseContextId !== null && ! $expense) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'El asiento no pertenece al gasto indicado.',
+                ]);
+            }
+
+            if (DB::table('compras')
+                ->where('empresa_id', $companyId)
+                ->where('pago_inicial_id', $paymentId)
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este asiento pertenece a una compra. Corrige la compra completa desde ese módulo.',
                 ]);
             }
 
@@ -425,6 +475,8 @@ class FinancialMovementService
         ?string $ip = null,
         ?int $purchaseContextId = null,
         ?int $collectionContextId = null,
+        ?int $cashMovementContextId = null,
+        ?int $expenseContextId = null,
     ): array {
         abort_unless(
             (int) $actor->empresa_id === $companyId && $actor->isActive(),
@@ -440,6 +492,8 @@ class FinancialMovementService
             $ip,
             $purchaseContextId,
             $collectionContextId,
+            $cashMovementContextId,
+            $expenseContextId,
         ): array {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -458,6 +512,37 @@ class FinancialMovementService
             if ($collectionContextId !== null && ! $collectionLink) {
                 throw ValidationException::withMessages([
                     'movimiento' => 'El movimiento no pertenece a la cobranza indicada.',
+                ]);
+            }
+
+            $cashMovement = DB::table('movimientos_caja_efectivo')
+                ->where('empresa_id', $companyId)
+                ->where('pago_id', $paymentId)
+                ->first(['id']);
+            if ($cashMovement
+                && (int) $cashMovement->id !== (int) $cashMovementContextId) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este asiento pertenece a Caja de efectivo. Anúlalo desde esa pantalla para conservar toda su trazabilidad.',
+                ]);
+            }
+            if ($cashMovementContextId !== null && ! $cashMovement) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'El asiento no pertenece al movimiento de caja indicado.',
+                ]);
+            }
+
+            $expense = DB::table('gastos_empresa')
+                ->where('empresa_id', $companyId)
+                ->where('pago_id', $paymentId)
+                ->first(['id']);
+            if ($expense && (int) $expense->id !== (int) $expenseContextId) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'Este asiento pertenece a un gasto de empresa. Anúlalo desde Gastos para conservar toda su trazabilidad.',
+                ]);
+            }
+            if ($expenseContextId !== null && ! $expense) {
+                throw ValidationException::withMessages([
+                    'movimiento' => 'El asiento no pertenece al gasto indicado.',
                 ]);
             }
 

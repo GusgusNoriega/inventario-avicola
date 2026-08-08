@@ -157,6 +157,9 @@ class CashRegisterMovementService
                     $paymentId,
                     'Correccion del movimiento de caja '.$cashMovement->codigo,
                     $ip,
+                    null,
+                    null,
+                    $cashMovementId,
                 );
                 $replacement = $this->movements->register(
                     $companyId,
@@ -176,6 +179,7 @@ class CashRegisterMovementService
                         'observaciones' => $data['detalle'],
                     ],
                     $ip,
+                    $cashMovementId,
                 );
             }
 
@@ -264,6 +268,9 @@ class CashRegisterMovementService
                 (int) $payment->id,
                 $reason,
                 $ip,
+                null,
+                null,
+                $cashMovementId,
             );
 
             $voidedAt = now();

@@ -2364,6 +2364,21 @@ body.fin-page {
   -webkit-line-clamp: 2;
 }
 
+.fin-cash-item-trace {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #8fc9e8;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-decoration: none;
+}
+
+.fin-cash-item-trace:is(a):hover { text-decoration: underline; }
+
 .fin-cash-item-copy small {
   color: var(--fin-muted);
   font-size: 9px;
@@ -2379,7 +2394,8 @@ body.fin-page {
   line-height: 1.35;
 }
 
-.fin-cash-item.is-income .fin-cash-item-copy small { order: 3; }
+.fin-cash-item.is-income .fin-cash-item-trace { order: 3; }
+.fin-cash-item.is-income .fin-cash-item-copy small { order: 4; }
 
 .fin-cash-amount {
   width: 100%;

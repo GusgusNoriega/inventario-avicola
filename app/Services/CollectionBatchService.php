@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Cobrador;
 use App\Models\Cobranza;
 use App\Models\CobranzaDetalle;
+use App\Models\CuentaFinanciera;
 use App\Models\MetodoPago;
 use App\Models\Pago;
 use App\Models\User;
@@ -823,6 +824,7 @@ class CollectionBatchService
             ->lockForUpdate()
             ->first([
                 'cuenta.id',
+                'cuenta.tipo',
                 'cuenta.moneda',
                 'entidad.tipo as entidad_tipo',
                 'entidad.proveedor_id as entidad_proveedor_id',
@@ -865,13 +867,13 @@ class CollectionBatchService
 
         $method = DB::table('metodos_pago')
             ->where('id', $collection->metodo_pago_id)
-            ->where('codigo', MetodoPago::CODE_DEPOSIT)
+            ->whereIn('codigo', $this->allowedCollectionMethodCodes($account->tipo))
             ->where('estado', MetodoPago::STATUS_ACTIVE)
             ->lockForUpdate()
             ->first();
         if (! $method) {
             throw ValidationException::withMessages([
-                'cobranza' => 'El método de depósito original ya no está disponible.',
+                'cobranza' => 'El método de pago original ya no está disponible para la cuenta de destino.',
             ]);
         }
 
@@ -1314,6 +1316,7 @@ class CollectionBatchService
             ->lockForUpdate()
             ->first([
                 'cuenta.id',
+                'cuenta.tipo',
                 'cuenta.moneda',
                 'entidad.tipo as entidad_tipo',
                 'entidad.proveedor_id as entidad_proveedor_id',
@@ -1348,14 +1351,15 @@ class CollectionBatchService
             }
         }
 
+        $methodCode = $this->preferredCollectionMethodCode($account->tipo);
         $method = DB::table('metodos_pago')
-            ->where('codigo', MetodoPago::CODE_DEPOSIT)
+            ->where('codigo', $methodCode)
             ->where('estado', MetodoPago::STATUS_ACTIVE)
             ->lockForUpdate()
             ->first();
         if (! $method) {
             throw ValidationException::withMessages([
-                'metodo_pago' => 'El método de pago DEPÓSITO no está disponible.',
+                'metodo_pago' => "El método de pago {$methodCode} no está disponible.",
             ]);
         }
 
@@ -1365,6 +1369,25 @@ class CollectionBatchService
             'proveedor_id' => $providerId,
             'metodo' => $method,
         ];
+    }
+
+    private function preferredCollectionMethodCode(string $accountType): string
+    {
+        return $accountType === CuentaFinanciera::TYPE_CASH
+            ? MetodoPago::CODE_CASH
+            : MetodoPago::CODE_DEPOSIT;
+    }
+
+    /** @return list<string> */
+    private function allowedCollectionMethodCodes(string $accountType): array
+    {
+        if ($accountType !== CuentaFinanciera::TYPE_CASH) {
+            return [MetodoPago::CODE_DEPOSIT];
+        }
+
+        // DEPÓSITO se conserva para cobranzas históricas creadas antes de
+        // distinguir entre una caja física y una cuenta bancaria.
+        return [MetodoPago::CODE_CASH, MetodoPago::CODE_DEPOSIT];
     }
 
     /** @param list<int> $clientIds */
