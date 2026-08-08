@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\TerceroRole;
 use App\Models\User;
 use App\Services\FinancialAccountBalanceService;
+use App\Services\ReportDataService;
 use App\Support\FinancialMoney;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -221,6 +222,19 @@ class CollectionApiTest extends TestCase
             ->assertJsonPath('data.paid_directly_by_clients', '100.00')
             ->assertJsonCount(2, 'data.recent_direct_deposits')
             ->assertJsonFragment(['reference' => 'VOUCHER-PROV-001']);
+
+        $statement = app(ReportDataService::class)->providerStatement(
+            (int) $this->user->empresa_id,
+            $provider,
+            '2026-08-01',
+            '2026-08-01',
+        );
+
+        $this->assertCount(1, $statement['rows']);
+        $this->assertStringContainsString('VOUCHER-PROV-001', $statement['rows']->first()['detail']);
+        $this->assertSame(100.0, $statement['rows']->first()['credit']);
+        $this->assertSame(-100.0, $statement['rows']->first()['effect']);
+        $this->assertSame(100.0, (float) $statement['credits']);
     }
 
     public function test_an_own_account_collection_can_keep_the_undisclosed_remainder_pending_without_affecting_customer_receivables(): void
@@ -370,6 +384,23 @@ class CollectionApiTest extends TestCase
             ->assertJsonPath('data.applied', '450.00')
             ->assertJsonPath('data.unapplied', '50.00')
             ->assertJsonPath('data.paid_directly_by_clients', '200.00');
+
+        $statement = app(ReportDataService::class)->providerStatement(
+            (int) $this->user->empresa_id,
+            $provider,
+            '2026-08-01',
+            '2026-08-01',
+        );
+
+        $this->assertCount(1, $statement['rows']);
+        $this->assertStringContainsString(
+            'VOUCHER-PENDIENTE-PROVEEDOR',
+            $statement['rows']->first()['detail'],
+        );
+        $this->assertSame(500.0, $statement['rows']->first()['credit']);
+        $this->assertSame(-500.0, $statement['rows']->first()['effect']);
+        $this->assertSame(500.0, (float) $statement['credits']);
+        $this->assertSame(-50.0, $statement['balance']);
     }
 
     public function test_one_client_can_have_multiple_collection_rows_with_separate_dates_and_sequential_fifo_applications(): void

@@ -12,6 +12,7 @@ use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ReportDataService
@@ -111,7 +112,15 @@ class ReportDataService
                 CarbonImmutable::parse($from)->startOfDay(),
                 CarbonImmutable::parse($to)->endOfDay(),
             ])
-            ->with(['metodoPago', 'cuentaOrigen.entidadFinanciera', 'cuentaDestino.entidadFinanciera'])
+            ->with([
+                'metodoPago',
+                'cuentaOrigen.entidadFinanciera',
+                'cuentaDestino.entidadFinanciera',
+                ...($operation === Comprobante::OPERATION_PURCHASE ? [
+                    'cobranzaDetalle:id,cobranza_id,pago_id',
+                    'cobranzaPendiente:id,cobranza_id,pago_id',
+                ] : []),
+            ])
             ->orderBy('fecha_hora')
             ->orderBy('id')
             ->get()
@@ -133,7 +142,7 @@ class ReportDataService
                         $payment->referencia,
                     ])->filter()->implode(' - ');
 
-                return [
+                $row = [
                     'date' => $payment->fecha_hora->format('Y-m-d'),
                     'sort' => $payment->fecha_hora->format('Y-m-d H:i:s').'-P-'.$payment->id,
                     'code' => $payment->codigo ?: 'PG-'.$payment->id,
@@ -145,7 +154,19 @@ class ReportDataService
                     'credit' => $effect < 0 ? abs($effect) : 0,
                     'effect' => $effect,
                 ];
+
+                if ($operation === Comprobante::OPERATION_PURCHASE) {
+                    $row['payment_id'] = (int) $payment->id;
+                    $row['collection_id'] = $payment->cobranzaDetalle?->cobranza_id
+                        ?? $payment->cobranzaPendiente?->cobranza_id;
+                }
+
+                return $row;
             });
+
+        if ($operation === Comprobante::OPERATION_PURCHASE) {
+            $payments = $this->consolidateProviderCollectionRows($payments);
+        }
 
         $balance = $opening;
         $rows = $transactions->concat($payments)
@@ -448,11 +469,42 @@ class ReportDataService
         }
 
         return match ($payment->tipo) {
-            Pago::TYPE_DIRECT_PAYMENT, Pago::TYPE_PROVIDER_PAYMENT, Pago::TYPE_PROVIDER_CREDIT => -abs((float) $payment->importe),
+            Pago::TYPE_DIRECT_PAYMENT,
+            Pago::TYPE_UNASSIGNED_DEPOSIT,
+            Pago::TYPE_PROVIDER_PAYMENT,
+            Pago::TYPE_PROVIDER_CREDIT => -abs((float) $payment->importe),
             default => $this->flow($payment) === Pago::DIRECTION_EXPENSE
                 ? -abs((float) $payment->importe)
                 : abs((float) $payment->importe),
         };
+    }
+
+    /**
+     * Una cobranza dirigida a un proveedor conserva un Pago por cliente para
+     * trazabilidad. En el estado de cuenta se representa como el deposito unico
+     * que realmente recibio el proveedor.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function consolidateProviderCollectionRows(Collection $rows): Collection
+    {
+        return $rows
+            ->groupBy(fn (array $row): string => $row['collection_id'] === null
+                ? 'payment:'.$row['payment_id']
+                : 'collection:'.$row['collection_id'])
+            ->map(function (Collection $group): array {
+                $row = $group->first();
+                $effect = round((float) $group->sum('effect'), 2);
+
+                $row['debit'] = $effect > 0 ? abs($effect) : 0;
+                $row['credit'] = $effect < 0 ? abs($effect) : 0;
+                $row['effect'] = $effect;
+                unset($row['payment_id'], $row['collection_id']);
+
+                return $row;
+            })
+            ->values();
     }
 
     private function flow(Pago $payment): string
