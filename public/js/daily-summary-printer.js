@@ -24,7 +24,7 @@ function formatPrintWeight(value) {
 function formatPrintPrice(value) {
   const normalized = String(value ?? "").trim();
 
-  if (normalized === "SIN PRECIO") {
+  if (normalized === "SIN PRECIO" || normalized === "VARIOS") {
     return normalized;
   }
 

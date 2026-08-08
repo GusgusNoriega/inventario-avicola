@@ -1535,7 +1535,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('renderClientTotals(loadedClientSummaries, loadedPrintTotals)', $javascript);
         $this->assertStringContainsString('TOTAL GENERAL', $javascript);
         $this->assertStringContainsString('data.summary?.print_totals', $javascript);
-        $this->assertStringNotContainsString('"VARIOS"', $javascript);
+        $this->assertStringContainsString('"VARIOS"', $javascript);
         $this->assertStringContainsString('/operacion/tickets-dia/impresion?', $javascript);
     }
 

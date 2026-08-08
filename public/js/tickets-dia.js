@@ -68,6 +68,52 @@ function printAmountValue(value) {
   return Number.isFinite(numericValue) ? String(numericValue) : "";
 }
 
+function summarizedPrintPrice(rows) {
+  const items = Array.isArray(rows) ? rows : [];
+
+  if (!items.length || items.some((row) => String(row.price_kg ?? "").trim() === "")) {
+    return "SIN PRECIO";
+  }
+
+  const prices = new Map();
+  items.forEach((row) => {
+    const value = String(row.price_kg).trim();
+    const numericValue = Number(value);
+    const key = Number.isFinite(numericValue) ? numericValue.toFixed(4) : value;
+
+    if (!prices.has(key)) prices.set(key, value);
+  });
+
+  return prices.size > 1 ? "VARIOS" : prices.values().next().value;
+}
+
+function moneyCents(value) {
+  const match = String(value ?? "").trim().match(/^([+-]?)(\d+)(?:\.(\d{1,2}))?$/);
+  if (!match) return null;
+
+  const whole = Number(match[2]);
+  const decimals = Number((match[3] || "").padEnd(2, "0"));
+  const cents = (whole * 100) + decimals;
+
+  if (!Number.isSafeInteger(cents)) return null;
+
+  return match[1] === "-" ? -cents : cents;
+}
+
+function summarizedPrintAmount(rows) {
+  const items = Array.isArray(rows) ? rows : [];
+  if (!items.length) return null;
+
+  let totalCents = 0;
+  for (const row of items) {
+    const cents = moneyCents(row.amount);
+    if (cents === null || !Number.isSafeInteger(totalCents + cents)) return null;
+    totalCents += cents;
+  }
+
+  return (totalCents / 100).toFixed(2);
+}
+
 function formatDate(value) {
   if (!value) return "--";
 
@@ -191,23 +237,28 @@ function renderClientTotals(clients, printTotals) {
 export function renderClientPrintRows(clients) {
   const items = Array.isArray(clients) ? clients : [];
 
-  return items.flatMap((item) => {
-    const rows = Array.isArray(item.print_rows) ? item.print_rows : [];
+  return items
+    .filter((item) => Array.isArray(item.print_rows) && item.print_rows.length > 0)
+    .map((item) => {
+      const rows = item.print_rows;
+      const price = summarizedPrintPrice(rows);
+      const amount = summarizedPrintAmount(rows);
 
-    return rows.map((row) => `
-      <tr data-print-price="${escapeHtml(printPriceValue(row.price_kg))}" data-print-amount="${escapeHtml(printAmountValue(row.amount))}">
-        <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
-        <td><div class="daily-client-types">${renderClientTypes([row.chicken_type])}</div></td>
-        <td>${formatNumber(row.cages)}</td>
-        <td>${formatNumber(row.trays)}</td>
-        <td>${formatNumber(row.birds)}</td>
-        <td data-print-weight="${Number(row.gross_weight_kg || 0)}">${formatWeight(row.gross_weight_kg)}</td>
-        <td data-print-weight="${Number(row.tare_weight_kg || 0)}">${formatWeight(row.tare_weight_kg)}</td>
-        <td class="daily-client-return" data-print-weight="${Number(row.return_net_weight_kg || 0)}"><strong>${formatWeight(row.return_net_weight_kg)}</strong></td>
-        <td class="daily-client-net" data-print-weight="${Number(row.net_weight_kg || 0)}"><strong>${formatWeight(row.net_weight_kg)}</strong></td>
-      </tr>
-    `);
-  }).join("");
+      return `
+        <tr data-print-price="${escapeHtml(printPriceValue(price))}" data-print-amount="${escapeHtml(printAmountValue(amount))}">
+          <td class="daily-client-name"><strong>${escapeHtml(item.client?.name || "Cliente sin registrar")}</strong></td>
+          <td><div class="daily-client-types">${renderClientTypes(item.chicken_types)}</div></td>
+          <td>${formatNumber(item.cages)}</td>
+          <td>${formatNumber(item.trays)}</td>
+          <td>${formatNumber(item.birds)}</td>
+          <td data-print-weight="${Number(item.gross_weight_kg || 0)}">${formatWeight(item.gross_weight_kg)}</td>
+          <td data-print-weight="${Number(item.tare_weight_kg || 0)}">${formatWeight(item.tare_weight_kg)}</td>
+          <td class="daily-client-return" data-print-weight="${Number(item.return_net_weight_kg || 0)}"><strong>${formatWeight(item.return_net_weight_kg)}</strong></td>
+          <td class="daily-client-net" data-print-weight="${Number(item.net_weight_kg || 0)}"><strong>${formatWeight(item.net_weight_kg)}</strong></td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
 function buildDailySummaryPrintTable() {
