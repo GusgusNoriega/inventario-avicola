@@ -12,6 +12,7 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -31,6 +32,7 @@ class ReportController extends Controller
     public function index(Request $request): View
     {
         $companyId = (int) $request->user()->empresa_id;
+        $company = Empresa::query()->findOrFail($companyId);
         $thirdParties = fn (string $role) => DB::table('terceros as tercero')
             ->join('tercero_roles as rol', 'rol.tercero_id', '=', 'tercero.id')
             ->where('tercero.empresa_id', $companyId)
@@ -51,6 +53,8 @@ class ReportController extends Controller
                 ->orderBy('nombre')
                 ->get(['id', 'nombre']),
             'paymentTypes' => Pago::TYPES,
+            'reportCurrencies' => $this->reportCurrencies($companyId, $company),
+            'defaultReportCurrency' => $this->defaultReportCurrency($company),
             'accounts' => $this->ownAccountsQuery($companyId)
                 ->orderBy('entidad.razon_social')
                 ->orderBy('cuenta.estado')
@@ -72,7 +76,10 @@ class ReportController extends Controller
         $options->set('tempDir', storage_path('framework/cache'));
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml($html, 'UTF-8');
-        $dompdf->setPaper('A4', in_array($type, ['ventas-clientes', 'responsable'], true) ? 'landscape' : 'portrait');
+        $dompdf->setPaper(
+            $type === 'deuda-clientes' ? 'letter' : 'A4',
+            in_array($type, ['ventas-clientes', 'responsable'], true) ? 'landscape' : 'portrait',
+        );
         $this->addPageNumbers($dompdf);
         $dompdf->render();
 
@@ -173,6 +180,7 @@ class ReportController extends Controller
     private function payload(Request $request, string $type): array
     {
         abort_unless(in_array($type, [
+            'deuda-clientes',
             'ventas-clientes',
             'estado-cliente',
             'estado-proveedor',
@@ -184,6 +192,12 @@ class ReportController extends Controller
             'tipo' => $request->filled('tipo') ? strtoupper(trim((string) $request->input('tipo'))) : null,
         ]);
         $companyId = (int) $request->user()->empresa_id;
+        $company = Empresa::query()->findOrFail($companyId);
+        if ($type === 'deuda-clientes') {
+            $request->merge([
+                'moneda' => strtoupper(trim((string) ($request->input('moneda') ?: $this->defaultReportCurrency($company)))),
+            ]);
+        }
         $rules = [
             'desde' => ['required', 'date_format:Y-m-d'],
             'hasta' => ['required', 'date_format:Y-m-d', 'after_or_equal:desde'],
@@ -191,6 +205,9 @@ class ReportController extends Controller
         ];
         if ($type === 'estado-cliente') {
             $rules['cliente_id'] = ['required', 'integer'];
+        }
+        if ($type === 'deuda-clientes') {
+            $rules['moneda'] = ['required', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'];
         }
         if ($type === 'estado-proveedor') {
             $rules['proveedor_id'] = ['required', 'integer'];
@@ -231,8 +248,13 @@ class ReportController extends Controller
                 ]);
             }
         }
-        $company = Empresa::query()->findOrFail($companyId);
         $data = match ($type) {
+            'deuda-clientes' => $this->reports->customerDebtSummary(
+                $companyId,
+                $validated['desde'],
+                $validated['hasta'],
+                $validated['moneda'],
+            ),
             'ventas-clientes' => $this->reports->salesByCustomer($companyId, $validated['desde'], $validated['hasta']),
             'estado-cliente' => $this->reports->customerStatement($companyId, (int) $validated['cliente_id'], $validated['desde'], $validated['hasta']),
             'estado-proveedor' => $this->reports->providerStatement($companyId, (int) $validated['proveedor_id'], $validated['desde'], $validated['hasta']),
@@ -246,6 +268,7 @@ class ReportController extends Controller
             ),
         };
         $titles = [
+            'deuda-clientes' => 'Reporte de cuentas de clientes',
             'ventas-clientes' => 'Reporte de ventas por cliente',
             'estado-cliente' => 'Estado de cuenta de cliente',
             'estado-proveedor' => 'Estado de cuenta de proveedor',
@@ -284,6 +307,38 @@ class ReportController extends Controller
                 'entidad.nombre_comercial as entidad_nombre_comercial',
                 'entidad.estado as entidad_estado',
             ]);
+    }
+
+    private function defaultReportCurrency(Empresa $company): string
+    {
+        $currency = strtoupper(trim((string) $company->moneda));
+
+        return preg_match('/^[A-Z]{3}$/', $currency) === 1 ? $currency : 'PEN';
+    }
+
+    /** @return Collection<int, string> */
+    private function reportCurrencies(int $companyId, Empresa $company): Collection
+    {
+        return collect([
+            $this->defaultReportCurrency($company),
+            'PEN',
+            'USD',
+        ])
+            ->merge(DB::table('comprobantes')
+                ->where('empresa_id', $companyId)
+                ->where('operacion', 'VENTA')
+                ->distinct()
+                ->pluck('moneda'))
+            ->merge(DB::table('pagos')
+                ->where('empresa_id', $companyId)
+                ->whereNotNull('cliente_id')
+                ->distinct()
+                ->pluck('moneda'))
+            ->map(fn (mixed $currency): string => strtoupper(trim((string) $currency)))
+            ->filter(fn (string $currency): bool => preg_match('/^[A-Z]{3}$/', $currency) === 1)
+            ->unique()
+            ->sort()
+            ->values();
     }
 
     /**

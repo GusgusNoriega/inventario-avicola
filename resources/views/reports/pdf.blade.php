@@ -9,6 +9,7 @@
     .brand { color: #59636e; font-size: 9px; text-align: center; }
     h1 { margin: 5px 0 2px; color: #14261b; font-size: 17px; text-align: center; text-transform: uppercase; }
     .period { margin: 0 0 12px; color: #4f5b66; text-align: center; }
+    .updated { margin: -7px 0 10px; color: #4f5b66; text-align: center; }
     .subject { margin: 8px 0 10px; border: 1px solid #ccd4cf; background: #f7faf8; padding: 7px 9px; }
     .subject strong { color: #14261b; font-size: 11px; }
     .summary { width: 100%; margin: 0 0 10px; border-collapse: separate; border-spacing: 4px 0; }
@@ -43,12 +44,25 @@
     .day-separator { page-break-after: avoid; }
     .section-title { margin: 12px 0 5px; border-left: 4px solid #2f7d4b; padding-left: 6px; color: #173c25; font-size: 11px; }
     .footer-note { margin-top: 9px; color: #707a74; font-size: 7px; }
+    table.debt-totals { width: 100%; margin: 1px 0 4px; border-collapse: collapse; table-layout: fixed; }
+    table.debt-totals .spacer { width: 35%; border: 0; background: transparent; }
+    table.debt-totals th { border: 1px solid #273037; background: #273037; color: #fff; padding: 2px 3px; font-size: 8px; letter-spacing: .35px; text-align: center; }
+    table.debt-totals td:not(.spacer) { width: 13%; border: 1px solid #596168; padding: 3px; font-size: 8px; font-weight: bold; text-align: right; white-space: nowrap; }
+    table.report.debt-report th { background: #d4d9dc; color: #20272c; padding: 4px 2px; font-size: 6.6px; line-height: 1.2; }
+    table.report.debt-report td { border: 1px solid #687178; padding: 2px 3px; font-size: 7.2px; line-height: 1.15; }
+    table.report.debt-report tbody tr:nth-child(even) td { background: #f3f4f4; }
+    table.report.debt-report td:last-child { background: #eef1f2; font-weight: bold; }
+    .debt-date { display: block; margin-top: 2px; font-size: 6px; font-weight: normal; }
   </style>
 </head>
 <body>
   <div class="brand">{{ $company->nombre_comercial ?: $company->razon_social }} @if($company->ruc) - RUC {{ $company->ruc }} @endif</div>
   <h1>{{ $title }}</h1>
   <p class="period">Periodo: {{ \Carbon\CarbonImmutable::parse($from)->format('d/m/Y') }} al {{ \Carbon\CarbonImmutable::parse($to)->format('d/m/Y') }}</p>
+
+  @if($type === 'deuda-clientes')
+    <p class="updated">Actualizado hasta el {{ $generatedAt->format('d/m/Y H:i') }} - Moneda: {{ $data['currency'] }}</p>
+  @endif
 
   @if($selectedAccount ?? null)
     <div class="subject">
@@ -64,7 +78,49 @@
     </div>
   @endif
 
-  @if(in_array($type, ['estado-cliente', 'estado-proveedor'], true))
+  @if($type === 'deuda-clientes')
+    @php
+      $singleDay = $from === $to;
+      $fromLabel = \Carbon\CarbonImmutable::parse($from)->format('d/m/Y');
+      $toLabel = \Carbon\CarbonImmutable::parse($to)->format('d/m/Y');
+      $previousLabel = \Carbon\CarbonImmutable::parse($from)->subDay()->format('d/m/Y');
+    @endphp
+    <table class="debt-totals">
+      <tr><td class="spacer"></td><th colspan="5">TOTALES</th></tr>
+      <tr>
+        <td class="spacer"></td>
+        <td>{{ number_format((float) $data['totals']['opening'], 2) }}</td>
+        <td>{{ number_format((float) $data['totals']['period_debt'], 2) }}</td>
+        <td>{{ number_format((float) $data['totals']['debt_to_date'], 2) }}</td>
+        <td>{{ number_format((float) $data['totals']['payments'], 2) }}</td>
+        <td>{{ number_format((float) $data['totals']['balance'], 2) }}</td>
+      </tr>
+    </table>
+    <table class="report debt-report">
+      <thead><tr>
+        <th style="width: 35%; text-align: left">Clientes</th>
+        <th style="width: 13%">{{ $singleDay ? 'Deuda hasta ayer' : 'Deuda anterior al' }}<span class="debt-date">{{ $singleDay ? $previousLabel : $fromLabel }}</span></th>
+        <th style="width: 13%">{{ $singleDay ? 'Deuda' : 'Deuda del periodo' }}<span class="debt-date">{{ $singleDay ? $toLabel : $fromLabel.' al '.$toLabel }}</span></th>
+        <th style="width: 13%">Total deuda hasta<span class="debt-date">{{ $toLabel }}</span></th>
+        <th style="width: 13%">Pagos realizados<span class="debt-date">{{ $singleDay ? $toLabel : $fromLabel.' al '.$toLabel }}</span></th>
+        <th style="width: 13%">{{ $singleDay ? 'Total deuda' : 'Deuda actual' }}<span class="debt-date">{{ $singleDay ? '' : $toLabel }}</span></th>
+      </tr></thead>
+      <tbody>
+        @forelse($data['rows'] as $row)
+          <tr>
+            <td>{{ $row['customer'] }}</td>
+            <td class="num">{{ (float) $row['opening'] !== 0.0 ? number_format((float) $row['opening'], 2) : '' }}</td>
+            <td class="num">{{ (float) $row['period_debt'] !== 0.0 ? number_format((float) $row['period_debt'], 2) : '' }}</td>
+            <td class="num">{{ (float) $row['debt_to_date'] !== 0.0 ? number_format((float) $row['debt_to_date'], 2) : '' }}</td>
+            <td class="num">{{ (float) $row['payments'] !== 0.0 ? number_format((float) $row['payments'], 2) : '' }}</td>
+            <td class="num balance">{{ (float) $row['balance'] !== 0.0 ? number_format((float) $row['balance'], 2) : '' }}</td>
+          </tr>
+        @empty
+          <tr><td colspan="6" class="empty">No hay deuda ni movimientos de clientes en el periodo seleccionado.</td></tr>
+        @endforelse
+      </tbody>
+    </table>
+  @elseif(in_array($type, ['estado-cliente', 'estado-proveedor'], true))
     <div class="subject">
       {{ $type === 'estado-cliente' ? 'Cliente' : 'Proveedor' }}:
       <strong>{{ $data['counterparty']->nombre_razon_social }}</strong>
@@ -197,6 +253,10 @@
     @endif
   @endif
 
-  <p class="footer-note">Generado el {{ $generatedAt->format('d/m/Y H:i') }}. Solo se incluyen registros vigentes; los movimientos anulados no forman parte de los totales.</p>
+  @if($type === 'deuda-clientes')
+    <p class="footer-note">Generado el {{ $generatedAt->format('d/m/Y H:i') }}. Las anulaciones se reflejan en la fecha en que fueron registradas para conservar el corte histórico.</p>
+  @else
+    <p class="footer-note">Generado el {{ $generatedAt->format('d/m/Y H:i') }}. Solo se incluyen registros vigentes; los movimientos anulados no forman parte de los totales.</p>
+  @endif
 </body>
 </html>

@@ -10,6 +10,7 @@ use App\Models\Pesada;
 use App\Models\Tercero;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
+use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -35,6 +36,368 @@ class ReportDataService
             ->findOrFail($providerId);
 
         return $this->statement($companyId, $provider, 'COMPRA', 'proveedor_id', $from, $to);
+    }
+
+    /** @return array<string, mixed> */
+    public function customerDebtSummary(
+        int $companyId,
+        string $from,
+        string $to,
+        string $currency = 'PEN',
+    ): array {
+        $toExclusive = CarbonImmutable::parse($to)->addDay()->startOfDay();
+        $documentEffect = 'CASE WHEN naturaleza = ? THEN -ABS(total) ELSE ABS(total) END';
+        $documentBalances = DB::table('comprobantes')
+            ->where('empresa_id', $companyId)
+            ->where('operacion', Comprobante::OPERATION_SALE)
+            ->where('moneda', $currency)
+            ->where(function ($query): void {
+                $query->whereIn('estado', [
+                    Comprobante::STATUS_PENDING,
+                    Comprobante::STATUS_PARTIAL,
+                    Comprobante::STATUS_PAID,
+                ])->orWhere(function ($voided): void {
+                    $voided->where('estado', Comprobante::STATUS_VOIDED)
+                        ->whereNotNull('anulada_at');
+                });
+            })
+            ->where('fecha_emision', '<=', $to)
+            ->groupBy('tercero_id')
+            ->select('tercero_id')
+            ->selectRaw(
+                "SUM(CASE WHEN fecha_emision < ? THEN {$documentEffect} ELSE 0 END)
+                    + SUM(CASE WHEN estado = ? AND DATE(anulada_at) < ? THEN -({$documentEffect}) ELSE 0 END)
+                    AS opening_documents",
+                [
+                    $from,
+                    Comprobante::NATURE_CREDIT,
+                    Comprobante::STATUS_VOIDED,
+                    $from,
+                    Comprobante::NATURE_CREDIT,
+                ],
+            )
+            ->selectRaw(
+                "SUM(CASE WHEN fecha_emision BETWEEN ? AND ? THEN {$documentEffect} ELSE 0 END)
+                    + SUM(CASE WHEN estado = ? AND DATE(anulada_at) BETWEEN ? AND ? THEN -({$documentEffect}) ELSE 0 END)
+                    AS period_debt",
+                [
+                    $from,
+                    $to,
+                    Comprobante::NATURE_CREDIT,
+                    Comprobante::STATUS_VOIDED,
+                    $from,
+                    $to,
+                    Comprobante::NATURE_CREDIT,
+                ],
+            )
+            ->get()
+            ->keyBy(fn (object $row): int => (int) $row->tercero_id);
+        $this->applyHistoricalDocumentTransitions(
+            $documentBalances,
+            $companyId,
+            $from,
+            $to,
+            $toExclusive,
+            $currency,
+        );
+
+        $negativePaymentTypes = [
+            Pago::TYPE_CUSTOMER_COLLECTION,
+            Pago::TYPE_RETAIL_COLLECTION,
+            Pago::TYPE_DIRECT_PAYMENT,
+            Pago::TYPE_CUSTOMER_DISCOUNT,
+            Pago::TYPE_OPENING_BALANCE,
+        ];
+        $paymentTypePlaceholders = implode(', ', array_fill(0, count($negativePaymentTypes), '?'));
+        $paymentEffect = "CASE
+            WHEN payment.tipo = ? THEN ABS(payment.importe)
+            WHEN payment.tipo IN ({$paymentTypePlaceholders}) THEN -ABS(payment.importe)
+            WHEN payment.direccion = ? THEN -ABS(payment.importe)
+            ELSE ABS(payment.importe)
+        END";
+        $paymentEffectBindings = [
+            Pago::TYPE_CUSTOMER_REFUND,
+            ...$negativePaymentTypes,
+            Pago::DIRECTION_INCOME,
+        ];
+        $effectivePaymentDate = 'COALESCE(collection_detail.fecha_recepcion, DATE(payment.fecha_hora))';
+        $paymentBalances = DB::table('pagos as payment')
+            ->leftJoin('cobranza_detalles as collection_detail', 'collection_detail.pago_id', '=', 'payment.id')
+            ->where('payment.empresa_id', $companyId)
+            ->where(function ($query): void {
+                $query->where('payment.estado', Pago::STATUS_REGISTERED)
+                    ->orWhere(function ($voided): void {
+                        $voided->where('payment.estado', Pago::STATUS_VOIDED)
+                            ->whereNotNull('payment.anulada_at');
+                    });
+            })
+            ->whereNull('payment.reversa_de_pago_id')
+            ->whereNotNull('payment.cliente_id')
+            ->where('payment.moneda', $currency)
+            ->where(function ($query) use ($to, $toExclusive): void {
+                $query->where(function ($received) use ($to): void {
+                    $received->whereNotNull('collection_detail.fecha_recepcion')
+                        ->where('collection_detail.fecha_recepcion', '<=', $to);
+                })->orWhere(function ($deposited) use ($toExclusive): void {
+                    $deposited->whereNull('collection_detail.fecha_recepcion')
+                        ->where('payment.fecha_hora', '<', $toExclusive);
+                });
+            })
+            ->groupBy('payment.cliente_id')
+            ->select('payment.cliente_id')
+            ->selectRaw(
+                "SUM(CASE WHEN {$effectivePaymentDate} < ? THEN {$paymentEffect} ELSE 0 END)
+                    + SUM(CASE WHEN payment.estado = ? AND DATE(payment.anulada_at) < ? THEN -({$paymentEffect}) ELSE 0 END)
+                    AS opening_payments",
+                [
+                    $from,
+                    ...$paymentEffectBindings,
+                    Pago::STATUS_VOIDED,
+                    $from,
+                    ...$paymentEffectBindings,
+                ],
+            )
+            ->selectRaw(
+                "SUM(CASE WHEN {$effectivePaymentDate} BETWEEN ? AND ? THEN {$paymentEffect} ELSE 0 END)
+                    + SUM(CASE WHEN payment.estado = ? AND DATE(payment.anulada_at) BETWEEN ? AND ? THEN -({$paymentEffect}) ELSE 0 END)
+                    AS period_payment_effect",
+                [
+                    $from,
+                    $to,
+                    ...$paymentEffectBindings,
+                    Pago::STATUS_VOIDED,
+                    $from,
+                    $to,
+                    ...$paymentEffectBindings,
+                ],
+            )
+            ->get()
+            ->keyBy(fn (object $row): int => (int) $row->cliente_id);
+
+        $customerIds = $documentBalances->keys()
+            ->merge($paymentBalances->keys())
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+        $rows = DB::table('terceros as tercero')
+            ->where('tercero.empresa_id', $companyId)
+            ->whereIn('tercero.id', $customerIds)
+            ->orderBy('tercero.nombre_razon_social')
+            ->orderBy('tercero.id')
+            ->get(['tercero.id', 'tercero.nombre_razon_social'])
+            ->map(function (object $customer) use ($documentBalances, $paymentBalances): array {
+                $documents = $documentBalances->get((int) $customer->id);
+                $payments = $paymentBalances->get((int) $customer->id);
+                $opening = FinancialMoney::add(
+                    FinancialMoney::normalize($documents?->opening_documents ?? '0'),
+                    FinancialMoney::normalize($payments?->opening_payments ?? '0'),
+                );
+                $periodDebt = FinancialMoney::normalize($documents?->period_debt ?? '0');
+                $debtToDate = FinancialMoney::add($opening, $periodDebt);
+                $periodPayments = FinancialMoney::subtract(
+                    '0.00',
+                    FinancialMoney::normalize($payments?->period_payment_effect ?? '0'),
+                );
+
+                return [
+                    'customer_id' => (int) $customer->id,
+                    'customer' => (string) $customer->nombre_razon_social,
+                    'opening' => $opening,
+                    'period_debt' => $periodDebt,
+                    'debt_to_date' => $debtToDate,
+                    'payments' => $periodPayments,
+                    'balance' => FinancialMoney::subtract($debtToDate, $periodPayments),
+                ];
+            })
+            ->filter(fn (array $row): bool => collect([
+                'opening',
+                'period_debt',
+                'debt_to_date',
+                'payments',
+                'balance',
+            ])->contains(fn (string $field): bool => FinancialMoney::compare($row[$field], '0.00') !== 0))
+            ->values();
+
+        $totals = collect([
+            'opening',
+            'period_debt',
+            'debt_to_date',
+            'payments',
+            'balance',
+        ])->mapWithKeys(fn (string $field): array => [
+            $field => $rows->reduce(
+                fn (string $total, array $row): string => FinancialMoney::add($total, $row[$field]),
+                '0.00',
+            ),
+        ])->all();
+
+        return [
+            'rows' => $rows,
+            'totals' => $totals,
+            'currency' => $currency,
+        ];
+    }
+
+    /**
+     * Replays prior void/restore cycles kept in the immutable audit log. The
+     * current document row only retains the latest state and cannot represent
+     * the days during which a restored ticket remained voided.
+     *
+     * @param  Collection<int, object>  $balances
+     */
+    private function applyHistoricalDocumentTransitions(
+        Collection $balances,
+        int $companyId,
+        string $from,
+        string $to,
+        CarbonImmutable $toExclusive,
+        string $currency,
+    ): void {
+        $documents = DB::table('comprobantes')
+            ->where('empresa_id', $companyId)
+            ->where('operacion', Comprobante::OPERATION_SALE)
+            ->where('origen_clave', 'like', 'VENTA:TICKET:%')
+            ->where('moneda', $currency)
+            ->where('fecha_emision', '<=', $to)
+            ->where(function ($query): void {
+                $query->whereIn('estado', [
+                    Comprobante::STATUS_PENDING,
+                    Comprobante::STATUS_PARTIAL,
+                    Comprobante::STATUS_PAID,
+                ])->orWhere(function ($voided): void {
+                    $voided->where('estado', Comprobante::STATUS_VOIDED)
+                        ->whereNotNull('anulada_at');
+                });
+            })
+            ->get([
+                'id',
+                'tercero_id',
+                'operacion',
+                'naturaleza',
+                'moneda',
+                'total',
+                'estado',
+                'anulada_at',
+            ])
+            ->keyBy(fn (object $document): int => (int) $document->id);
+
+        if ($documents->isEmpty()) {
+            return;
+        }
+
+        $auditEvents = collect();
+        foreach ($documents->keys()->chunk(500) as $documentIds) {
+            $auditEvents = $auditEvents->concat(
+                DB::table('auditoria_eventos')
+                    ->where('empresa_id', $companyId)
+                    ->where('entidad', 'comprobantes')
+                    ->whereIn('entidad_id', $documentIds->map(fn (mixed $id): string => (string) $id)->all())
+                    ->where('created_at', '<', $toExclusive)
+                    ->orderBy('created_at')
+                    ->orderBy('id')
+                    ->get(['id', 'entidad_id', 'datos_antes', 'datos_despues', 'created_at']),
+            );
+        }
+
+        foreach ($auditEvents->groupBy(fn (object $event): int => (int) $event->entidad_id) as $documentId => $events) {
+            $document = $documents->get((int) $documentId);
+            if (! $document) {
+                continue;
+            }
+
+            $transitions = $events
+                ->map(function (object $event): ?array {
+                    $before = $this->auditPayload($event->datos_antes);
+                    $after = $this->auditPayload($event->datos_despues);
+                    $beforeStatus = (string) ($before['estado'] ?? '');
+                    $afterStatus = (string) ($after['estado'] ?? '');
+
+                    if ($beforeStatus !== Comprobante::STATUS_VOIDED
+                        && $afterStatus === Comprobante::STATUS_VOIDED) {
+                        return [
+                            'audit_id' => (int) $event->id,
+                            'kind' => 'void',
+                            'date' => substr((string) $event->created_at, 0, 10),
+                        ];
+                    }
+                    if ($beforeStatus === Comprobante::STATUS_VOIDED
+                        && in_array($afterStatus, [
+                            Comprobante::STATUS_PENDING,
+                            Comprobante::STATUS_PARTIAL,
+                            Comprobante::STATUS_PAID,
+                        ], true)) {
+                        return [
+                            'audit_id' => (int) $event->id,
+                            'kind' => 'restore',
+                            'date' => substr((string) $event->created_at, 0, 10),
+                        ];
+                    }
+
+                    return null;
+                })
+                ->filter()
+                ->values();
+
+            $currentVoidAuditId = null;
+            if ($document->estado === Comprobante::STATUS_VOIDED && $document->anulada_at !== null) {
+                $currentVoidDate = substr((string) $document->anulada_at, 0, 10);
+                $currentVoidAuditId = $transitions
+                    ->filter(fn (array $transition): bool => $transition['kind'] === 'void'
+                        && $transition['date'] === $currentVoidDate)
+                    ->pluck('audit_id')
+                    ->last();
+            }
+
+            foreach ($transitions as $transition) {
+                if ($transition['audit_id'] === $currentVoidAuditId) {
+                    continue;
+                }
+                $eventDate = $transition['date'];
+                if ($eventDate === '' || $eventDate > $to) {
+                    continue;
+                }
+                $effect = $this->documentSnapshotEffect((array) $document);
+                $adjustment = $transition['kind'] === 'void'
+                    ? FinancialMoney::subtract('0.00', $effect)
+                    : $effect;
+                $field = $eventDate < $from ? 'opening_documents' : 'period_debt';
+                $customerId = (int) $document->tercero_id;
+                $row = $balances->get($customerId) ?? (object) [
+                    'tercero_id' => $customerId,
+                    'opening_documents' => '0.00',
+                    'period_debt' => '0.00',
+                ];
+                $row->{$field} = FinancialMoney::add(
+                    FinancialMoney::normalize($row->{$field} ?? '0'),
+                    $adjustment,
+                );
+                $balances->put($customerId, $row);
+            }
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function auditPayload(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_object($value)) {
+            return (array) $value;
+        }
+        $decoded = is_string($value) ? json_decode($value, true) : null;
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /** @param array<string, mixed> $snapshot */
+    private function documentSnapshotEffect(array $snapshot): string
+    {
+        $total = FinancialMoney::normalize($snapshot['total']);
+
+        return ($snapshot['naturaleza'] ?? null) === Comprobante::NATURE_CREDIT
+            ? FinancialMoney::subtract('0.00', $total)
+            : $total;
     }
 
     /** @return array<string, mixed> */

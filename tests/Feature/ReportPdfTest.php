@@ -44,8 +44,430 @@ class ReportPdfTest extends TestCase
             ->assertSee('Estado de cuenta de proveedor')
             ->assertSee('Pagos y cobros')
             ->assertSee('Movimientos por responsable')
+            ->assertSee('Cuentas de clientes')
+            ->assertSee('Deuda anterior, deuda del día o periodo, pagos realizados y deuda actual')
             ->assertSee('Sin zonas ni campos heredados')
             ->assertDontSee('Reporte de ventas por zonas');
+    }
+
+    public function test_customer_debt_summary_rebuilds_balances_and_totals_for_the_selected_days(): void
+    {
+        $alpha = $this->thirdParty('Alfa Cliente', TerceroRole::CLIENT);
+        $beta = $this->thirdParty('Beta Cliente', TerceroRole::CLIENT);
+        $this->thirdParty('Cliente sin movimientos', TerceroRole::CLIENT);
+        $document = function (
+            Tercero $customer,
+            string $code,
+            string $date,
+            string $amount,
+            string $nature = Comprobante::NATURE_CHARGE,
+            string $currency = 'PEN',
+            string $status = Comprobante::STATUS_PENDING,
+        ): Comprobante {
+            return Comprobante::query()->create([
+                'empresa_id' => $this->user->empresa_id,
+                'tercero_id' => $customer->id,
+                'operacion' => Comprobante::OPERATION_SALE,
+                'naturaleza' => $nature,
+                'tipo_documento' => 'INTERNO',
+                'codigo' => $code,
+                'origen_codigo' => 'PRUEBA_REPORTE_DEUDA',
+                'fecha_emision' => $date,
+                'moneda' => $currency,
+                'subtotal' => $amount,
+                'impuesto' => '0.00',
+                'total' => $amount,
+                'saldo_pendiente' => $amount,
+                'estado' => $status,
+                'created_by' => $this->user->id,
+            ]);
+        };
+        $payment = function (
+            Tercero $customer,
+            string $code,
+            string $dateTime,
+            string $amount,
+            string $type = Pago::TYPE_CUSTOMER_COLLECTION,
+            string $currency = 'PEN',
+            string $status = Pago::STATUS_REGISTERED,
+        ): Pago {
+            return Pago::query()->create([
+                'empresa_id' => $this->user->empresa_id,
+                'codigo' => $code,
+                'tercero_id' => $customer->id,
+                'tipo' => $type,
+                'cliente_id' => $customer->id,
+                'direccion' => $type === Pago::TYPE_CUSTOMER_REFUND
+                    ? Pago::DIRECTION_EXPENSE
+                    : Pago::DIRECTION_INCOME,
+                'fecha_hora' => $dateTime,
+                'metodo' => 'EFECTIVO',
+                'moneda' => $currency,
+                'importe' => $amount,
+                'estado' => $status,
+                'created_by' => $this->user->id,
+            ]);
+        };
+
+        $document($alpha, 'V-ALFA-ANT', '2026-06-30', '100.00');
+        $document($alpha, 'NC-ALFA-ANT', '2026-06-30', '10.00', Comprobante::NATURE_CREDIT);
+        $payment($alpha, 'PG-ALFA-ANT', '2026-06-30 16:00:00', '20.00');
+        $document($alpha, 'V-ALFA-DIA', '2026-07-10', '50.00');
+        $document($alpha, 'NC-ALFA-DIA', '2026-07-11', '5.00', Comprobante::NATURE_CREDIT);
+        $payment($alpha, 'PG-ALFA-DIA', '2026-07-12 09:00:00', '30.00');
+        $payment($alpha, 'DS-ALFA-DIA', '2026-07-12 10:00:00', '5.00', Pago::TYPE_CUSTOMER_DISCOUNT);
+        $payment($alpha, 'RE-ALFA-DIA', '2026-07-12 11:00:00', '2.00', Pago::TYPE_CUSTOMER_REFUND);
+        $document($alpha, 'V-ALFA-USD', '2026-07-10', '999.00', currency: 'USD');
+        $document($alpha, 'V-ALFA-ANULADA', '2026-07-10', '500.00', status: Comprobante::STATUS_VOIDED);
+        $document($alpha, 'V-ALFA-BORRADOR', '2026-07-10', '450.00', status: Comprobante::STATUS_DRAFT);
+        $payment($alpha, 'PG-ALFA-ANULADO', '2026-07-12 12:00:00', '300.00', status: Pago::STATUS_VOIDED);
+        $document($alpha, 'V-ALFA-FUTURA', '2026-08-01', '700.00');
+
+        $document($beta, 'V-BETA-DIA', '2026-07-05', '40.00');
+        $payment($beta, 'PG-BETA-DIA', '2026-07-05 14:00:00', '40.00');
+
+        TerceroRole::query()
+            ->where('tercero_id', $alpha->id)
+            ->where('rol', TerceroRole::CLIENT)
+            ->delete();
+
+        $report = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-01',
+            '2026-07-31',
+            'PEN',
+        );
+
+        $this->assertSame(['Alfa Cliente', 'Beta Cliente'], $report['rows']->pluck('customer')->all());
+        $alphaRow = $report['rows']->firstWhere('customer_id', $alpha->id);
+        $this->assertIsArray($alphaRow);
+        $this->assertSame('70.00', $alphaRow['opening']);
+        $this->assertSame('45.00', $alphaRow['period_debt']);
+        $this->assertSame('115.00', $alphaRow['debt_to_date']);
+        $this->assertSame('33.00', $alphaRow['payments']);
+        $this->assertSame('82.00', $alphaRow['balance']);
+        $betaRow = $report['rows']->firstWhere('customer_id', $beta->id);
+        $this->assertIsArray($betaRow);
+        $this->assertSame('0.00', $betaRow['balance']);
+        $this->assertSame([
+            'opening' => '70.00',
+            'period_debt' => '85.00',
+            'debt_to_date' => '155.00',
+            'payments' => '73.00',
+            'balance' => '82.00',
+        ], $report['totals']);
+        $this->assertSame('PEN', $report['currency']);
+    }
+
+    public function test_customer_debt_report_accepts_the_company_iso_currency(): void
+    {
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update(['moneda' => 'COP']);
+
+        $this->get(route('finanzas.reportes'))
+            ->assertOk()
+            ->assertViewHas('defaultReportCurrency', 'COP')
+            ->assertSee('<option value="COP" selected>COP</option>', false);
+
+        $this->get(route('finanzas.reportes.pdf', [
+            'type' => 'deuda-clientes',
+            'desde' => '2026-07-01',
+            'hasta' => '2026-07-31',
+            'moneda' => 'COP',
+        ]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_customer_debt_summary_keeps_voids_on_the_day_they_happened(): void
+    {
+        $client = $this->thirdParty('Cliente con anulaciones historicas', TerceroRole::CLIENT);
+        $documentDefaults = [
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $client->id,
+            'operacion' => Comprobante::OPERATION_SALE,
+            'naturaleza' => Comprobante::NATURE_CHARGE,
+            'tipo_documento' => 'INTERNO',
+            'origen_codigo' => 'PRUEBA_CORTE_HISTORICO',
+            'moneda' => 'PEN',
+            'impuesto' => '0.00',
+            'saldo_pendiente' => '0.00',
+            'estado' => Comprobante::STATUS_VOIDED,
+            'created_by' => $this->user->id,
+        ];
+        foreach ([
+            ['codigo' => 'V-ANULADA-EN-PERIODO', 'fecha_emision' => '2026-06-20', 'total' => '100.00', 'anulada_at' => '2026-07-15 10:00:00'],
+            ['codigo' => 'V-ANULADA-DESPUES', 'fecha_emision' => '2026-07-20', 'total' => '40.00', 'anulada_at' => '2026-08-05 10:00:00'],
+            ['codigo' => 'V-ANULADA-ANTES', 'fecha_emision' => '2026-06-01', 'total' => '80.00', 'anulada_at' => '2026-06-20 10:00:00'],
+        ] as $attributes) {
+            Comprobante::query()->create([
+                ...$documentDefaults,
+                ...$attributes,
+                'subtotal' => $attributes['total'],
+            ]);
+        }
+
+        $paymentDefaults = [
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $client->id,
+            'tipo' => Pago::TYPE_CUSTOMER_COLLECTION,
+            'cliente_id' => $client->id,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'metodo' => 'EFECTIVO',
+            'moneda' => 'PEN',
+            'estado' => Pago::STATUS_VOIDED,
+            'created_by' => $this->user->id,
+        ];
+        $openingPayment = Pago::query()->create([
+            ...$paymentDefaults,
+            'codigo' => 'PG-ANULADO-EN-PERIODO',
+            'fecha_hora' => '2026-06-25 10:00:00',
+            'importe' => '30.00',
+            'anulada_at' => '2026-07-10 10:00:00',
+        ]);
+        Pago::query()->create([
+            ...$paymentDefaults,
+            'codigo' => 'PG-ANULADO-DESPUES',
+            'fecha_hora' => '2026-07-25 10:00:00',
+            'importe' => '10.00',
+            'anulada_at' => '2026-08-05 10:00:00',
+        ]);
+        Pago::query()->create([
+            ...$paymentDefaults,
+            'codigo' => 'PG-ANULADO-ANTES',
+            'fecha_hora' => '2026-06-10 10:00:00',
+            'importe' => '15.00',
+            'anulada_at' => '2026-06-20 10:00:00',
+        ]);
+        Pago::query()->create([
+            ...$paymentDefaults,
+            'codigo' => 'PG-REVERSA-EN-PERIODO',
+            'direccion' => Pago::DIRECTION_EXPENSE,
+            'fecha_hora' => '2026-07-10 10:00:00',
+            'importe' => '30.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'reversa_de_pago_id' => $openingPayment->id,
+            'anulada_at' => null,
+        ]);
+
+        $row = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-01',
+            '2026-07-31',
+            'PEN',
+        )['rows']->sole();
+
+        $this->assertSame('70.00', $row['opening']);
+        $this->assertSame('-60.00', $row['period_debt']);
+        $this->assertSame('10.00', $row['debt_to_date']);
+        $this->assertSame('-20.00', $row['payments']);
+        $this->assertSame('30.00', $row['balance']);
+    }
+
+    public function test_customer_debt_summary_replays_a_ticket_void_and_restore_from_the_audit_log(): void
+    {
+        $client = $this->thirdParty('Cliente con ticket restablecido', TerceroRole::CLIENT);
+        $correctedClient = $this->thirdParty('Cliente corregido del ticket', TerceroRole::CLIENT);
+        $document = Comprobante::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $client->id,
+            'operacion' => Comprobante::OPERATION_SALE,
+            'naturaleza' => Comprobante::NATURE_CHARGE,
+            'tipo_documento' => 'INTERNO',
+            'codigo' => 'V-TICKET-RESTABLECIDO',
+            'origen_codigo' => 'AUTOMATICO',
+            'origen_clave' => 'VENTA:TICKET:999999',
+            'fecha_emision' => '2026-06-20',
+            'moneda' => 'PEN',
+            'subtotal' => '100.00',
+            'impuesto' => '0.00',
+            'total' => '100.00',
+            'saldo_pendiente' => '100.00',
+            'estado' => Comprobante::STATUS_PENDING,
+            'created_by' => $this->user->id,
+        ]);
+        $active = $document->getAttributes();
+        $voided = [
+            ...$active,
+            'estado' => Comprobante::STATUS_VOIDED,
+            'anulada_at' => '2026-07-11T01:00:00.000000Z',
+        ];
+        $restored = [
+            ...$active,
+            'estado' => Comprobante::STATUS_PENDING,
+            'anulada_at' => null,
+        ];
+        $revalued = [
+            ...$active,
+            'tercero_id' => $correctedClient->id,
+            'subtotal' => '120.00',
+            'total' => '120.00',
+            'saldo_pendiente' => '120.00',
+            'estado' => Comprobante::STATUS_PENDING,
+            'anulada_at' => null,
+        ];
+        $voidedAgain = [
+            ...$revalued,
+            'estado' => Comprobante::STATUS_VOIDED,
+            'saldo_pendiente' => '0.00',
+            'anulada_at' => '2026-07-21T01:00:00.000000Z',
+        ];
+        $document->update([
+            'tercero_id' => $correctedClient->id,
+            'subtotal' => '120.00',
+            'total' => '120.00',
+            'saldo_pendiente' => '0.00',
+            'estado' => Comprobante::STATUS_VOIDED,
+            'anulada_at' => '2026-07-20 20:00:00',
+        ]);
+        DB::table('auditoria_eventos')->insert([
+            [
+                'empresa_id' => $this->user->empresa_id,
+                'usuario_id' => $this->user->id,
+                'entidad' => 'comprobantes',
+                'entidad_id' => (string) $document->id,
+                'accion' => 'ANULAR_AUTOMATICO',
+                'datos_antes' => json_encode($active, JSON_THROW_ON_ERROR),
+                'datos_despues' => json_encode($voided, JSON_THROW_ON_ERROR),
+                'created_at' => '2026-07-10 20:00:00',
+            ],
+            [
+                'empresa_id' => $this->user->empresa_id,
+                'usuario_id' => $this->user->id,
+                'entidad' => 'comprobantes',
+                'entidad_id' => (string) $document->id,
+                'accion' => 'REVALORIZAR',
+                'datos_antes' => json_encode($voided, JSON_THROW_ON_ERROR),
+                'datos_despues' => json_encode($restored, JSON_THROW_ON_ERROR),
+                'created_at' => '2026-07-15 10:00:00',
+            ],
+            [
+                'empresa_id' => $this->user->empresa_id,
+                'usuario_id' => $this->user->id,
+                'entidad' => 'comprobantes',
+                'entidad_id' => (string) $document->id,
+                'accion' => 'REVALORIZAR',
+                'datos_antes' => json_encode($restored, JSON_THROW_ON_ERROR),
+                'datos_despues' => json_encode($revalued, JSON_THROW_ON_ERROR),
+                'created_at' => '2026-07-18 10:00:00',
+            ],
+            [
+                'empresa_id' => $this->user->empresa_id,
+                'usuario_id' => $this->user->id,
+                'entidad' => 'comprobantes',
+                'entidad_id' => (string) $document->id,
+                'accion' => 'ANULAR_AUTOMATICO',
+                'datos_antes' => json_encode($revalued, JSON_THROW_ON_ERROR),
+                'datos_despues' => json_encode($voidedAgain, JSON_THROW_ON_ERROR),
+                'created_at' => '2026-07-20 20:00:00',
+            ],
+        ]);
+
+        $voidedCut = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-10',
+            '2026-07-10',
+            'PEN',
+        )['rows']->sole();
+        $restoredCut = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-15',
+            '2026-07-15',
+            'PEN',
+        )['rows']->sole();
+        $currentVoidCut = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-20',
+            '2026-07-20',
+            'PEN',
+        )['rows']->sole();
+        $afterCurrentVoidCut = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-21',
+            '2026-07-21',
+            'PEN',
+        );
+
+        $this->assertSame('Cliente corregido del ticket', $voidedCut['customer']);
+        $this->assertSame('120.00', $voidedCut['opening']);
+        $this->assertSame('-120.00', $voidedCut['period_debt']);
+        $this->assertSame('0.00', $voidedCut['balance']);
+        $this->assertSame('0.00', $restoredCut['opening']);
+        $this->assertSame('120.00', $restoredCut['period_debt']);
+        $this->assertSame('120.00', $restoredCut['balance']);
+        $this->assertSame('120.00', $currentVoidCut['opening']);
+        $this->assertSame('-120.00', $currentVoidCut['period_debt']);
+        $this->assertSame('0.00', $currentVoidCut['balance']);
+        $this->assertTrue($afterCurrentVoidCut['rows']->isEmpty());
+        $this->assertSame('0.00', $afterCurrentVoidCut['totals']['balance']);
+    }
+
+    public function test_customer_debt_summary_uses_the_day_the_collection_was_received(): void
+    {
+        $client = $this->thirdParty('Cliente cobrado antes del deposito', TerceroRole::CLIENT);
+        $payment = Pago::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PG-RECEPCION-ANTERIOR',
+            'tercero_id' => $client->id,
+            'tipo' => Pago::TYPE_CUSTOMER_COLLECTION,
+            'cliente_id' => $client->id,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'fecha_hora' => '2026-07-15 10:00:00',
+            'metodo' => 'EFECTIVO',
+            'moneda' => 'PEN',
+            'importe' => '25.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+        ]);
+        $collectorId = DB::table('cobradores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre' => 'Cobrador fecha efectiva',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $accountId = $this->financialAccount(EntidadFinanciera::TYPE_OWN, 'Cuenta fecha efectiva');
+        $methodId = (int) DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        $collectionId = DB::table('cobranzas')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'cobrador_id' => $collectorId,
+            'cobrador_nombre_snapshot' => 'Cobrador fecha efectiva',
+            'codigo' => 'COB-FECHA-EFECTIVA',
+            'idempotency_key' => (string) Str::uuid(),
+            'payload_hash' => hash('sha256', 'cobranza-fecha-efectiva'),
+            'cuenta_destino_id' => $accountId,
+            'metodo_pago_id' => $methodId,
+            'fecha_hora' => '2026-07-15 10:00:00',
+            'referencia' => 'REF-FECHA-EFECTIVA',
+            'moneda' => 'PEN',
+            'importe_total' => '25.00',
+            'estado' => 'REGISTRADO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('cobranza_detalles')->insert([
+            'cobranza_id' => $collectionId,
+            'pago_id' => $payment->id,
+            'cliente_id' => $client->id,
+            'fecha_recepcion' => '2026-06-30',
+            'medio_recepcion' => 'EFECTIVO',
+            'importe' => '25.00',
+            'orden' => 1,
+            'created_at' => now(),
+        ]);
+
+        $row = app(ReportDataService::class)->customerDebtSummary(
+            (int) $this->user->empresa_id,
+            '2026-07-01',
+            '2026-07-31',
+            'PEN',
+        )['rows']->sole();
+
+        $this->assertSame('-25.00', $row['opening']);
+        $this->assertSame('0.00', $row['period_debt']);
+        $this->assertSame('0.00', $row['payments']);
+        $this->assertSame('-25.00', $row['balance']);
     }
 
     public function test_reports_page_shows_the_csv_download_and_optional_user_filter_for_payments(): void
@@ -453,6 +875,28 @@ class ReportPdfTest extends TestCase
             ->assertHeader('Content-Type', 'application/pdf')
             ->assertHeader('Content-Disposition', 'inline; filename="ventas-clientes-2026-07-01-2026-07-31.pdf"');
         $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
+    public function test_customer_debt_report_can_be_generated_as_pdf_and_image(): void
+    {
+        $query = [
+            'type' => 'deuda-clientes',
+            'desde' => '2026-07-15',
+            'hasta' => '2026-07-15',
+            'moneda' => 'PEN',
+        ];
+        $pdf = $this->get(route('finanzas.reportes.pdf', $query));
+
+        $pdf->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename="deuda-clientes-2026-07-15-2026-07-15.pdf"');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+
+        $image = $this->get(route('finanzas.reportes.imagen', $query));
+        $image->assertOk()
+            ->assertHeader('Content-Type', 'image/png')
+            ->assertHeader('Content-Disposition', 'attachment; filename="deuda-clientes-2026-07-15-2026-07-15.png"');
+        $this->assertStringStartsWith("\x89PNG\r\n\x1a\n", $image->getContent());
     }
 
     public function test_report_rejects_an_inverted_date_range(): void
@@ -1049,6 +1493,57 @@ class ReportPdfTest extends TestCase
         $this->assertSame(2, substr_count($plainText, 'Movimientos del'));
         $this->assertStringContainsString('class="num debit"', $html);
         $this->assertStringContainsString('class="num credit"', $html);
+    }
+
+    public function test_customer_debt_pdf_layout_matches_the_daily_reference_columns(): void
+    {
+        $html = view('reports.pdf', [
+            'company' => $this->user->empresa,
+            'type' => 'deuda-clientes',
+            'title' => 'Reporte de cuentas de clientes',
+            'from' => '2026-07-15',
+            'to' => '2026-07-15',
+            'data' => [
+                'currency' => 'PEN',
+                'rows' => collect([[
+                    'customer_id' => 1,
+                    'customer' => 'CLIENTE DE REFERENCIA',
+                    'opening' => '100.00',
+                    'period_debt' => '50.00',
+                    'debt_to_date' => '150.00',
+                    'payments' => '40.00',
+                    'balance' => '110.00',
+                ]]),
+                'totals' => [
+                    'opening' => '100.00',
+                    'period_debt' => '50.00',
+                    'debt_to_date' => '150.00',
+                    'payments' => '40.00',
+                    'balance' => '110.00',
+                ],
+            ],
+            'generatedAt' => CarbonImmutable::parse('2026-07-16 12:30:00'),
+        ])->render();
+        $plainText = preg_replace('/\s+/', ' ', strip_tags($html));
+
+        $this->assertIsString($plainText);
+        foreach ([
+            'Reporte de cuentas de clientes',
+            'Actualizado hasta el 16/07/2026 12:30 - Moneda: PEN',
+            'TOTALES',
+            'Clientes',
+            'Deuda hasta ayer',
+            '14/07/2026',
+            'Deuda',
+            '15/07/2026',
+            'Total deuda hasta',
+            'Pagos realizados',
+            'Total deuda',
+            'CLIENTE DE REFERENCIA',
+        ] as $text) {
+            $this->assertStringContainsString($text, $plainText);
+        }
+        $this->assertStringNotContainsString('S/ ', $plainText);
     }
 
     /** @return array{int, int} */

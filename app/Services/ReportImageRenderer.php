@@ -31,8 +31,13 @@ class ReportImageRenderer
 
         $landscape = in_array($payload['type'], ['ventas-clientes', 'responsable'], true);
         [$columns, $rows] = $this->table($payload['type'], $payload['data']);
-        $firstCapacity = $landscape ? 20 : ($payload['type'] === 'estado-cliente' ? 37 : 34);
-        $followingCapacity = $landscape ? 27 : 42;
+        $firstCapacity = match (true) {
+            $landscape => 20,
+            $payload['type'] === 'deuda-clientes' => 29,
+            $payload['type'] === 'estado-cliente' => 37,
+            default => 34,
+        };
+        $followingCapacity = $landscape ? 27 : ($payload['type'] === 'deuda-clientes' ? 37 : 42);
         $chunks = $this->chunkRows($rows, $firstCapacity, $followingCapacity);
 
         return array_map(
@@ -85,7 +90,9 @@ class ReportImageRenderer
         int $page,
         int $pageCount,
     ): string {
-        [$width, $height] = $landscape ? [1980, 1400] : [1400, 1980];
+        [$width, $height] = $landscape
+            ? [1980, 1400]
+            : ($payload['type'] === 'deuda-clientes' ? [1400, 1812] : [1400, 1980]);
         $image = imagecreatetruecolor($width, $height);
         $white = imagecolorallocate($image, 255, 255, 255);
         $ink = imagecolorallocate($image, 23, 32, 42);
@@ -110,6 +117,12 @@ class ReportImageRenderer
                 .' al '.CarbonImmutable::parse($payload['to'])->format('d/m/Y');
             $this->centerText($image, $period, 16, $cursorY, $muted, false, $width);
             $cursorY += 55;
+            if ($payload['type'] === 'deuda-clientes') {
+                $updated = 'Actualizado: '.$payload['generatedAt']->format('d/m/Y H:i')
+                    .' - Moneda: '.$payload['data']['currency'];
+                $this->centerText($image, $updated, 14, $cursorY, $muted, false, $width);
+                $cursorY += 42;
+            }
             if (in_array($payload['type'], ['estado-cliente', 'estado-proveedor'], true)) {
                 $label = $payload['type'] === 'estado-cliente' ? 'Cliente: ' : 'Proveedor: ';
                 $this->centerText(
@@ -308,6 +321,13 @@ class ReportImageRenderer
     private function summary(string $type, array $data): array
     {
         return match ($type) {
+            'deuda-clientes' => [
+                ['Deuda anterior', number_format((float) $data['totals']['opening'], 2)],
+                ['Deuda del periodo', number_format((float) $data['totals']['period_debt'], 2)],
+                ['Total hasta el corte', number_format((float) $data['totals']['debt_to_date'], 2)],
+                ['Pagos realizados', number_format((float) $data['totals']['payments'], 2)],
+                ['Deuda actual', number_format((float) $data['totals']['balance'], 2)],
+            ],
             'ventas-clientes' => [
                 ['Registros de venta', (string) $data['rows']->count()],
                 ['Aves netas', number_format($data['totals']['birds'])],
@@ -344,6 +364,30 @@ class ReportImageRenderer
      */
     private function table(string $type, array $data): array
     {
+        if ($type === 'deuda-clientes') {
+            $columns = [
+                ['label' => 'Cliente', 'width' => .35],
+                ['label' => 'Deuda anterior', 'width' => .13, 'align' => 'right'],
+                ['label' => 'Deuda periodo', 'width' => .13, 'align' => 'right'],
+                ['label' => 'Total al corte', 'width' => .13, 'align' => 'right'],
+                ['label' => 'Pagos', 'width' => .13, 'align' => 'right'],
+                ['label' => 'Deuda actual', 'width' => .13, 'align' => 'right'],
+            ];
+            $amount = static fn (mixed $value): string => (float) $value !== 0.0
+                ? number_format((float) $value, 2)
+                : '';
+            $rows = $data['rows']->map(fn (array $row): array => [
+                $row['customer'],
+                $amount($row['opening']),
+                $amount($row['period_debt']),
+                $amount($row['debt_to_date']),
+                $amount($row['payments']),
+                $amount($row['balance']),
+            ])->all();
+
+            return [$columns, $rows];
+        }
+
         if ($type === 'estado-cliente') {
             $columns = [
                 ['label' => 'FEC.', 'width' => .10], ['label' => 'CÓD.', 'width' => .15],
@@ -468,6 +512,10 @@ class ReportImageRenderer
         bool $bold,
         string $align,
     ): void {
+        if (trim($text) === '') {
+            return;
+        }
+
         $font = $bold ? $this->boldFont : $this->regularFont;
         $text = $this->fitText($text, $font, $size, $width - 12);
         $box = imagettfbbox($size, 0, $font, $text);

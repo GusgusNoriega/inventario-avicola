@@ -79,6 +79,16 @@
           @include('reports.partials.form-actions', ['reportType' => 'responsable'])
         </form>
       </article>
+
+      <article class="report-card fin-card">
+        <div class="report-card-heading"><span>06</span><div><h2>Cuentas de clientes</h2><p>Deuda anterior, deuda del día o periodo, pagos realizados y deuda actual de todos los clientes.</p></div></div>
+        <form method="GET" action="{{ route('finanzas.reportes.pdf', 'deuda-clientes') }}" target="_blank" class="report-form">
+          <label class="fin-field report-wide"><span>Moneda</span><select name="moneda" required>@foreach($reportCurrencies as $currency)<option value="{{ $currency }}" @selected($currency === $defaultReportCurrency)>{{ $currency === 'PEN' ? 'Soles (PEN)' : ($currency === 'USD' ? 'Dólares (USD)' : $currency) }}</option>@endforeach</select></label>
+          @include('reports.partials.date-fields')
+          <p class="report-form-hint report-wide">Para consultar un solo día, selecciona la misma fecha en Desde y Hasta.</p>
+          @include('reports.partials.form-actions', ['reportType' => 'deuda-clientes'])
+        </form>
+      </article>
     </section>
   </main>
 </body>

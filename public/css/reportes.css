@@ -36,6 +36,7 @@
 .report-card-heading p { margin: 0; color: var(--fin-muted, #66706b); font-size: 13px; line-height: 1.45; }
 .report-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .report-wide { grid-column: 1 / -1; }
+.report-form-hint { margin: -2px 0 0; color: var(--fin-muted, #66706b); font-size: 12px; }
 .report-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding-top: 3px; }
 .report-actions .fin-btn { min-width: 128px; }
 .fin-btn-image { border-color: #315b8a; background: #eaf2fb; color: #244d79; }
