@@ -117,7 +117,8 @@ class ProviderReportService
                 'vehiculo:id,placa,marca,modelo',
                 'tipoPollo:id,codigo,nombre',
                 'tipoJava:id,codigo,nombre',
-                'ticket:id,jornada_id,codigo,cliente_destino_id,almacen_destino_id,estado',
+                'ajustePesoMayoristaDos:id,codigo,nombre',
+                'ticket:id,jornada_id,codigo,cliente_destino_id,almacen_destino_id,estado,modulo_origen,tipo_operacion',
                 'ticket.jornada:id,fecha_operativa,estado',
                 'ticket.clienteDestino:id,nombre_razon_social',
                 'ticket.almacenDestino:id,codigo,nombre',
@@ -327,6 +328,8 @@ class ProviderReportService
     {
         $birds = (int) $record->cantidad_aves;
         $netWeight = (float) $record->peso_neto_kg;
+        $usesWholesaleTwoAdjustment = $record->ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO
+            && $record->ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH;
 
         return [
             'id' => (int) $record->id,
@@ -359,6 +362,19 @@ class ProviderReportService
             'cages' => (int) $record->cantidad_javas,
             'birds_per_cage' => (int) $record->aves_por_java,
             'birds' => $birds,
+            'read_weight_kg' => (float) $record->peso_leido_kg,
+            'adjustment' => $usesWholesaleTwoAdjustment && $record->ajustePesoMayoristaDos
+                ? [
+                    'code' => $record->ajustePesoMayoristaDos->codigo,
+                    'name' => $record->ajustePesoMayoristaDos->nombre,
+                    'additional_grams' => (int) $record->ajuste_peso_mayorista_2_gramos,
+                    'total_grams' => (int) $record->ajuste_peso_mayorista_2_gramos * $birds,
+                    'total_weight_kg' => round(
+                        ((int) $record->ajuste_peso_mayorista_2_gramos * $birds) / 1000,
+                        3
+                    ),
+                ]
+                : null,
             'gross_weight_kg' => (float) $record->peso_bruto_kg,
             'tare_weight_kg' => (float) $record->tara_total_kg,
             'net_weight_kg' => $netWeight,

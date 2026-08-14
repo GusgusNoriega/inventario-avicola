@@ -37,6 +37,7 @@
               <button id="closeConfigMenuBtn" class="config-close-btn" type="button" aria-label="Cerrar configuración">X</button>
             </div>
             <div class="config-menu-actions">
+              <button id="openWeightAdjustmentSettingsBtn" class="btn btn-ghost" type="button">Configurar mermas</button>
               <button id="openJsonBtn" class="btn btn-ghost" type="button">Ver JSON</button>
               <button id="resetDayBtn" class="btn btn-ghost" type="button">Reiniciar jornada</button>
               <button id="openFontSidebarBtn" class="btn btn-ghost" type="button">Tamaños personalizados</button>
@@ -67,8 +68,8 @@
         </div>
         <div>
           <p class="eyebrow">Despacho mayorista 2</p>
-          <h1>Entrada de Camiones de Pollos</h1>
-          <p class="hero-copy">Vista única para monitor táctil. Registro simultáneo con 2 balanzas.</p>
+          <h1>Recepción y despacho de pollos</h1>
+          <p class="hero-copy">Recepción con origen mayorista o despacho directo sin proveedor. Registro simultáneo con 2 balanzas.</p>
         </div>
         <div class="hero-actions">
           <div class="hero-menu-row">
@@ -135,9 +136,9 @@
               </label>
 
               <div class="selected-origin-summary">
-                <span>Camión origen</span>
-                <strong id="selectedProviderName">Selecciona un camión de la lista</strong>
-                <small id="selectedProviderPlateLabel">Proveedor y placa pendientes</small>
+                <span>Origen opcional</span>
+                <strong id="selectedProviderName">Despacho directo</strong>
+                <small id="selectedProviderPlateLabel">Sin proveedor ni placa</small>
               </div>
 
               <label class="field dispatch-quantity-field">
@@ -150,11 +151,22 @@
                 <input id="javaCount" type="number" min="0" step="1" value="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
               </label>
 
-              <fieldset class="sex-selector dispatch-sex-selector" aria-label="Sexo de los pollos">
+              <fieldset id="liveSexSelector" class="sex-selector dispatch-sex-selector" aria-label="Sexo de los pollos vivos">
                 <legend>Sexo</legend>
                 <div class="sex-selector-buttons">
                   <button class="sex-btn sex-btn-male is-active" type="button" data-sex="macho" aria-pressed="true" aria-label="Macho" title="Macho">M</button>
                   <button class="sex-btn sex-btn-female" type="button" data-sex="hembra" aria-pressed="false" aria-label="Hembra" title="Hembra">H</button>
+                </div>
+              </fieldset>
+
+              <fieldset id="dressedVariantSelector" class="dressed-variant-selector dispatch-dressed-variant-selector" aria-label="Clasificación del pollo pelado" hidden>
+                <legend>Clasificación del pollo pelado</legend>
+                <div class="dressed-variant-buttons">
+                  <button class="dressed-variant-btn is-male is-open is-active" type="button" data-dressed-variant="MACHO_ABIERTO" aria-pressed="true">Macho abierto</button>
+                  <button class="dressed-variant-btn is-male is-closed" type="button" data-dressed-variant="MACHO_CERRADO" aria-pressed="false">Macho cerrado</button>
+                  <button class="dressed-variant-btn is-female is-open" type="button" data-dressed-variant="HEMBRA_ABIERTA" aria-pressed="false">Hembra abierta</button>
+                  <button class="dressed-variant-btn is-female is-closed" type="button" data-dressed-variant="HEMBRA_CERRADA" aria-pressed="false">Hembra cerrada</button>
+                  <button class="dressed-variant-btn is-processed" type="button" data-dressed-variant="POLLO_BENEFICIADO" aria-pressed="false">Pollo beneficiado</button>
                 </div>
               </fieldset>
             </div>
@@ -188,14 +200,14 @@
             </label>
 
             <label class="field" id="manualWeightField" hidden>
-              Peso bruto manual (kg)
-              <input id="manualWeight" type="number" min="0" step="0.01" placeholder="Ej: 49.50" readonly inputmode="none" data-keypad-label="Peso bruto manual (kg)">
+              Peso leído manual (kg)
+              <input id="manualWeight" type="number" min="0" step="0.001" placeholder="Ej: 49.500" readonly inputmode="none" data-keypad-label="Peso leído manual (kg)">
             </label>
 
             <div class="weight-preview weight-preview-gross">
-              <span>Peso bruto a registrar</span>
+              <span>Peso neto a registrar</span>
               <strong id="selectedWeightValue">---</strong>
-              <small id="selectedWeightBreakdown" hidden></small>
+              <small id="selectedWeightBreakdown"></small>
             </div>
 
             <button id="addWeighingBtn" class="btn btn-success weighing-submit-button" type="submit" disabled>Capturar peso</button>
@@ -209,8 +221,9 @@
 
       <button id="returnTicketBtn" class="return-ticket-btn" type="button">Cambiar a devolución</button>
 
-      <section class="daily-provider-panel card" aria-label="Camiones del día">
+      <section class="daily-provider-panel card" aria-label="Origen opcional de las pesadas">
         <div class="daily-provider-head">
+          <span class="daily-provider-title">Origen opcional</span>
           <div class="daily-provider-actions">
             <a class="btn btn-ghost" href="{{ route('jornada') }}">Configurar jornada</a>
             <strong id="dailyProviderCount" class="daily-provider-count">0</strong>
@@ -243,6 +256,58 @@
         <button id="resetFontSizesBtn" class="btn btn-ghost" type="button">Restablecer tamaños</button>
       </div>
     </aside>
+  </div>
+
+  <div id="weightAdjustmentSettingsModal" class="modal weight-adjustment-settings-modal" hidden>
+    <form id="weightAdjustmentSettingsForm" class="weight-adjustment-settings-card card" role="dialog" aria-modal="true" aria-labelledby="weightAdjustmentSettingsTitle">
+      <div class="section-head weight-adjustment-settings-head">
+        <div>
+          <p class="weight-adjustment-settings-caption">Configuración exclusiva de Despacho mayorista 2</p>
+          <h2 id="weightAdjustmentSettingsTitle">Mermas por tipo de pollo</h2>
+        </div>
+        <button id="closeWeightAdjustmentSettingsBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+
+      <p class="weight-adjustment-settings-help">Los gramos se suman por cada ave al peso leído antes de descontar la tara de las javas. Las pesadas pendientes se recalculan al guardar.</p>
+
+      <div id="weightAdjustmentSettingsGrid" class="weight-adjustment-settings-grid">
+        <article class="weight-adjustment-setting is-live">
+          <strong>PV-M · Pollo vivo macho</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="MACHO" readonly inputmode="none" data-keypad-label="Merma en gramos para pollo vivo macho" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-live">
+          <strong>PV-H · Pollo vivo hembra</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="HEMBRA" readonly inputmode="none" data-keypad-label="Merma en gramos para pollo vivo hembra" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-male">
+          <strong>MA · Macho abierto</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="MACHO_ABIERTO" readonly inputmode="none" data-keypad-label="Merma en gramos para macho abierto" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-male">
+          <strong>MC · Macho cerrado</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="MACHO_CERRADO" readonly inputmode="none" data-keypad-label="Merma en gramos para macho cerrado" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-female">
+          <strong>HA · Hembra abierta</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="HEMBRA_ABIERTA" readonly inputmode="none" data-keypad-label="Merma en gramos para hembra abierta" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-female">
+          <strong>HC · Hembra cerrada</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="HEMBRA_CERRADA" readonly inputmode="none" data-keypad-label="Merma en gramos para hembra cerrada" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-processed is-locked" aria-disabled="true">
+          <strong>PB · Pollo beneficiado</strong>
+          <label><span>Gramos por ave</span><input type="number" value="0" disabled aria-describedby="processedWeightAdjustmentHelp"></label>
+          <small id="processedWeightAdjustmentHelp">Sin merma por regla del sistema.</small>
+        </article>
+      </div>
+
+      <p id="weightAdjustmentSettingsMessage" class="weight-adjustment-settings-message" role="status" aria-live="polite"></p>
+      <div class="weight-adjustment-settings-actions">
+        <button id="cancelWeightAdjustmentSettingsBtn" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="saveWeightAdjustmentSettingsBtn" class="btn btn-success" type="submit">Guardar mermas</button>
+      </div>
+    </form>
   </div>
 
   <div id="scaleSettingsModal1" class="modal" hidden>
@@ -462,7 +527,7 @@
       <form id="itemEditForm" class="item-form" novalidate>
         <div class="item-form-grid">
           <label class="field">
-            Tipo de pollo
+            Familia de pollo
             <select id="editType"></select>
           </label>
 
@@ -476,11 +541,22 @@
             <input id="editJavaCount" type="number" min="0" step="1" required readonly inputmode="none" data-keypad-label="Javas" data-keypad-decimal="false">
           </label>
 
-          <fieldset class="sex-selector edit-sex-selector" aria-label="Sexo de los pollos">
+          <fieldset id="editLiveSexSelector" class="sex-selector edit-sex-selector" aria-label="Sexo de los pollos vivos">
             <legend>Sexo</legend>
             <div class="sex-selector-buttons">
               <button class="sex-btn sex-btn-male is-active" type="button" data-edit-sex="macho" aria-pressed="true">Macho</button>
               <button class="sex-btn sex-btn-female" type="button" data-edit-sex="hembra" aria-pressed="false">Hembra</button>
+            </div>
+          </fieldset>
+
+          <fieldset id="editDressedVariantSelector" class="dressed-variant-selector edit-dressed-variant-selector" aria-label="Clasificación del pollo pelado" hidden>
+            <legend>Clasificación del pollo pelado</legend>
+            <div class="dressed-variant-buttons">
+              <button class="dressed-variant-btn is-male is-open is-active" type="button" data-edit-dressed-variant="MACHO_ABIERTO" aria-pressed="true">Macho abierto</button>
+              <button class="dressed-variant-btn is-male is-closed" type="button" data-edit-dressed-variant="MACHO_CERRADO" aria-pressed="false">Macho cerrado</button>
+              <button class="dressed-variant-btn is-female is-open" type="button" data-edit-dressed-variant="HEMBRA_ABIERTA" aria-pressed="false">Hembra abierta</button>
+              <button class="dressed-variant-btn is-female is-closed" type="button" data-edit-dressed-variant="HEMBRA_CERRADA" aria-pressed="false">Hembra cerrada</button>
+              <button class="dressed-variant-btn is-processed" type="button" data-edit-dressed-variant="POLLO_BENEFICIADO" aria-pressed="false">Pollo beneficiado</button>
             </div>
           </fieldset>
 
@@ -490,8 +566,8 @@
           </label>
 
           <label class="field">
-            Peso bruto (kg)
-            <input id="editWeight" type="number" min="0.01" step="0.01" required readonly inputmode="none" data-keypad-label="Peso bruto (kg)">
+            Peso leído (kg)
+            <input id="editWeight" type="number" min="0.001" step="0.001" required readonly inputmode="none" data-keypad-label="Peso leído (kg)">
           </label>
 
           <label class="field">
@@ -503,12 +579,18 @@
             </select>
           </label>
 
+          <div id="editWeightBreakdown" class="weight-adjustment-preview" aria-live="polite">
+            <span>Merma y peso neto</span>
+            <strong>---</strong>
+            <small>Selecciona los datos de la pesada.</small>
+          </div>
+
           <div class="field">
-            <span>Origen de la mercadería</span>
+            <span>Origen de la mercadería (opcional)</span>
             <button id="editSelectProviderBtn" class="provider-select-btn" type="button" aria-haspopup="dialog" aria-controls="providerModal">
               <span class="provider-select-copy">
                 <small>Origen registrado en esta pesada</small>
-                <strong id="editSelectedProviderName">Sin origen registrado</strong>
+                <strong id="editSelectedProviderName">Despacho directo · sin proveedor</strong>
               </span>
               <span class="provider-select-action">Cambiar</span>
             </button>
@@ -537,8 +619,8 @@
     <div class="provider-modal-card card" role="dialog" aria-modal="true" aria-labelledby="providerModalTitle">
       <div class="section-head">
         <div>
-          <p class="provider-modal-caption">Origen de la mercadería</p>
-          <h2 id="providerModalTitle">Seleccionar origen</h2>
+          <p class="provider-modal-caption">Origen opcional de la mercadería</p>
+          <h2 id="providerModalTitle">Seleccionar origen o despacho directo</h2>
         </div>
         <button id="closeProviderModalBtn" class="btn btn-primary" type="button">Cerrar</button>
       </div>
@@ -548,7 +630,7 @@
         <input id="providerSearch" type="search" placeholder="Nombre, almacén, DNI/RUC o dirección" autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar proveedor o almacén de origen">
       </label>
 
-      <p id="providerModalSelection" class="provider-modal-selection">Ningún origen seleccionado.</p>
+      <p id="providerModalSelection" class="provider-modal-selection">Despacho directo seleccionado: sin proveedor ni placa.</p>
       <div id="providerList" class="provider-list" role="listbox" aria-label="Lista de proveedores y almacenes"></div>
     </div>
   </div>

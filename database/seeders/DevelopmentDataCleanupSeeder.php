@@ -88,6 +88,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'proveedor_vehiculos',
         'tipos_bandeja',
         'ajustes_peso_minorista',
+        'ajustes_peso_mayorista_2',
         'configuraciones_despacho_minorista',
         'metodos_pago',
         'entidades_financieras',

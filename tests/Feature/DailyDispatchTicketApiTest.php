@@ -9,6 +9,8 @@ use App\Models\Role;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\WholesaleTwoWeightAdjustmentService;
+use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -760,6 +762,52 @@ class DailyDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.tickets.0.records.0.read_weight_kg', 12)
             ->assertJsonPath('data.tickets.0.records.0.gross_weight_kg', 12.25)
             ->assertJsonPath('data.tickets.0.records.0.net_weight_kg', 12.25);
+    }
+
+    public function test_daily_summary_serializes_wholesale_two_adjustment_without_changing_totals(): void
+    {
+        $ticketId = $this->createTicket('T-M2-20260626-001', '2026-06-26', [
+            [
+                'type_id' => $this->liveTypeId,
+                'birds_per_cage' => 10,
+                'cages' => 2,
+                'read_weight' => 31.5,
+                'gross_weight' => 34,
+                'tare_weight' => 14,
+                'net_weight' => 20,
+                'weighed_at' => '2026-06-26 09:15:00',
+                'presentation' => 'CERRADO',
+            ],
+        ]);
+        app(WholesaleTwoWeightAdjustmentService::class)->ensureDefaults(
+            (int) $this->user->empresa_id
+        );
+        $adjustment = DB::table('ajustes_peso_mayorista_2')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', WholesaleTwoChickenVariant::MALE_CLOSED)
+            ->first();
+        DB::table('ajustes_peso_mayorista_2')
+            ->where('id', $adjustment->id)
+            ->update(['gramos_adicionales' => 125]);
+        DB::table('tickets_despacho')->where('id', $ticketId)->update([
+            'modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO,
+        ]);
+        DB::table('pesadas')->where('ticket_id', $ticketId)->update([
+            'ajuste_peso_mayorista_2_id' => $adjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 125,
+        ]);
+
+        $this->getJson('/api/v1/operacion/tickets-dia?date=2026-06-26')
+            ->assertOk()
+            ->assertJsonPath('data.summary.gross_weight_kg', 34)
+            ->assertJsonPath('data.summary.net_weight_kg', 20)
+            ->assertJsonPath('data.tickets.0.summary.gross_weight_kg', 34)
+            ->assertJsonPath('data.tickets.0.summary.net_weight_kg', 20)
+            ->assertJsonPath('data.tickets.0.records.0.read_weight_kg', 31.5)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.code', WholesaleTwoChickenVariant::MALE_CLOSED)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.additional_grams', 125)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.total_grams', 2500)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.total_weight_kg', 2.5);
     }
 
     public function test_only_an_administrator_can_void_a_ticket(): void

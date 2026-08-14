@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'codigo',
     'referencia_externa',
     'canal',
+    'modulo_origen',
     'tipo_operacion',
     'cliente_destino_id',
     'almacen_destino_id',
@@ -34,6 +35,8 @@ class TicketDespacho extends Model
     public const CHANNEL_WHOLESALE = 'MAYORISTA';
 
     public const CHANNEL_RETAIL = 'MINORISTA';
+
+    public const SOURCE_WHOLESALE_TWO = 'MODULO_DESPACHO_MAYORISTA_2';
 
     public const PUBLIC_SALE_LABEL = 'Venta público';
 

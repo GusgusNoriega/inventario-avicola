@@ -14,6 +14,8 @@ use App\Services\FinancialObligationService;
 use App\Services\JavaControlService;
 use App\Services\OperationContextService;
 use App\Services\TicketMessageService;
+use App\Services\WholesaleTwoWeightAdjustmentService;
+use App\Support\WholesaleTwoChickenVariant;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -29,6 +31,7 @@ class TicketWeighingManagementController extends Controller
         private readonly JavaControlService $javaControl,
         private readonly FinancialObligationService $financialObligations,
         private readonly TicketMessageService $ticketMessages,
+        private readonly WholesaleTwoWeightAdjustmentService $wholesaleTwoAdjustments,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -69,6 +72,7 @@ class TicketWeighingManagementController extends Controller
                 'id' => $ticket->id,
                 'code' => $ticket->codigo,
                 'channel' => $ticket->canal,
+                'source_module' => $ticket->modulo_origen,
                 'operation_type' => $ticket->tipo_operacion,
                 'status' => $ticket->estado,
                 'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
@@ -215,21 +219,35 @@ class TicketWeighingManagementController extends Controller
             $branch->zona_horaria
         );
         $this->assertEditable($selected, $currentOperatingDate);
+        $usesWholesaleTwoVariants = $this->usesWholesaleTwoVariants($selected);
         $validated = $request->validate([
             'chicken_type_code' => ['required', 'string', 'max:40'],
             'chicken_condition' => ['required', Rule::in([
                 Pesada::CHICKEN_CONDITION_LIVE,
                 Pesada::CHICKEN_CONDITION_DEAD,
             ])],
-            'chicken_sex' => ['required', Rule::in([
-                Pesada::SEX_MALE,
-                Pesada::SEX_FEMALE,
-            ])],
+            'chicken_variant_code' => $usesWholesaleTwoVariants
+                ? ['required', Rule::in(WholesaleTwoChickenVariant::codes())]
+                : ['prohibited'],
+            'chicken_sex' => $usesWholesaleTwoVariants
+                ? ['sometimes', 'nullable', Rule::in([
+                    Pesada::SEX_MALE,
+                    Pesada::SEX_FEMALE,
+                ])]
+                : ['required', Rule::in([
+                    Pesada::SEX_MALE,
+                    Pesada::SEX_FEMALE,
+                ])],
             'cage_type_code' => ['required', 'string', 'max:40'],
             'weight_source' => ['required', Rule::in(['MANUAL', 'BALANZA_1', 'BALANZA_2', 'BALANZA'])],
             'birds_per_cage' => ['required', 'integer', 'min:1', 'max:1000'],
             'cages' => ['required', 'integer', 'min:0', 'max:10000'],
-            'gross_weight_kg' => ['required', 'numeric', 'gt:0', 'max:99999999.999'],
+            'read_weight_kg' => $usesWholesaleTwoVariants
+                ? ['required', 'numeric', 'gt:0', 'max:99999999.999']
+                : ['prohibited'],
+            'gross_weight_kg' => $usesWholesaleTwoVariants
+                ? ['prohibited']
+                : ['required', 'numeric', 'gt:0', 'max:99999999.999'],
             'weighed_at' => ['required', 'date'],
             'origin_program_detail_id' => [
                 Rule::prohibitedIf(
@@ -243,6 +261,29 @@ class TicketWeighingManagementController extends Controller
         $actor = $this->context->actor($request, (int) $branch->id);
         $typeCode = mb_strtoupper(trim($validated['chicken_type_code']), 'UTF-8');
         $condition = $validated['chicken_condition'];
+        $variantDefinition = $usesWholesaleTwoVariants
+            ? WholesaleTwoChickenVariant::definition($validated['chicken_variant_code'])
+            : null;
+
+        if (
+            $usesWholesaleTwoVariants
+            && (! $variantDefinition || $variantDefinition['chicken_type_code'] !== $typeCode)
+        ) {
+            throw ValidationException::withMessages([
+                'chicken_variant_code' => 'La clasificación seleccionada no corresponde al tipo de pollo.',
+            ]);
+        }
+
+        if (
+            $usesWholesaleTwoVariants
+            && array_key_exists('chicken_sex', $validated)
+            && $validated['chicken_sex'] !== null
+            && $validated['chicken_sex'] !== $variantDefinition['sex']
+        ) {
+            throw ValidationException::withMessages([
+                'chicken_sex' => 'El sexo enviado no corresponde a la clasificación seleccionada.',
+            ]);
+        }
 
         if ($selected->tipo_operacion === TicketDespacho::OPERATION_RETURN) {
             $typeCode = $condition === Pesada::CHICKEN_CONDITION_DEAD
@@ -275,12 +316,15 @@ class TicketWeighingManagementController extends Controller
 
         $cages = (int) $validated['cages'];
         $birdsPerCage = (int) $validated['birds_per_cage'];
-        $grossWeight = round((float) $validated['gross_weight_kg'], 3);
+        $readWeight = round((float) ($usesWholesaleTwoVariants
+            ? $validated['read_weight_kg']
+            : $validated['gross_weight_kg']), 3);
+        $grossWeight = $usesWholesaleTwoVariants ? null : $readWeight;
         $cageWeight = round((float) $cageType->peso_kg, 3);
         $tareWeight = round($cages * $cageWeight, 3);
-        $netWeight = round($grossWeight - $tareWeight, 3);
+        $netWeight = $grossWeight !== null ? round($grossWeight - $tareWeight, 3) : null;
 
-        if ($netWeight <= 0) {
+        if ($netWeight !== null && $netWeight <= 0) {
             throw ValidationException::withMessages([
                 'gross_weight_kg' => 'El peso bruto debe ser mayor que la tara total de las javas.',
             ]);
@@ -297,14 +341,18 @@ class TicketWeighingManagementController extends Controller
             $cages,
             $birdsPerCage,
             $cageWeight,
+            $readWeight,
             $grossWeight,
             $tareWeight,
             $netWeight,
             $branch,
             $actor,
-            $companyId
+            $companyId,
+            $usesWholesaleTwoVariants,
+            $variantDefinition
         ): void {
             $record = Pesada::query()
+                ->with(['tipoPollo', 'ajustePesoMayoristaDos'])
                 ->where('ticket_id', $selected->id)
                 ->whereKey($weighing)
                 ->lockForUpdate()
@@ -319,18 +367,54 @@ class TicketWeighingManagementController extends Controller
                     $companyId
                 )
                 : null;
+            $adjustmentId = null;
+            $adjustmentGrams = null;
+
+            if ($usesWholesaleTwoVariants) {
+                $currentVariantCode = WholesaleTwoChickenVariant::fromStored(
+                    $record->tipoPollo?->codigo,
+                    $record->sexo,
+                    $record->presentacion_pollo,
+                );
+
+                if ($currentVariantCode === $validated['chicken_variant_code']) {
+                    $adjustmentId = $record->ajuste_peso_mayorista_2_id;
+                    $adjustmentGrams = $record->ajuste_peso_mayorista_2_gramos;
+                } else {
+                    $adjustment = $this->wholesaleTwoAdjustments->resolveForVariant(
+                        $companyId,
+                        $validated['chicken_variant_code'],
+                        true,
+                    );
+                    $adjustmentId = $adjustment->id;
+                    $adjustmentGrams = (int) $adjustment->gramos_adicionales;
+                }
+
+                $birdCount = $birdsPerCage * max($cages, 1);
+                $totalAdjustmentKg = ((int) $adjustmentGrams * $birdCount) / 1000;
+                $grossWeight = round($readWeight + $totalAdjustmentKg, 3);
+                $netWeight = round($grossWeight - $tareWeight, 3);
+
+                if ($netWeight <= 0) {
+                    throw ValidationException::withMessages([
+                        'read_weight_kg' => 'El peso leído con la merma aplicada debe ser mayor que la tara total de las javas.',
+                    ]);
+                }
+            }
 
             $changes = [
                 'tipo_pollo_id' => $type->id,
                 'condicion_pollo' => $condition,
-                'sexo' => $validated['chicken_sex'],
+                'sexo' => $usesWholesaleTwoVariants
+                    ? $variantDefinition['sex']
+                    : $validated['chicken_sex'],
                 'tipo_java_id' => $cageType->id,
                 'origen_peso' => $validated['weight_source'],
                 'aves_por_java' => $birdsPerCage,
                 'cantidad_javas' => $cages,
                 'cantidad_aves' => $birdsPerCage * max($cages, 1),
                 'peso_java_kg_snapshot' => $cageWeight,
-                'peso_leido_kg' => $grossWeight,
+                'peso_leido_kg' => $readWeight,
                 'peso_bruto_kg' => $grossWeight,
                 'tara_total_kg' => $tareWeight,
                 'peso_neto_kg' => $netWeight,
@@ -339,6 +423,12 @@ class TicketWeighingManagementController extends Controller
                     $branch->zona_horaria
                 )->format('Y-m-d H:i:s'),
             ];
+
+            if ($usesWholesaleTwoVariants) {
+                $changes['presentacion_pollo'] = $variantDefinition['presentation'];
+                $changes['ajuste_peso_mayorista_2_id'] = $adjustmentId;
+                $changes['ajuste_peso_mayorista_2_gramos'] = $adjustmentGrams;
+            }
 
             if ($origin) {
                 $changes = [
@@ -481,6 +571,7 @@ class TicketWeighingManagementController extends Controller
             'pesadas.tipoJava',
             'pesadas.tipoBandeja',
             'pesadas.ajustePesoMinorista',
+            'pesadas.ajustePesoMayoristaDos',
             'pesadas.proveedorOrigen',
             'pesadas.almacenOrigen',
             'pesadas.vehiculo',
@@ -498,6 +589,7 @@ class TicketWeighingManagementController extends Controller
         $editable = $this->isEditable($ticket, $currentOperatingDate);
         $deliveryEditable = $this->isDeliveryEditable($ticket, $currentOperatingDate);
         $isRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL;
+        $usesWholesaleTwoVariants = $this->usesWholesaleTwoVariants($ticket);
         $pricesByType = $ticket->precios->keyBy('tipo_pollo_id');
         $amount = $records->sum(function (Pesada $record) use ($ticket, $pricesByType): float {
             $price = $pricesByType->get($record->tipo_pollo_id);
@@ -511,6 +603,7 @@ class TicketWeighingManagementController extends Controller
             'id' => $ticket->id,
             'code' => $ticket->codigo,
             'channel' => $ticket->canal,
+            'source_module' => $ticket->modulo_origen,
             'operation_type' => $ticket->tipo_operacion,
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
@@ -552,12 +645,22 @@ class TicketWeighingManagementController extends Controller
                 'cages' => (int) $records->sum('cantidad_javas'),
                 'trays' => (int) $records->sum('cantidad_bandejas'),
                 'birds' => (int) $records->sum('cantidad_aves'),
+                ...($usesWholesaleTwoVariants ? [
+                    'read_weight_kg' => round((float) $records->sum('peso_leido_kg'), 3),
+                    'adjustment_weight_kg' => round(
+                        (float) $records->sum(
+                            fn (Pesada $record): float => (float) $record->peso_bruto_kg
+                                - (float) $record->peso_leido_kg
+                        ),
+                        3
+                    ),
+                ] : []),
                 'gross_weight_kg' => round((float) $records->sum('peso_bruto_kg'), 3),
                 'tare_weight_kg' => round((float) $records->sum('tara_total_kg'), 3),
                 'net_weight_kg' => round((float) $records->sum('peso_neto_kg'), 3),
                 'amount' => $isRetail ? round((float) $amount, 2) : null,
             ],
-            'weighings' => $records->map(function (Pesada $record) use ($ticket, $isRetail, $pricesByType, $timezone): array {
+            'weighings' => $records->map(function (Pesada $record) use ($ticket, $isRetail, $usesWholesaleTwoVariants, $pricesByType, $timezone): array {
                 $frozenPrice = $pricesByType->get($record->tipo_pollo_id);
 
                 return [
@@ -570,13 +673,35 @@ class TicketWeighingManagementController extends Controller
                     'chicken_condition' => $record->condicion_pollo,
                     'chicken_sex' => $record->sexo,
                     'presentation' => $record->presentacion_pollo,
-                    'adjustment' => $record->ajustePesoMinorista
-                        ? [
-                            'code' => $record->ajustePesoMinorista->codigo,
-                            'name' => $record->ajustePesoMinorista->nombre,
-                            'additional_grams' => (int) $record->ajuste_peso_gramos,
-                        ]
+                    'chicken_variant_code' => $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO
+                        ? WholesaleTwoChickenVariant::fromStored(
+                            $record->tipoPollo?->codigo,
+                            $record->sexo,
+                            $record->presentacion_pollo,
+                        )
                         : null,
+                    'adjustment' => $usesWholesaleTwoVariants
+                        ? ($record->ajustePesoMayoristaDos
+                            ? [
+                                'code' => $record->ajustePesoMayoristaDos->codigo,
+                                'name' => $record->ajustePesoMayoristaDos->nombre,
+                                'additional_grams' => (int) $record->ajuste_peso_mayorista_2_gramos,
+                                'total_grams' => (int) $record->ajuste_peso_mayorista_2_gramos
+                                    * (int) $record->cantidad_aves,
+                                'total_weight_kg' => round(
+                                    ((int) $record->ajuste_peso_mayorista_2_gramos
+                                        * (int) $record->cantidad_aves) / 1000,
+                                    3
+                                ),
+                            ]
+                            : null)
+                        : ($record->ajustePesoMinorista
+                            ? [
+                                'code' => $record->ajustePesoMinorista->codigo,
+                                'name' => $record->ajustePesoMinorista->nombre,
+                                'additional_grams' => (int) $record->ajuste_peso_gramos,
+                            ]
+                            : null),
                     'cage_type' => [
                         'code' => $record->tipoJava?->codigo,
                         'name' => $record->tipoJava?->nombre,
@@ -648,6 +773,12 @@ class TicketWeighingManagementController extends Controller
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
             && $ticket->estado !== TicketDespacho::STATUS_VOIDED
             && $this->isFromOperatingDate($ticket, $operatingDate);
+    }
+
+    private function usesWholesaleTwoVariants(TicketDespacho $ticket): bool
+    {
+        return $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO
+            && $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH;
     }
 
     private function isDeliveryEditable(TicketDespacho $ticket, string $operatingDate): bool
@@ -900,6 +1031,9 @@ class TicketWeighingManagementController extends Controller
                     ])
                     ->values()
                 : collect(),
+            'weight_adjustments' => $this->usesWholesaleTwoVariants($ticket)
+                ? $this->wholesaleTwoAdjustments->configuration($companyId)
+                : collect(),
         ];
     }
 
@@ -986,6 +1120,7 @@ class TicketWeighingManagementController extends Controller
             'tipo_pollo_id' => $record->tipo_pollo_id,
             'condicion_pollo' => $record->condicion_pollo,
             'sexo' => $record->sexo,
+            'presentacion_pollo' => $record->presentacion_pollo,
             'tipo_java_id' => $record->tipo_java_id,
             'proveedor_origen_id' => $record->proveedor_origen_id,
             'almacen_origen_id' => $record->almacen_origen_id,
@@ -997,6 +1132,9 @@ class TicketWeighingManagementController extends Controller
             'cantidad_javas' => $record->cantidad_javas,
             'cantidad_aves' => $record->cantidad_aves,
             'peso_java_kg_snapshot' => $record->peso_java_kg_snapshot,
+            'ajuste_peso_mayorista_2_id' => $record->ajuste_peso_mayorista_2_id,
+            'ajuste_peso_mayorista_2_gramos' => $record->ajuste_peso_mayorista_2_gramos,
+            'peso_leido_kg' => $record->peso_leido_kg,
             'peso_bruto_kg' => $record->peso_bruto_kg,
             'tara_total_kg' => $record->tara_total_kg,
             'peso_neto_kg' => $record->peso_neto_kg,

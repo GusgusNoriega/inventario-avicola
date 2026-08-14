@@ -85,6 +85,7 @@ class DailyDispatchTicketController extends Controller
                 'pesadas.tipoJava',
                 'pesadas.tipoBandeja',
                 'pesadas.ajustePesoMinorista',
+                'pesadas.ajustePesoMayoristaDos',
                 'pesadas.proveedorOrigen',
                 'pesadas.almacenOrigen',
                 'pesadas.vehiculo',
@@ -628,13 +629,29 @@ class DailyDispatchTicketController extends Controller
             'chicken_condition' => $record->condicion_pollo,
             'chicken_sex' => $record->sexo,
             'presentation' => $record->presentacion_pollo,
-            'adjustment' => $record->ajustePesoMinorista
-                ? [
-                    'code' => $record->ajustePesoMinorista->codigo,
-                    'name' => $record->ajustePesoMinorista->nombre,
-                    'additional_grams' => (int) $record->ajuste_peso_gramos,
-                ]
-                : null,
+            'adjustment' => $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO
+                && $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH
+                ? ($record->ajustePesoMayoristaDos
+                    ? [
+                        'code' => $record->ajustePesoMayoristaDos->codigo,
+                        'name' => $record->ajustePesoMayoristaDos->nombre,
+                        'additional_grams' => (int) $record->ajuste_peso_mayorista_2_gramos,
+                        'total_grams' => (int) $record->ajuste_peso_mayorista_2_gramos
+                            * (int) $record->cantidad_aves,
+                        'total_weight_kg' => round(
+                            ((int) $record->ajuste_peso_mayorista_2_gramos
+                                * (int) $record->cantidad_aves) / 1000,
+                            3
+                        ),
+                    ]
+                    : null)
+                : ($record->ajustePesoMinorista
+                    ? [
+                        'code' => $record->ajustePesoMinorista->codigo,
+                        'name' => $record->ajustePesoMinorista->nombre,
+                        'additional_grams' => (int) $record->ajuste_peso_gramos,
+                    ]
+                    : null),
             'cage_type' => [
                 'code' => $record->tipoJava?->codigo,
                 'name' => $record->tipoJava?->nombre,

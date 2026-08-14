@@ -44,6 +44,49 @@ test("el ticket mayorista usa tipografia grande y muestra el camion y chofer sel
   assert.match(html, /\.form-fields \{[\s\S]*font-size: 19px;/);
   assert.match(html, /CAMIÓN: ABC-123/);
   assert.match(html, /CHOFER: María &lt;Prueba&gt;/);
+  assert.match(html, /<th>PB<\/th><th>TARA<\/th><th>PN<\/th>/);
+  assert.doesNotMatch(html, /<th>LECT<\/th><th>MERM<\/th>/);
+});
+
+test("el ticket de Mayorista 2 reimprime lectura, merma y pesos calculados sin alterar Mayorista 1", () => {
+  const html = compactHtml(buildWeightControlTicketHtml({
+    code: "M2-20260814-001",
+    channel: "MAYORISTA",
+    sourceModule: "MODULO_DESPACHO_MAYORISTA_2",
+    operationType: "DESPACHO",
+    destinationName: "Despacho sin proveedor",
+    records: [
+      {
+        typeCode: "HA",
+        birds: 10,
+        birdsPerCage: 5,
+        cages: 2,
+        readWeight: 12,
+        adjustment: {
+          code: "HEMBRA_ABIERTA",
+          name: "Hembra abierta",
+          additional_grams: 250,
+          total_weight_kg: 2.5
+        },
+        grossWeight: 14.5,
+        tareWeight: 1,
+        netWeight: 13.5
+      }
+    ]
+  }, "2026-08-14T12:30:00-05:00"));
+
+  assert.match(
+    html,
+    /<th style="width:12%">TIPO<\/th>.*<th style="width:18%">LECT<\/th><th style="width:17%">MERM<\/th>.*<th style="width:17%">TARA<\/th>/
+  );
+  assert.match(
+    html,
+    /<td>HA<\/td> <td class="number">5<\/td> <td class="number">2<\/td> <td class="number">12\.00<\/td> <td class="number">2\.50<\/td> <td class="number">14\.50<\/td> <td class="number">1\.00<\/td>/
+  );
+  assert.match(
+    html,
+    /<th>TIPO<\/th> <th>LECT<\/th><th>MERM<\/th><th>PB<\/th><th>TARA<\/th><th>PN<\/th>.*<td>HA<\/td> <td>12\.00<\/td> <td>2\.50<\/td> <td>14\.50<\/td> <td>1\.00<\/td> <td>13\.50<\/td>/
+  );
 });
 
 test("el mensaje global aparece pequeño, escapado y antes de los campos finales en ambos tickets", () => {

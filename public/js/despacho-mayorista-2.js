@@ -3,6 +3,10 @@
 import { apiRequest } from "./despacho-mayorista-2-api-client.js";
 import { printWeightControlTicket } from "./despacho-mayorista-2-ticket-printer.js";
 import { newestRecordsFirst } from "./despacho-mayorista-2-record-order.js";
+import {
+  calculateWholesaleTwoWeightBreakdown,
+  wholesaleTwoAdjustmentGramsForVariant
+} from "./despacho-mayorista-2-weight-calculation.js";
 
 const LEGACY_STORAGE_KEY = STORAGE_KEY;
 const STORAGE_KEY_PREFIX = "sistema-pollos-despacho-mayorista-2-state-v2";
@@ -90,6 +94,26 @@ const CHICKEN_TYPES = [
   { id: "pollo_beneficiado", apiCode: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "Benef.", tagClass: "tag-pollo-beneficiado" }
 ];
 const DISPATCH_CHICKEN_TYPES = CHICKEN_TYPES.filter((type) => type.id !== "pollo_beneficiado");
+const DRESSED_CHICKEN_VARIANTS = [
+  { code: "MACHO_ABIERTO", label: "Macho abierto", shortLabel: "MA", typeId: "pollo_pelado", sex: "macho", presentation: "ABIERTO", tagClass: "tag-macho-abierto" },
+  { code: "MACHO_CERRADO", label: "Macho cerrado", shortLabel: "MC", typeId: "pollo_pelado", sex: "macho", presentation: "CERRADO", tagClass: "tag-macho-cerrado" },
+  { code: "HEMBRA_ABIERTA", label: "Hembra abierta", shortLabel: "HA", typeId: "pollo_pelado", sex: "hembra", presentation: "ABIERTA", tagClass: "tag-hembra-abierta" },
+  { code: "HEMBRA_CERRADA", label: "Hembra cerrada", shortLabel: "HC", typeId: "pollo_pelado", sex: "hembra", presentation: "CERRADA", tagClass: "tag-hembra-cerrada" },
+  { code: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "PB", typeId: "pollo_beneficiado", sex: null, presentation: null, tagClass: "tag-pollo-beneficiado" }
+];
+const DEFAULT_DRESSED_CHICKEN_VARIANT = DRESSED_CHICKEN_VARIANTS[0].code;
+const VALID_DRESSED_CHICKEN_VARIANTS = new Set(DRESSED_CHICKEN_VARIANTS.map((variant) => variant.code));
+const LIVE_CHICKEN_VARIANTS = [
+  { code: "MACHO", label: "Vivo macho", shortLabel: "PV-M", typeId: "pollo_vivo", sex: "macho", presentation: null, tagClass: "tag-pollo-vivo" },
+  { code: "HEMBRA", label: "Vivo hembra", shortLabel: "PV-H", typeId: "pollo_vivo", sex: "hembra", presentation: null, tagClass: "tag-pollo-vivo" }
+];
+const DISPATCH_CHICKEN_VARIANTS = [...LIVE_CHICKEN_VARIANTS, ...DRESSED_CHICKEN_VARIANTS];
+const DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS = DISPATCH_CHICKEN_VARIANTS.map((variant) => ({
+  variantCode: variant.code,
+  name: variant.label,
+  additionalGrams: 0,
+  configurable: variant.code !== "POLLO_BENEFICIADO"
+}));
 const TICKET_OPERATIONS = {
   DISPATCH: "DESPACHO",
   RETURN: "DEVOLUCION"
@@ -155,7 +179,7 @@ const WAREHOUSE_ORIGINS = WAREHOUSE_DESTINATIONS.map((warehouse) => ({
   direccion: ""
 }));
 
-const VALID_TYPES = new Set(DISPATCH_CHICKEN_TYPES.map((type) => type.id));
+const VALID_TYPES = new Set(CHICKEN_TYPES.map((type) => type.id));
 const VALID_WEIGHT_SOURCES = new Set(["1", "2", "manual"]);
 const CRATE_TYPES = [
   { id: "java_700", apiCode: "JAVA_700", label: "Java 7.00 kg", weightKg: 7.0 },
@@ -241,6 +265,8 @@ const SCALE_BLE_SERVICE_UUIDS = Array.from(new Set(SCALE_BLE_PROFILES.map((profi
 let liveDirectoryClients = null;
 let liveDirectoryProviders = null;
 let operationCatalog = null;
+let wholesaleTwoWeightAdjustments = DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS.map((adjustment) => ({ ...adjustment }));
+let wholesaleTwoWeightAdjustmentsLoaded = false;
 let dailyJourneyPlan = null;
 let directoryLoadPromise = null;
 
@@ -289,9 +315,13 @@ const elements = {
   addWeighingBtn: document.getElementById("addWeighingBtn"),
   mobileTabs: document.querySelectorAll("[data-mobile-panel-target]"),
   typeButtons: document.querySelectorAll(".type-btn"),
+  liveSexSelector: document.getElementById("liveSexSelector"),
   sexButtons: document.querySelectorAll("[data-sex]"),
+  dressedVariantSelector: document.getElementById("dressedVariantSelector"),
+  dressedVariantButtons: document.querySelectorAll("[data-dressed-variant]"),
   truckSelect: document.getElementById("truckSelect"),
   selectProviderBtn: document.getElementById("selectProviderBtn"),
+  selectedOriginSummary: document.querySelector(".selected-origin-summary"),
   selectedProviderName: document.getElementById("selectedProviderName"),
   selectedProviderPlateLabel: document.getElementById("selectedProviderPlateLabel"),
   truckPlateField: document.getElementById("truckPlateField"),
@@ -317,6 +347,14 @@ const elements = {
   configMenuBtn: document.getElementById("configMenuBtn"),
   configMenu: document.getElementById("configMenu"),
   closeConfigMenuBtn: document.getElementById("closeConfigMenuBtn"),
+  openWeightAdjustmentSettingsBtn: document.getElementById("openWeightAdjustmentSettingsBtn"),
+  weightAdjustmentSettingsModal: document.getElementById("weightAdjustmentSettingsModal"),
+  weightAdjustmentSettingsForm: document.getElementById("weightAdjustmentSettingsForm"),
+  weightAdjustmentSettingsInputs: document.querySelectorAll("[data-weight-adjustment-variant]"),
+  weightAdjustmentSettingsMessage: document.getElementById("weightAdjustmentSettingsMessage"),
+  closeWeightAdjustmentSettingsBtn: document.getElementById("closeWeightAdjustmentSettingsBtn"),
+  cancelWeightAdjustmentSettingsBtn: document.getElementById("cancelWeightAdjustmentSettingsBtn"),
+  saveWeightAdjustmentSettingsBtn: document.getElementById("saveWeightAdjustmentSettingsBtn"),
   openJsonBtn: document.getElementById("openJsonBtn"),
   closeJsonBtn: document.getElementById("closeJsonBtn"),
   copyJsonBtn: document.getElementById("copyJsonBtn"),
@@ -359,11 +397,15 @@ const elements = {
   itemHour: document.getElementById("itemHour"),
   itemFormMessage: document.getElementById("itemFormMessage"),
   editType: document.getElementById("editType"),
+  editLiveSexSelector: document.getElementById("editLiveSexSelector"),
   editBirdCount: document.getElementById("editBirdCount"),
   editJavaCount: document.getElementById("editJavaCount"),
   editSexButtons: document.querySelectorAll("[data-edit-sex]"),
+  editDressedVariantSelector: document.getElementById("editDressedVariantSelector"),
+  editDressedVariantButtons: document.querySelectorAll("[data-edit-dressed-variant]"),
   editCrateType: document.getElementById("editCrateType"),
   editWeight: document.getElementById("editWeight"),
+  editWeightBreakdown: document.getElementById("editWeightBreakdown"),
   editWeightSource: document.getElementById("editWeightSource"),
   editSelectProviderBtn: document.getElementById("editSelectProviderBtn"),
   editSelectedProviderName: document.getElementById("editSelectedProviderName"),
@@ -489,6 +531,7 @@ let deliverySelectionContext = null;
 let providerPickerContext = null;
 let editSelectedOrigin = null;
 let editingChickenSex = DEFAULT_CHICKEN_SEX;
+let editingDressedVariantCode = DEFAULT_DRESSED_CHICKEN_VARIANT;
 let scaleTextDecoder = new TextDecoder("utf-8");
 let scaleConnections = { 1: null, 2: null };
 let scaleConnectionGenerations = { 1: 0, 2: 0 };
@@ -868,7 +911,131 @@ function normalizeType(type) {
 
 function getTypeMeta(typeId) {
   const normalizedType = normalizeType(typeId);
-  return DISPATCH_CHICKEN_TYPES.find((type) => type.id === normalizedType) || DISPATCH_CHICKEN_TYPES[0];
+  return CHICKEN_TYPES.find((type) => type.id === normalizedType) || DISPATCH_CHICKEN_TYPES[0];
+}
+
+function normalizeDispatchFamily(type) {
+  const normalizedType = normalizeType(type);
+  return normalizedType === "pollo_beneficiado" ? "pollo_pelado" : normalizedType;
+}
+
+function normalizeDressedChickenVariant(value, fallback = DEFAULT_DRESSED_CHICKEN_VARIANT) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return VALID_DRESSED_CHICKEN_VARIANTS.has(normalized) ? normalized : fallback;
+}
+
+function getDressedChickenVariantMeta(value) {
+  const normalized = normalizeDressedChickenVariant(value);
+  return DRESSED_CHICKEN_VARIANTS.find((variant) => variant.code === normalized)
+    || DRESSED_CHICKEN_VARIANTS[0];
+}
+
+function inferChickenVariantCode(typeId, sex, variantCode = null) {
+  const normalizedType = normalizeType(typeId);
+  const requestedVariant = String(variantCode || "").trim().toUpperCase();
+
+  if (normalizedType === "pollo_beneficiado" || requestedVariant === "POLLO_BENEFICIADO") {
+    return "POLLO_BENEFICIADO";
+  }
+
+  if (normalizedType === "pollo_pelado") {
+    if (VALID_DRESSED_CHICKEN_VARIANTS.has(requestedVariant)) {
+      return requestedVariant;
+    }
+
+    return normalizeChickenSex(sex) === "hembra" ? "HEMBRA_CERRADA" : "MACHO_CERRADO";
+  }
+
+  if (requestedVariant === "MACHO" || requestedVariant === "HEMBRA") {
+    return requestedVariant;
+  }
+
+  return normalizeChickenSex(sex) === "hembra" ? "HEMBRA" : "MACHO";
+}
+
+function getChickenVariantMeta(value, typeId = "pollo_vivo", sex = DEFAULT_CHICKEN_SEX) {
+  const normalizedCode = inferChickenVariantCode(typeId, sex, value);
+  return DISPATCH_CHICKEN_VARIANTS.find((variant) => variant.code === normalizedCode)
+    || LIVE_CHICKEN_VARIANTS[0];
+}
+
+function getCageChickenVariantMeta(cage) {
+  return getChickenVariantMeta(
+    cage?.chickenVariantCode || cage?.chicken_variant_code || cage?.variantePollo,
+    cage?.tipo,
+    cage?.chickenSex || cage?.sexo
+  );
+}
+
+function normalizeWeightAdjustmentConfiguration(payload) {
+  const source = Array.isArray(payload?.adjustments)
+    ? payload.adjustments
+    : (Array.isArray(payload) ? payload : []);
+  const byCode = new Map(source.map((adjustment) => [
+    String(adjustment?.code || adjustment?.variant_code || adjustment?.variantCode || "").trim().toUpperCase(),
+    adjustment
+  ]));
+
+  return DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS.map((fallback) => {
+    const stored = byCode.get(fallback.variantCode) || {};
+    const configurable = fallback.configurable && stored.configurable !== false;
+
+    return {
+      variantCode: fallback.variantCode,
+      name: String(stored.name || fallback.name),
+      additionalGrams: configurable
+        ? wholesaleTwoAdjustmentGramsForVariant(
+            fallback.variantCode,
+            stored.additional_grams ?? stored.additionalGrams,
+            TICKET_OPERATIONS.DISPATCH
+          )
+        : 0,
+      configurable
+    };
+  });
+}
+
+function applyWeightAdjustmentConfiguration(payload) {
+  wholesaleTwoWeightAdjustments = normalizeWeightAdjustmentConfiguration(payload);
+  wholesaleTwoWeightAdjustmentsLoaded = true;
+}
+
+function getWeightAdjustmentMeta(variantCode) {
+  const normalizedCode = String(variantCode || "").trim().toUpperCase();
+  return wholesaleTwoWeightAdjustments.find((adjustment) => adjustment.variantCode === normalizedCode)
+    || DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS.find((adjustment) => adjustment.variantCode === normalizedCode)
+    || DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS[0];
+}
+
+function getEntryChickenVariant(truck = getSelectedTruck()) {
+  const isReturn = isReturnTicket(truck);
+  const birdsPerJava = normalizeBirdCountPerJava(
+    elements.birdCount?.value,
+    state.entryDefaults?.birdCountPerJava || 1
+  );
+  const chickenSex = normalizeChickenSex(
+    state.entryDefaults?.chickenSex,
+    getSuggestedChickenSex(birdsPerJava)
+  );
+
+  if (isReturn || normalizeDispatchFamily(state.selectedType) === "pollo_vivo") {
+    return getChickenVariantMeta(
+      chickenSex === "hembra" ? "HEMBRA" : "MACHO",
+      "pollo_vivo",
+      chickenSex
+    );
+  }
+
+  return getDressedChickenVariantMeta(state.entryDefaults?.dressedVariantCode);
+}
+
+function adjustmentGramsForVariant(variantCode, operationType = TICKET_OPERATIONS.DISPATCH) {
+  const adjustment = getWeightAdjustmentMeta(variantCode);
+  return wholesaleTwoAdjustmentGramsForVariant(
+    variantCode,
+    adjustment.additionalGrams,
+    operationType
+  );
 }
 
 function normalizeChickenSex(value, fallback = DEFAULT_CHICKEN_SEX) {
@@ -1415,6 +1582,31 @@ function buildOriginRecord(origin) {
   };
 }
 
+function hasCageMerchandiseOrigin(cage) {
+  return Boolean(
+    String(
+      cage?.origenId
+        || cage?.origen?.id
+        || cage?.proveedorOrigenId
+        || cage?.proveedorOrigen?.id
+        || cage?.almacenOrigenId
+        || cage?.origen?.almacenId
+        || cage?.origenNombre
+        || cage?.proveedorOrigenNombre
+        || cage?.tipoOrigen
+        || ""
+    ).trim()
+  );
+}
+
+function truckHasMerchandiseOrigins(truck) {
+  return Boolean(truck?.cages?.some((cage) => hasCageMerchandiseOrigin(cage)));
+}
+
+function entryOriginRequiresJourney() {
+  return Boolean(String(state.entryDefaults?.originId || "").trim());
+}
+
 function normalizeTruckPlate(value) {
   return String(value ?? "")
     .toUpperCase()
@@ -1599,21 +1791,71 @@ function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS
     netWeight = 0;
   }
 
+  const normalizedRecordType = ticketOperation === TICKET_OPERATIONS.RETURN
+    ? "pollo_vivo"
+    : normalizeType(cage?.tipo);
+  const normalizedRecordSex = normalizeChickenSex(
+    cage?.chickenSex || cage?.sexo,
+    getSuggestedChickenSex(birdsPerJava)
+  );
+  const chickenVariantCode = inferChickenVariantCode(
+    normalizedRecordType,
+    normalizedRecordSex,
+    cage?.chickenVariantCode || cage?.chicken_variant_code || cage?.variantePollo || cage?.tipo
+  );
+  const chickenVariant = getChickenVariantMeta(
+    chickenVariantCode,
+    normalizedRecordType,
+    normalizedRecordSex
+  );
+  const rawAdjustmentGrams = cage?.ajustePesoGramos
+    ?? cage?.adjustmentGrams
+    ?? cage?.ajuste_peso_gramos;
+  const hasAdjustmentSnapshot = rawAdjustmentGrams !== null
+    && rawAdjustmentGrams !== undefined
+    && String(rawAdjustmentGrams).trim() !== "";
+  const adjustmentGrams = hasAdjustmentSnapshot
+    ? wholesaleTwoAdjustmentGramsForVariant(
+        chickenVariant.code,
+        rawAdjustmentGrams,
+        ticketOperation
+      )
+    : 0;
+  let readWeight = Number(cage?.pesoLeidoKg ?? cage?.readWeightKg ?? cage?.read_weight_kg);
+
+  if (!Number.isFinite(readWeight) || readWeight <= 0) {
+    readWeight = Math.max(0, grossWeight - ((adjustmentGrams * birdsTotal) / 1000));
+  }
+
+  const adjustmentBreakdown = calculateWholesaleTwoWeightBreakdown({
+    variantCode: chickenVariant.code,
+    operationType: ticketOperation,
+    readWeightKg: readWeight,
+    cageCount: javaCount,
+    birdsPerCage: birdsPerJava,
+    crateWeightKg: crateMeta.weightKg,
+    configuredAdjustmentGrams: adjustmentGrams
+  });
+
+  if (hasAdjustmentSnapshot) {
+    readWeight = adjustmentBreakdown.readWeightKg;
+    grossWeight = adjustmentBreakdown.grossWeight;
+    tareWeight = adjustmentBreakdown.tareWeightKg;
+    netWeight = adjustmentBreakdown.netWeightKg;
+  }
+
   return {
     id,
     operationType: ticketOperation,
     timestamp: cage?.timestamp || formatPeruIsoString(),
     hora: cage?.hora || "--:--:--",
-    tipo: ticketOperation === TICKET_OPERATIONS.RETURN
-      ? "pollo_vivo"
-      : normalizeType(cage?.tipo),
+    tipo: chickenVariant.typeId,
     chickenCondition: ticketOperation === TICKET_OPERATIONS.RETURN
       ? normalizeReturnCondition(cage?.chickenCondition || cage?.condicionPollo || cage?.condicion_pollo || cage?.tipo)
       : "vivo",
-    chickenSex: normalizeChickenSex(
-      cage?.chickenSex || cage?.sexo,
-      getSuggestedChickenSex(birdsPerJava)
-    ),
+    chickenVariantCode,
+    chickenPresentation: chickenVariant.presentation,
+    chickenSex: chickenVariant.sex,
     cantidadAvesPorJava: birdsPerJava,
     cantidadPollosPorJava: birdsPerJava,
     cantidadAves: birdsTotal,
@@ -1621,9 +1863,10 @@ function normalizeCageRecord(cage, fallbackId, operationType = TICKET_OPERATIONS
     cantidadJavas: javaCount,
     crateTypeId: crateMeta.id,
     pesoJavaKg: roundWeight(crateMeta.weightKg),
-    pesoLeidoKg: Number.isFinite(Number(cage?.pesoLeidoKg))
-      ? roundWeight(Number(cage.pesoLeidoKg))
-      : grossWeight,
+    pesoLeidoKg: roundBusinessWeight(readWeight),
+    ajustePesoGramos: adjustmentGrams,
+    mermaTotalGramos: hasAdjustmentSnapshot ? adjustmentBreakdown.totalAdjustmentGrams : 0,
+    mermaTotalKg: hasAdjustmentSnapshot ? adjustmentBreakdown.adjustmentWeightKg : 0,
     pesoBrutoKg: grossWeight,
     taraTotalKg: tareWeight,
     pesoNetoKg: netWeight,
@@ -1650,6 +1893,7 @@ function createDefaultState() {
       birdCountPerJava: 1,
       javaCount: 1,
       chickenSex: DEFAULT_CHICKEN_SEX,
+      dressedVariantCode: DEFAULT_DRESSED_CHICKEN_VARIANT,
       crateTypeId: DEFAULT_CRATE_TYPE_ID,
       originId: null,
       journeyKey: "",
@@ -1667,8 +1911,16 @@ function roundWeight(value) {
   return Math.round(value * 100) / 100;
 }
 
+function roundBusinessWeight(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 1000) / 1000;
+}
+
 function formatWeight(value) {
   return `${Number(value).toFixed(2)} kg`;
+}
+
+function formatBusinessWeight(value) {
+  return `${Number(value || 0).toFixed(3)} kg`;
 }
 
 function normalizeJavaCount(value, fallback = 1) {
@@ -1733,22 +1985,26 @@ function getCrateTypeIdByWeight(weightKg) {
   return closest?.id || null;
 }
 
-function calculateWeightBreakdown(grossWeight, javaCount, crateWeightKg) {
-  const scaleWeight = roundWeight(Number(grossWeight) || 0);
-  const javas = normalizeJavaCount(javaCount, 1);
-  const crateWeight = roundWeight(Number(crateWeightKg) || 0);
-  const tare = roundWeight(javas * crateWeight);
-  const gross = scaleWeight;
-  const net = roundWeight(gross - tare);
-
-  return {
-    grossWeight: gross,
-    scaleWeightKg: scaleWeight,
-    javaCount: javas,
-    crateWeightKg: crateWeight,
-    tareWeightKg: tare,
-    netWeightKg: net
-  };
+function calculateWeightBreakdown(
+  readWeight,
+  javaCount,
+  crateWeightKg,
+  birdsPerJava = 0,
+  variantCode = "MACHO",
+  operationType = TICKET_OPERATIONS.DISPATCH,
+  configuredAdjustmentGrams = null
+) {
+  return calculateWholesaleTwoWeightBreakdown({
+    variantCode,
+    operationType,
+    readWeightKg: readWeight,
+    cageCount: normalizeJavaCount(javaCount, 1),
+    birdsPerCage: normalizeBirdCountPerJava(birdsPerJava, 0),
+    crateWeightKg,
+    configuredAdjustmentGrams: configuredAdjustmentGrams === null
+      ? adjustmentGramsForVariant(variantCode, operationType)
+      : configuredAdjustmentGrams
+  });
 }
 
 function sanitizeNumericBuffer(rawValue, allowDecimal) {
@@ -2448,7 +2704,10 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
   const normalizedOperation = normalizeTicketOperation(operationType);
   const typeCatalog = normalizedOperation === TICKET_OPERATIONS.RETURN
     ? RETURN_CONDITIONS
-    : DISPATCH_CHICKEN_TYPES;
+    : DISPATCH_CHICKEN_VARIANTS.map((variant) => ({
+        ...variant,
+        id: variant.code.toLowerCase()
+      }));
   const birdsBySex = {
     macho: 0,
     hembra: 0
@@ -2458,10 +2717,13 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
     byTypeMap[type.id] = {
       id: type.id,
       label: type.label,
+      shortLabel: type.shortLabel || type.label,
       records: 0,
       cages: 0,
       javas: 0,
       birds: 0,
+      readWeight: 0,
+      adjustmentWeight: 0,
       grossWeight: 0,
       tareWeight: 0,
       netWeight: 0,
@@ -2472,7 +2734,7 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
   cages.forEach((cage) => {
     const typeId = normalizedOperation === TICKET_OPERATIONS.RETURN
       ? normalizeReturnCondition(cage.chickenCondition)
-      : normalizeType(cage.tipo);
+      : getCageChickenVariantMeta(cage).code.toLowerCase();
     const bucket = byTypeMap[typeId];
     if (!bucket) {
       return;
@@ -2482,41 +2744,55 @@ function calculateTruckTotals(cages, operationType = TICKET_OPERATIONS.DISPATCH)
     const aves = avesPorJava > 0
       ? calculateBirdTotal(avesPorJava, javas)
       : (Number(cage.cantidadAves ?? cage.cantidadPollos) || 0);
+    const readWeight = Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg ?? cage.pesoKg) || 0;
     const grossWeight = Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0;
+    const adjustmentWeight = Number.isFinite(Number(cage.mermaTotalKg))
+      ? Number(cage.mermaTotalKg)
+      : Math.max(0, grossWeight - readWeight);
     const tareWeight = Number(cage.taraTotalKg) || 0;
     const netWeight = Number(cage.pesoNetoKg ?? cage.pesoKg) || 0;
-    const chickenSex = normalizeChickenSex(cage.chickenSex || cage.sexo);
+    const chickenSex = getCageChickenVariantMeta(cage).sex;
 
     bucket.records += 1;
     bucket.cages += 1;
     bucket.javas += javas;
     bucket.birds += aves;
+    bucket.readWeight += readWeight;
+    bucket.adjustmentWeight += adjustmentWeight;
     bucket.grossWeight += grossWeight;
     bucket.tareWeight += tareWeight;
     bucket.netWeight += netWeight;
     bucket.weight += netWeight;
-    birdsBySex[chickenSex] += aves;
+    if (chickenSex) {
+      birdsBySex[chickenSex] += aves;
+    }
   });
 
   const byType = typeCatalog.map((type) => ({
     ...byTypeMap[type.id],
-    grossWeight: roundWeight(byTypeMap[type.id].grossWeight),
-    tareWeight: roundWeight(byTypeMap[type.id].tareWeight),
-    netWeight: roundWeight(byTypeMap[type.id].netWeight),
-    weight: roundWeight(byTypeMap[type.id].weight)
+    readWeight: roundBusinessWeight(byTypeMap[type.id].readWeight),
+    adjustmentWeight: roundBusinessWeight(byTypeMap[type.id].adjustmentWeight),
+    grossWeight: roundBusinessWeight(byTypeMap[type.id].grossWeight),
+    tareWeight: roundBusinessWeight(byTypeMap[type.id].tareWeight),
+    netWeight: roundBusinessWeight(byTypeMap[type.id].netWeight),
+    weight: roundBusinessWeight(byTypeMap[type.id].weight)
   }));
 
   const totalJavas = byType.reduce((sum, item) => sum + item.javas, 0);
   const totalBirds = byType.reduce((sum, item) => sum + item.birds, 0);
-  const totalGrossWeight = roundWeight(byType.reduce((sum, item) => sum + item.grossWeight, 0));
-  const totalTareWeight = roundWeight(byType.reduce((sum, item) => sum + item.tareWeight, 0));
-  const totalNetWeight = roundWeight(byType.reduce((sum, item) => sum + item.netWeight, 0));
+  const totalReadWeight = roundBusinessWeight(byType.reduce((sum, item) => sum + item.readWeight, 0));
+  const totalAdjustmentWeight = roundBusinessWeight(byType.reduce((sum, item) => sum + item.adjustmentWeight, 0));
+  const totalGrossWeight = roundBusinessWeight(byType.reduce((sum, item) => sum + item.grossWeight, 0));
+  const totalTareWeight = roundBusinessWeight(byType.reduce((sum, item) => sum + item.tareWeight, 0));
+  const totalNetWeight = roundBusinessWeight(byType.reduce((sum, item) => sum + item.netWeight, 0));
 
   return {
     records: cages.length,
     cages: cages.length,
     javas: totalJavas,
     birds: totalBirds,
+    readWeight: totalReadWeight,
+    adjustmentWeight: totalAdjustmentWeight,
     grossWeight: totalGrossWeight,
     tareWeight: totalTareWeight,
     netWeight: totalNetWeight,
@@ -2596,6 +2872,14 @@ function loadState(storageKey = activeStorageKey) {
         parsedEntryDefaults.chickenSex ?? parsedEntryDefaults.sexo,
         getSuggestedChickenSex(legacyBirdCountPerJava)
       ),
+      dressedVariantCode: normalizeDressedChickenVariant(
+        parsedEntryDefaults.dressedVariantCode
+          || parsedEntryDefaults.chickenVariantCode
+          || parsedEntryDefaults.variantePollo
+          || parsed.selectedDressedVariantCode
+          || parsed.selectedType,
+        fallback.entryDefaults.dressedVariantCode
+      ),
       crateTypeId: normalizeCrateTypeId(
         parsedEntryDefaults.crateTypeId
           || getCrateTypeIdByWeight(parsedEntryDefaults.pesoJavaKg)
@@ -2619,7 +2903,7 @@ function loadState(storageKey = activeStorageKey) {
 
     return {
       lastId: Math.max(Number(parsed.lastId) || 0, maxId),
-      selectedType: normalizeType(parsed.selectedType),
+      selectedType: normalizeDispatchFamily(parsed.selectedType),
       selectedReturnCondition: normalizeReturnCondition(parsed.selectedReturnCondition),
       entryDefaults,
       scales: {
@@ -2992,6 +3276,96 @@ function openFontSidebar() {
 
 function closeFontSidebar() {
   setFontSidebarOpen(false);
+}
+
+function setWeightAdjustmentSettingsMessage(message, isError = false) {
+  if (!elements.weightAdjustmentSettingsMessage) {
+    return;
+  }
+
+  elements.weightAdjustmentSettingsMessage.textContent = message;
+  elements.weightAdjustmentSettingsMessage.classList.toggle("is-error", isError);
+}
+
+function renderWeightAdjustmentSettings() {
+  elements.weightAdjustmentSettingsInputs.forEach((input) => {
+    const adjustment = getWeightAdjustmentMeta(input.dataset.weightAdjustmentVariant);
+    input.value = String(adjustment.additionalGrams);
+    input.disabled = !adjustment.configurable;
+  });
+  setWeightAdjustmentSettingsMessage(
+    wholesaleTwoWeightAdjustmentsLoaded
+      ? "Los valores guardados se expresan en gramos por ave."
+      : "La configuración todavía no se ha cargado; puedes guardarla para crear los valores iniciales."
+  );
+}
+
+function openWeightAdjustmentSettings() {
+  closeConfigMenu();
+  closeAllScaleSettings();
+  closeFontSidebar();
+  closeTextTouchKeyboard(true, false);
+  closeNumericPad();
+  closeTouchSelect();
+  renderWeightAdjustmentSettings();
+  elements.weightAdjustmentSettingsModal.hidden = false;
+}
+
+function closeWeightAdjustmentSettings() {
+  closeNumericPad();
+  elements.weightAdjustmentSettingsModal.hidden = true;
+  setWeightAdjustmentSettingsMessage("");
+}
+
+async function saveWeightAdjustmentSettings(event) {
+  event.preventDefault();
+  const adjustments = [];
+  let invalid = false;
+
+  elements.weightAdjustmentSettingsInputs.forEach((input) => {
+    const grams = Number(input.value);
+    if (!Number.isInteger(grams) || grams < 0 || grams > 1000000) {
+      invalid = true;
+    }
+    adjustments.push({
+      code: String(input.dataset.weightAdjustmentVariant || "").toUpperCase(),
+      additional_grams: grams
+    });
+  });
+
+  if (invalid || adjustments.length !== 6) {
+    setWeightAdjustmentSettingsMessage(
+      "Todas las mermas deben ser números enteros entre 0 y 1000000 gramos por ave.",
+      true
+    );
+    return;
+  }
+
+  elements.saveWeightAdjustmentSettingsBtn.disabled = true;
+  setWeightAdjustmentSettingsMessage("Guardando mermas de Despacho mayorista 2...");
+
+  try {
+    const response = await apiRequest("/despacho-mayorista-2/configuracion-mermas", {
+      method: "PUT",
+      body: JSON.stringify({ adjustments })
+    });
+    applyWeightAdjustmentConfiguration(response.data);
+    const updatedRecords = recalculatePendingWeightAdjustments();
+    renderWeightAdjustmentSettings();
+    renderAll();
+    const recalculationMessage = updatedRecords > 0
+      ? ` Se recalcularon ${updatedRecords} pesada${updatedRecords === 1 ? "" : "s"} pendiente${updatedRecords === 1 ? "" : "s"}.`
+      : " Las pesadas registradas no se modificaron.";
+    setWeightAdjustmentSettingsMessage(`${response.message || "Mermas guardadas correctamente."}${recalculationMessage}`);
+    setFormMessage(`Configuración de mermas actualizada.${recalculationMessage}`);
+  } catch (error) {
+    const validation = error.data?.errors
+      ? Object.values(error.data.errors).flat()[0]
+      : null;
+    setWeightAdjustmentSettingsMessage(validation || error.message, true);
+  } finally {
+    elements.saveWeightAdjustmentSettingsBtn.disabled = false;
+  }
 }
 
 function setConfigMenuOpen(isOpen) {
@@ -3374,6 +3748,57 @@ function applyOperationCatalog(catalog) {
 
 }
 
+function recalculatePendingWeightAdjustments() {
+  let updatedRecords = 0;
+
+  state.trucks.forEach((truck) => {
+    if (isTruckRegistered(truck)) {
+      return;
+    }
+
+    const operationType = getTruckOperationType(truck);
+    truck.cages.forEach((cage) => {
+      const variant = getCageChickenVariantMeta(cage);
+      const birdsPerJava = normalizeBirdCountPerJava(
+        cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
+        0
+      );
+      const javaCount = normalizeJavaCount(cage.cantidadJavas, 1);
+      const crate = getCrateTypeMeta(cage.crateTypeId);
+      const breakdown = calculateWeightBreakdown(
+        cage.pesoLeidoKg ?? cage.pesoBrutoKg,
+        javaCount,
+        crate.weightKg,
+        birdsPerJava,
+        variant.code,
+        operationType
+      );
+      const changed = Number(cage.ajustePesoGramos || 0) !== breakdown.adjustmentGrams
+        || Math.abs(Number(cage.pesoBrutoKg || 0) - breakdown.grossWeight) > 0.0001
+        || Math.abs(Number(cage.pesoNetoKg || 0) - breakdown.netWeightKg) > 0.0001;
+
+      cage.ajustePesoGramos = breakdown.adjustmentGrams;
+      cage.mermaTotalGramos = breakdown.totalAdjustmentGrams;
+      cage.mermaTotalKg = breakdown.adjustmentWeightKg;
+      cage.pesoLeidoKg = breakdown.readWeightKg;
+      cage.pesoBrutoKg = breakdown.grossWeight;
+      cage.taraTotalKg = breakdown.tareWeightKg;
+      cage.pesoNetoKg = breakdown.netWeightKg;
+      cage.pesoKg = breakdown.netWeightKg;
+
+      if (changed) {
+        updatedRecords += 1;
+      }
+    });
+  });
+
+  if (updatedRecords > 0) {
+    saveState();
+  }
+
+  return updatedRecords;
+}
+
 function applyJourneyPlan(plan) {
   dailyJourneyPlan = plan && typeof plan === "object"
     ? plan
@@ -3386,11 +3811,12 @@ function loadCurrentDirectoryData() {
   }
 
   directoryLoadPromise = (async () => {
-    const [clientsResult, providersResult, catalogResult, journeyResult] = await Promise.allSettled([
+    const [clientsResult, providersResult, catalogResult, journeyResult, adjustmentsResult] = await Promise.allSettled([
       loadDirectoryRecords("clientes"),
       loadDirectoryRecords("proveedores"),
       apiRequest("/despacho-mayorista-2/catalogo"),
-      apiRequest("/despacho-mayorista-2/jornada")
+      apiRequest("/despacho-mayorista-2/jornada"),
+      apiRequest("/despacho-mayorista-2/configuracion-mermas")
     ]);
 
     if (clientsResult.status === "fulfilled") {
@@ -3411,12 +3837,18 @@ function loadCurrentDirectoryData() {
       applyJourneyPlan(null);
     }
 
+    if (adjustmentsResult.status === "fulfilled") {
+      applyWeightAdjustmentConfiguration(adjustmentsResult.value?.data);
+      recalculatePendingWeightAdjustments();
+    }
+
     refreshClientsFromDirectory();
 
     if (
       providersResult.status === "rejected"
       || catalogResult.status === "rejected"
       || journeyResult.status === "rejected"
+      || adjustmentsResult.status === "rejected"
     ) {
       setFormMessage("No se pudieron actualizar todos los catálogos operativos desde la base de datos.", true);
     }
@@ -5885,7 +6317,7 @@ function getWeightFromSource(source) {
   if (source === "manual") {
     const rawValue = String(elements.manualWeight.value ?? "").trim();
     const weight = Number(rawValue.replace(",", "."));
-    return rawValue && Number.isFinite(weight) && weight >= 0 ? roundWeight(weight) : null;
+    return rawValue && Number.isFinite(weight) && weight >= 0 ? roundBusinessWeight(weight) : null;
   }
 
   const scaleId = Number(source);
@@ -5893,26 +6325,31 @@ function getWeightFromSource(source) {
 }
 
 function formatWeightBreakdownDetail(breakdown, totalBirds) {
-  const javaDetail = `${breakdown.javaCount} javas x ${breakdown.crateWeightKg.toFixed(2)} kg`;
+  const javaDetail = `${breakdown.javaCount} javas × ${breakdown.crateWeightKg.toFixed(2)} kg`;
+  const adjustmentDetail = breakdown.adjustmentGrams > 0
+    ? `${breakdown.adjustmentGrams} g × ${totalBirds} aves = +${breakdown.adjustmentWeightKg.toFixed(3)} kg`
+    : "Sin merma";
 
   if (breakdown.netWeightKg <= 0 && breakdown.grossWeight > 0) {
-    return `No concuerda: Bruto ${breakdown.grossWeight.toFixed(2)} - Javas ${breakdown.tareWeightKg.toFixed(2)} (${javaDetail}) | Aves totales ${totalBirds}`;
+    return `No concuerda: leído ${breakdown.readWeightKg.toFixed(3)} + merma ${breakdown.adjustmentWeightKg.toFixed(3)} - javas ${breakdown.tareWeightKg.toFixed(3)} | ${javaDetail}`;
   }
 
-  return `Bruto ${breakdown.grossWeight.toFixed(2)} - Javas ${breakdown.tareWeightKg.toFixed(2)} (${javaDetail}) | Aves totales ${totalBirds}`;
+  return `Leído ${breakdown.readWeightKg.toFixed(3)} + ${adjustmentDetail} - tara ${breakdown.tareWeightKg.toFixed(3)} (${javaDetail})`;
 }
 
 function formatWeightMismatchMessage(breakdown) {
-  return `El peso no concuerda: las javas pesan ${breakdown.tareWeightKg.toFixed(2)} kg y el bruto es ${breakdown.grossWeight.toFixed(2)} kg. Revisa la cantidad de javas, el tipo de java o la lectura de la balanza.`;
+  return `El peso no concuerda: las javas pesan ${breakdown.tareWeightKg.toFixed(3)} kg y el peso ajustado es ${breakdown.grossWeight.toFixed(3)} kg. Revisa las javas, la lectura o la merma configurada.`;
 }
 
 function buildWeightMismatchErrorOptions(breakdown) {
   return {
     title: "Peso no concuerda",
     details: [
-      { label: "Peso bruto", value: formatWeight(breakdown.grossWeight) },
-      { label: "Peso de javas", value: formatWeight(breakdown.tareWeightKg) },
-      { label: "Neto calculado", value: formatWeight(breakdown.netWeightKg) },
+      { label: "Peso leído", value: formatBusinessWeight(breakdown.readWeightKg) },
+      { label: "Merma aplicada", value: `${breakdown.adjustmentWeightKg.toFixed(3)} kg (${breakdown.adjustmentGrams} g/ave)` },
+      { label: "Peso ajustado", value: formatBusinessWeight(breakdown.grossWeight) },
+      { label: "Peso de javas", value: formatBusinessWeight(breakdown.tareWeightKg) },
+      { label: "Neto calculado", value: formatBusinessWeight(breakdown.netWeightKg) },
       { label: "Cantidad de javas", value: String(breakdown.javaCount) },
       { label: "Peso por java", value: formatWeight(breakdown.crateWeightKg) }
     ]
@@ -6011,9 +6448,17 @@ function renderTypeButtons() {
   const options = isReturn ? RETURN_CONDITIONS : DISPATCH_CHICKEN_TYPES;
   const activeValue = isReturn
     ? normalizeReturnCondition(state.selectedReturnCondition)
-    : normalizeType(state.selectedType);
+    : normalizeDispatchFamily(state.selectedType);
+  const dressedMode = !isReturn && activeValue === "pollo_pelado";
 
   elements.form?.classList.toggle("is-return-mode", isReturn);
+  elements.form?.classList.toggle("is-dressed-mode", dressedMode);
+  if (elements.liveSexSelector) {
+    elements.liveSexSelector.hidden = dressedMode;
+  }
+  if (elements.dressedVariantSelector) {
+    elements.dressedVariantSelector.hidden = !dressedMode;
+  }
 
   elements.typeButtons.forEach((button) => {
     const option = options[Number(button.dataset.optionIndex) || Array.from(elements.typeButtons).indexOf(button)] || options[0];
@@ -6035,6 +6480,16 @@ function renderChickenSexButtons(buttons, selectedSex) {
   });
 }
 
+function renderDressedVariantButtons(buttons, selectedVariantCode) {
+  const normalizedVariant = normalizeDressedChickenVariant(selectedVariantCode);
+  buttons.forEach((button) => {
+    const selected = String(button.dataset.dressedVariant || button.dataset.editDressedVariant || "").toUpperCase()
+      === normalizedVariant;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function selectEntryChickenSex(sex) {
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
@@ -6042,6 +6497,19 @@ function selectEntryChickenSex(sex) {
   };
   saveState();
   renderChickenSexButtons(elements.sexButtons, state.entryDefaults.chickenSex);
+  renderWeightPreview();
+  publishCustomerDisplayState();
+}
+
+function selectEntryDressedVariant(variantCode) {
+  state.entryDefaults = {
+    ...(state.entryDefaults || {}),
+    dressedVariantCode: normalizeDressedChickenVariant(variantCode)
+  };
+  saveState();
+  renderDressedVariantButtons(elements.dressedVariantButtons, state.entryDefaults.dressedVariantCode);
+  renderWeightPreview();
+  setFormMessage(`${getDressedChickenVariantMeta(state.entryDefaults.dressedVariantCode).label} seleccionado para la siguiente pesada.`);
 }
 
 function handleEntryBirdCountInput() {
@@ -6062,6 +6530,7 @@ function handleEditBirdCountInput() {
     editingChickenSex = getSuggestedChickenSex(birdsPerJava, editingChickenSex);
     renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
   }
+  renderEditWeightPreview();
 }
 
 function renderEditTypeOptions(operationType = TICKET_OPERATIONS.DISPATCH) {
@@ -6072,6 +6541,20 @@ function renderEditTypeOptions(operationType = TICKET_OPERATIONS.DISPATCH) {
   elements.editType.innerHTML = options
     .map((type) => `<option value="${type.id}">${type.label}</option>`)
     .join("");
+}
+
+function renderEditClassificationControls(operationType = TICKET_OPERATIONS.DISPATCH) {
+  const isReturn = normalizeTicketOperation(operationType) === TICKET_OPERATIONS.RETURN;
+  const dressedMode = !isReturn && normalizeDispatchFamily(elements.editType.value) === "pollo_pelado";
+  if (elements.editLiveSexSelector) {
+    elements.editLiveSexSelector.hidden = dressedMode;
+  }
+  if (elements.editDressedVariantSelector) {
+    elements.editDressedVariantSelector.hidden = !dressedMode;
+  }
+  renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
+  renderDressedVariantButtons(elements.editDressedVariantButtons, editingDressedVariantCode);
+  renderEditWeightPreview();
 }
 
 function renderCrateTypeOptions() {
@@ -6091,6 +6574,10 @@ function renderEntryDefaults() {
     defaults.chickenSex,
     getSuggestedChickenSex(birdCountPerJava)
   );
+  const dressedVariantCode = normalizeDressedChickenVariant(
+    defaults.dressedVariantCode,
+    DEFAULT_DRESSED_CHICKEN_VARIANT
+  );
   const crateTypeId = normalizeCrateTypeId(defaults.crateTypeId, DEFAULT_CRATE_TYPE_ID);
   const originId = normalizeOriginId(defaults.originId || defaults.providerId);
   const truckPlate = normalizeTruckPlate(defaults.truckPlate || defaults.plate || "");
@@ -6099,6 +6586,7 @@ function renderEntryDefaults() {
     birdCountPerJava,
     javaCount,
     chickenSex,
+    dressedVariantCode,
     crateTypeId,
     originId,
     journeyKey: String(defaults.journeyKey || getJourneyKey()),
@@ -6108,6 +6596,7 @@ function renderEntryDefaults() {
   elements.javaCount.value = String(javaCount);
   elements.crateType.value = crateTypeId;
   renderChickenSexButtons(elements.sexButtons, chickenSex);
+  renderDressedVariantButtons(elements.dressedVariantButtons, dressedVariantCode);
   renderEntryProviderSelection();
 }
 
@@ -6115,6 +6604,8 @@ function renderEntryProviderSelection() {
   const activeTruck = getSelectedTruck();
   renderTicketOperationToggle(activeTruck);
   if (isReturnTicket(activeTruck)) {
+    elements.selectedOriginSummary?.classList.remove("is-direct");
+    elements.selectedOriginSummary?.classList.add("is-return");
     elements.selectedProviderName.textContent = getTruckClientName(activeTruck);
     elements.selectProviderBtn.classList.add("is-empty");
     elements.truckPlateField.hidden = true;
@@ -6131,7 +6622,9 @@ function renderEntryProviderSelection() {
   const hasOrigin = Boolean(origin);
   const currentPlate = normalizeTruckPlate(state.entryDefaults?.truckPlate || elements.truckPlate.value);
 
-  elements.selectedProviderName.textContent = origin?.name || "Selecciona un camión de la lista";
+  elements.selectedProviderName.textContent = origin?.name || "Despacho directo";
+  elements.selectedOriginSummary?.classList.remove("is-return");
+  elements.selectedOriginSummary?.classList.toggle("is-direct", !hasOrigin);
   elements.selectProviderBtn.classList.toggle("is-empty", !hasOrigin);
   updateTruckPlateField(
     origin,
@@ -6146,7 +6639,7 @@ function renderEntryProviderSelection() {
     : normalizeTruckPlate(elements.truckPlate.value);
   state.entryDefaults.truckPlate = isWarehouseOrigin(origin) ? "" : selectedPlate;
   elements.selectedProviderPlateLabel.textContent = selectedPlate
-    || (origin ? "Selecciona una placa de la lista" : "Proveedor y placa pendientes");
+    || (origin ? "Selecciona una placa de la lista" : "Sin proveedor ni placa");
 }
 
 function renderTicketOperationToggle(truck = getSelectedTruck()) {
@@ -6169,7 +6662,7 @@ function renderTicketOperationToggle(truck = getSelectedTruck()) {
 
 function renderEditProviderSelection() {
   const originName = String(editSelectedOrigin?.name || "").trim();
-  elements.editSelectedProviderName.textContent = originName || "Sin origen registrado";
+  elements.editSelectedProviderName.textContent = originName || "Despacho directo · sin proveedor";
   elements.editSelectProviderBtn.classList.toggle("is-empty", !originName);
   updateTruckPlateField(
     editSelectedOrigin,
@@ -6186,8 +6679,16 @@ function renderEditProviderSelection() {
 
 function updateTruckPlateField(origin, select, field, help, options = {}) {
   const warehouse = isWarehouseOrigin(origin);
-  field.hidden = warehouse;
-  select.required = !warehouse;
+  field.hidden = warehouse || !origin;
+  select.required = Boolean(origin) && !warehouse;
+
+  if (!origin) {
+    select.disabled = true;
+    select.innerHTML = '<option value="">Despacho directo · no aplica</option>';
+    select.value = "";
+    help.textContent = "El despacho directo no requiere proveedor ni placa.";
+    return;
+  }
 
   if (warehouse) {
     select.disabled = true;
@@ -6201,13 +6702,6 @@ function updateTruckPlateField(origin, select, field, help, options = {}) {
   const activePlate = getProviderVehicleByPlate(origin, currentPlate);
   const historicalPlate = options.allowHistoricalPlate && currentPlate && !activePlate;
   const optionMarkup = [];
-
-  if (!origin) {
-    select.disabled = true;
-    select.innerHTML = '<option value="">Selecciona primero un proveedor</option>';
-    help.textContent = "Selecciona un proveedor para consultar sus placas asignadas.";
-    return;
-  }
 
   if (vehicles.length > 1) {
     optionMarkup.push('<option value="">Selecciona una placa</option>');
@@ -6385,22 +6879,92 @@ function renderWeightPreview() {
   const pendingCapture = getPendingWeighingCapture(source);
   elements.manualWeightField.hidden = !isManual;
 
-  const grossWeight = pendingCapture?.weightKg ?? getWeightFromSource(source);
+  const readWeight = pendingCapture?.weightKg ?? getWeightFromSource(source);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
+  const truck = getSelectedTruck();
+  const operationType = getTruckOperationType(truck);
+  const variant = getEntryChickenVariant(truck);
+  const birdsPerJava = normalizeBirdCountPerJava(
+    elements.birdCount.value,
+    state.entryDefaults?.birdCountPerJava || 1
+  );
+  const javaCount = normalizeJavaCount(
+    elements.javaCount.value,
+    state.entryDefaults?.javaCount || 1
+  );
 
   elements.crateType.value = crateMeta.id;
 
-  if (!Number.isFinite(grossWeight) || grossWeight < 0) {
+  if (!Number.isFinite(readWeight) || readWeight < 0) {
     elements.selectedWeightValue.textContent = "---";
-    elements.selectedWeightBreakdown.textContent = "";
+    elements.selectedWeightBreakdown.textContent = `${variant.shortLabel} · ${adjustmentGramsForVariant(variant.code, operationType)} g por ave`;
+    elements.selectedWeightBreakdown.classList.remove("is-error");
     publishCustomerDisplayState();
     return;
   }
 
-  elements.selectedWeightValue.textContent = formatWeight(Math.max(grossWeight, 0));
-  elements.selectedWeightBreakdown.textContent = "";
+  const breakdown = calculateWeightBreakdown(
+    Math.max(readWeight, 0),
+    javaCount,
+    crateMeta.weightKg,
+    birdsPerJava,
+    variant.code,
+    operationType
+  );
+  elements.selectedWeightValue.textContent = formatBusinessWeight(Math.max(breakdown.netWeightKg, 0));
+  elements.selectedWeightBreakdown.textContent = `${variant.shortLabel} · ${formatWeightBreakdownDetail(breakdown, breakdown.birdCount)}`;
+  elements.selectedWeightBreakdown.classList.toggle("is-error", breakdown.netWeightKg <= 0 && breakdown.readWeightKg > 0);
   publishCustomerDisplayState();
+}
+
+function renderEditWeightPreview() {
+  if (!elements.editWeightBreakdown || !editingContext) {
+    return;
+  }
+
+  const truck = state.trucks.find((item) => item.id === editingContext.truckId);
+  const operationType = getTruckOperationType(truck);
+  const isReturn = operationType === TICKET_OPERATIONS.RETURN;
+  const selectedFamily = isReturn
+    ? "pollo_vivo"
+    : normalizeDispatchFamily(elements.editType.value);
+  const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
+  const javaCount = normalizeJavaCount(elements.editJavaCount.value, 1);
+  const chickenSex = normalizeChickenSex(
+    editingChickenSex,
+    getSuggestedChickenSex(birdsPerJava)
+  );
+  const variant = isReturn || selectedFamily === "pollo_vivo"
+    ? getChickenVariantMeta(chickenSex === "hembra" ? "HEMBRA" : "MACHO", "pollo_vivo", chickenSex)
+    : getDressedChickenVariantMeta(editingDressedVariantCode);
+  const crate = getCrateTypeMeta(elements.editCrateType.value);
+  const readWeight = Number(elements.editWeight.value);
+
+  if (!Number.isFinite(readWeight) || readWeight <= 0) {
+    elements.editWeightBreakdown.innerHTML = `
+      <span>Merma y peso neto</span>
+      <strong>---</strong>
+      <small>${variant.shortLabel} · ${adjustmentGramsForVariant(variant.code, operationType)} g por ave</small>
+    `;
+    elements.editWeightBreakdown.classList.remove("is-error");
+    return;
+  }
+
+  const breakdown = calculateWeightBreakdown(
+    readWeight,
+    javaCount,
+    crate.weightKg,
+    birdsPerJava,
+    variant.code,
+    operationType
+  );
+  elements.editWeightBreakdown.innerHTML = `
+    <span>${variant.shortLabel} · ${breakdown.adjustmentGrams} g por ave</span>
+    <strong>${formatBusinessWeight(Math.max(breakdown.netWeightKg, 0))}</strong>
+    <small>${escapeHtml(formatWeightBreakdownDetail(breakdown, breakdown.birdCount))}</small>
+  `;
+  elements.editWeightBreakdown.classList.toggle("is-error", breakdown.netWeightKg <= 0);
 }
 
 function renderClientList(truckId) {
@@ -6498,12 +7062,20 @@ function renderProviderList() {
 
   elements.providerModalSelection.textContent = selectedOrigin?.name
     ? `Seleccionado: ${selectedOrigin.name}`
-    : "Ningún origen seleccionado.";
+    : "Despacho directo seleccionado: sin proveedor ni placa.";
+
+  const directOption = `
+    <button class="provider-option provider-option-direct ${selectedOrigin ? "" : "is-active"}" type="button" data-direct-dispatch="true">
+      <span class="provider-option-name">Despacho directo</span>
+      <span class="provider-option-meta">Sin proveedor ni placa · salida normal desde inventario</span>
+    </button>
+  `;
 
   if (!origins.length) {
-    const message = "No hay proveedores o almacenes que coincidan con la búsqueda.";
+    const message = "No hay proveedores o almacenes que coincidan con la búsqueda. El despacho directo sigue disponible.";
 
     elements.providerList.innerHTML = `
+      ${directOption}
       <div class="provider-empty">
         <p>${escapeHtml(message)}</p>
       </div>
@@ -6511,7 +7083,7 @@ function renderProviderList() {
     return;
   }
 
-  elements.providerList.innerHTML = origins.map((origin) => {
+  elements.providerList.innerHTML = directOption + origins.map((origin) => {
     const isActive = selectedOrigin?.id === origin.id ? "is-active" : "";
     const warehouse = isWarehouseOrigin(origin);
     const plateCount = getProviderVehicles(origin).length;
@@ -6532,8 +7104,18 @@ function renderProviderList() {
 }
 
 function getDailyProviderRows() {
+  const directRow = {
+    key: "despacho-directo",
+    origin: null,
+    plate: "",
+    plateLabel: "SIN PROVEEDOR",
+    alias: "Despacho directo",
+    disabled: false,
+    direct: true
+  };
+
   if (dailyJourneyPlan === null) {
-    return [];
+    return [directRow];
   }
 
   const warehouseRows = getConfiguredWarehouseOrigins().map((origin) => ({
@@ -6567,7 +7149,7 @@ function getDailyProviderRows() {
     }));
   });
 
-  return [...warehouseRows, ...providerRows];
+  return [directRow, ...warehouseRows, ...providerRows];
 }
 
 function renderDailyProviderList() {
@@ -6597,10 +7179,12 @@ function renderDailyProviderList() {
   }
 
   elements.dailyProviderList.innerHTML = rows.map((row, index) => {
-    const isActive = activeOrigin?.id === row.origin.id
-      && activePlate === row.plate;
+    const isActive = row.direct
+      ? !activeOrigin
+      : activeOrigin?.id === row.origin.id && activePlate === row.plate;
     const rowClass = [
       "daily-provider-row",
+      row.direct ? "is-direct" : "",
       isActive ? "is-active" : "",
       row.disabled ? "is-disabled" : ""
     ].filter(Boolean).join(" ");
@@ -6611,13 +7195,14 @@ function renderDailyProviderList() {
         type="button"
         role="option"
         aria-selected="${isActive ? "true" : "false"}"
-        data-origin-id="${escapeHtml(row.origin.id)}"
+        data-origin-id="${escapeHtml(row.origin?.id || "")}"
+        data-direct-dispatch="${row.direct ? "true" : "false"}"
         data-plate="${escapeHtml(row.plate)}"
         ${row.disabled ? "disabled" : ""}
       >
         <span class="daily-provider-index">${String(index + 1).padStart(2, "0")}</span>
         <span class="daily-provider-name">
-          <strong>${escapeHtml(row.origin.name)}</strong>
+          <strong>${escapeHtml(row.direct ? "Despacho directo" : row.origin.name)}</strong>
         </span>
         <span class="daily-provider-plate">
           <strong>${escapeHtml(row.plateLabel)}</strong>
@@ -6628,6 +7213,11 @@ function renderDailyProviderList() {
 }
 
 function selectDailyProviderVehicle(originId, plate) {
+  if (!String(originId || "").trim()) {
+    clearEntryOriginSelection();
+    return;
+  }
+
   const origin = getOriginById(originId);
   if (!origin) {
     renderDailyProviderList();
@@ -6665,37 +7255,49 @@ function buildTruckTableRows(truck) {
     .map((cage) => {
       const typeMeta = isReturn
         ? getReturnConditionMeta(cage.chickenCondition)
-        : getTypeMeta(cage.tipo);
-      const sexMeta = getChickenSexMeta(cage.chickenSex);
-      const typeTag = `<span class="tag ${typeMeta.tagClass}">${typeMeta.label}</span>`;
-      const sexBadge = `<span class="chicken-sex-badge chicken-sex-${sexMeta.id}" title="${sexMeta.label}" aria-label="${sexMeta.label}">${sexMeta.id === "hembra" ? "H" : "M"}</span>`;
+        : getCageChickenVariantMeta(cage);
+      const sexMeta = cage.chickenSex ? getChickenSexMeta(cage.chickenSex) : null;
+      const classificationLabel = isReturn
+        ? typeMeta.label
+        : `${typeMeta.shortLabel} · ${typeMeta.label}`;
+      const typeTag = `<span class="tag ${typeMeta.tagClass}">${classificationLabel}</span>`;
+      const sexBadge = sexMeta
+        ? `<span class="chicken-sex-badge chicken-sex-${sexMeta.id}" title="${sexMeta.label}" aria-label="${sexMeta.label}">${sexMeta.id === "hembra" ? "H" : "M"}</span>`
+        : '<span class="chicken-sex-badge chicken-sex-none" title="No aplica" aria-label="Sexo no aplicable">—</span>';
       const weightSourceText = cage.origenPeso === "manual" ? "Manual" : `B${cage.balanza}`;
       const merchandiseOrigin = isReturn
         ? "Devolución cliente"
         : String(cage.origenNombre || cage.proveedorOrigenNombre || "").trim();
       const sourceText = merchandiseOrigin
         ? `${merchandiseOrigin} · ${weightSourceText}`
-        : weightSourceText;
+        : `Despacho directo · ${weightSourceText}`;
       const javas = normalizeJavaCount(cage.cantidadJavas, 1);
       const avesPorJava = normalizeBirdCountPerJava(cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava, 0);
       const aves = avesPorJava > 0
         ? calculateBirdTotal(avesPorJava, javas)
         : (Number(cage.cantidadAves ?? cage.cantidadPollos) || 0);
+      const readWeight = Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg ?? cage.pesoKg) || 0;
       const grossWeight = Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0;
+      const adjustmentWeight = Number.isFinite(Number(cage.mermaTotalKg))
+        ? Number(cage.mermaTotalKg)
+        : Math.max(0, grossWeight - readWeight);
+      const adjustmentGrams = Number(cage.ajustePesoGramos) || 0;
       const tareWeight = Number(cage.taraTotalKg) || 0;
       const netWeight = Number(cage.pesoNetoKg ?? cage.pesoKg) || 0;
 
       return `
         <tr class="cage-row" data-truck-id="${escapeHtml(truck.id)}" data-cage-id="${escapeHtml(cage.id)}" tabindex="0" role="button" aria-label="Editar registro ${escapeHtml(cage.id)}">
           <td class="truck-cell-id">${escapeHtml(cage.id)}</td>
-          <td class="truck-cell-weight truck-cell-gross-weight">${grossWeight.toFixed(2)}</td>
+          <td class="truck-cell-weight truck-cell-read-weight">${readWeight.toFixed(3)}</td>
           <td class="truck-cell-type">${typeTag}</td>
           <td class="truck-cell-sex">${sexBadge}</td>
           <td class="truck-cell-count">${avesPorJava}</td>
           <td class="truck-cell-count">${aves}</td>
           <td class="truck-cell-count">${javas}</td>
-          <td class="truck-cell-weight">${tareWeight.toFixed(2)}</td>
-          <td class="truck-cell-weight">${netWeight.toFixed(2)}</td>
+          <td class="truck-cell-weight truck-cell-adjustment">${adjustmentWeight.toFixed(3)}<small>${adjustmentGrams} g/ave</small></td>
+          <td class="truck-cell-weight truck-cell-gross-weight">${grossWeight.toFixed(3)}</td>
+          <td class="truck-cell-weight">${tareWeight.toFixed(3)}</td>
+          <td class="truck-cell-weight truck-cell-net-weight">${netWeight.toFixed(3)}</td>
           <td class="truck-cell-meta">${escapeHtml(sourceText)}</td>
           <td class="truck-cell-meta">${escapeHtml(cage.hora)}</td>
         </tr>
@@ -6704,13 +7306,14 @@ function buildTruckTableRows(truck) {
     .join("");
 }
 
-function getTicketTypeCode(typeId, condition = "vivo", operationType = TICKET_OPERATIONS.DISPATCH) {
+function getTicketTypeCode(cage, operationType = TICKET_OPERATIONS.DISPATCH) {
   if (normalizeTicketOperation(operationType) === TICKET_OPERATIONS.RETURN) {
-    return normalizeReturnCondition(condition || typeId) === "muerto" ? "PM" : "PV";
+    if (normalizeReturnCondition(cage?.chickenCondition || cage?.tipo) === "muerto") {
+      return "PM";
+    }
   }
 
-  const normalizedType = normalizeType(typeId);
-  return normalizedType === "pollo_pelado" ? "PP" : "PV";
+  return getCageChickenVariantMeta(cage).shortLabel;
 }
 
 function buildDispatchTicketData(truck) {
@@ -6727,12 +7330,15 @@ function buildDispatchTicketData(truck) {
     emittedAt: registration?.registeredAt || null,
     delivery: registration?.delivery || null,
     records: truck.cages.map((cage) => ({
-      typeCode: getTicketTypeCode(cage.tipo, cage.chickenCondition, operationType),
+      typeCode: getTicketTypeCode(cage, operationType),
       birdsPerCage: normalizeBirdCountPerJava(
         cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
         0
       ),
       cages: normalizeJavaCount(cage.cantidadJavas, 1),
+      readWeight: Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg ?? cage.pesoKg) || 0,
+      adjustmentGrams: Number(cage.ajustePesoGramos) || 0,
+      adjustmentWeight: Number(cage.mermaTotalKg) || 0,
       grossWeight: Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0,
       tareWeight: Number(cage.taraTotalKg) || 0,
       netWeight: Number(cage.pesoNetoKg ?? cage.pesoKg) || 0
@@ -6925,12 +7531,14 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
       id: destinationId
     },
     weighings: truck.cages.map((cage) => {
-      const type = getTypeMeta(isReturn ? "pollo_vivo" : cage.tipo);
+      const chickenVariant = getCageChickenVariantMeta(cage);
+      const type = getTypeMeta(isReturn ? "pollo_vivo" : chickenVariant.typeId);
       const returnCondition = isReturn
         ? getReturnConditionMeta(cage.chickenCondition)
         : null;
       const crate = getCrateTypeMeta(cage.crateTypeId);
       const origin = getOriginById(cage.origenId);
+      const hasOrigin = !isReturn && hasCageMerchandiseOrigin(cage);
       const warehouseOrigin = isWarehouseOrigin(origin)
         || cage.tipoOrigen === "almacen";
       const warehouseId = Number(
@@ -6947,11 +7555,11 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
         ? null
         : normalizeScaleReadingSnapshot(cage.scaleReading);
 
-      if (!isReturn && warehouseOrigin && (!Number.isInteger(warehouseId) || warehouseId <= 0)) {
+      if (hasOrigin && warehouseOrigin && (!Number.isInteger(warehouseId) || warehouseId <= 0)) {
         throw new Error(`El almacén de origen del registro #${cage.id} no está vinculado con la base de datos.`);
       }
 
-      if (!isReturn && !warehouseOrigin && (!Number.isInteger(providerId) || providerId <= 0)) {
+      if (hasOrigin && !warehouseOrigin && (!Number.isInteger(providerId) || providerId <= 0)) {
         throw new Error(`El proveedor del registro #${cage.id} no está vinculado con la base de datos.`);
       }
 
@@ -6963,7 +7571,8 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
         chicken_condition: isReturn
           ? returnCondition.apiCode
           : "VIVO",
-        chicken_sex: getChickenSexMeta(cage.chickenSex).apiCode,
+        chicken_variant_code: chickenVariant.code,
+        chicken_sex: chickenVariant.sex ? getChickenSexMeta(chickenVariant.sex).apiCode : null,
         cage_type_code: crate.apiCode,
         weight_source: cage.origenPeso === "manual"
           ? "MANUAL"
@@ -6973,8 +7582,8 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
           0
         ),
         cage_count: normalizeJavaCount(cage.cantidadJavas, 1),
-        read_weight_kg: roundWeight(Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg)),
-        gross_weight_kg: roundWeight(Number(cage.pesoBrutoKg ?? cage.pesoKg)),
+        read_weight_kg: roundBusinessWeight(Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg)),
+        gross_weight_kg: roundBusinessWeight(Number(cage.pesoBrutoKg ?? cage.pesoKg)),
         weighed_at: cage.timestamp
       };
 
@@ -6987,7 +7596,7 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
         };
       }
 
-      if (!isReturn) {
+      if (hasOrigin) {
         payload.origin = warehouseOrigin
           ? {
               type: "ALMACEN",
@@ -7034,16 +7643,43 @@ function getApiErrorPresentation(error) {
   };
 }
 
-async function registerDispatchTicket(truckId, deliverySelection = null) {
-  const truck = state.trucks.find((item) => item.id === truckId);
-
-  if (!isJourneyConfigured()) {
-    setFormMessage("Configura la jornada antes de registrar el ticket y sus pesadas.", true);
+function applyRegisteredWeighingSnapshots(truck, weighings) {
+  if (!Array.isArray(weighings)) {
     return;
   }
 
+  truck.cages.forEach((cage, index) => {
+    const stored = weighings[index];
+    if (!stored) {
+      return;
+    }
+
+    cage.pesoLeidoKg = roundBusinessWeight(stored.read_weight_kg);
+    cage.ajustePesoGramos = Number(stored.adjustment?.additional_grams) || 0;
+    cage.mermaTotalGramos = Number(stored.adjustment?.total_grams) || 0;
+    cage.mermaTotalKg = roundBusinessWeight(stored.adjustment?.total_weight_kg);
+    cage.pesoBrutoKg = roundBusinessWeight(stored.gross_weight_kg);
+    cage.taraTotalKg = roundBusinessWeight(stored.tare_weight_kg);
+    cage.pesoNetoKg = roundBusinessWeight(stored.net_weight_kg);
+    cage.pesoKg = cage.pesoNetoKg;
+  });
+}
+
+async function registerDispatchTicket(truckId, deliverySelection = null) {
+  const truck = state.trucks.find((item) => item.id === truckId);
+
   if (!truck) {
     setFormMessage("No se encontró el ticket seleccionado.", true);
+    return;
+  }
+
+  if (!isReturnTicket(truck) && !wholesaleTwoWeightAdjustmentsLoaded) {
+    setFormMessage("No se puede registrar el ticket sin cargar la configuración de mermas de Mayorista 2.", true);
+    return;
+  }
+
+  if (truckHasMerchandiseOrigins(truck) && !isJourneyConfigured()) {
+    setFormMessage("Este ticket contiene pesadas con origen y requiere una jornada publicada antes de registrarse.", true);
     return;
   }
 
@@ -7083,6 +7719,7 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
       method: "POST",
       body: JSON.stringify(payload)
     });
+    applyRegisteredWeighingSnapshots(truck, response.data?.weighings);
     truck.registration = normalizeTicketRegistration({
       id: response.data?.id,
       code: response.data?.code,
@@ -7119,14 +7756,15 @@ function buildSelectedTruckDetails(truck, totals) {
   const hasDestination = Boolean(getTruckDestination(truck));
   const isReturn = isReturnTicket(truck);
   const typeItems = totals.byType
+    .filter((item) => item.records > 0)
     .map((item) => {
       const toneClass = `type-total-${item.id.replace(/_/g, "-")}`;
 
       return `
         <div class="selected-truck-type ${toneClass}">
-          <span>${item.label}</span>
+          <span>${item.shortLabel} · ${item.label}</span>
           <strong>${item.records} registros | ${item.javas} javas | ${item.birds} aves</strong>
-          <small>Neto ${item.weight.toFixed(2)} kg</small>
+          <small>Leído ${item.readWeight.toFixed(3)} + merma ${item.adjustmentWeight.toFixed(3)} · neto ${item.weight.toFixed(3)} kg</small>
         </div>
       `;
     })
@@ -7160,16 +7798,24 @@ function buildSelectedTruckDetails(truck, totals) {
         >M: ${totals.maleBirds} | H: ${totals.femaleBirds}</small>
       </div>
       <div class="selected-truck-stat">
-        <span>Bruto kg</span>
-        <strong>${totals.grossWeight.toFixed(2)}</strong>
+        <span>Leído kg</span>
+        <strong>${totals.readWeight.toFixed(3)}</strong>
+      </div>
+      <div class="selected-truck-stat selected-truck-stat-adjustment">
+        <span>Merma kg</span>
+        <strong>${totals.adjustmentWeight.toFixed(3)}</strong>
+      </div>
+      <div class="selected-truck-stat">
+        <span>Ajustado kg</span>
+        <strong>${totals.grossWeight.toFixed(3)}</strong>
       </div>
       <div class="selected-truck-stat">
         <span>Javas kg</span>
-        <strong>${totals.tareWeight.toFixed(2)}</strong>
+        <strong>${totals.tareWeight.toFixed(3)}</strong>
       </div>
       <div class="selected-truck-stat">
         <span>Neto kg</span>
-        <strong>${totals.netWeight.toFixed(2)}</strong>
+        <strong>${totals.netWeight.toFixed(3)}</strong>
       </div>
     </div>
 
@@ -7233,12 +7879,14 @@ function renderTruckColumns() {
               <thead>
                 <tr>
                   <th class="truck-head-id">#</th>
-                  <th class="truck-head-weight truck-head-gross-weight">Bruto</th>
-                  <th class="truck-head-type">Tipo</th>
+                  <th class="truck-head-weight truck-head-read-weight">Leído</th>
+                  <th class="truck-head-type">Clasificación</th>
                   <th class="truck-head-sex">Sexo</th>
                   <th class="truck-head-count">Aves/Java</th>
                   <th class="truck-head-count">Aves</th>
                   <th class="truck-head-count">Javas</th>
+                  <th class="truck-head-weight truck-head-adjustment">Merma</th>
+                  <th class="truck-head-weight truck-head-gross-weight">Ajustado</th>
                   <th class="truck-head-weight">Javas kg</th>
                   <th class="truck-head-weight">Neto</th>
                   <th class="truck-head-meta">Origen</th>
@@ -7289,8 +7937,12 @@ function renderTruckColumns() {
               <strong>${totals.javas}</strong>
             </div>
             <div class="metric">
+              <span>Merma kg</span>
+              <strong>${totals.adjustmentWeight.toFixed(3)}</strong>
+            </div>
+            <div class="metric">
               <span>Javas kg</span>
-              <strong>${totals.tareWeight.toFixed(2)}</strong>
+              <strong>${totals.tareWeight.toFixed(3)}</strong>
             </div>
           </div>
 
@@ -7308,21 +7960,35 @@ function renderGlobalStats() {
       acc.records += truckTotals.records;
       acc.javas += truckTotals.javas;
       acc.birds += truckTotals.birds;
+      acc.readWeight += truckTotals.readWeight;
+      acc.adjustmentWeight += truckTotals.adjustmentWeight;
       acc.grossWeight += truckTotals.grossWeight;
       acc.tareWeight += truckTotals.tareWeight;
       acc.netWeight += truckTotals.netWeight;
       return acc;
     },
-    { records: 0, javas: 0, birds: 0, grossWeight: 0, tareWeight: 0, netWeight: 0 }
+    { records: 0, javas: 0, birds: 0, readWeight: 0, adjustmentWeight: 0, grossWeight: 0, tareWeight: 0, netWeight: 0 }
   );
 
-  elements.globalStats.textContent = `Registros: ${total.records} | Javas: ${total.javas} | Javas kg: ${roundWeight(total.tareWeight).toFixed(2)} | Aves: ${total.birds} | Neto aves kg: ${roundWeight(total.netWeight).toFixed(2)}`;
+  elements.globalStats.textContent = `Registros: ${total.records} | Aves: ${total.birds} | Leído: ${roundBusinessWeight(total.readWeight).toFixed(3)} kg | Merma: ${roundBusinessWeight(total.adjustmentWeight).toFixed(3)} kg | Javas: ${total.javas} (${roundBusinessWeight(total.tareWeight).toFixed(3)} kg) | Neto: ${roundBusinessWeight(total.netWeight).toFixed(3)} kg`;
 }
 
 function buildJsonPayload() {
   return {
     fechaCorte: formatPeruIsoString(),
-    tiposDisponibles: DISPATCH_CHICKEN_TYPES.map((type) => ({ id: type.id, nombre: type.label })),
+    tiposDisponibles: CHICKEN_TYPES.map((type) => ({ id: type.id, nombre: type.label })),
+    variantesDisponibles: DISPATCH_CHICKEN_VARIANTS.map((variant) => ({
+      codigo: variant.code,
+      nombre: variant.label,
+      tipoId: variant.typeId,
+      sexo: variant.sex
+    })),
+    configuracionMermas: wholesaleTwoWeightAdjustments.map((adjustment) => ({
+      codigo: adjustment.variantCode,
+      nombre: adjustment.name,
+      gramosPorAve: adjustment.additionalGrams,
+      configurable: adjustment.configurable
+    })),
     tiposJavasDisponibles: CRATE_TYPES.map((crate) => ({ id: crate.id, nombre: crate.label, pesoKg: crate.weightKg })),
     clientesDisponibles: getClientCatalog().map((client) => ({
       id: client.id,
@@ -7385,6 +8051,8 @@ function buildJsonPayload() {
         totalRegistros: totals.records,
         totalJavas: totals.javas,
         totalAves: totals.birds,
+        totalKgLeido: totals.readWeight,
+        totalKgMerma: totals.adjustmentWeight,
         totalKgBruto: totals.grossWeight,
         totalKgJavas: totals.tareWeight,
         totalKgTara: totals.tareWeight,
@@ -7400,6 +8068,8 @@ function buildJsonPayload() {
           totalJavas: item.javas,
           totalAves: item.birds,
           totalPollos: item.birds,
+          totalKgLeido: item.readWeight,
+          totalKgMerma: item.adjustmentWeight,
           totalKgBruto: item.grossWeight,
           totalKgJavas: item.tareWeight,
           totalKgTara: item.tareWeight,
@@ -7453,18 +8123,19 @@ function renderAll() {
 }
 
 function renderJourneyAvailability() {
-  const configured = isJourneyConfigured();
+  const receptionMode = entryOriginRequiresJourney();
+  const available = !receptionMode || isJourneyConfigured();
   if (elements.addWeighingBtn) {
-    elements.addWeighingBtn.disabled = !configured;
+    elements.addWeighingBtn.disabled = !available;
     elements.addWeighingBtn.textContent = pendingWeighingCapture
       ? "Registrar pesada"
       : "Capturar peso";
     elements.addWeighingBtn.classList.toggle("is-captured", Boolean(pendingWeighingCapture));
-    elements.addWeighingBtn.title = configured
+    elements.addWeighingBtn.title = available
       ? (pendingWeighingCapture
         ? "Registrar la pesada usando el peso ya capturado"
         : "Capturar y congelar el peso actual")
-      : "Configura la jornada antes de agregar pesadas.";
+      : "El origen seleccionado requiere una jornada publicada.";
   }
 }
 
@@ -7522,6 +8193,10 @@ function updateEntryDefaults(showMessage = false) {
     state.entryDefaults?.chickenSex,
     getSuggestedChickenSex(birdCountPerJava)
   );
+  const dressedVariantCode = normalizeDressedChickenVariant(
+    state.entryDefaults?.dressedVariantCode,
+    DEFAULT_DRESSED_CHICKEN_VARIANT
+  );
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
   const truckPlate = normalizeTruckPlate(elements.truckPlate.value || state.entryDefaults?.truckPlate);
@@ -7530,6 +8205,7 @@ function updateEntryDefaults(showMessage = false) {
     birdCountPerJava,
     javaCount,
     chickenSex,
+    dressedVariantCode,
     crateTypeId: crateMeta.id,
     originId: normalizeOriginId(state.entryDefaults?.originId),
     journeyKey: String(state.entryDefaults?.journeyKey || getJourneyKey()),
@@ -7540,12 +8216,16 @@ function updateEntryDefaults(showMessage = false) {
   elements.javaCount.value = String(javaCount);
   elements.crateType.value = crateMeta.id;
   renderChickenSexButtons(elements.sexButtons, chickenSex);
+  renderDressedVariantButtons(elements.dressedVariantButtons, dressedVariantCode);
 
   saveState();
   renderWeightPreview();
 
   if (showMessage) {
-    setFormMessage(`Configuración fija: ${birdCountPerJava} aves/java, ${javaCount} javas, ${getChickenSexMeta(chickenSex).label.toLowerCase()}, java de ${crateMeta.weightKg.toFixed(2)} kg.`);
+    const classification = normalizeDispatchFamily(state.selectedType) === "pollo_pelado"
+      ? getDressedChickenVariantMeta(dressedVariantCode).label
+      : getChickenSexMeta(chickenSex).label;
+    setFormMessage(`Configuración fija: ${birdCountPerJava} aves/java, ${javaCount} javas, ${classification.toLowerCase()}, java de ${crateMeta.weightKg.toFixed(2)} kg.`);
   }
 }
 
@@ -7579,8 +8259,8 @@ function selectScaleForWeighing(scaleId) {
 function captureWeightForRegistration(event) {
   event?.preventDefault?.();
 
-  if (!isJourneyConfigured()) {
-    setFormMessage("Configura la jornada antes de capturar pesadas.", true);
+  if (entryOriginRequiresJourney() && !isJourneyConfigured()) {
+    setFormMessage("El origen seleccionado requiere una jornada publicada antes de capturar pesadas.", true);
     return;
   }
 
@@ -7614,13 +8294,13 @@ function captureWeightForRegistration(event) {
   }
 
   if (!Number.isFinite(weightKg) || weightKg <= 0) {
-    setFormMessage("Ingresa o selecciona un peso bruto válido mayor a 0 kg para capturarlo.", true);
+    setFormMessage("Ingresa o selecciona un peso leído válido mayor a 0 kg para capturarlo.", true);
     return;
   }
 
   pendingWeighingCapture = {
     source,
-    weightKg: roundWeight(weightKg),
+    weightKg: roundBusinessWeight(weightKg),
     scaleReading
   };
   logScaleDebug(scaleId, "peso-capturado", {
@@ -7647,8 +8327,8 @@ function handleWeighingAction(event) {
 function addCage(event) {
   event.preventDefault();
 
-  if (!isJourneyConfigured()) {
-    setFormMessage("Configura la jornada antes de agregar pesadas.", true);
+  if (entryOriginRequiresJourney() && !isJourneyConfigured()) {
+    setFormMessage("El origen seleccionado requiere una jornada publicada antes de agregar pesadas.", true);
     return;
   }
 
@@ -7660,6 +8340,11 @@ function addCage(event) {
     state.entryDefaults?.chickenSex,
     getSuggestedChickenSex(birdsPerJava)
   );
+  const selectedFamily = normalizeDispatchFamily(state.selectedType);
+  const dressedVariantCode = normalizeDressedChickenVariant(
+    state.entryDefaults?.dressedVariantCode,
+    DEFAULT_DRESSED_CHICKEN_VARIANT
+  );
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
@@ -7667,14 +8352,24 @@ function addCage(event) {
   const capturedWeight = getPendingWeighingCapture(source);
   const scaleReading = capturedWeight?.scaleReading || null;
   const rawWeight = capturedWeight?.weightKg;
-  const grossWeight = roundWeight(rawWeight);
-  const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
+  const readWeight = roundBusinessWeight(rawWeight);
   const truck = state.trucks.find((item) => item.id === truckId);
   const isReturn = isReturnTicket(truck);
+  const chickenVariant = isReturn || selectedFamily === "pollo_vivo"
+    ? getChickenVariantMeta(chickenSex === "hembra" ? "HEMBRA" : "MACHO", "pollo_vivo", chickenSex)
+    : getDressedChickenVariantMeta(dressedVariantCode);
+  const breakdown = calculateWeightBreakdown(
+    readWeight,
+    javaCount,
+    crateMeta.weightKg,
+    birdsPerJava,
+    chickenVariant.code,
+    getTruckOperationType(truck)
+  );
   const origin = isReturn ? null : getOriginById(state.entryDefaults?.originId);
   const warehouseOrigin = isWarehouseOrigin(origin);
   const truckPlate = isReturn || warehouseOrigin ? "" : normalizeTruckPlate(elements.truckPlate.value);
-  const providerVehicle = warehouseOrigin ? null : getProviderVehicleByPlate(origin, truckPlate);
+  const providerVehicle = !origin || warehouseOrigin ? null : getProviderVehicleByPlate(origin, truckPlate);
   elements.truckPlate.value = truckPlate;
   logScaleDebug(scaleId, "registro-intento", {
     weightSource: source,
@@ -7703,17 +8398,17 @@ function addCage(event) {
     return;
   }
 
-  if (!isReturn && !origin) {
-    setFormMessage("Selecciona un proveedor o almacén de origen antes de agregar la pesada.", true);
+  if (!isReturn && !wholesaleTwoWeightAdjustmentsLoaded) {
+    setFormMessage("No se pudo cargar la configuración de mermas de Mayorista 2. Recarga la vista o guárdala desde Configurar mermas.", true);
     return;
   }
 
-  if (!isReturn && !warehouseOrigin && !getProviderVehicles(origin).length) {
+  if (!isReturn && origin && !warehouseOrigin && !getProviderVehicles(origin).length) {
     setFormMessage("El proveedor seleccionado no tiene placas activas asignadas.", true);
     return;
   }
 
-  if (!isReturn && !warehouseOrigin && !providerVehicle) {
+  if (!isReturn && origin && !warehouseOrigin && !providerVehicle) {
     setFormMessage("Selecciona una placa activa asignada al proveedor.", true);
     return;
   }
@@ -7747,8 +8442,8 @@ function addCage(event) {
     return;
   }
 
-  if (!Number.isFinite(grossWeight) || grossWeight <= 0) {
-    setFormMessage("Ingresa o selecciona un peso bruto válido mayor a 0 kg.", true);
+  if (!Number.isFinite(readWeight) || readWeight <= 0) {
+    setFormMessage("Ingresa o selecciona un peso leído válido mayor a 0 kg.", true);
     return;
   }
 
@@ -7773,9 +8468,11 @@ function addCage(event) {
       minute: "2-digit",
       second: "2-digit"
     }),
-    tipo: isReturn ? "pollo_vivo" : normalizeType(state.selectedType),
+    tipo: isReturn ? "pollo_vivo" : chickenVariant.typeId,
     chickenCondition: isReturn ? returnCondition : "vivo",
-    chickenSex,
+    chickenVariantCode: chickenVariant.code,
+    chickenPresentation: chickenVariant.presentation,
+    chickenSex: chickenVariant.sex,
     cantidadAvesPorJava: birdsPerJava,
     cantidadPollosPorJava: birdsPerJava,
     cantidadAves: totalBirds,
@@ -7783,7 +8480,10 @@ function addCage(event) {
     cantidadJavas: javaCount,
     crateTypeId: crateMeta.id,
     pesoJavaKg: roundWeight(crateMeta.weightKg),
-    pesoLeidoKg: breakdown.scaleWeightKg,
+    pesoLeidoKg: breakdown.readWeightKg,
+    ajustePesoGramos: breakdown.adjustmentGrams,
+    mermaTotalGramos: breakdown.totalAdjustmentGrams,
+    mermaTotalKg: breakdown.adjustmentWeightKg,
     pesoBrutoKg: breakdown.grossWeight,
     taraTotalKg: breakdown.tareWeightKg,
     pesoNetoKg: breakdown.netWeightKg,
@@ -7817,14 +8517,16 @@ function addCage(event) {
         birdCountPerJava: birdsPerJava,
         javaCount,
         chickenSex,
+        dressedVariantCode,
         crateTypeId: crateMeta.id
       }
     : {
         birdCountPerJava: birdsPerJava,
         javaCount,
         chickenSex,
+        dressedVariantCode,
         crateTypeId: crateMeta.id,
-        originId: origin.id,
+        originId: origin?.id || null,
         journeyKey: getJourneyKey(),
         truckPlate
       };
@@ -7839,12 +8541,14 @@ function addCage(event) {
 
   const typeLabel = isReturn
     ? getReturnConditionMeta(record.chickenCondition).label
-    : getTypeMeta(record.tipo).label;
-  const sexLabel = getChickenSexMeta(record.chickenSex).label;
+    : getCageChickenVariantMeta(record).label;
+  const sexLabel = record.chickenSex ? getChickenSexMeta(record.chickenSex).label : "Sin sexo";
   setFormMessage(
     isReturn
-      ? `Registro #${record.id} en ${truck.name}: devolución ${typeLabel}, ${sexLabel.toLowerCase()}, cliente ${getTruckClientName(truck)}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
-      : `Registro #${record.id} en ${truck.name}: ${typeLabel}, ${sexLabel.toLowerCase()}, origen ${origin.name}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(2)} kg.`
+      ? `Registro #${record.id} en ${truck.name}: devolución ${typeLabel}, ${sexLabel.toLowerCase()}, cliente ${getTruckClientName(truck)}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(3)} kg.`
+      : origin
+        ? `Registro #${record.id} en ${truck.name}: ${typeLabel}, merma ${record.ajustePesoGramos} g/ave, origen ${origin.name}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(3)} kg.`
+        : `Registro #${record.id} en ${truck.name}: ${typeLabel}, merma ${record.ajustePesoGramos} g/ave, despacho directo sin proveedor ni placa, ${record.cantidadAvesPorJava} aves/java (${record.cantidadAves} aves totales), ${record.cantidadJavas} javas, neto ${record.pesoNetoKg.toFixed(3)} kg.`
   );
 }
 
@@ -7923,7 +8627,7 @@ function toggleTicketOperation() {
 
   if (convertingToDispatch) {
     closeClientModal();
-    setFormMessage(`${truck.name} ahora es un ticket de despacho. Selecciona un origen antes de agregar una pesada.`);
+    setFormMessage(`${truck.name} ahora es un ticket de despacho directo. El proveedor es opcional.`);
     return;
   }
 
@@ -8068,6 +8772,34 @@ function closeProviderModal() {
   elements.providerSearch.value = "";
 }
 
+function clearEntryOriginSelection(options = {}) {
+  state.entryDefaults = {
+    ...(state.entryDefaults || {}),
+    originId: null,
+    journeyKey: getJourneyKey(),
+    truckPlate: ""
+  };
+  elements.truckPlate.value = "";
+  saveState();
+  renderEntryProviderSelection();
+  renderDailyProviderList();
+  if (options.closeModal !== false && !elements.providerModal.hidden) {
+    closeProviderModal();
+  }
+  if (options.message !== false) {
+    setFormMessage("Despacho directo seleccionado: esta pesada no requiere proveedor ni placa.");
+  }
+}
+
+function clearEditOriginSelection() {
+  editSelectedOrigin = null;
+  elements.editTruckPlate.value = "";
+  delete elements.editTruckPlate.dataset.historicalPlate;
+  renderEditProviderSelection();
+  closeProviderModal();
+  setItemFormMessage("Despacho directo seleccionado: este registro quedará sin proveedor ni placa.");
+}
+
 function selectOrigin(originId) {
   const origin = getOriginById(originId);
   if (!origin) {
@@ -8130,7 +8862,7 @@ function openCageModal(truckId, cageId) {
   renderEditTypeOptions(getTruckOperationType(truck));
   elements.editType.value = isReturnTicket(truck)
     ? normalizeReturnCondition(cage.chickenCondition)
-    : normalizeType(cage.tipo);
+    : normalizeDispatchFamily(cage.tipo);
   const editJavaCount = normalizeJavaCount(cage.cantidadJavas, 1);
   const editBirdsPerJava = normalizeBirdCountPerJava(
     cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
@@ -8143,9 +8875,13 @@ function openCageModal(truckId, cageId) {
     cage.chickenSex || cage.sexo,
     getSuggestedChickenSex(editBirdsPerJava)
   );
-  renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
+  editingDressedVariantCode = normalizeDressedChickenVariant(
+    getCageChickenVariantMeta(cage).code,
+    DEFAULT_DRESSED_CHICKEN_VARIANT
+  );
+  renderEditClassificationControls(getTruckOperationType(truck));
   elements.editCrateType.value = normalizeCrateTypeId(cage.crateTypeId || getCrateTypeIdByWeight(cage.pesoJavaKg) || DEFAULT_CRATE_TYPE_ID);
-  elements.editWeight.value = Number(cage.pesoBrutoKg ?? cage.pesoKg).toFixed(2);
+  elements.editWeight.value = Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg ?? cage.pesoKg).toFixed(3);
   elements.editWeightSource.value = cage.origenPeso === "manual"
     ? "manual"
     : normalizeWeightSource(cage.balanza || cage.origenPeso || "1");
@@ -8174,6 +8910,7 @@ function openCageModal(truckId, cageId) {
   elements.editTruckPlate.innerHTML = "";
   elements.editTruckPlate.dataset.historicalPlate = normalizeTruckPlate(cage.placaCamion || "");
   renderEditProviderSelection();
+  renderEditWeightPreview();
 
   setItemFormMessage("");
   elements.itemModal.hidden = false;
@@ -8184,6 +8921,7 @@ function closeItemModal() {
   editingContext = null;
   editSelectedOrigin = null;
   editingChickenSex = DEFAULT_CHICKEN_SEX;
+  editingDressedVariantCode = DEFAULT_DRESSED_CHICKEN_VARIANT;
   delete elements.editTruckPlate.dataset.historicalPlate;
   if (!elements.providerModal.hidden && providerPickerContext === "edit") {
     closeProviderModal();
@@ -8216,7 +8954,7 @@ function saveCageChanges(event) {
   }
 
   const isReturn = isReturnTicket(truck);
-  const type = isReturn ? "pollo_vivo" : normalizeType(elements.editType.value);
+  const selectedFamily = isReturn ? "pollo_vivo" : normalizeDispatchFamily(elements.editType.value);
   const returnCondition = isReturn ? normalizeReturnCondition(elements.editType.value) : "vivo";
   const birdsPerJava = normalizeBirdCountPerJava(elements.editBirdCount.value, 0);
   const javaCount = normalizeJavaCount(elements.editJavaCount.value, 1);
@@ -8224,11 +8962,22 @@ function saveCageChanges(event) {
     editingChickenSex,
     getSuggestedChickenSex(birdsPerJava)
   );
+  const chickenVariant = isReturn || selectedFamily === "pollo_vivo"
+    ? getChickenVariantMeta(chickenSex === "hembra" ? "HEMBRA" : "MACHO", "pollo_vivo", chickenSex)
+    : getDressedChickenVariantMeta(editingDressedVariantCode);
+  const type = chickenVariant.typeId;
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.editCrateType.value, DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
-  const grossWeight = roundWeight(Number(elements.editWeight.value));
-  const breakdown = calculateWeightBreakdown(grossWeight, javaCount, crateMeta.weightKg);
+  const readWeight = roundBusinessWeight(Number(elements.editWeight.value));
+  const breakdown = calculateWeightBreakdown(
+    readWeight,
+    javaCount,
+    crateMeta.weightKg,
+    birdsPerJava,
+    chickenVariant.code,
+    getTruckOperationType(truck)
+  );
   const source = elements.editWeightSource.value;
   const existingScaleReading = normalizeScaleReadingSnapshot(cage.scaleReading);
   const originId = isReturn ? null : (String(editSelectedOrigin?.id || "").trim() || null);
@@ -8253,6 +9002,11 @@ function saveCageChanges(event) {
     return;
   }
 
+  if (!isReturn && !wholesaleTwoWeightAdjustmentsLoaded) {
+    setItemFormMessage("No se pudo cargar la configuración de mermas de Mayorista 2.", true);
+    return;
+  }
+
   if (isReturn && !VALID_RETURN_CONDITIONS.has(returnCondition)) {
     setItemFormMessage("Selecciona una condición de devolución válida.", true);
     return;
@@ -8273,8 +9027,8 @@ function saveCageChanges(event) {
     return;
   }
 
-  if (!Number.isFinite(grossWeight) || grossWeight <= 0) {
-    setItemFormMessage("Ingresa un peso bruto válido mayor a 0 kg.", true);
+  if (!Number.isFinite(readWeight) || readWeight <= 0) {
+    setItemFormMessage("Ingresa un peso leído válido mayor a 0 kg.", true);
     return;
   }
 
@@ -8283,7 +9037,7 @@ function saveCageChanges(event) {
     && (
       !existingScaleReading
       || existingScaleReading.scaleId !== Number(source)
-      || Math.abs(existingScaleReading.weightKg - grossWeight) > 0.001
+      || Math.abs(existingScaleReading.weightKg - readWeight) > 0.001
     )
   ) {
     setItemFormMessage(
@@ -8303,12 +9057,7 @@ function saveCageChanges(event) {
     return;
   }
 
-  if (!isReturn && !originName) {
-    setItemFormMessage("Selecciona el proveedor o almacén de origen del registro.", true);
-    return;
-  }
-
-  if (!isReturn && !warehouseOrigin && !providerVehicle && !historicalPlateUnchanged) {
+  if (!isReturn && originName && !warehouseOrigin && !providerVehicle && !historicalPlateUnchanged) {
     setItemFormMessage("Selecciona una placa activa asignada al proveedor.", true);
     return;
   }
@@ -8316,7 +9065,9 @@ function saveCageChanges(event) {
   cage.operationType = getTruckOperationType(truck);
   cage.tipo = type;
   cage.chickenCondition = returnCondition;
-  cage.chickenSex = chickenSex;
+  cage.chickenVariantCode = chickenVariant.code;
+  cage.chickenPresentation = chickenVariant.presentation;
+  cage.chickenSex = chickenVariant.sex;
   cage.cantidadAvesPorJava = birdsPerJava;
   cage.cantidadPollosPorJava = birdsPerJava;
   cage.cantidadAves = totalBirds;
@@ -8324,16 +9075,19 @@ function saveCageChanges(event) {
   cage.cantidadJavas = javaCount;
   cage.crateTypeId = crateMeta.id;
   cage.pesoJavaKg = roundWeight(crateMeta.weightKg);
+  cage.pesoLeidoKg = breakdown.readWeightKg;
+  cage.ajustePesoGramos = breakdown.adjustmentGrams;
+  cage.mermaTotalGramos = breakdown.totalAdjustmentGrams;
+  cage.mermaTotalKg = breakdown.adjustmentWeightKg;
   cage.pesoBrutoKg = breakdown.grossWeight;
   cage.taraTotalKg = breakdown.tareWeightKg;
   cage.pesoNetoKg = breakdown.netWeightKg;
   cage.pesoKg = breakdown.netWeightKg;
-  cage.pesoLeidoKg = breakdown.scaleWeightKg;
   cage.lecturaBalanzaComoNeto = false;
   cage.origenPeso = source;
   cage.balanza = source === "manual" ? null : Number(source);
   cage.scaleReading = source === "manual" ? null : existingScaleReading;
-  Object.assign(cage, isReturn
+  Object.assign(cage, isReturn || !originName
     ? buildOriginRecord(null)
     : buildOriginRecord({
         ...editSelectedOrigin,
@@ -8352,10 +9106,14 @@ function saveCageChanges(event) {
   renderAll();
   closeItemModal();
 
-  const sexLabel = getChickenSexMeta(cage.chickenSex).label.toLowerCase();
+  const classificationLabel = isReturn
+    ? getChickenSexMeta(cage.chickenSex).label.toLowerCase()
+    : getCageChickenVariantMeta(cage).label;
   setFormMessage(isReturn
-    ? `Registro #${cage.id} actualizado en ${truck.name}. Devolución ${getReturnConditionMeta(cage.chickenCondition).label}, ${sexLabel}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`
-    : `Registro #${cage.id} actualizado en ${truck.name}. ${sexLabel}, origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(2)} kg.`);
+    ? `Registro #${cage.id} actualizado en ${truck.name}. Devolución ${getReturnConditionMeta(cage.chickenCondition).label}, ${classificationLabel}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(3)} kg.`
+    : originName
+      ? `Registro #${cage.id} actualizado en ${truck.name}. ${classificationLabel}, merma ${cage.ajustePesoGramos} g/ave, origen ${originName}, ${warehouseOrigin ? "sin placa (origen interno)" : `placa ${truckPlate}`}, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(3)} kg.`
+      : `Registro #${cage.id} actualizado en ${truck.name}. ${classificationLabel}, merma ${cage.ajustePesoGramos} g/ave, despacho directo sin proveedor ni placa, ${cage.cantidadAvesPorJava} aves/java (${cage.cantidadAves} aves totales), neto ${cage.pesoNetoKg.toFixed(3)} kg.`);
 }
 
 function releaseConsumedScaleReadingIdIfUnused(removedScaleReading) {
@@ -8597,20 +9355,37 @@ function bindEvents() {
       if (isReturnTicket(activeTruck)) {
         state.selectedReturnCondition = normalizeReturnCondition(button.dataset.type);
       } else {
-        state.selectedType = normalizeType(button.dataset.type);
+        state.selectedType = normalizeDispatchFamily(button.dataset.type);
       }
       saveState();
-      renderTypeButtons();
+      renderAll();
     });
   });
   elements.sexButtons.forEach((button) => {
     button.addEventListener("click", () => selectEntryChickenSex(button.dataset.sex));
   });
+  elements.dressedVariantButtons.forEach((button) => {
+    button.addEventListener("click", () => selectEntryDressedVariant(button.dataset.dressedVariant));
+  });
   elements.editSexButtons.forEach((button) => {
     button.addEventListener("click", () => {
       editingChickenSex = normalizeChickenSex(button.dataset.editSex);
       renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
+      renderEditWeightPreview();
     });
+  });
+  elements.editDressedVariantButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      editingDressedVariantCode = normalizeDressedChickenVariant(button.dataset.editDressedVariant);
+      renderDressedVariantButtons(elements.editDressedVariantButtons, editingDressedVariantCode);
+      renderEditWeightPreview();
+    });
+  });
+  elements.editType.addEventListener("change", () => {
+    const operationType = editingContext
+      ? getTruckOperationType(state.trucks.find((truck) => truck.id === editingContext.truckId))
+      : TICKET_OPERATIONS.DISPATCH;
+    renderEditClassificationControls(operationType);
   });
 
   elements.scaleCaptureButtons[1].addEventListener("click", () => selectScaleForWeighing(1));
@@ -8668,12 +9443,19 @@ function bindEvents() {
   elements.birdCount.addEventListener("input", handleEntryBirdCountInput);
   elements.birdCount.addEventListener("change", () => updateEntryDefaults(true));
   elements.editBirdCount.addEventListener("input", handleEditBirdCountInput);
+  elements.editJavaCount.addEventListener("input", renderEditWeightPreview);
+  elements.editCrateType.addEventListener("change", renderEditWeightPreview);
+  elements.editWeight.addEventListener("input", renderEditWeightPreview);
   elements.javaCount.addEventListener("input", renderWeightPreview);
   elements.javaCount.addEventListener("change", () => updateEntryDefaults(true));
   elements.crateType.addEventListener("change", () => updateEntryDefaults(true));
   elements.form.addEventListener("submit", handleWeighingAction);
   elements.configMenuBtn?.addEventListener("click", toggleConfigMenu);
   elements.closeConfigMenuBtn?.addEventListener("click", closeConfigMenu);
+  elements.openWeightAdjustmentSettingsBtn?.addEventListener("click", openWeightAdjustmentSettings);
+  elements.closeWeightAdjustmentSettingsBtn?.addEventListener("click", closeWeightAdjustmentSettings);
+  elements.cancelWeightAdjustmentSettingsBtn?.addEventListener("click", closeWeightAdjustmentSettings);
+  elements.weightAdjustmentSettingsForm?.addEventListener("submit", saveWeightAdjustmentSettings);
   elements.openFontSidebarBtn?.addEventListener("click", openFontSidebar);
   elements.closeFontSidebarBtn?.addEventListener("click", closeFontSidebar);
   elements.resetFontSizesBtn?.addEventListener("click", resetAllCustomFontSizes);
@@ -8741,6 +9523,15 @@ function bindEvents() {
   elements.providerList.addEventListener("click", (event) => {
     const option = event.target.closest(".provider-option");
     if (!option) {
+      return;
+    }
+
+    if (option.dataset.directDispatch === "true") {
+      if (providerPickerContext === "edit") {
+        clearEditOriginSelection();
+      } else {
+        clearEntryOriginSelection();
+      }
       return;
     }
 
@@ -8843,6 +9634,12 @@ function bindEvents() {
     }
   });
 
+  elements.weightAdjustmentSettingsModal?.addEventListener("click", (event) => {
+    if (event.target === elements.weightAdjustmentSettingsModal) {
+      closeWeightAdjustmentSettings();
+    }
+  });
+
   SCALE_IDS.forEach((scaleId) => {
     elements.scaleSettingsModals[scaleId]?.addEventListener("click", (event) => {
       if (event.target === elements.scaleSettingsModals[scaleId]) {
@@ -8920,6 +9717,11 @@ function bindEvents() {
 
     if (!elements.fontSidebarOverlay?.hidden) {
       closeFontSidebar();
+      return;
+    }
+
+    if (!elements.weightAdjustmentSettingsModal?.hidden) {
+      closeWeightAdjustmentSettings();
       return;
     }
 

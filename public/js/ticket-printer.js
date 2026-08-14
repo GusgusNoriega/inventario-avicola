@@ -71,6 +71,7 @@ function normalizeTicketRecord(record) {
   const grossWeight = Number(record?.grossWeight) || 0;
   const tareWeight = Number(record?.tareWeight) || 0;
   const suppliedReadWeight = Number(record?.readWeight);
+  const suppliedAdjustmentWeight = Number(record?.adjustment?.total_weight_kg);
   const suppliedNetWeight = Number(record?.netWeight);
   const priceKg = Number(record?.priceKg) || 0;
   const suppliedAmount = Number(record?.amount);
@@ -90,7 +91,9 @@ function normalizeTicketRecord(record) {
     grossWeight,
     tareWeight,
     netWeight,
-    adjustmentWeight: grossWeight - readWeight,
+    adjustmentWeight: Number.isFinite(suppliedAdjustmentWeight)
+      ? suppliedAdjustmentWeight
+      : grossWeight - readWeight,
     priceKg,
     amount: Number.isFinite(suppliedAmount) ? suppliedAmount : netWeight * priceKg
   };
@@ -513,6 +516,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   const typeTotals = summarizeTicketRecords(records);
   const isReturn = ticket?.operationType === "DEVOLUCION";
   const isRetail = ticket?.channel === "MINORISTA";
+  const isWholesaleTwo = ticket?.sourceModule === "MODULO_DESPACHO_MAYORISTA_2";
 
   if (isRetail) {
     return buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isReturn);
@@ -530,6 +534,13 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
         <td class="number">${record.netWeight.toFixed(2)}</td>
         <td class="number">${escapeTicketHtml(formatTicketMoney(record.priceKg))}</td>
         <td class="number">${escapeTicketHtml(formatTicketMoney(record.amount))}</td>
+      ` : isWholesaleTwo ? `
+        <td class="number">${record.birdsPerCage}</td>
+        <td class="number">${record.cages}</td>
+        <td class="number">${record.readWeight.toFixed(2)}</td>
+        <td class="number">${record.adjustmentWeight.toFixed(2)}</td>
+        <td class="number">${record.grossWeight.toFixed(2)}</td>
+        <td class="number">${record.tareWeight.toFixed(2)}</td>
       ` : `
         <td class="number">${record.birdsPerCage}</td>
         <td class="number">${record.cages}</td>
@@ -545,6 +556,12 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
         <td>${total.netWeight.toFixed(2)}</td>
         <td>${escapeTicketHtml(formatTicketMoney(total.priceKg))}</td>
         <td>${escapeTicketHtml(formatTicketMoney(total.amount))}</td>
+      ` : isWholesaleTwo ? `
+        <td>${total.readWeight.toFixed(2)}</td>
+        <td>${total.adjustmentWeight.toFixed(2)}</td>
+        <td>${total.grossWeight.toFixed(2)}</td>
+        <td>${total.tareWeight.toFixed(2)}</td>
+        <td>${total.netWeight.toFixed(2)}</td>
       ` : `
         <td>${total.grossWeight.toFixed(2)}</td>
         <td>${total.tareWeight.toFixed(2)}</td>
@@ -790,12 +807,14 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   ${isRetail ? `<p class="channel">DESPACHO MINORISTA · ${escapeTicketHtml(customerKind)}</p>` : ""}
   ${deliveryHtml}
 
-  <table class="detail-table${isRetail ? " retail-detail-table" : ""}">
+  <table class="detail-table${isRetail ? " retail-detail-table" : (isWholesaleTwo ? " wholesale-two-detail-table" : "")}">
     <thead>
       <tr>
         ${isRetail
           ? "<th>TIPO</th><th>POLLOS</th><th>NETO<br>KG</th><th>PRECIO<br>/KG</th><th>SUBTOTAL</th>"
-          : "<th>TIPO</th><th>C/A</th><th>CJ</th><th>PESO<br>BRUTO</th><th>PESO<br>TARA</th>"}
+          : (isWholesaleTwo
+            ? '<th style="width:12%">TIPO</th><th style="width:10%">C/A</th><th style="width:9%">CJ</th><th style="width:18%">LECT</th><th style="width:17%">MERM</th><th style="width:17%">PB</th><th style="width:17%">TARA</th>'
+            : "<th>TIPO</th><th>C/A</th><th>CJ</th><th>PESO<br>BRUTO</th><th>PESO<br>TARA</th>")}
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -808,7 +827,9 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
         <th>TIPO</th>
         ${isRetail
           ? "<th>NETO KG</th><th>PRECIO/KG</th><th>SUBTOTAL</th>"
-          : "<th>PB</th><th>TARA</th><th>PN</th>"}
+          : (isWholesaleTwo
+            ? '<th>LECT</th><th>MERM</th><th>PB</th><th>TARA</th><th>PN</th>'
+            : "<th>PB</th><th>TARA</th><th>PN</th>")}
       </tr>
     </thead>
     <tbody>${totalRows}</tbody>

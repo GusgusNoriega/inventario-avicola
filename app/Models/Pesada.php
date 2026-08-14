@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'tipo_java_id',
     'tipo_bandeja_id',
     'ajuste_peso_minorista_id',
+    'ajuste_peso_mayorista_2_id',
     'lectura_balanza_id',
     'proveedor_origen_id',
     'almacen_origen_id',
@@ -34,6 +35,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'peso_bandeja_kg_snapshot',
     'peso_leido_kg',
     'ajuste_peso_gramos',
+    'ajuste_peso_mayorista_2_gramos',
     'peso_bruto_kg',
     'tara_total_kg',
     'peso_neto_kg',
@@ -101,6 +103,17 @@ class Pesada extends Model
     }
 
     /**
+     * @return BelongsTo<AjustePesoMayoristaDos, $this>
+     */
+    public function ajustePesoMayoristaDos(): BelongsTo
+    {
+        return $this->belongsTo(
+            AjustePesoMayoristaDos::class,
+            'ajuste_peso_mayorista_2_id'
+        );
+    }
+
+    /**
      * @return BelongsTo<LecturaBalanza, $this>
      */
     public function lecturaBalanza(): BelongsTo
@@ -156,6 +169,7 @@ class Pesada extends Model
             'peso_bandeja_kg_snapshot' => 'decimal:3',
             'peso_leido_kg' => 'decimal:3',
             'ajuste_peso_gramos' => 'integer',
+            'ajuste_peso_mayorista_2_gramos' => 'integer',
             'peso_bruto_kg' => 'decimal:3',
             'tara_total_kg' => 'decimal:3',
             'peso_neto_kg' => 'decimal:3',

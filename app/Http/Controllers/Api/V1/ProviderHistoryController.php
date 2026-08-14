@@ -80,6 +80,7 @@ class ProviderHistoryController extends Controller
                 'ticket.almacenDestino',
                 'tipoPollo',
                 'tipoJava',
+                'ajustePesoMayoristaDos',
                 'vehiculo',
             ])
             ->orderByDesc('pesada_at')
@@ -131,6 +132,8 @@ class ProviderHistoryController extends Controller
     private function formatRecord(Pesada $record): array
     {
         $ticket = $record->ticket;
+        $usesWholesaleTwoAdjustment = $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO
+            && $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH;
         $destination = $ticket->clienteDestino
             ? [
                 'type' => 'CLIENTE',
@@ -158,6 +161,21 @@ class ProviderHistoryController extends Controller
             'cage_type' => $record->tipoJava?->nombre,
             'cages' => $record->cantidad_javas,
             'birds' => $record->cantidad_aves,
+            'read_weight_kg' => (float) $record->peso_leido_kg,
+            'adjustment' => $usesWholesaleTwoAdjustment && $record->ajustePesoMayoristaDos
+                ? [
+                    'code' => $record->ajustePesoMayoristaDos->codigo,
+                    'name' => $record->ajustePesoMayoristaDos->nombre,
+                    'additional_grams' => (int) $record->ajuste_peso_mayorista_2_gramos,
+                    'total_grams' => (int) $record->ajuste_peso_mayorista_2_gramos
+                        * (int) $record->cantidad_aves,
+                    'total_weight_kg' => round(
+                        ((int) $record->ajuste_peso_mayorista_2_gramos
+                            * (int) $record->cantidad_aves) / 1000,
+                        3
+                    ),
+                ]
+                : null,
             'gross_weight_kg' => (float) $record->peso_bruto_kg,
             'tare_weight_kg' => (float) $record->tara_total_kg,
             'net_weight_kg' => (float) $record->peso_neto_kg,

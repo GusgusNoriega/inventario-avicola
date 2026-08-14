@@ -31,6 +31,19 @@ class WholesaleTwoIsolationTest extends TestCase
             ->assertSee(route('despacho-mayorista-2.pantalla-cliente'), false)
             ->assertSee(asset('css/despacho-mayorista-2.css'), false)
             ->assertSee(asset('js/despacho-mayorista-2.js'), false)
+            ->assertSee('data-dressed-variant="MACHO_ABIERTO"', false)
+            ->assertSee('data-dressed-variant="MACHO_CERRADO"', false)
+            ->assertSee('data-dressed-variant="HEMBRA_ABIERTA"', false)
+            ->assertSee('data-dressed-variant="HEMBRA_CERRADA"', false)
+            ->assertSee('data-dressed-variant="POLLO_BENEFICIADO"', false)
+            ->assertSee('Despacho directo', false)
+            ->assertSee('Sin proveedor ni placa', false)
+            ->assertSee('openWeightAdjustmentSettingsBtn', false)
+            ->assertSee('weightAdjustmentSettingsModal', false)
+            ->assertSee('data-weight-adjustment-variant="MACHO"', false)
+            ->assertSee('data-weight-adjustment-variant="HEMBRA_CERRADA"', false)
+            ->assertSee('PB · Pollo beneficiado', false)
+            ->assertSee('Sin merma por regla del sistema.', false)
             ->assertDontSee(asset('css/style.css'), false)
             ->assertDontSee(asset('js/app.js'), false);
 
@@ -75,6 +88,8 @@ class WholesaleTwoIsolationTest extends TestCase
         foreach (['catalogo', 'clientes', 'proveedores', 'jornada'] as $path) {
             $this->getJson("/api/v1/despacho-mayorista-2/{$path}")->assertOk();
         }
+        $this->getJson('/api/v1/despacho-mayorista-2/configuracion-mermas')->assertOk();
+        $this->putJson('/api/v1/despacho-mayorista-2/configuracion-mermas', [])->assertUnprocessable();
         $this->postJson('/api/v1/despacho-mayorista-2/tickets', [])->assertUnprocessable();
 
         foreach (['catalogo', 'clientes', 'proveedores', 'jornada'] as $path) {
@@ -95,6 +110,8 @@ class WholesaleTwoIsolationTest extends TestCase
         foreach (['catalogo', 'clientes', 'proveedores', 'jornada'] as $path) {
             $this->getJson("/api/v1/despacho-mayorista-2/{$path}")->assertForbidden();
         }
+        $this->getJson('/api/v1/despacho-mayorista-2/configuracion-mermas')->assertForbidden();
+        $this->putJson('/api/v1/despacho-mayorista-2/configuracion-mermas', [])->assertForbidden();
         $this->postJson('/api/v1/despacho-mayorista-2/tickets', [])->assertForbidden();
     }
 
@@ -152,6 +169,26 @@ class WholesaleTwoIsolationTest extends TestCase
         }
         $this->assertStringContainsString('/despacho-mayorista-2/${type}?per_page=100', $wholesaleTwo);
         $this->assertStringNotContainsString('apiRequest("/operacion/', $wholesaleTwo);
+        $this->assertStringContainsString('./despacho-mayorista-2-weight-calculation.js', $wholesaleTwo);
+        $this->assertStringContainsString('/despacho-mayorista-2/configuracion-mermas', $wholesaleTwo);
+        $this->assertStringContainsString('recalculatePendingWeightAdjustments', $wholesaleTwo);
+
+        foreach ([
+            'MACHO',
+            'HEMBRA',
+            'MACHO_ABIERTO',
+            'MACHO_CERRADO',
+            'HEMBRA_ABIERTA',
+            'HEMBRA_CERRADA',
+            'POLLO_BENEFICIADO',
+        ] as $variantCode) {
+            $this->assertStringContainsString('"'.$variantCode.'"', $wholesaleTwo);
+        }
+
+        $this->assertStringContainsString('chicken_variant_code: chickenVariant.code', $wholesaleTwo);
+        $this->assertStringContainsString('if (hasOrigin) {', $wholesaleTwo);
+        $this->assertStringContainsString('truckHasMerchandiseOrigins(truck)', $wholesaleTwo);
+        $this->assertStringNotContainsString('chicken_variant_code:', $wholesaleOne);
     }
 
     private function createBranchFor(User $user, string $code): int

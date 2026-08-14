@@ -4,8 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\WholesaleTwoWeightAdjustmentService;
+use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -161,6 +164,51 @@ class ProviderHistoryApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.summary.records', 1)
             ->assertJsonPath('data.records.0.ticket.code', 'T-20260621-002');
+    }
+
+    public function test_provider_history_exposes_wholesale_two_adjustment_without_changing_net_totals(): void
+    {
+        $this->createWeighing(
+            'T-M2-20260621-001',
+            '2026-06-21',
+            'M2-001',
+            customerId: $this->customerId,
+            netWeight: 20
+        );
+        app(WholesaleTwoWeightAdjustmentService::class)->ensureDefaults(
+            (int) $this->user->empresa_id
+        );
+        $adjustment = DB::table('ajustes_peso_mayorista_2')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', WholesaleTwoChickenVariant::MALE_OPEN)
+            ->first();
+        DB::table('ajustes_peso_mayorista_2')
+            ->where('id', $adjustment->id)
+            ->update(['gramos_adicionales' => 125]);
+        $ticketId = (int) DB::table('tickets_despacho')
+            ->where('codigo', 'T-M2-20260621-001')
+            ->value('id');
+        DB::table('tickets_despacho')->where('id', $ticketId)->update([
+            'modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO,
+            'tipo_operacion' => TicketDespacho::OPERATION_DISPATCH,
+        ]);
+        DB::table('pesadas')->where('ticket_id', $ticketId)->update([
+            'presentacion_pollo' => 'ABIERTO',
+            'ajuste_peso_mayorista_2_id' => $adjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 125,
+            'peso_leido_kg' => 31.5,
+        ]);
+
+        $this->getJson("/api/v1/proveedores/{$this->providerId}/historial")
+            ->assertOk()
+            ->assertJsonPath('data.summary.net_weight_kg', 20)
+            ->assertJsonPath('data.records.0.read_weight_kg', 31.5)
+            ->assertJsonPath('data.records.0.gross_weight_kg', 34)
+            ->assertJsonPath('data.records.0.net_weight_kg', 20)
+            ->assertJsonPath('data.records.0.adjustment.code', WholesaleTwoChickenVariant::MALE_OPEN)
+            ->assertJsonPath('data.records.0.adjustment.additional_grams', 125)
+            ->assertJsonPath('data.records.0.adjustment.total_grams', 2500)
+            ->assertJsonPath('data.records.0.adjustment.total_weight_kg', 2.5);
     }
 
     public function test_provider_can_have_multiple_assigned_plates(): void

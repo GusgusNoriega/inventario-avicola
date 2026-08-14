@@ -72,6 +72,7 @@ function normalizeTicketRecord(record) {
   const tareWeight = Number(record?.tareWeight) || 0;
   const suppliedReadWeight = Number(record?.readWeight);
   const suppliedNetWeight = Number(record?.netWeight);
+  const suppliedAdjustmentWeight = Number(record?.adjustmentWeight);
   const priceKg = Number(record?.priceKg) || 0;
   const suppliedAmount = Number(record?.amount);
   const readWeight = Number.isFinite(suppliedReadWeight) ? suppliedReadWeight : grossWeight;
@@ -90,7 +91,10 @@ function normalizeTicketRecord(record) {
     grossWeight,
     tareWeight,
     netWeight,
-    adjustmentWeight: grossWeight - readWeight,
+    adjustmentGrams: Math.max(0, Number(record?.adjustmentGrams) || 0),
+    adjustmentWeight: Number.isFinite(suppliedAdjustmentWeight)
+      ? Math.max(0, suppliedAdjustmentWeight)
+      : Math.max(0, grossWeight - readWeight),
     priceKg,
     amount: Number.isFinite(suppliedAmount) ? suppliedAmount : netWeight * priceKg
   };
@@ -533,8 +537,10 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       ` : `
         <td class="number">${record.birdsPerCage}</td>
         <td class="number">${record.cages}</td>
-        <td class="number">${record.grossWeight.toFixed(2)}</td>
-        <td class="number">${record.tareWeight.toFixed(2)}</td>
+        <td class="number">${record.readWeight.toFixed(3)}</td>
+        <td class="number adjustment">${record.adjustmentWeight.toFixed(3)}</td>
+        <td class="number">${record.tareWeight.toFixed(3)}</td>
+        <td class="number net">${record.netWeight.toFixed(3)}</td>
       `}
     </tr>
   `).join("");
@@ -546,9 +552,10 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
         <td>${escapeTicketHtml(formatTicketMoney(total.priceKg))}</td>
         <td>${escapeTicketHtml(formatTicketMoney(total.amount))}</td>
       ` : `
-        <td>${total.grossWeight.toFixed(2)}</td>
-        <td>${total.tareWeight.toFixed(2)}</td>
-        <td>${total.netWeight.toFixed(2)}</td>
+        <td>${total.readWeight.toFixed(3)}</td>
+        <td class="adjustment">${total.adjustmentWeight.toFixed(3)}</td>
+        <td>${total.tareWeight.toFixed(3)}</td>
+        <td class="net">${total.netWeight.toFixed(3)}</td>
       `}
     </tr>
   `).join("");
@@ -706,11 +713,23 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       text-align: right;
     }
 
-    .detail-table th:nth-child(1) { width: 14%; }
-    .detail-table th:nth-child(2) { width: 13%; }
-    .detail-table th:nth-child(3) { width: 12%; }
-    .detail-table th:nth-child(4) { width: 31%; }
-    .detail-table th:nth-child(5) { width: 30%; }
+    .wholesale-ticket .detail-table th:nth-child(1) { width: 11%; }
+    .wholesale-ticket .detail-table th:nth-child(2) { width: 9%; }
+    .wholesale-ticket .detail-table th:nth-child(3) { width: 8%; }
+    .wholesale-ticket .detail-table th:nth-child(4) { width: 19%; }
+    .wholesale-ticket .detail-table th:nth-child(5) { width: 17%; }
+    .wholesale-ticket .detail-table th:nth-child(6) { width: 17%; }
+    .wholesale-ticket .detail-table th:nth-child(7) { width: 19%; }
+
+    .wholesale-ticket .detail-table td,
+    .wholesale-ticket .detail-table th {
+      font-size: 12.5px;
+    }
+
+    .adjustment,
+    .net {
+      font-weight: 900;
+    }
 
     .retail-detail-table th,
     .retail-detail-table td {
@@ -795,7 +814,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       <tr>
         ${isRetail
           ? "<th>TIPO</th><th>POLLOS</th><th>NETO<br>KG</th><th>PRECIO<br>/KG</th><th>SUBTOTAL</th>"
-          : "<th>TIPO</th><th>C/A</th><th>CJ</th><th>PESO<br>BRUTO</th><th>PESO<br>TARA</th>"}
+          : "<th>TIPO</th><th>C/A</th><th>CJ</th><th>LECT.</th><th>MERMA</th><th>TARA</th><th>NETO</th>"}
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -808,7 +827,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
         <th>TIPO</th>
         ${isRetail
           ? "<th>NETO KG</th><th>PRECIO/KG</th><th>SUBTOTAL</th>"
-          : "<th>PB</th><th>TARA</th><th>PN</th>"}
+          : "<th>LECT.</th><th>MERMA</th><th>TARA</th><th>NETO</th>"}
       </tr>
     </thead>
     <tbody>${totalRows}</tbody>

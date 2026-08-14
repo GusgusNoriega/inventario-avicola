@@ -64,7 +64,7 @@ class DispatchTicketService
                     ]);
                 }
 
-                if ($existing->canal !== TicketDespacho::CHANNEL_WHOLESALE) {
+                if (! $this->ownsExistingTicket($existing)) {
                     throw ValidationException::withMessages([
                         'draft_id' => 'Este identificador ya pertenece a un ticket de otro canal.',
                     ]);
@@ -83,13 +83,20 @@ class DispatchTicketService
             }
 
             $weighings = collect($data['weighings']);
+            $this->prepareWeighingsForRegistration(
+                $companyId,
+                $operationType,
+                $weighings,
+            );
             $weighedAt = $this->weighedTimes($weighings, $branch->zona_horaria);
             $operatingDate = $this->resolveOperatingDate(
                 $companyId,
                 $weighedAt,
                 $branch->zona_horaria
             );
-            $program = $this->configuredProgram((int) $branch->id, $operatingDate);
+            $program = $this->requiresConfiguredProgram($operationType, $weighings)
+                ? $this->configuredProgram((int) $branch->id, $operatingDate)
+                : null;
             $journey = $this->openJourney($branch, $actor, $operatingDate, $companyId);
             $destination = $this->resolveDestination(
                 $companyId,
@@ -118,6 +125,7 @@ class DispatchTicketService
                 'codigo' => $this->nextTicketCode($journey, $operatingDate, $operationType),
                 'referencia_externa' => $data['draft_id'],
                 'canal' => TicketDespacho::CHANNEL_WHOLESALE,
+                'modulo_origen' => $this->sourceModule(),
                 'tipo_operacion' => $operationType,
                 'cliente_destino_id' => $destination['client_id'],
                 'almacen_destino_id' => $destination['warehouse_id'],
@@ -158,26 +166,29 @@ class DispatchTicketService
                 $cageType = $cageTypes->get($weighing['cage_type_code']);
                 $origin = $operationType === TicketDespacho::OPERATION_RETURN
                     ? $this->emptyOrigin()
-                    : $this->resolveOrigin(
+                    : $this->resolveWeighingOrigin(
                         $companyId,
                         (int) $branch->id,
                         $program,
-                        $weighing['origin'],
+                        $weighing,
                         "weighings.{$index}.origin"
                     );
                 $cageCount = (int) $weighing['cage_count'];
                 $birdsPerCage = (int) $weighing['birds_per_cage'];
                 $cageWeight = round((float) $cageType->peso_kg, 3);
-                $grossWeight = round((float) $weighing['gross_weight_kg'], 3);
-                $readWeight = round((float) $weighing['read_weight_kg'], 3);
-                $tareWeight = round($cageCount * $cageWeight, 3);
-                $netWeight = round($grossWeight - $tareWeight, 3);
-
-                if ($netWeight <= 0) {
-                    throw ValidationException::withMessages([
-                        "weighings.{$index}.gross_weight_kg" => 'El peso bruto debe ser mayor que la tara total de las javas.',
-                    ]);
-                }
+                $weights = $this->weighingWeightBreakdown(
+                    $companyId,
+                    $operationType,
+                    $weighing,
+                    $cageCount,
+                    $birdsPerCage,
+                    $cageWeight,
+                    $index,
+                );
+                $readWeight = $weights['read_weight_kg'];
+                $grossWeight = $weights['gross_weight_kg'];
+                $tareWeight = $weights['tare_weight_kg'];
+                $netWeight = $weights['net_weight_kg'];
 
                 $scaleReading = $this->scaleReadings->record(
                     (int) $branch->id,
@@ -192,8 +203,10 @@ class DispatchTicketService
                     'numero' => $index + 1,
                     'tipo_pollo_id' => $type->id,
                     'condicion_pollo' => $this->weighingCondition($operationType, $weighing),
-                    'sexo' => $weighing['chicken_sex'],
+                    'sexo' => $this->weighingSex($operationType, $weighing),
+                    'presentacion_pollo' => $this->weighingPresentation($operationType, $weighing),
                     'tipo_java_id' => $cageType->id,
+                    'ajuste_peso_mayorista_2_id' => $weights['wholesale_two_adjustment_id'],
                     'lectura_balanza_id' => $scaleReading?->id,
                     'proveedor_origen_id' => $origin['provider_id'],
                     'almacen_origen_id' => $origin['warehouse_id'],
@@ -208,6 +221,7 @@ class DispatchTicketService
                     'cantidad_aves' => $birdsPerCage * max($cageCount, 1),
                     'peso_java_kg_snapshot' => $cageWeight,
                     'peso_leido_kg' => $readWeight,
+                    'ajuste_peso_mayorista_2_gramos' => $weights['wholesale_two_adjustment_grams'],
                     'peso_bruto_kg' => $grossWeight,
                     'tara_total_kg' => $tareWeight,
                     'peso_neto_kg' => $netWeight,
@@ -236,6 +250,109 @@ class DispatchTicketService
         return $operationType === TicketDespacho::OPERATION_RETURN
             ? TicketDespacho::OPERATION_RETURN
             : TicketDespacho::OPERATION_DISPATCH;
+    }
+
+    protected function sourceModule(): ?string
+    {
+        return null;
+    }
+
+    /** @param Collection<int, array<string, mixed>> $weighings */
+    protected function prepareWeighingsForRegistration(
+        int $companyId,
+        string $operationType,
+        Collection $weighings,
+    ): void {}
+
+    /**
+     * @param  array<string, mixed>  $weighing
+     * @return array{
+     *     read_weight_kg: float,
+     *     gross_weight_kg: float,
+     *     tare_weight_kg: float,
+     *     net_weight_kg: float,
+     *     wholesale_two_adjustment_id: ?int,
+     *     wholesale_two_adjustment_grams: ?int
+     * }
+     */
+    protected function weighingWeightBreakdown(
+        int $companyId,
+        string $operationType,
+        array $weighing,
+        int $cageCount,
+        int $birdsPerCage,
+        float $cageWeight,
+        int $index,
+    ): array {
+        $readWeight = round((float) $weighing['read_weight_kg'], 3);
+        $grossWeight = round((float) $weighing['gross_weight_kg'], 3);
+        $tareWeight = round($cageCount * $cageWeight, 3);
+        $netWeight = round($grossWeight - $tareWeight, 3);
+
+        if ($netWeight <= 0) {
+            throw ValidationException::withMessages([
+                "weighings.{$index}.gross_weight_kg" => 'El peso bruto debe ser mayor que la tara total de las javas.',
+            ]);
+        }
+
+        return [
+            'read_weight_kg' => $readWeight,
+            'gross_weight_kg' => $grossWeight,
+            'tare_weight_kg' => $tareWeight,
+            'net_weight_kg' => $netWeight,
+            'wholesale_two_adjustment_id' => null,
+            'wholesale_two_adjustment_grams' => null,
+        ];
+    }
+
+    protected function ownsExistingTicket(TicketDespacho $ticket): bool
+    {
+        return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $ticket->modulo_origen === null;
+    }
+
+    /** @param Collection<int, array<string, mixed>> $weighings */
+    protected function requiresConfiguredProgram(string $operationType, Collection $weighings): bool
+    {
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $weighing
+     * @return array{provider_id: ?int, warehouse_id: ?int, vehicle_id: ?int, plate: ?string, program_detail_id: ?int}
+     */
+    protected function resolveWeighingOrigin(
+        int $companyId,
+        int $branchId,
+        ?ProgramacionRecepcion $program,
+        array $weighing,
+        string $field,
+    ): array {
+        if (! $program) {
+            throw ValidationException::withMessages([
+                'journey' => 'Configura y publica la jornada antes de agregar pesadas.',
+            ]);
+        }
+
+        return $this->resolveOrigin(
+            $companyId,
+            $branchId,
+            $program,
+            $weighing['origin'],
+            $field,
+        );
+    }
+
+    /** @param array<string, mixed> $weighing */
+    protected function weighingSex(string $operationType, array $weighing): ?string
+    {
+        return $weighing['chicken_sex'];
+    }
+
+    /** @param array<string, mixed> $weighing */
+    protected function weighingPresentation(string $operationType, array $weighing): ?string
+    {
+        return null;
     }
 
     /**
@@ -708,7 +825,7 @@ class DispatchTicketService
     /**
      * @return array{provider_id: null, warehouse_id: null, vehicle_id: null, plate: null, program_detail_id: null}
      */
-    private function emptyOrigin(): array
+    protected function emptyOrigin(): array
     {
         return [
             'provider_id' => null,

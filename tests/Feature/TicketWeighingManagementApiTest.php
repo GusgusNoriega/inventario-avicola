@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AjustePesoMayoristaDos;
 use App\Models\Permission;
 use App\Models\Pesada;
 use App\Models\Role;
@@ -10,6 +11,8 @@ use App\Models\TipoPollo;
 use App\Models\User;
 use App\Services\FinancialMovementService;
 use App\Services\FinancialObligationService;
+use App\Services\WholesaleTwoWeightAdjustmentService;
+use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +37,8 @@ class TicketWeighingManagementApiTest extends TestCase
     private int $liveTypeId;
 
     private int $dressedTypeId;
+
+    private int $processedTypeId;
 
     private int $smallCageTypeId;
 
@@ -74,6 +79,7 @@ class TicketWeighingManagementApiTest extends TestCase
 
         $this->liveTypeId = $this->createChickenType(TipoPollo::CHICKEN_LIVE, 'Pollo vivo');
         $this->dressedTypeId = $this->createChickenType(TipoPollo::CHICKEN_DRESSED, 'Pollo pelado');
+        $this->processedTypeId = $this->createChickenType(TipoPollo::CHICKEN_PROCESSED, 'Pollo beneficiado');
         $largeCageTypeId = $this->createCageType('JAVA_700', 'Java 7 kg', 7);
         $this->smallCageTypeId = $this->createCageType('JAVA_500', 'Java 5 kg', 5);
         $this->clientId = DB::table('terceros')->insertGetId([
@@ -189,7 +195,44 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonCount(1, 'data.ticket.weighings')
             ->assertJsonPath('data.ticket.weighings.0.id', $this->weighingId)
             ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_MALE)
+            ->assertJsonPath('data.ticket.source_module', null)
+            ->assertJsonPath('data.ticket.weighings.0.chicken_variant_code', null)
             ->assertJsonPath('data.ticket.summary.net_weight_kg', 26);
+    }
+
+    public function test_wholesale_two_exposes_its_source_and_null_safe_processed_variant(): void
+    {
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_pollo_id' => $this->processedTypeId,
+                'sexo' => null,
+                'presentacion_pollo' => null,
+            ]);
+
+        $this->getJson('/api/v1/operacion/gestion-pesadas?search=20260627-001')
+            ->assertOk()
+            ->assertJsonPath('data.tickets.0.source_module', TicketDespacho::SOURCE_WHOLESALE_TWO);
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertOk()
+            ->assertJsonPath('data.ticket.source_module', TicketDespacho::SOURCE_WHOLESALE_TWO)
+            ->assertJsonPath(
+                'data.ticket.weighings.0.chicken_variant_code',
+                WholesaleTwoChickenVariant::PROCESSED
+            )
+            ->assertJsonPath('data.ticket.weighings.0.chicken_sex', null)
+            ->assertJsonPath('data.ticket.weighings.0.presentation', null)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment', null)
+            ->assertJsonCount(7, 'data.catalogs.weight_adjustments')
+            ->assertJsonFragment([
+                'code' => WholesaleTwoChickenVariant::PROCESSED,
+                'additional_grams' => 0,
+                'configurable' => false,
+            ]);
     }
 
     public function test_administrator_can_void_a_ticket_from_weighing_management(): void
@@ -327,6 +370,206 @@ class TicketWeighingManagementApiTest extends TestCase
             'entidad_id' => (string) $this->weighingId,
             'accion' => 'ACTUALIZAR',
             'usuario_id' => $this->user->id,
+        ]);
+    }
+
+    public function test_wholesale_two_update_derives_sex_and_presentation_from_its_variant(): void
+    {
+        $adjustment = $this->wholesaleTwoAdjustment(
+            WholesaleTwoChickenVariant::FEMALE_OPEN,
+            250
+        );
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_pollo_id' => $this->dressedTypeId,
+                'sexo' => Pesada::SEX_MALE,
+                'presentacion_pollo' => 'CERRADO',
+            ]);
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::FEMALE_OPEN;
+        $payload['read_weight_kg'] = 30;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertOk()
+            ->assertJsonPath(
+                'data.ticket.weighings.0.chicken_variant_code',
+                WholesaleTwoChickenVariant::FEMALE_OPEN
+            )
+            ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.ticket.weighings.0.presentation', 'ABIERTA')
+            ->assertJsonPath('data.ticket.weighings.0.read_weight_kg', 30)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.code', WholesaleTwoChickenVariant::FEMALE_OPEN)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.additional_grams', 250)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.total_grams', 6000)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.total_weight_kg', 6)
+            ->assertJsonPath('data.ticket.weighings.0.gross_weight_kg', 36)
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 26)
+            ->assertJsonPath('data.ticket.summary.read_weight_kg', 30)
+            ->assertJsonPath('data.ticket.summary.adjustment_weight_kg', 6);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $this->dressedTypeId,
+            'sexo' => Pesada::SEX_FEMALE,
+            'presentacion_pollo' => 'ABIERTA',
+            'ajuste_peso_mayorista_2_id' => $adjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 250,
+            'peso_leido_kg' => 30,
+            'peso_bruto_kg' => 36,
+            'peso_neto_kg' => 26,
+        ]);
+
+        $audit = DB::table('auditoria_eventos')
+            ->where('entidad', 'pesadas')
+            ->where('entidad_id', (string) $this->weighingId)
+            ->where('accion', 'ACTUALIZAR')
+            ->latest('id')
+            ->firstOrFail();
+        $this->assertSame('CERRADO', json_decode($audit->datos_antes, true)['presentacion_pollo']);
+        $this->assertSame('ABIERTA', json_decode($audit->datos_despues, true)['presentacion_pollo']);
+        $this->assertSame(250, json_decode($audit->datos_despues, true)['ajuste_peso_mayorista_2_gramos']);
+        $this->assertSame(30.0, (float) json_decode($audit->datos_despues, true)['peso_leido_kg']);
+    }
+
+    public function test_wholesale_two_update_preserves_the_weighing_snapshot_for_the_same_variant(): void
+    {
+        $adjustment = $this->wholesaleTwoAdjustment(WholesaleTwoChickenVariant::MALE, 100);
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'ajuste_peso_mayorista_2_id' => $adjustment->id,
+                'ajuste_peso_mayorista_2_gramos' => 100,
+                'peso_leido_kg' => 40,
+                'peso_bruto_kg' => 42,
+                'peso_neto_kg' => 28,
+            ]);
+        $adjustment->update(['gramos_adicionales' => 400]);
+
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_type_code'] = TipoPollo::CHICKEN_LIVE;
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::MALE;
+        $payload['read_weight_kg'] = 30;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.code', WholesaleTwoChickenVariant::MALE)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.additional_grams', 100)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.total_grams', 2400)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.total_weight_kg', 2.4)
+            ->assertJsonPath('data.ticket.weighings.0.read_weight_kg', 30)
+            ->assertJsonPath('data.ticket.weighings.0.gross_weight_kg', 32.4)
+            ->assertJsonPath('data.ticket.weighings.0.tare_weight_kg', 10)
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 22.4);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'ajuste_peso_mayorista_2_id' => $adjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 100,
+            'peso_leido_kg' => 30,
+            'peso_bruto_kg' => 32.4,
+            'peso_neto_kg' => 22.4,
+        ]);
+        $this->assertDatabaseHas('ajustes_peso_mayorista_2', [
+            'id' => $adjustment->id,
+            'gramos_adicionales' => 400,
+        ]);
+
+        $audit = DB::table('auditoria_eventos')
+            ->where('entidad', 'pesadas')
+            ->where('entidad_id', (string) $this->weighingId)
+            ->where('accion', 'ACTUALIZAR')
+            ->latest('id')
+            ->firstOrFail();
+        $this->assertSame(100, json_decode($audit->datos_antes, true)['ajuste_peso_mayorista_2_gramos']);
+        $this->assertSame(100, json_decode($audit->datos_despues, true)['ajuste_peso_mayorista_2_gramos']);
+    }
+
+    public function test_wholesale_two_processed_variant_clears_sex_and_presentation(): void
+    {
+        $adjustment = $this->wholesaleTwoAdjustment(WholesaleTwoChickenVariant::PROCESSED, 0);
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_pollo_id' => $this->dressedTypeId,
+                'sexo' => Pesada::SEX_MALE,
+                'presentacion_pollo' => 'ABIERTO',
+            ]);
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_type_code'] = TipoPollo::CHICKEN_PROCESSED;
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::PROCESSED;
+        $payload['read_weight_kg'] = 30;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertOk()
+            ->assertJsonPath(
+                'data.ticket.weighings.0.chicken_variant_code',
+                WholesaleTwoChickenVariant::PROCESSED
+            )
+            ->assertJsonPath('data.ticket.weighings.0.chicken_sex', null)
+            ->assertJsonPath('data.ticket.weighings.0.presentation', null)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.code', WholesaleTwoChickenVariant::PROCESSED)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.additional_grams', 0)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.total_weight_kg', 0)
+            ->assertJsonPath('data.ticket.weighings.0.gross_weight_kg', 30)
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 20);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $this->processedTypeId,
+            'sexo' => null,
+            'presentacion_pollo' => null,
+            'ajuste_peso_mayorista_2_id' => $adjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 0,
+            'peso_leido_kg' => 30,
+            'peso_bruto_kg' => 30,
+            'peso_neto_kg' => 20,
+        ]);
+    }
+
+    public function test_wholesale_two_rejects_a_variant_for_another_chicken_type(): void
+    {
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::PROCESSED;
+        $payload['read_weight_kg'] = 30;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('chicken_variant_code');
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $this->liveTypeId,
+            'sexo' => Pesada::SEX_MALE,
+            'presentacion_pollo' => null,
         ]);
     }
 
@@ -1024,6 +1267,20 @@ class TicketWeighingManagementApiTest extends TestCase
             'vehicle_id' => $vehicleId,
             'program_detail_id' => $programDetailId,
         ];
+    }
+
+    private function wholesaleTwoAdjustment(string $variantCode, int $grams): AjustePesoMayoristaDos
+    {
+        app(WholesaleTwoWeightAdjustmentService::class)->ensureDefaults(
+            (int) $this->user->empresa_id
+        );
+        $adjustment = AjustePesoMayoristaDos::query()
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', $variantCode)
+            ->firstOrFail();
+        $adjustment->update(['gramos_adicionales' => $grams]);
+
+        return $adjustment->refresh();
     }
 
     /** @return array<string, mixed> */

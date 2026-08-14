@@ -73,7 +73,19 @@
             <option value="MUERTO">Pollo muerto</option>
           </select>
         </label>
-        <fieldset class="sex-selector management-sex-selector" aria-label="Sexo de los pollos">
+        <label id="editChickenVariantField" class="field" hidden>
+          Clasificación del pollo
+          <select id="editChickenVariant">
+            <option value="MACHO">Pollo vivo macho</option>
+            <option value="HEMBRA">Pollo vivo hembra</option>
+            <option value="MACHO_ABIERTO">Macho abierto</option>
+            <option value="MACHO_CERRADO">Macho cerrado</option>
+            <option value="HEMBRA_ABIERTA">Hembra abierta</option>
+            <option value="HEMBRA_CERRADA">Hembra cerrada</option>
+            <option value="POLLO_BENEFICIADO">Pollo beneficiado</option>
+          </select>
+        </label>
+        <fieldset id="editChickenSexField" class="sex-selector management-sex-selector" aria-label="Sexo de los pollos">
           <legend>Sexo</legend>
           <div class="sex-selector-buttons">
             <button class="sex-btn sex-btn-male is-active" type="button" data-management-sex="MACHO" aria-pressed="true">Macho</button>
@@ -93,8 +105,9 @@
           <select id="editCageType" required></select>
         </label>
         <label class="field">
-          Peso bruto (kg)
+          <span id="editWeightLabel">Peso bruto (kg)</span>
           <input id="editGrossWeight" type="number" min="0.001" max="99999999.999" step="0.001" required>
+          <small id="editWeightHelp" class="field-help">Peso bruto antes de descontar la tara de las javas.</small>
         </label>
         <label id="editOriginTruckField" class="field">
           Camión de origen de la jornada

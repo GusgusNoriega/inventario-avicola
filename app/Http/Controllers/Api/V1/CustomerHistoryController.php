@@ -86,6 +86,7 @@ class CustomerHistoryController extends Controller
                 'pesadas.tipoJava',
                 'pesadas.tipoBandeja',
                 'pesadas.ajustePesoMinorista',
+                'pesadas.ajustePesoMayoristaDos',
             ])
             ->orderByDesc(
                 DB::table('jornadas_operativas')
@@ -142,7 +143,9 @@ class CustomerHistoryController extends Controller
     {
         $movementSign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
-        $records = $ticket->pesadas->map(function (Pesada $record) use ($movementSign, $prices): array {
+        $usesWholesaleTwoAdjustments = $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO
+            && $ticket->tipo_operacion === TicketDespacho::OPERATION_DISPATCH;
+        $records = $ticket->pesadas->map(function (Pesada $record) use ($movementSign, $prices, $usesWholesaleTwoAdjustments): array {
             $price = $prices->get($record->tipo_pollo_id);
             $amount = $record->estado === Pesada::STATUS_ACTIVE && $price
                 ? $movementSign * (float) $record->peso_neto_kg * (float) $price->precio_kg
@@ -158,13 +161,28 @@ class CustomerHistoryController extends Controller
                 'chicken_condition' => $record->condicion_pollo,
                 'chicken_sex' => $record->sexo,
                 'presentation' => $record->presentacion_pollo,
-                'adjustment' => $record->ajustePesoMinorista
-                    ? [
-                        'code' => $record->ajustePesoMinorista->codigo,
-                        'name' => $record->ajustePesoMinorista->nombre,
-                        'additional_grams' => (int) $record->ajuste_peso_gramos,
-                    ]
-                    : null,
+                'adjustment' => $usesWholesaleTwoAdjustments
+                    ? ($record->ajustePesoMayoristaDos
+                        ? [
+                            'code' => $record->ajustePesoMayoristaDos->codigo,
+                            'name' => $record->ajustePesoMayoristaDos->nombre,
+                            'additional_grams' => (int) $record->ajuste_peso_mayorista_2_gramos,
+                            'total_grams' => (int) $record->ajuste_peso_mayorista_2_gramos
+                                * (int) $record->cantidad_aves,
+                            'total_weight_kg' => round(
+                                ((int) $record->ajuste_peso_mayorista_2_gramos
+                                    * (int) $record->cantidad_aves) / 1000,
+                                3
+                            ),
+                        ]
+                        : null)
+                    : ($record->ajustePesoMinorista
+                        ? [
+                            'code' => $record->ajustePesoMinorista->codigo,
+                            'name' => $record->ajustePesoMinorista->nombre,
+                            'additional_grams' => (int) $record->ajuste_peso_gramos,
+                        ]
+                        : null),
                 'cage_type' => $record->tipoJava?->nombre,
                 'birds_per_cage' => $record->aves_por_java,
                 'cages' => $record->cantidad_javas,

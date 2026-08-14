@@ -1622,6 +1622,11 @@ class WebViewsTest extends TestCase
             ->assertSee('editTicketVehicle', false)
             ->assertSee('editTicketDriver', false)
             ->assertSee('editOriginTruck', false)
+            ->assertSee('editChickenVariant', false)
+            ->assertSee('editWeightLabel', false)
+            ->assertSee('editWeightHelp', false)
+            ->assertSee('MACHO_ABIERTO', false)
+            ->assertSee('POLLO_BENEFICIADO', false)
             ->assertSee('voidTicketModal', false)
             ->assertSee('voidTicketReason', false)
             ->assertSee('Acción exclusiva de administrador')
@@ -1664,6 +1669,21 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('ticket.prices', $managementJavascript);
         $this->assertStringContainsString('summary.amount', $managementJavascript);
         $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);
+        $this->assertStringContainsString('MODULO_DESPACHO_MAYORISTA_2', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "PV-M"', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "PV-H"', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "MA"', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "MC"', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "HA"', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "HC"', $managementJavascript);
+        $this->assertStringContainsString('shortLabel: "PB"', $managementJavascript);
+        $this->assertStringContainsString('payload.chicken_variant_code = selectedVariant.code', $managementJavascript);
+        $this->assertStringContainsString('payload.read_weight_kg = Number(elements.grossWeight.value)', $managementJavascript);
+        $this->assertStringContainsString('weight_adjustments', $managementJavascript);
+        $this->assertStringContainsString('sourceModule: ticket.source_module', $managementJavascript);
+        $this->assertStringContainsString('adjustment: weighing.adjustment || null', $managementJavascript);
+        $this->assertStringContainsString('Merma aplicada', $managementJavascript);
+        $this->assertStringContainsString('return wholesaleTwoVariantForWeighing(weighing)?.shortLabel || "--";', $managementJavascript);
     }
 
     public function test_provider_report_view_is_available_without_database_queries(): void
@@ -1706,6 +1726,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('record?.netWeight', $printerJavascript);
         $this->assertStringContainsString('record?.priceKg', $printerJavascript);
         $this->assertStringContainsString('record?.amount', $printerJavascript);
+        $this->assertStringContainsString('record?.adjustment?.total_weight_kg', $printerJavascript);
+        $this->assertStringContainsString('ticket?.sourceModule === "MODULO_DESPACHO_MAYORISTA_2"', $printerJavascript);
 
         $this->assertStringContainsString('buildRetailTicketPrintData,', $retailJavascript);
         $this->assertStringContainsString('buildRetailTicketPrintData(ticket, ticketMessage)', $retailJavascript);

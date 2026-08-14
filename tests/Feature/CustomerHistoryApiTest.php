@@ -8,6 +8,8 @@ use App\Models\Role;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\WholesaleTwoWeightAdjustmentService;
+use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -259,6 +261,46 @@ class CustomerHistoryApiTest extends TestCase
             ->assertJsonPath('data.tickets.0.records.0.read_weight_kg', 12)
             ->assertJsonPath('data.tickets.0.records.0.gross_weight_kg', 12.25)
             ->assertJsonPath('data.tickets.0.records.0.net_weight_kg', 12.25);
+    }
+
+    public function test_customer_history_serializes_wholesale_two_adjustment_and_keeps_sales_totals(): void
+    {
+        $this->createTicket('T-M2-20260622-001', '2026-06-22', 20, 8.5);
+        app(WholesaleTwoWeightAdjustmentService::class)->ensureDefaults(
+            (int) $this->user->empresa_id
+        );
+        $adjustment = DB::table('ajustes_peso_mayorista_2')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', WholesaleTwoChickenVariant::MALE_CLOSED)
+            ->first();
+        DB::table('ajustes_peso_mayorista_2')
+            ->where('id', $adjustment->id)
+            ->update(['gramos_adicionales' => 125]);
+        $ticketId = (int) DB::table('tickets_despacho')
+            ->where('codigo', 'T-M2-20260622-001')
+            ->value('id');
+        DB::table('tickets_despacho')->where('id', $ticketId)->update([
+            'modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO,
+        ]);
+        DB::table('pesadas')->where('ticket_id', $ticketId)->update([
+            'presentacion_pollo' => 'CERRADO',
+            'ajuste_peso_mayorista_2_id' => $adjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 125,
+            'peso_leido_kg' => 31.5,
+        ]);
+
+        $this->getJson("/api/v1/clientes/{$this->customerId}/historial")
+            ->assertOk()
+            ->assertJsonPath('data.summary.net_weight_kg', 20)
+            ->assertJsonPath('data.summary.amount', 170)
+            ->assertJsonPath('data.tickets.0.summary.net_weight_kg', 20)
+            ->assertJsonPath('data.tickets.0.summary.amount', 170)
+            ->assertJsonPath('data.tickets.0.records.0.read_weight_kg', 31.5)
+            ->assertJsonPath('data.tickets.0.records.0.gross_weight_kg', 34)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.code', WholesaleTwoChickenVariant::MALE_CLOSED)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.additional_grams', 125)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.total_grams', 2500)
+            ->assertJsonPath('data.tickets.0.records.0.adjustment.total_weight_kg', 2.5);
     }
 
     private function createTicket(

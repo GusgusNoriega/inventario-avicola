@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(100, $migrationFiles);
+        $this->assertCount(102, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -40,6 +40,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_07_22_000001_add_station_to_retail_weight_adjustments.php' => 2,
                 '2026_08_01_000003_create_cobranzas_tables.php' => 3,
                 '2026_08_04_000001_create_cobranza_asignaciones_table.php' => 2,
+                '2026_08_14_000003_create_wholesale_two_weight_adjustments.php' => 2,
                 default => 1,
             };
 
@@ -76,6 +77,7 @@ class DatabaseSchemaTest extends TestCase
             'tipos_java',
             'tipos_bandeja',
             'ajustes_peso_minorista',
+            'ajustes_peso_mayorista_2',
             'configuraciones_despacho_minorista',
             'balanzas',
             'conductores',
@@ -138,7 +140,7 @@ class DatabaseSchemaTest extends TestCase
             'conductores' => ['empresa_id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'telefono', 'estado'],
             'vehiculos' => ['empresa_id', 'placa', 'marca', 'modelo', 'color', 'descripcion', 'es_propio', 'estado'],
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
-            'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id', 'asignacion_transporte_posterior', 'estado', 'anulado_por', 'anulado_at', 'motivo_anulacion'],
+            'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'modulo_origen', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id', 'asignacion_transporte_posterior', 'estado', 'anulado_por', 'anulado_at', 'motivo_anulacion'],
             'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'cantidad_bandejas', 'vehiculo_id', 'fecha_movimiento'],
             'ajustes_saldos_javas' => ['empresa_id', 'sucursal_id', 'jornada_id', 'cliente_id', 'saldo_anterior_javas', 'saldo_nuevo_javas', 'diferencia_javas', 'saldo_anterior_bandejas', 'saldo_nuevo_bandejas', 'diferencia_bandejas', 'motivo', 'created_by'],
             'inventarios_javas' => ['empresa_id', 'cantidad_total', 'cantidad_total_bandejas', 'updated_by'],
@@ -146,9 +148,10 @@ class DatabaseSchemaTest extends TestCase
             'conteos_diarios_javas_camiones' => ['conteo_diario_java_id', 'vehiculo_id', 'placa_snapshot', 'cantidad_javas', 'cantidad_bandejas'],
             'tipos_bandeja' => ['codigo', 'nombre', 'peso_kg', 'capacidad_aves', 'estado'],
             'ajustes_peso_minorista' => ['empresa_id', 'estacion', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
+            'ajustes_peso_mayorista_2' => ['empresa_id', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'estado'],
             'configuraciones_despacho_minorista' => ['empresa_id', 'sucursal_id', 'estacion', 'metodo_pago_id', 'cuenta_destino_id'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
-            'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
+            'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'ajuste_peso_mayorista_2_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'ajuste_peso_mayorista_2_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
             'entidades_financieras' => ['empresa_id', 'tipo', 'proveedor_id', 'tipo_documento', 'numero_documento', 'razon_social', 'nombre_comercial', 'direccion', 'telefono', 'email', 'estado', 'created_by'],
             'cuentas_financieras' => ['entidad_financiera_id', 'tipo', 'alias', 'banco', 'numero_cuenta', 'cci', 'moneda', 'estado', 'created_by'],
@@ -183,8 +186,10 @@ class DatabaseSchemaTest extends TestCase
         $weighingColumns = collect(Schema::getColumns('pesadas'))->keyBy('name');
         $this->assertTrue($weighingColumns->get('sexo')['nullable']);
         $this->assertTrue($weighingColumns->get('ajuste_peso_minorista_id')['nullable']);
+        $this->assertTrue($weighingColumns->get('ajuste_peso_mayorista_2_id')['nullable']);
         $this->assertTrue($weighingColumns->get('presentacion_pollo')['nullable']);
         $this->assertTrue($weighingColumns->get('ajuste_peso_gramos')['nullable']);
+        $this->assertTrue($weighingColumns->get('ajuste_peso_mayorista_2_gramos')['nullable']);
 
         $this->assertTrue(collect(Schema::getColumns('comprobantes'))->keyBy('name')->get('tercero_id')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('pagos'))->keyBy('name')->get('tercero_id')['nullable']);
@@ -783,5 +788,46 @@ class DatabaseSchemaTest extends TestCase
             'vehiculo_id' => $vehicleId,
             'conductor_id' => $driverId,
         ]);
+    }
+
+    public function test_wholesale_two_source_module_migration_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_08_14_000002_add_source_module_to_dispatch_tickets.php'
+        );
+
+        $this->assertTrue(Schema::hasColumn('tickets_despacho', 'modulo_origen'));
+
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('tickets_despacho', 'modulo_origen'));
+
+        $migration->up();
+        $this->assertTrue(Schema::hasColumn('tickets_despacho', 'modulo_origen'));
+    }
+
+    public function test_wholesale_two_weight_adjustment_migration_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $companyId = User::factory()->create()->empresa_id;
+        $migration = require database_path(
+            'migrations/2026_08_14_000003_create_wholesale_two_weight_adjustments.php'
+        );
+
+        $this->assertTrue(Schema::hasTable('ajustes_peso_mayorista_2'));
+        $this->assertTrue(Schema::hasColumn('pesadas', 'ajuste_peso_mayorista_2_id'));
+        $this->assertTrue(Schema::hasColumn('pesadas', 'ajuste_peso_mayorista_2_gramos'));
+
+        $migration->down();
+        $this->assertFalse(Schema::hasTable('ajustes_peso_mayorista_2'));
+        $this->assertFalse(Schema::hasColumn('pesadas', 'ajuste_peso_mayorista_2_id'));
+        $this->assertFalse(Schema::hasColumn('pesadas', 'ajuste_peso_mayorista_2_gramos'));
+
+        $migration->up();
+        $this->assertTrue(Schema::hasTable('ajustes_peso_mayorista_2'));
+        $this->assertTrue(Schema::hasColumn('pesadas', 'ajuste_peso_mayorista_2_id'));
+        $this->assertTrue(Schema::hasColumn('pesadas', 'ajuste_peso_mayorista_2_gramos'));
+        $this->assertSame(
+            7,
+            DB::table('ajustes_peso_mayorista_2')->where('empresa_id', $companyId)->count()
+        );
     }
 }

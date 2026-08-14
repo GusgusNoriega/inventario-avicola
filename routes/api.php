@@ -34,6 +34,8 @@ use App\Http\Controllers\Api\V1\PurchaseController;
 use App\Http\Controllers\Api\V1\RetailDispatchController;
 use App\Http\Controllers\Api\V1\TicketWeighingManagementController;
 use App\Http\Controllers\Api\V1\TruckController;
+use App\Http\Controllers\Api\V1\WholesaleTwoDispatchTicketController;
+use App\Http\Controllers\Api\V1\WholesaleTwoWeightAdjustmentController;
 use App\Models\TerceroRole;
 use Illuminate\Support\Facades\Route;
 
@@ -310,7 +312,9 @@ Route::prefix('v1')->group(function (): void {
             }
 
             Route::get('/jornada', [JourneyPlanController::class, 'show']);
-            Route::post('/tickets', [DispatchTicketController::class, 'store']);
+            Route::get('/configuracion-mermas', [WholesaleTwoWeightAdjustmentController::class, 'show']);
+            Route::put('/configuracion-mermas', [WholesaleTwoWeightAdjustmentController::class, 'update']);
+            Route::post('/tickets', [WholesaleTwoDispatchTicketController::class, 'store']);
         });
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
         ->middleware($retailOneMiddleware);
