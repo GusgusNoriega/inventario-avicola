@@ -18,6 +18,7 @@ class ModuleAccessControlTest extends TestCase
         foreach ([
             '/',
             '/operacion',
+            '/despacho-mayorista-2',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -42,6 +43,7 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/despacho-mayorista-2',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -135,6 +137,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertOk()
             ->assertSee(route('finanzas'), false)
             ->assertDontSee(route('operacion'), false)
+            ->assertDontSee(route('despacho-mayorista-2'), false)
             ->assertDontSee(route('despacho-minorista'), false)
             ->assertDontSee(route('precios-jornada'), false)
             ->assertDontSee(route('reporte-proveedores'), false)
@@ -170,6 +173,7 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/despacho-mayorista-2',
             '/despacho-minorista',
             '/despacho-minorista-2',
             '/precios-jornada',

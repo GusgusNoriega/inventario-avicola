@@ -34,6 +34,7 @@ class AccessAdministrationApiTest extends TestCase
 
         foreach ([
             'MODULO_DESPACHO_MAYORISTA',
+            'MODULO_DESPACHO_MAYORISTA_2',
             'MODULO_DESPACHO_MINORISTA_1',
             'MODULO_DESPACHO_MINORISTA_2',
             'MODULO_RESUMEN_JORNADA',

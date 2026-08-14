@@ -28,6 +28,13 @@ class CustomerDisplayTest extends TestCase
             ->assertSee('id="openCustomerDisplayBtn"', false)
             ->assertSee(route('operacion.pantalla-cliente'), false)
             ->assertSee('target="pantalla-cliente"', false);
+
+        $this->get('/despacho-mayorista-2')
+            ->assertOk()
+            ->assertSee('id="openCustomerDisplayBtn"', false)
+            ->assertSee(route('despacho-mayorista-2.pantalla-cliente'), false)
+            ->assertSee('target="pantalla-cliente-mayorista-2"', false)
+            ->assertDontSee(route('operacion.pantalla-cliente'), false);
     }
 
     public function test_each_retail_view_opens_its_own_customer_display(): void
@@ -137,6 +144,7 @@ class CustomerDisplayTest extends TestCase
 
         foreach ([
             '/operacion/pantalla-cliente',
+            '/despacho-mayorista-2/pantalla-cliente',
             '/despacho-minorista/pantalla-cliente',
             '/despacho-minorista-2/pantalla-cliente',
         ] as $url) {

@@ -231,6 +231,12 @@ Route::prefix('v1')->group(function (): void {
     $operationWriteMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA'];
+    $wholesaleTwoMiddleware = [
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_DESPACHO_MAYORISTA_2',
+    ];
     $weighingManagementMiddleware = config('directory.public_access')
         ? ['throttle:api']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_GESTION_PESADAS'];
@@ -290,6 +296,22 @@ Route::prefix('v1')->group(function (): void {
         ]);
     Route::post('/operacion/tickets', [DispatchTicketController::class, 'store'])
         ->middleware($operationWriteMiddleware);
+    Route::prefix('despacho-mayorista-2')
+        ->middleware($wholesaleTwoMiddleware)
+        ->group(function (): void {
+            Route::get('/catalogo', [OperationCatalogController::class, 'index']);
+
+            foreach ([
+                'clientes' => TerceroRole::CLIENT,
+                'proveedores' => TerceroRole::PROVIDER,
+            ] as $path => $role) {
+                Route::get("/{$path}", [DirectoryController::class, 'index'])
+                    ->defaults('directory_role', $role);
+            }
+
+            Route::get('/jornada', [JourneyPlanController::class, 'show']);
+            Route::post('/tickets', [DispatchTicketController::class, 'store']);
+        });
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
         ->middleware($retailOneMiddleware);
     Route::put('/despacho-minorista/configuracion', [RetailDispatchController::class, 'updateConfiguration'])

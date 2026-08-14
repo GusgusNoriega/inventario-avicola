@@ -37,6 +37,14 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             ->middleware('module:MODULO_DESPACHO_MAYORISTA')
             ->name('operacion.pantalla-cliente');
 
+        Route::view('/despacho-mayorista-2', 'despacho-mayorista-2')
+            ->middleware('module:MODULO_DESPACHO_MAYORISTA_2')
+            ->name('despacho-mayorista-2');
+
+        Route::view('/despacho-mayorista-2/pantalla-cliente', 'pantalla-cliente-mayorista-2')
+            ->middleware('module:MODULO_DESPACHO_MAYORISTA_2')
+            ->name('despacho-mayorista-2.pantalla-cliente');
+
         Route::view('/despacho-minorista', 'despacho-minorista')
             ->middleware('module:MODULO_DESPACHO_MINORISTA_1')
             ->name('despacho-minorista');

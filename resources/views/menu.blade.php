@@ -76,6 +76,25 @@
         </a>
         @endif
 
+        @if ($user->hasModule('MODULO_DESPACHO_MAYORISTA_2'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('despacho-mayorista-2') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 5h16v4H4z"></path>
+              <path d="M6 9v10"></path>
+              <path d="M18 9v10"></path>
+              <path d="M3 19h18"></path>
+              <path d="M8 13h8"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Despacho mayorista 2</strong>
+            <small>Segundo puesto independiente de despacho mayorista</small>
+          </span>
+          <span class="menu-status">Disponible</span>
+        </a>
+        @endif
+
         @if ($user->hasModule('MODULO_DESPACHO_MINORISTA_1'))
         <a class="menu-tile menu-tile-primary" href="{{ route('despacho-minorista') }}">
           <span class="menu-tile-icon" aria-hidden="true">

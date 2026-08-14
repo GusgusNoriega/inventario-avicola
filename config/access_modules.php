@@ -23,6 +23,17 @@ return [
             ],
             'legacy_permissions' => ['DESPACHOS_VER', 'DESPACHOS_CREAR'],
         ],
+        'MODULO_DESPACHO_MAYORISTA_2' => [
+            'name' => 'Despacho mayorista 2',
+            'description' => 'Segundo puesto independiente de despacho mayorista.',
+            'path' => '/despacho-mayorista-2',
+            'technical_permissions' => [
+                'DASHBOARD_VER',
+                'DESPACHOS_VER',
+                'DESPACHOS_CREAR',
+            ],
+            'legacy_permissions' => [],
+        ],
         'MODULO_DESPACHO_MINORISTA_1' => [
             'name' => 'Despacho minorista 1',
             'description' => 'Primer puesto de despacho minorista.',

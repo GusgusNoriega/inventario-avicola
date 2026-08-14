@@ -28,6 +28,8 @@ class WebViewsTest extends TestCase
             ->assertSee('Menú principal')
             ->assertSee(route('operacion').'#despacho', false)
             ->assertSee('Despacho mayorista')
+            ->assertSee(route('despacho-mayorista-2'), false)
+            ->assertSee('Despacho mayorista 2')
             ->assertSee(route('despacho-minorista'), false)
             ->assertSee('Despacho minorista')
             ->assertSee(route('despacho-minorista-2'), false)

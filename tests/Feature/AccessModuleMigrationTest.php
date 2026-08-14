@@ -18,7 +18,7 @@ class AccessModuleMigrationTest extends TestCase
     {
         $moduleCodes = array_keys(config('access_modules.modules'));
 
-        $this->assertCount(12, $moduleCodes);
+        $this->assertCount(13, $moduleCodes);
         $this->assertEqualsCanonicalizing(
             $moduleCodes,
             Permission::query()
@@ -127,6 +127,43 @@ class AccessModuleMigrationTest extends TestCase
         );
     }
 
+    public function test_second_wholesale_dispatch_migration_creates_an_isolated_marker_and_rolls_back_cleanly(): void
+    {
+        $user = User::factory()->create();
+        $operator = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'OPERADOR',
+            'nombre' => 'Operador',
+        ]);
+        $operator->permissions()->attach(
+            Permission::query()->where('codigo', 'MODULO_DESPACHO_MAYORISTA')->value('id'),
+        );
+
+        $migration = $this->secondWholesaleDispatchMigration();
+        $migration->down();
+        $migration->up();
+
+        $permission = Permission::query()
+            ->where('codigo', 'MODULO_DESPACHO_MAYORISTA_2')
+            ->firstOrFail();
+
+        $this->assertFalse(
+            $operator->fresh()->permissions()->whereKey($permission->id)->exists(),
+        );
+
+        $operator->permissions()->attach($permission);
+        $migration->down();
+
+        $this->assertDatabaseMissing('rol_permisos', [
+            'rol_id' => $operator->id,
+            'permiso_id' => $permission->id,
+        ]);
+        $this->assertDatabaseMissing('permisos', [
+            'id' => $permission->id,
+            'codigo' => 'MODULO_DESPACHO_MAYORISTA_2',
+        ]);
+    }
+
     private function moduleMigration(): Migration
     {
         return require database_path(
@@ -138,6 +175,13 @@ class AccessModuleMigrationTest extends TestCase
     {
         return require database_path(
             'migrations/2026_08_01_000002_add_provider_report_module.php',
+        );
+    }
+
+    private function secondWholesaleDispatchMigration(): Migration
+    {
+        return require database_path(
+            'migrations/2026_08_14_000001_add_second_wholesale_dispatch_module.php',
         );
     }
 }
