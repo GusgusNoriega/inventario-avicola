@@ -40,6 +40,19 @@
               <button id="openJsonBtn" class="btn btn-ghost" type="button">Ver JSON</button>
               <button id="resetDayBtn" class="btn btn-ghost" type="button">Reiniciar jornada</button>
               <button id="openFontSidebarBtn" class="btn btn-ghost" type="button">Tamaños personalizados</button>
+              <div class="view-zoom-tools" aria-labelledby="viewZoomLabel">
+                <div class="view-zoom-heading">
+                  <span id="viewZoomLabel">Zoom de la vista</span>
+                  <small>Guardado en este navegador</small>
+                </div>
+                <div class="view-zoom-actions" role="group" aria-label="Ajustar zoom de la vista">
+                  <button id="viewZoomDecreaseBtn" class="view-zoom-btn" type="button" aria-label="Reducir zoom">&minus;</button>
+                  <output id="viewZoomStatus" for="viewZoomDecreaseBtn viewZoomIncreaseBtn" aria-live="polite">100 %</output>
+                  <button id="viewZoomIncreaseBtn" class="view-zoom-btn" type="button" aria-label="Aumentar zoom">+</button>
+                  <button id="viewZoomResetBtn" class="view-zoom-btn view-zoom-reset" type="button" aria-label="Restablecer zoom al 100 %" title="Restablecer al 100 %">100 %</button>
+                </div>
+                <small class="view-zoom-help">Niveles disponibles: 67 % a 150 %.</small>
+              </div>
               <div class="font-tools" aria-label="Tamaño de letra">
                 <span>Letra</span>
                 <div class="font-tools-actions">

@@ -2085,6 +2085,10 @@ body {
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.78);
   display: grid;
   gap: 10px;
+  max-height: calc(100vh - 76px);
+  max-height: calc(100dvh - 76px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .config-menu[hidden] {
@@ -5303,6 +5307,7 @@ input[type="number"][readonly] {
   line-height: 1.25;
 }
 
+.view-zoom-tools,
 .font-tools {
   border: 1px solid #4a4633;
   border-radius: 10px;
@@ -5312,11 +5317,84 @@ input[type="number"][readonly] {
   gap: 6px;
 }
 
-.font-tools span {
+.view-zoom-heading > span,
+.font-tools > span {
   color: var(--text-soft);
   font-size: 0.76rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.view-zoom-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.view-zoom-heading small,
+.view-zoom-help {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.view-zoom-heading small {
+  text-align: right;
+}
+
+.view-zoom-actions {
+  display: grid;
+  grid-template-columns: 48px minmax(74px, 1fr) 48px 58px;
+  gap: 6px;
+  align-items: center;
+}
+
+.view-zoom-actions output {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid #5b522b;
+  border-radius: 8px;
+  color: var(--secondary);
+  background: #050505;
+  display: grid;
+  place-items: center;
+  font-size: 0.94rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+.view-zoom-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid #6a5d27;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2d2814, #151207);
+  color: var(--secondary);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 900;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.view-zoom-btn:hover:not(:disabled),
+.view-zoom-btn:focus-visible {
+  border-color: var(--secondary);
+  background: linear-gradient(180deg, #463915, #211a09);
+}
+
+.view-zoom-btn:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+
+.view-zoom-reset {
+  border-color: #4d4d4d;
+  background: #171717;
+  color: #ffffff;
+  font-size: 0.74rem;
 }
 
 .font-tools-actions {
@@ -7645,6 +7723,7 @@ body.menu-page {
 .operation-touch-page .config-close-btn,
 .operation-touch-page .scale-settings-btn,
 .operation-touch-page .scale-connect-actions .btn,
+.operation-touch-page .view-zoom-btn,
 .operation-touch-page .font-size-stepper button,
 .operation-touch-page .assign-client-btn,
 .operation-touch-page .clear-column-btn,

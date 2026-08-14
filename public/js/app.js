@@ -23,6 +23,9 @@ const PERU_UTC_OFFSET_MINUTES = -5 * 60;
 
 const FONT_SIZE_STORAGE_KEY = "sistema-pollos-font-size-v1";
 const CUSTOM_FONT_SIZE_STORAGE_KEY = "sistema-pollos-custom-font-sizes-v1";
+const VIEW_ZOOM_STORAGE_KEY = "sistema-pollos-wholesale-view-zoom-v1";
+const VIEW_ZOOM_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
+const DEFAULT_VIEW_ZOOM = 100;
 const FONT_SIZE_STEPS = ["compact", "normal", "large", "xlarge"];
 const FONT_SIZE_LABELS = {
   compact: "Compacta",
@@ -318,6 +321,10 @@ const elements = {
   closeJsonBtn: document.getElementById("closeJsonBtn"),
   copyJsonBtn: document.getElementById("copyJsonBtn"),
   resetDayBtn: document.getElementById("resetDayBtn"),
+  viewZoomDecreaseBtn: document.getElementById("viewZoomDecreaseBtn"),
+  viewZoomIncreaseBtn: document.getElementById("viewZoomIncreaseBtn"),
+  viewZoomResetBtn: document.getElementById("viewZoomResetBtn"),
+  viewZoomStatus: document.getElementById("viewZoomStatus"),
   fontDecreaseBtn: document.getElementById("fontDecreaseBtn"),
   fontIncreaseBtn: document.getElementById("fontIncreaseBtn"),
   fontResetBtn: document.getElementById("fontResetBtn"),
@@ -2692,6 +2699,65 @@ let lastCustomerDisplayStorageWrite = 0;
 let pendingCustomerDisplayStoragePayload = null;
 let customerDisplayStorageTimer = null;
 let customerDisplayRevision = 0;
+
+export function normalizeViewZoomLevel(value) {
+  const numericValue = Number(value);
+  return VIEW_ZOOM_LEVELS.includes(numericValue) ? numericValue : DEFAULT_VIEW_ZOOM;
+}
+
+export function getAdjacentViewZoomLevel(value, direction) {
+  const currentLevel = normalizeViewZoomLevel(value);
+  const currentIndex = VIEW_ZOOM_LEVELS.indexOf(currentLevel);
+  const step = direction > 0 ? 1 : direction < 0 ? -1 : 0;
+  const nextIndex = Math.min(Math.max(currentIndex + step, 0), VIEW_ZOOM_LEVELS.length - 1);
+  return VIEW_ZOOM_LEVELS[nextIndex];
+}
+
+function loadViewZoomPreference() {
+  try {
+    return normalizeViewZoomLevel(localStorage.getItem(VIEW_ZOOM_STORAGE_KEY));
+  } catch {
+    return DEFAULT_VIEW_ZOOM;
+  }
+}
+
+function saveViewZoomPreference(level) {
+  try {
+    localStorage.setItem(VIEW_ZOOM_STORAGE_KEY, String(level));
+  } catch {
+    // El zoom sigue activo durante la sesión aunque el navegador bloquee localStorage.
+  }
+}
+
+function applyViewZoomPreference(level, shouldSave = true) {
+  const normalizedLevel = normalizeViewZoomLevel(level);
+  document.documentElement.style.setProperty("zoom", `${normalizedLevel}%`);
+  document.documentElement.dataset.viewZoom = String(normalizedLevel);
+
+  if (elements.viewZoomStatus) {
+    elements.viewZoomStatus.textContent = `${normalizedLevel} %`;
+  }
+
+  const currentIndex = VIEW_ZOOM_LEVELS.indexOf(normalizedLevel);
+  if (elements.viewZoomDecreaseBtn) {
+    elements.viewZoomDecreaseBtn.disabled = currentIndex <= 0;
+  }
+  if (elements.viewZoomIncreaseBtn) {
+    elements.viewZoomIncreaseBtn.disabled = currentIndex >= VIEW_ZOOM_LEVELS.length - 1;
+  }
+  if (elements.viewZoomResetBtn) {
+    elements.viewZoomResetBtn.disabled = normalizedLevel === DEFAULT_VIEW_ZOOM;
+  }
+
+  if (shouldSave) {
+    saveViewZoomPreference(normalizedLevel);
+  }
+}
+
+function changeViewZoom(direction) {
+  const currentLevel = normalizeViewZoomLevel(document.documentElement.dataset.viewZoom);
+  applyViewZoomPreference(getAdjacentViewZoomLevel(currentLevel, direction));
+}
 
 function normalizeFontSizeStep(step) {
   return FONT_SIZE_STEPS.includes(step) ? step : "normal";
@@ -8490,6 +8556,11 @@ function bindEvents() {
   window.addEventListener("hashchange", initializeMobilePanelFromHash);
   window.addEventListener("popstate", initializeMobilePanelFromHash);
   window.addEventListener("storage", (event) => {
+    if (event.key === VIEW_ZOOM_STORAGE_KEY) {
+      applyViewZoomPreference(event.newValue, false);
+      return;
+    }
+
     if (event.key && event.key !== PEOPLE_STORAGE_KEY) {
       return;
     }
@@ -8626,6 +8697,9 @@ function bindEvents() {
   elements.closeJsonBtn.addEventListener("click", closeJsonModal);
   elements.resetDayBtn.addEventListener("click", resetDay);
   elements.returnTicketBtn?.addEventListener("click", toggleTicketOperation);
+  elements.viewZoomDecreaseBtn?.addEventListener("click", () => changeViewZoom(-1));
+  elements.viewZoomIncreaseBtn?.addEventListener("click", () => changeViewZoom(1));
+  elements.viewZoomResetBtn?.addEventListener("click", () => applyViewZoomPreference(DEFAULT_VIEW_ZOOM));
   elements.fontDecreaseBtn?.addEventListener("click", () => changeFontSize(-1));
   elements.fontIncreaseBtn?.addEventListener("click", () => changeFontSize(1));
   elements.fontResetBtn?.addEventListener("click", () => applyFontSizePreference("normal"));
@@ -8934,6 +9008,7 @@ installScaleDebugConsoleApi();
 bindNumericInputs();
 bindTextTouchInputs();
 bindTouchSelects();
+applyViewZoomPreference(loadViewZoomPreference(), false);
 applyFontSizePreference(loadFontSizePreference(), false);
 applyCustomFontSizes();
 renderFontSizeControls();

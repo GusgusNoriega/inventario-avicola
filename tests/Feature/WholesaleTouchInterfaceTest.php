@@ -142,4 +142,27 @@ class WholesaleTouchInterfaceTest extends TestCase
         $this->assertStringContainsString('grid-template-rows: auto minmax(220px, 1fr) auto;', $stylesheet);
         $this->assertStringContainsString('touch-action: manipulation;', $stylesheet);
     }
+
+    public function test_wholesale_settings_include_persistent_touch_zoom_controls(): void
+    {
+        $response = $this->get('/operacion')
+            ->assertOk()
+            ->assertSee('id="viewZoomDecreaseBtn"', false)
+            ->assertSee('id="viewZoomStatus"', false)
+            ->assertSee('id="viewZoomIncreaseBtn"', false)
+            ->assertSee('id="viewZoomResetBtn"', false)
+            ->assertSee('Guardado en este navegador');
+
+        $html = $response->getContent();
+        $javascript = file_get_contents(public_path('js/app.js'));
+        $stylesheet = file_get_contents(public_path('css/style.css'));
+
+        $this->assertStringContainsString('aria-live="polite"', $html);
+        $this->assertStringContainsString('sistema-pollos-wholesale-view-zoom-v1', $javascript);
+        $this->assertStringContainsString('[67, 75, 80, 90, 100, 110, 125, 150]', $javascript);
+        $this->assertStringContainsString('document.documentElement.style.setProperty("zoom", `${normalizedLevel}%`);', $javascript);
+        $this->assertStringContainsString('applyViewZoomPreference(loadViewZoomPreference(), false);', $javascript);
+        $this->assertMatchesRegularExpression('/\.view-zoom-btn\s*\{[^}]*min-height:\s*44px;/s', $stylesheet);
+        $this->assertStringContainsString('.operation-touch-page .view-zoom-btn', $stylesheet);
+    }
 }
