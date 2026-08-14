@@ -8,6 +8,7 @@ use App\Http\Requests\Finance\ListFinancialTicketsRequest;
 use App\Http\Requests\Finance\RestoreFinancialTicketRequest;
 use App\Http\Requests\Finance\SearchFinancialTicketClientsRequest;
 use App\Http\Requests\Finance\UpdateFinancialTicketClientRequest;
+use App\Http\Requests\Finance\UpdateFinancialTicketDateTimeRequest;
 use App\Http\Requests\Finance\UpdateFinancialTicketPricesRequest;
 use App\Http\Requests\Finance\VoidFinancialTicketRequest;
 use App\Services\FinancialTicketLifecycleService;
@@ -66,6 +67,22 @@ class FinancialTicketController extends Controller
                 $request->user(),
                 $ticket,
                 (int) $request->validated('cliente_id'),
+                $request->ip(),
+            ),
+        ]);
+    }
+
+    public function updateDateTime(
+        UpdateFinancialTicketDateTimeRequest $request,
+        int $ticket,
+    ): JsonResponse {
+        return response()->json([
+            'message' => 'La fecha y hora del ticket y sus pesadas fueron actualizadas correctamente.',
+            'data' => $this->tickets->updateDateTime(
+                (int) $request->user()->empresa_id,
+                $request->user(),
+                $ticket,
+                (string) $request->validated('fecha_hora'),
                 $request->ip(),
             ),
         ]);

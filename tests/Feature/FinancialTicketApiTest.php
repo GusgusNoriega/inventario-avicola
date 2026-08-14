@@ -619,6 +619,371 @@ class FinancialTicketApiTest extends TestCase
         );
     }
 
+    public function test_it_changes_the_ticket_datetime_and_shifts_its_related_records_to_the_destination_journey(): void
+    {
+        $destinationJourneyId = DB::table('jornadas_operativas')->insertGetId([
+            'sucursal_id' => $this->branchId,
+            'fecha_operativa' => '2026-07-19',
+            'estado' => 'CERRADA',
+            'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-07-19 00:00:00',
+            'cierre_programado_at' => '2026-07-19 23:59:59',
+            'cerrada_por' => $this->user->id,
+            'cerrada_at' => '2026-07-19 23:59:59',
+        ]);
+        $ticket = $this->createTicket(
+            'FECHA-HORA-001',
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $this->sourceClientId,
+            $this->twoTypeValues(),
+        );
+        $weighingIds = DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->orderBy('id')
+            ->pluck('id');
+        DB::table('pesadas')->where('id', $weighingIds[0])->update([
+            'pesada_at' => '2026-07-20 13:58:30',
+        ]);
+        DB::table('pesadas')->where('id', $weighingIds[1])->update([
+            'pesada_at' => '2026-07-20 14:06:45',
+            'estado' => Pesada::STATUS_VOIDED,
+        ]);
+        $this->createJavaMovement($ticket['id'], $this->sourceClientId);
+
+        // Fuerza la creacion del comprobante que tambien debe seguir a la jornada nueva.
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/precios", [
+            'precios' => [[
+                'id' => $ticket['price_ids'][$this->firstChickenTypeId],
+                'precio_kg' => '8.5000',
+            ]],
+        ])->assertOk();
+
+        $ticketCreatedAt = DB::table('tickets_despacho')
+            ->where('id', $ticket['id'])
+            ->value('created_at');
+        $weighingCreatedAt = DB::table('pesadas')
+            ->whereIn('id', $weighingIds)
+            ->orderBy('id')
+            ->pluck('created_at', 'id')
+            ->all();
+        $javaMovement = DB::table('movimientos_javas')
+            ->where('ticket_despacho_id', $ticket['id'])
+            ->firstOrFail();
+        $document = DB::table('comprobantes')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('origen_clave', "VENTA:TICKET:{$ticket['id']}")
+            ->firstOrFail();
+
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-19T20:30',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.id', $ticket['id'])
+            ->assertJsonPath('data.registered_at', '2026-07-19T20:30:00-05:00');
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'],
+            'jornada_id' => $destinationJourneyId,
+            'cerrado_at' => '2026-07-19 20:30:00',
+            'created_at' => $ticketCreatedAt,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingIds[0],
+            'ticket_id' => $ticket['id'],
+            'pesada_at' => '2026-07-19 20:18:30',
+            'created_at' => $weighingCreatedAt[$weighingIds[0]],
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingIds[1],
+            'ticket_id' => $ticket['id'],
+            'pesada_at' => '2026-07-19 20:26:45',
+            'estado' => Pesada::STATUS_VOIDED,
+            'created_at' => $weighingCreatedAt[$weighingIds[1]],
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'id' => $javaMovement->id,
+            'ticket_despacho_id' => $ticket['id'],
+            'jornada_id' => $destinationJourneyId,
+            'fecha_movimiento' => '2026-07-19 20:30:00',
+            'created_at' => $javaMovement->created_at,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $document->id,
+            'fecha_emision' => '2026-07-19',
+            'fecha_vencimiento' => '2026-07-19',
+            'created_at' => $document->created_at,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'usuario_id' => $this->user->id,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CAMBIAR_FECHA_HORA',
+        ]);
+        $audit = DB::table('auditoria_eventos')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('entidad', 'tickets_despacho')
+            ->where('entidad_id', (string) $ticket['id'])
+            ->where('accion', 'CAMBIAR_FECHA_HORA')
+            ->sole();
+        $auditBefore = json_decode($audit->datos_antes, true, flags: JSON_THROW_ON_ERROR);
+        $auditAfter = json_decode($audit->datos_despues, true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertSame($this->journeyId, (int) $auditBefore['jornada_id']);
+        $this->assertSame('2026-07-20 14:10:00', $auditBefore['cerrado_at']);
+        $this->assertSame($destinationJourneyId, (int) $auditAfter['jornada_id']);
+        $this->assertSame('2026-07-19 20:30:00', $auditAfter['cerrado_at']);
+        $this->assertEqualsCanonicalizing(
+            $weighingIds->map(fn ($id): string => (string) $id)->all(),
+            DB::table('auditoria_eventos')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('entidad', 'pesadas')
+                ->where('accion', 'CAMBIAR_FECHA_HORA_POR_TICKET')
+                ->pluck('entidad_id')
+                ->all(),
+        );
+    }
+
+    public function test_datetime_change_is_atomic_when_the_destination_journey_does_not_exist(): void
+    {
+        $ticket = $this->createTicket(
+            'FECHA-HORA-SIN-JORNADA',
+            CarbonImmutable::parse('2026-07-20 15:00:00'),
+            $this->sourceClientId,
+            $this->twoTypeValues(),
+        );
+        $weighingIds = DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->orderBy('id')
+            ->pluck('id');
+        DB::table('pesadas')->where('id', $weighingIds[0])->update([
+            'pesada_at' => '2026-07-20 14:48:00',
+        ]);
+        DB::table('pesadas')->where('id', $weighingIds[1])->update([
+            'pesada_at' => '2026-07-20 14:57:00',
+        ]);
+        $this->createJavaMovement($ticket['id'], $this->sourceClientId);
+        DB::table('movimientos_javas')
+            ->where('ticket_despacho_id', $ticket['id'])
+            ->update(['fecha_movimiento' => '2026-07-20 15:00:00']);
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/precios", [
+            'precios' => [[
+                'id' => $ticket['price_ids'][$this->firstChickenTypeId],
+                'precio_kg' => '8.5000',
+            ]],
+        ])->assertOk();
+
+        $ticketBefore = DB::table('tickets_despacho')
+            ->where('id', $ticket['id'])
+            ->firstOrFail();
+        $weighingsBefore = DB::table('pesadas')
+            ->whereIn('id', $weighingIds)
+            ->orderBy('id')
+            ->get()
+            ->all();
+        $javaMovementBefore = DB::table('movimientos_javas')
+            ->where('ticket_despacho_id', $ticket['id'])
+            ->firstOrFail();
+        $documentBefore = DB::table('comprobantes')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('origen_clave', "VENTA:TICKET:{$ticket['id']}")
+            ->firstOrFail();
+
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-18T09:15',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fecha_hora']);
+
+        $this->assertEquals(
+            $ticketBefore,
+            DB::table('tickets_despacho')->where('id', $ticket['id'])->firstOrFail(),
+        );
+        $this->assertEquals(
+            $weighingsBefore,
+            DB::table('pesadas')->whereIn('id', $weighingIds)->orderBy('id')->get()->all(),
+        );
+        $this->assertEquals(
+            $javaMovementBefore,
+            DB::table('movimientos_javas')
+                ->where('ticket_despacho_id', $ticket['id'])
+                ->firstOrFail(),
+        );
+        $this->assertEquals(
+            $documentBefore,
+            DB::table('comprobantes')
+                ->where('empresa_id', $this->user->empresa_id)
+                ->where('origen_clave', "VENTA:TICKET:{$ticket['id']}")
+                ->firstOrFail(),
+        );
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CAMBIAR_FECHA_HORA',
+        ]);
+    }
+
+    public function test_datetime_change_rejects_a_duplicate_ticket_code_in_the_destination_journey(): void
+    {
+        $destinationJourneyId = DB::table('jornadas_operativas')->insertGetId([
+            'sucursal_id' => $this->branchId,
+            'fecha_operativa' => '2026-07-19',
+            'estado' => 'CERRADA',
+            'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-07-19 00:00:00',
+            'cierre_programado_at' => '2026-07-19 23:59:59',
+            'cerrada_por' => $this->user->id,
+            'cerrada_at' => '2026-07-19 23:59:59',
+        ]);
+        $ticket = $this->createTicket(
+            'FECHA-HORA-DUPLICADO',
+            CarbonImmutable::parse('2026-07-20 16:00:00'),
+            $this->sourceClientId,
+            $this->twoTypeValues(),
+        );
+        DB::table('tickets_despacho')->insert([
+            'jornada_id' => $destinationJourneyId,
+            'codigo' => 'FECHA-HORA-DUPLICADO',
+            'canal' => TicketDespacho::CHANNEL_WHOLESALE,
+            'tipo_operacion' => TicketDespacho::OPERATION_DISPATCH,
+            'cliente_destino_id' => $this->sourceClientId,
+            'estado' => TicketDespacho::STATUS_CLOSED,
+            'cerrado_por' => $this->user->id,
+            'cerrado_at' => '2026-07-19 08:00:00',
+            'created_by' => $this->user->id,
+            'created_at' => '2026-07-19 08:00:00',
+            'updated_at' => '2026-07-19 08:00:00',
+        ]);
+        $ticketBefore = DB::table('tickets_despacho')
+            ->where('id', $ticket['id'])
+            ->firstOrFail();
+        $weighingsBefore = DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->orderBy('id')
+            ->get()
+            ->all();
+
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-19T16:00',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fecha_hora']);
+
+        $this->assertEquals(
+            $ticketBefore,
+            DB::table('tickets_despacho')->where('id', $ticket['id'])->firstOrFail(),
+        );
+        $this->assertEquals(
+            $weighingsBefore,
+            DB::table('pesadas')
+                ->where('ticket_id', $ticket['id'])
+                ->orderBy('id')
+                ->get()
+                ->all(),
+        );
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CAMBIAR_FECHA_HORA',
+        ]);
+    }
+
+    public function test_datetime_change_validates_required_format_and_future_values(): void
+    {
+        $ticket = $this->createTicket(
+            'FECHA-HORA-VALIDACION',
+            CarbonImmutable::parse('2026-07-20 17:00:00'),
+            $this->sourceClientId,
+        );
+        $endpoint = "/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora";
+
+        $this->putJson($endpoint, [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fecha_hora']);
+        $this->putJson($endpoint, ['fecha_hora' => '2026-07-20 17:30'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fecha_hora']);
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse(
+            '2026-08-14 10:00:00',
+            'America/Lima',
+        ));
+        try {
+            $this->putJson($endpoint, ['fecha_hora' => '2026-08-14T10:06'])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['fecha_hora']);
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'],
+            'jornada_id' => $this->journeyId,
+            'cerrado_at' => '2026-07-20 17:00:00',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CAMBIAR_FECHA_HORA',
+        ]);
+    }
+
+    public function test_datetime_change_rejects_voided_tickets_and_tickets_from_another_company(): void
+    {
+        $voidedTicket = $this->createTicket(
+            'FECHA-HORA-ANULADO',
+            CarbonImmutable::parse('2026-07-20 17:10:00'),
+            $this->sourceClientId,
+        );
+        DB::table('tickets_despacho')->where('id', $voidedTicket['id'])->update([
+            'estado' => TicketDespacho::STATUS_VOIDED,
+        ]);
+
+        $this->putJson("/api/v1/finanzas/tickets/{$voidedTicket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-20T17:40',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['ticket']);
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $voidedTicket['id'],
+            'estado' => TicketDespacho::STATUS_VOIDED,
+            'jornada_id' => $this->journeyId,
+            'cerrado_at' => '2026-07-20 17:10:00',
+        ]);
+
+        $companyTicket = $this->createTicket(
+            'FECHA-HORA-OTRA-EMPRESA',
+            CarbonImmutable::parse('2026-07-20 17:20:00'),
+            $this->sourceClientId,
+        );
+        $foreignUser = User::factory()->create();
+        $this->grantModules(
+            $foreignUser,
+            ['MODULO_FINANZAS'],
+            'FINANCIAL_TICKETS_FOREIGN_DATETIME',
+            'Tickets financieros de otra empresa',
+        );
+        Sanctum::actingAs($foreignUser, ['api']);
+
+        $this->putJson("/api/v1/finanzas/tickets/{$companyTicket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-20T17:50',
+        ])->assertNotFound();
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $companyTicket['id'],
+            'jornada_id' => $this->journeyId,
+            'cerrado_at' => '2026-07-20 17:20:00',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $companyTicket['id'],
+            'accion' => 'CAMBIAR_FECHA_HORA',
+        ]);
+    }
+
     public function test_bulk_adjustment_increases_and_decreases_only_the_selected_type_for_all_filtered_pages(): void
     {
         $registeredAt = CarbonImmutable::parse('2026-07-20 16:00:00');

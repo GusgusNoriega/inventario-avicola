@@ -154,6 +154,9 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/tickets/{ticket}/cliente', [FinancialTicketController::class, 'updateClient'])
             ->whereNumber('ticket')
             ->middleware('permission:SALDOS_AJUSTAR');
+        Route::put('/tickets/{ticket}/fecha-hora', [FinancialTicketController::class, 'updateDateTime'])
+            ->whereNumber('ticket')
+            ->middleware('permission:SALDOS_AJUSTAR');
         Route::post('/tickets/{ticket}/anular', [FinancialTicketController::class, 'void'])
             ->whereNumber('ticket')
             ->middleware('permission:SALDOS_AJUSTAR');

@@ -1930,7 +1930,31 @@ body.fin-page {
 }
 
 .fin-ticket-actions {
-  min-width: 190px;
+  min-width: 220px;
+}
+
+.fin-ticket-datetime-dialog {
+  width: min(640px, calc(100% - 28px));
+}
+
+.fin-ticket-datetime-field {
+  margin-top: 16px;
+}
+
+.fin-ticket-datetime-warning {
+  margin: 14px 0 0;
+  padding: 11px 12px;
+  color: #bceeff;
+  border: 1px solid rgba(50, 202, 255, .32);
+  border-radius: 9px;
+  background: rgba(50, 202, 255, .07);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fin-ticket-datetime-dialog form[aria-busy="true"] .fin-dialog-close {
+  opacity: .48;
+  cursor: wait;
 }
 
 .fin-ticket-lifecycle-warning {

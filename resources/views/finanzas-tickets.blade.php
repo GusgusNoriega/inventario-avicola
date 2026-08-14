@@ -18,7 +18,7 @@
       'active' => 'tickets',
       'eyebrow' => 'Control de ventas',
       'title' => 'Consulta y edición de tickets',
-      'description' => 'Busca tickets históricos, incluidos los anulados, y administra su estado, cliente o precios.'
+      'description' => 'Busca tickets históricos, incluidos los anulados, y administra su fecha, estado, cliente o precios.'
     ])
 
     <section class="fin-card fin-management-notice" aria-label="Condición de consulta">
@@ -167,6 +167,31 @@
       <footer class="fin-purchase-dialog-actions">
         <button class="fin-btn fin-btn-ghost" type="button" data-dialog-close>Cancelar</button>
         <button id="financeTicketClientSave" class="fin-btn fin-btn-primary" type="submit" disabled>Guardar cliente</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="financeTicketDateTimeDialog" class="fin-purchase-dialog fin-ticket-datetime-dialog" aria-labelledby="financeTicketDateTimeTitle">
+    <form id="financeTicketDateTimeForm" class="fin-purchase-dialog-card" novalidate>
+      <header class="fin-purchase-dialog-head">
+        <div>
+          <p class="fin-eyebrow">Corrección histórica</p>
+          <h2 id="financeTicketDateTimeTitle">Cambiar fecha y hora</h2>
+        </div>
+        <button class="fin-dialog-close" type="button" data-dialog-close aria-label="Cerrar">×</button>
+      </header>
+      <p id="financeTicketDateTimeDescription" class="fin-section-copy"></p>
+      <label class="fin-field fin-ticket-datetime-field">
+        <span>Nueva fecha y hora <b>*</b></span>
+        <input id="financeTicketDateTimeInput" type="datetime-local" step="60" required>
+      </label>
+      <p class="fin-ticket-datetime-warning">
+        Al guardar, todas las pesadas del ticket se moverán automáticamente por el mismo intervalo. Se conservarán su orden y la separación de tiempo entre cada pesada.
+      </p>
+      <p id="financeTicketDateTimeMessage" class="fin-message" role="status" aria-live="polite"></p>
+      <footer class="fin-purchase-dialog-actions">
+        <button class="fin-btn fin-btn-ghost" type="button" data-dialog-close>Cancelar</button>
+        <button id="financeTicketDateTimeSave" class="fin-btn fin-btn-primary" type="submit">Guardar fecha y hora</button>
       </footer>
     </form>
   </dialog>

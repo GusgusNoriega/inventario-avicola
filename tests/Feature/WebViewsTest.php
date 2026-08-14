@@ -299,6 +299,9 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeTicketRows"', false)
             ->assertSee('id="financeTicketPriceDialog"', false)
             ->assertSee('id="financeTicketClientDialog"', false)
+            ->assertSee('id="financeTicketDateTimeDialog"', false)
+            ->assertSee('id="financeTicketDateTimeForm"', false)
+            ->assertSee('id="financeTicketDateTimeInput"', false)
             ->assertSee('id="financeTicketVoidDialog"', false)
             ->assertSee('id="financeTicketVoidReason"', false)
             ->assertSee('id="financeTicketRestoreDialog"', false)
@@ -446,6 +449,8 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/catalogo', $ticketsJavascript);
         $this->assertStringContainsString('/finanzas/tickets/clientes?', $ticketsJavascript);
         $this->assertStringContainsString('/ajustar-precios', $ticketsJavascript);
+        $this->assertStringContainsString('data-edit-date-time', $ticketsJavascript);
+        $this->assertStringContainsString('/fecha-hora`', $ticketsJavascript);
         $this->assertStringContainsString('filters.cliente_id', $ticketsJavascript);
         $this->assertStringContainsString('FILTER_CLIENT_RESULT_LIMIT = 8', $ticketsJavascript);
         $this->assertStringContainsString('aria-activedescendant', $ticketsJavascript);

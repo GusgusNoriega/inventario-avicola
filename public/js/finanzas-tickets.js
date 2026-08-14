@@ -44,6 +44,13 @@ const elements = {
   clientSelection: document.getElementById("financeTicketClientSelection"),
   clientMessage: document.getElementById("financeTicketClientMessage"),
   clientSave: document.getElementById("financeTicketClientSave"),
+  dateTimeDialog: document.getElementById("financeTicketDateTimeDialog"),
+  dateTimeForm: document.getElementById("financeTicketDateTimeForm"),
+  dateTimeTitle: document.getElementById("financeTicketDateTimeTitle"),
+  dateTimeDescription: document.getElementById("financeTicketDateTimeDescription"),
+  dateTimeInput: document.getElementById("financeTicketDateTimeInput"),
+  dateTimeMessage: document.getElementById("financeTicketDateTimeMessage"),
+  dateTimeSave: document.getElementById("financeTicketDateTimeSave"),
   voidDialog: document.getElementById("financeTicketVoidDialog"),
   voidForm: document.getElementById("financeTicketVoidForm"),
   voidDescription: document.getElementById("financeTicketVoidDescription"),
@@ -85,6 +92,7 @@ const state = {
   filterClientLoading: false,
   editingPriceTicketId: null,
   editingClientTicketId: null,
+  editingDateTimeTicketId: null,
   voidingTicketId: null,
   restoringTicketId: null,
   selectedClientId: null,
@@ -96,6 +104,7 @@ const state = {
   bulkIdempotencyKey: null,
   bulkAttemptFingerprint: null,
   bulkSaving: false,
+  dateTimeSaving: false,
   lifecycleSaving: false,
   loading: false,
   saving: false
@@ -246,6 +255,11 @@ function formatTicketDateTime(value) {
   }
 }
 
+function dateTimeLocalValue(value) {
+  const match = String(value || "").match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  return match?.[1] || "";
+}
+
 function operationLabel(record) {
   const operation = String(record.operation_type || "").toUpperCase();
   const channel = String(record.channel || "").toUpperCase();
@@ -291,6 +305,9 @@ function actionsHtml(record) {
     actions.push(record.can_edit_prices
       ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-prices="${record.id}">Editar precio</button>`
       : '<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" disabled>Sin precios</button>');
+    if (record.can_edit_datetime) {
+      actions.push(`<button class="fin-btn fin-btn-accent fin-btn-small" type="button" data-edit-date-time="${record.id}">Cambiar fecha/hora</button>`);
+    }
     actions.push(record.can_change_client
       ? `<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-change-client="${record.id}">Cambiar cliente</button>`
       : '<button class="fin-btn fin-btn-primary fin-btn-small" type="button" disabled>Sin venta</button>');
@@ -859,6 +876,71 @@ async function saveClient(event) {
   }
 }
 
+function setDateTimeSaving(isSaving) {
+  state.dateTimeSaving = isSaving;
+  elements.dateTimeForm.setAttribute("aria-busy", String(isSaving));
+  elements.dateTimeInput.disabled = isSaving;
+  elements.dateTimeSave.disabled = isSaving;
+  elements.dateTimeSave.textContent = isSaving ? "Guardando..." : "Guardar fecha y hora";
+}
+
+function openDateTimeDialog(ticketId) {
+  const record = state.records.get(String(ticketId));
+  if (!canManage || !record?.can_edit_datetime || state.dateTimeSaving) return;
+
+  state.editingDateTimeTicketId = record.id;
+  const weighingCount = Number(record.weighing_count || 0);
+  const currentDateTime = formatTicketDateTime(record.registered_at).replace(/[.]$/, "");
+  elements.dateTimeTitle.textContent = `Cambiar fecha y hora · ${record.code}`;
+  elements.dateTimeDescription.textContent = weighingCount > 0
+    ? `Fecha actual: ${currentDateTime}. Se actualizarán automáticamente ${weighingCount} pesada${weighingCount === 1 ? "" : "s"}.`
+    : `Fecha actual: ${currentDateTime}. Este ticket no tiene pesadas asociadas.`;
+  elements.dateTimeInput.value = dateTimeLocalValue(record.registered_at);
+  setMessage(elements.dateTimeMessage, "");
+  elements.dateTimeDialog.showModal();
+  elements.dateTimeInput.focus();
+}
+
+async function saveDateTime(event) {
+  event.preventDefault();
+  if (state.saving || state.dateTimeSaving || !state.editingDateTimeTicketId) return;
+
+  if (!elements.dateTimeForm.checkValidity()) {
+    elements.dateTimeForm.reportValidity();
+    setMessage(elements.dateTimeMessage, "Indica una fecha y hora válidas.", "error");
+    return;
+  }
+
+  state.saving = true;
+  setDateTimeSaving(true);
+  updateBulkAvailability();
+  setMessage(elements.dateTimeMessage, "Actualizando el ticket y todas sus pesadas...");
+  try {
+    const response = await apiRequest(
+      `/finanzas/tickets/${encodeURIComponent(state.editingDateTimeTicketId)}/fecha-hora`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ fecha_hora: elements.dateTimeInput.value })
+      }
+    );
+    elements.dateTimeDialog.close();
+    state.editingDateTimeTicketId = null;
+    await refreshAfterMutation(
+      response?.message || "Fecha y hora del ticket y sus pesadas actualizadas correctamente."
+    );
+  } catch (error) {
+    setMessage(
+      elements.dateTimeMessage,
+      errorMessage(error, "No se pudo cambiar la fecha y hora del ticket."),
+      "error"
+    );
+  } finally {
+    state.saving = false;
+    setDateTimeSaving(false);
+    updateBulkAvailability();
+  }
+}
+
 function setLifecycleSaving(isSaving) {
   state.lifecycleSaving = isSaving;
   elements.voidForm.setAttribute("aria-busy", String(isSaving));
@@ -1193,16 +1275,19 @@ elements.next.addEventListener("click", () => {
 });
 elements.rows.addEventListener("click", (event) => {
   const editPrices = event.target.closest("[data-edit-prices]");
+  const editDateTime = event.target.closest("[data-edit-date-time]");
   const changeClient = event.target.closest("[data-change-client]");
   const voidButton = event.target.closest("[data-void-ticket]");
   const restoreButton = event.target.closest("[data-restore-ticket]");
   if (editPrices) openPriceDialog(editPrices.dataset.editPrices);
+  if (editDateTime) openDateTimeDialog(editDateTime.dataset.editDateTime);
   if (changeClient) void openClientDialog(changeClient.dataset.changeClient);
   if (voidButton) openVoidDialog(voidButton.dataset.voidTicket);
   if (restoreButton) openRestoreDialog(restoreButton.dataset.restoreTicket);
 });
 elements.priceForm.addEventListener("submit", savePrices);
 elements.clientForm.addEventListener("submit", saveClient);
+elements.dateTimeForm.addEventListener("submit", saveDateTime);
 elements.voidForm.addEventListener("submit", voidTicket);
 elements.restoreForm.addEventListener("submit", restoreTicket);
 elements.clientSearch.addEventListener("input", renderClientOptions);
@@ -1232,6 +1317,10 @@ document.querySelectorAll("[data-dialog-close]").forEach((button) => {
       setMessage(elements.bulkMessage, "Espera a que termine el ajuste antes de cerrar.", "error");
       return;
     }
+    if (dialog === elements.dateTimeDialog && state.dateTimeSaving) {
+      setMessage(elements.dateTimeMessage, "Espera a que termine la actualización antes de cerrar.", "error");
+      return;
+    }
     if (state.lifecycleSaving && dialog === elements.voidDialog) {
       setMessage(elements.voidMessage, "Espera a que termine la anulación antes de cerrar.", "error");
       return;
@@ -1248,6 +1337,11 @@ elements.bulkDialog.addEventListener("cancel", (event) => {
   event.preventDefault();
   setMessage(elements.bulkMessage, "Espera a que termine el ajuste antes de cerrar.", "error");
 });
+elements.dateTimeDialog.addEventListener("cancel", (event) => {
+  if (!state.dateTimeSaving) return;
+  event.preventDefault();
+  setMessage(elements.dateTimeMessage, "Espera a que termine la actualización antes de cerrar.", "error");
+});
 elements.voidDialog.addEventListener("cancel", (event) => {
   if (!state.lifecycleSaving) return;
   event.preventDefault();
@@ -1263,6 +1357,9 @@ elements.voidDialog.addEventListener("close", () => {
 });
 elements.restoreDialog.addEventListener("close", () => {
   if (!state.lifecycleSaving) state.restoringTicketId = null;
+});
+elements.dateTimeDialog.addEventListener("close", () => {
+  if (!state.dateTimeSaving) state.editingDateTimeTicketId = null;
 });
 
 initFinanceAccess(() => {

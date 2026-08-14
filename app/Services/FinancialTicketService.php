@@ -197,6 +197,211 @@ class FinancialTicketService
         }, 3);
     }
 
+    /** @return array<string, mixed> */
+    public function updateDateTime(
+        int $companyId,
+        User $actor,
+        int $ticketId,
+        string $dateTime,
+        ?string $ip,
+    ): array {
+        return DB::transaction(function () use (
+            $companyId,
+            $actor,
+            $ticketId,
+            $dateTime,
+            $ip,
+        ): array {
+            $ticket = $this->editableTicket($companyId, $ticketId);
+
+            if ($ticket->estado !== TicketDespacho::STATUS_CLOSED) {
+                throw ValidationException::withMessages([
+                    'ticket' => 'Solo se puede corregir la fecha y hora de un ticket cerrado.',
+                ]);
+            }
+
+            $journeyContext = DB::table('jornadas_operativas as jornada')
+                ->join('sucursales as sucursal', 'sucursal.id', '=', 'jornada.sucursal_id')
+                ->where('jornada.id', $ticket->jornada_id)
+                ->where('sucursal.empresa_id', $companyId)
+                ->first([
+                    'sucursal.id as sucursal_id',
+                    'sucursal.zona_horaria as sucursal_zona_horaria',
+                ]);
+            abort_unless($journeyContext, 404);
+
+            $companyTimezone = $this->companyTimezone($companyId);
+            $databaseTimezone = $this->databaseTimezone();
+            $branchTimezone = (string) (
+                $journeyContext->sucursal_zona_horaria ?: $companyTimezone
+            );
+            $rawClosedAt = $ticket->getRawOriginal('cerrado_at');
+            $rawRegisteredAt = $rawClosedAt ?: $ticket->getRawOriginal('created_at');
+
+            if ($rawRegisteredAt === null) {
+                throw ValidationException::withMessages([
+                    'fecha_hora' => 'El ticket no tiene una fecha registrada que pueda corregirse.',
+                ]);
+            }
+
+            $currentRegisteredAt = CarbonImmutable::parse(
+                (string) $rawRegisteredAt,
+                $databaseTimezone,
+            );
+            $targetRegisteredAt = $this->localDateTime($dateTime, $companyTimezone)
+                ->setTimezone($databaseTimezone);
+            $offsetSeconds = $targetRegisteredAt->getTimestamp()
+                - $currentRegisteredAt->getTimestamp();
+            $records = Pesada::query()
+                ->where('ticket_id', $ticket->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $recordChanges = $records->map(function (Pesada $record) use (
+                $databaseTimezone,
+                $offsetSeconds,
+            ): array {
+                $before = CarbonImmutable::parse(
+                    (string) $record->getRawOriginal('pesada_at'),
+                    $databaseTimezone,
+                );
+
+                return [
+                    'record' => $record,
+                    'before' => $before,
+                    'after' => $before->addSeconds($offsetSeconds),
+                ];
+            });
+            $cutoff = (string) (
+                DB::table('empresas')
+                    ->where('id', $companyId)
+                    ->value('hora_corte_operativo')
+                ?: '21:00:00'
+            );
+            $operatingDates = $recordChanges
+                ->map(fn (array $change): string => $this->operatingDateFor(
+                    $change['after']->setTimezone($branchTimezone),
+                    $cutoff,
+                ))
+                ->unique()
+                ->values();
+
+            if ($operatingDates->count() > 1) {
+                throw ValidationException::withMessages([
+                    'fecha_hora' => 'La nueva hora haría que las pesadas queden en jornadas operativas diferentes. Elige una hora que conserve todas las pesadas dentro de la misma jornada.',
+                ]);
+            }
+
+            $targetOperatingDate = $operatingDates->first()
+                ?? $this->operatingDateFor(
+                    $targetRegisteredAt->setTimezone($branchTimezone),
+                    $cutoff,
+                );
+            $targetJourney = DB::table('jornadas_operativas')
+                ->where('sucursal_id', $journeyContext->sucursal_id)
+                ->whereDate('fecha_operativa', $targetOperatingDate)
+                ->lockForUpdate()
+                ->first(['id', 'fecha_operativa']);
+
+            if (! $targetJourney) {
+                throw ValidationException::withMessages([
+                    'fecha_hora' => "No existe una jornada operativa para {$targetOperatingDate} en la sucursal del ticket. Configura esa jornada antes de guardar la corrección.",
+                ]);
+            }
+
+            $targetJourneyId = (int) $targetJourney->id;
+            $hasCodeCollision = $targetJourneyId !== (int) $ticket->jornada_id
+                && TicketDespacho::query()
+                    ->where('jornada_id', $targetJourneyId)
+                    ->where('codigo', $ticket->codigo)
+                    ->whereKeyNot($ticket->id)
+                    ->exists();
+
+            if ($hasCodeCollision) {
+                throw ValidationException::withMessages([
+                    'fecha_hora' => 'La jornada de destino ya contiene otro ticket con el mismo código. No se realizó ningún cambio.',
+                ]);
+            }
+
+            $targetDatabaseValue = $targetRegisteredAt->format('Y-m-d H:i:s');
+            $ticketBefore = [
+                'jornada_id' => (int) $ticket->jornada_id,
+                'cerrado_at' => $rawClosedAt === null
+                    ? null
+                    : $currentRegisteredAt->format('Y-m-d H:i:s'),
+            ];
+            $ticketAfter = [
+                'jornada_id' => $targetJourneyId,
+                'cerrado_at' => $targetDatabaseValue,
+            ];
+
+            if ($ticketBefore !== $ticketAfter) {
+                DB::table('tickets_despacho')
+                    ->where('id', $ticket->id)
+                    ->update([
+                        'jornada_id' => $targetJourneyId,
+                        'cerrado_at' => $targetDatabaseValue,
+                        'updated_at' => now(),
+                    ]);
+
+                $this->audit->record(
+                    $companyId,
+                    (int) $actor->id,
+                    'tickets_despacho',
+                    (int) $ticket->id,
+                    'CAMBIAR_FECHA_HORA',
+                    $ticketBefore,
+                    $ticketAfter,
+                    $ip,
+                );
+            }
+
+            foreach ($recordChanges as $change) {
+                /** @var Pesada $record */
+                $record = $change['record'];
+                $beforeValue = $change['before']->format('Y-m-d H:i:s');
+                $afterValue = $change['after']->format('Y-m-d H:i:s');
+
+                if ($beforeValue === $afterValue) {
+                    continue;
+                }
+
+                DB::table('pesadas')
+                    ->where('id', $record->id)
+                    ->update([
+                        'pesada_at' => $afterValue,
+                        'updated_at' => now(),
+                    ]);
+                $this->audit->record(
+                    $companyId,
+                    (int) $actor->id,
+                    'pesadas',
+                    (int) $record->id,
+                    'CAMBIAR_FECHA_HORA_POR_TICKET',
+                    [
+                        'ticket_id' => (int) $ticket->id,
+                        'pesada_at' => $beforeValue,
+                    ],
+                    [
+                        'ticket_id' => (int) $ticket->id,
+                        'pesada_at' => $afterValue,
+                    ],
+                    $ip,
+                );
+            }
+
+            $ticket->refresh();
+            $this->javaControl->syncDispatchMovement(
+                $ticket,
+                $companyId,
+                (int) $journeyContext->sucursal_id,
+            );
+            $this->syncFinancialDocument($companyId, $ticket, $actor);
+
+            return $this->freshFormattedTicket($companyId, (int) $ticket->id);
+        }, 3);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -686,10 +891,12 @@ class FinancialTicketService
             'currency' => $currency,
             'amount' => $amount,
             'prices' => $prices,
+            'weighing_count' => $ticket->pesadas->count(),
             'can_edit_prices' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
                 && $prices !== [],
             'can_change_client' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
                 && $prices !== [],
+            'can_edit_datetime' => $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'can_void' => $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'can_restore' => $ticket->estado === TicketDespacho::STATUS_VOIDED,
         ];
@@ -940,6 +1147,14 @@ class FinancialTicketService
     private function localDateTime(string $value, string $timezone): CarbonImmutable
     {
         return CarbonImmutable::createFromFormat('!Y-m-d\TH:i', $value, $timezone);
+    }
+
+    private function operatingDateFor(CarbonImmutable $time, string $cutoff): string
+    {
+        $cutoffAt = $time->startOfDay()->setTimeFromTimeString($cutoff);
+
+        return ($time->greaterThanOrEqualTo($cutoffAt) ? $time->addDay() : $time)
+            ->format('Y-m-d');
     }
 
     private function escapedLikePattern(string $value): string
