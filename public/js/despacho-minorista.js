@@ -2884,12 +2884,15 @@ function clearRegisteredList(listIndex, draftId, ticket) {
 }
 
 function printRegisteredTicket(ticket) {
+  const ticketTitle = Object.prototype.hasOwnProperty.call(ticket || {}, "ticket_title")
+    ? ticket.ticket_title
+    : state.catalog.ticket_title;
   const ticketMessage = Object.prototype.hasOwnProperty.call(ticket || {}, "ticket_message")
     ? ticket.ticket_message
     : state.catalog.ticket_message;
 
   return new Promise((resolve, reject) => {
-    printWeightControlTicket(buildRetailTicketPrintData(ticket, ticketMessage), {
+    printWeightControlTicket(buildRetailTicketPrintData(ticket, ticketMessage, ticketTitle), {
       frameTitle: `Impresión de ${ticket.code}`,
       onSuccess: resolve,
       onError: () => reject(new Error("El ticket quedó guardado, pero no se pudo abrir la ventana de impresión."))
@@ -3286,6 +3289,7 @@ function normalizeCatalog(data) {
   const adjustments = Array.isArray(data.adjustments) ? data.adjustments : [];
   return {
     branch: data.branch || null,
+    ticket_title: String(data.ticket_title || "").trim(),
     ticket_message: String(data.ticket_message || "").trim(),
     clients: Array.isArray(data.clients) ? data.clients : [],
     general_prices: data.general_prices && typeof data.general_prices === "object"

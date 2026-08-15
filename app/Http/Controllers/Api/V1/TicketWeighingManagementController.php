@@ -14,6 +14,7 @@ use App\Services\FinancialObligationService;
 use App\Services\JavaControlService;
 use App\Services\OperationContextService;
 use App\Services\TicketMessageService;
+use App\Services\TicketTitleService;
 use App\Services\WholesaleTwoWeightAdjustmentService;
 use App\Support\WholesaleTwoChickenVariant;
 use Carbon\CarbonImmutable;
@@ -31,6 +32,7 @@ class TicketWeighingManagementController extends Controller
         private readonly JavaControlService $javaControl,
         private readonly FinancialObligationService $financialObligations,
         private readonly TicketMessageService $ticketMessages,
+        private readonly TicketTitleService $ticketTitles,
         private readonly WholesaleTwoWeightAdjustmentService $wholesaleTwoAdjustments,
     ) {}
 
@@ -122,6 +124,7 @@ class TicketWeighingManagementController extends Controller
 
         return response()->json([
             'data' => [
+                'ticket_title' => $this->ticketTitles->current((int) $branch->empresa_id),
                 'ticket_message' => $this->ticketMessages->current((int) $branch->empresa_id),
                 'ticket' => $this->formatTicket(
                     $selected,

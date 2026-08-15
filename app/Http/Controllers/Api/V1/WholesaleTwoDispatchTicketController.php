@@ -7,6 +7,7 @@ use App\Http\Requests\Operation\StoreWholesaleTwoDispatchTicketRequest;
 use App\Models\TicketDespacho;
 use App\Services\OperationContextService;
 use App\Services\TicketMessageService;
+use App\Services\TicketTitleService;
 use App\Services\WholesaleTwoDispatchTicketService;
 use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class WholesaleTwoDispatchTicketController extends Controller
         private readonly OperationContextService $context,
         private readonly WholesaleTwoDispatchTicketService $tickets,
         private readonly TicketMessageService $ticketMessages,
+        private readonly TicketTitleService $ticketTitles,
     ) {}
 
     public function store(StoreWholesaleTwoDispatchTicketRequest $request): JsonResponse
@@ -37,13 +39,18 @@ class WholesaleTwoDispatchTicketController extends Controller
             'already_registered' => $result['already_registered'],
             'data' => $this->formatTicket(
                 $result['ticket'],
+                $this->ticketTitles->current($companyId),
                 $this->ticketMessages->current($companyId)
             ),
         ], $result['already_registered'] ? 200 : 201);
     }
 
     /** @return array<string, mixed> */
-    private function formatTicket(TicketDespacho $ticket, ?string $ticketMessage): array
+    private function formatTicket(
+        TicketDespacho $ticket,
+        string $ticketTitle,
+        ?string $ticketMessage
+    ): array
     {
         $ticket->loadMissing([
             'pesadas.tipoPollo',
@@ -60,6 +67,7 @@ class WholesaleTwoDispatchTicketController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
+            'ticket_title' => $ticketTitle,
             'ticket_message' => $ticketMessage,
             'destination' => $ticket->clienteDestino
                 ? [

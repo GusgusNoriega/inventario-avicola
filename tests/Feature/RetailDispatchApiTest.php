@@ -183,6 +183,7 @@ class RetailDispatchApiTest extends TestCase
 
         $this->getJson('/api/v1/despacho-minorista/catalogo')
             ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.clients.0.id', $this->clientId)
             ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.5)
             ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.source', 'CLIENTE')
@@ -333,6 +334,7 @@ class RetailDispatchApiTest extends TestCase
 
         $this->getJson('/api/v1/despacho-minorista-2/catalogo')
             ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.clients.0.id', $this->clientId)
             ->assertJsonPath('data.clients.0.prices.POLLO_PELADO.price_kg', 8.5)
             ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA_2');
@@ -396,6 +398,7 @@ class RetailDispatchApiTest extends TestCase
         $payload['weighings'][0]['weight_source'] = 'BALANZA_MINORISTA_2';
         $ticketId = $this->postJson('/api/v1/despacho-minorista-2/tickets', $payload)
             ->assertCreated()
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.weighings.0.weight_source', 'BALANZA_MINORISTA_2')
             ->json('data.id');
 
@@ -586,6 +589,7 @@ class RetailDispatchApiTest extends TestCase
         $response = $this->postJson('/api/v1/despacho-minorista/tickets', $payload)
             ->assertCreated()
             ->assertJsonPath('already_registered', false)
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.channel', TicketDespacho::CHANNEL_RETAIL)
             ->assertJsonPath('data.operation_type', TicketDespacho::OPERATION_DISPATCH)
             ->assertJsonPath('data.client.id', $this->clientId)

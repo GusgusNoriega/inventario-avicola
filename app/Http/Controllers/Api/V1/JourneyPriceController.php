@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Operation\UpdateJourneyPricesRequest;
 use App\Http\Requests\Operation\UpdateTicketMessageRequest;
+use App\Http\Requests\Operation\UpdateTicketTitleRequest;
 use App\Services\GlobalPriceService;
 use App\Services\JourneyPlanService;
 use App\Services\OperationContextService;
 use App\Services\TicketMessageService;
+use App\Services\TicketTitleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +21,8 @@ class JourneyPriceController extends Controller
         private readonly OperationContextService $context,
         private readonly JourneyPlanService $journeys,
         private readonly GlobalPriceService $prices,
-        private readonly TicketMessageService $ticketMessages
+        private readonly TicketMessageService $ticketMessages,
+        private readonly TicketTitleService $ticketTitles,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -63,6 +66,21 @@ class JourneyPriceController extends Controller
         ]);
     }
 
+    public function updateTicketTitle(UpdateTicketTitleRequest $request): JsonResponse
+    {
+        $ticketTitle = $this->ticketTitles->save(
+            $this->context->companyId($request),
+            $request->validated('ticket_title')
+        );
+
+        return response()->json([
+            'message' => 'Título para los tickets actualizado correctamente.',
+            'data' => [
+                'ticket_title' => $ticketTitle,
+            ],
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -78,6 +96,7 @@ class JourneyPriceController extends Controller
             'ends_at' => $window['ends_at']->toIso8601String(),
             'timezone' => $branch->zona_horaria,
             'global_prices' => $this->prices->current($companyId),
+            'ticket_title' => $this->ticketTitles->current($companyId),
             'ticket_message' => $this->ticketMessages->current($companyId),
         ];
     }

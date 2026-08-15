@@ -59,30 +59,52 @@
       </div>
     </section>
 
-    <form id="ticketMessageForm" class="journey-global-prices journey-ticket-message card" aria-labelledby="ticketMessageTitle">
+    <section class="journey-global-prices journey-ticket-settings card" aria-labelledby="ticketSettingsTitle">
       <div class="journey-global-prices-head">
         <div>
           <p class="eyebrow">Impresión de tickets</p>
-          <h2 id="ticketMessageTitle">Mensaje global</h2>
+          <h2 id="ticketSettingsTitle">Configuración global</h2>
         </div>
-        <p>Este mensaje aparecerá por defecto en los tickets de los tres módulos de despacho.</p>
+        <p>El título y el mensaje se aplicarán a los tickets de todos los módulos de despacho, incluidas las reimpresiones.</p>
       </div>
-      <label class="field" for="ticketMessageInput">
-        Mensaje para los tickets
-        <input
-          id="ticketMessageInput"
-          name="ticket_message"
-          type="text"
-          maxlength="255"
-          autocomplete="off"
-          placeholder="Escribe un mensaje breve"
-        >
-      </label>
-      <div class="journey-price-actions">
-        <p id="ticketMessageStatus" class="journey-message" role="status" aria-live="polite"></p>
-        <button id="ticketMessageSave" class="btn btn-success" type="submit">Guardar mensaje</button>
-      </div>
-    </form>
+
+      <form id="ticketTitleForm" class="journey-ticket-setting" aria-labelledby="ticketTitleLabel">
+        <label id="ticketTitleLabel" class="field" for="ticketTitleInput">
+          Título de los tickets
+          <input
+            id="ticketTitleInput"
+            name="ticket_title"
+            type="text"
+            maxlength="120"
+            autocomplete="organization"
+            placeholder="DISTRIBUIDORA DIEGO ALBERTO"
+            required
+          >
+        </label>
+        <div class="journey-price-actions">
+          <p id="ticketTitleStatus" class="journey-message" role="status" aria-live="polite"></p>
+          <button id="ticketTitleSave" class="btn btn-success" type="submit">Guardar título</button>
+        </div>
+      </form>
+
+      <form id="ticketMessageForm" class="journey-ticket-setting" aria-labelledby="ticketMessageLabel">
+        <label id="ticketMessageLabel" class="field" for="ticketMessageInput">
+          Mensaje para los tickets
+          <input
+            id="ticketMessageInput"
+            name="ticket_message"
+            type="text"
+            maxlength="255"
+            autocomplete="off"
+            placeholder="Escribe un mensaje breve"
+          >
+        </label>
+        <div class="journey-price-actions">
+          <p id="ticketMessageStatus" class="journey-message" role="status" aria-live="polite"></p>
+          <button id="ticketMessageSave" class="btn btn-success" type="submit">Guardar mensaje</button>
+        </div>
+      </form>
+    </section>
   </main>
 
   <script type="module" src="{{ asset('js/precios-jornada.js') }}"></script>

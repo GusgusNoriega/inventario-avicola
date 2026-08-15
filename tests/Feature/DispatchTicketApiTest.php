@@ -161,6 +161,7 @@ class DispatchTicketApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('already_registered', false)
             ->assertJsonPath('data.code', 'T-'.$operatingDate->format('Ymd').'-001')
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.status', 'CERRADO')
             ->assertJsonPath('data.destination.id', $this->clientId)
             ->assertJsonPath('data.delivery.vehicle.id', $this->deliveryVehicleId)
@@ -704,6 +705,7 @@ class DispatchTicketApiTest extends TestCase
     {
         $response = $this->getJson('/api/v1/operacion/catalogo')
             ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.branch.id', $this->branchId)
             ->assertJsonPath('data.warehouses.0.id', $this->warehouseId)
             ->assertJsonPath('data.warehouses.0.code', 'ALMACEN_1')

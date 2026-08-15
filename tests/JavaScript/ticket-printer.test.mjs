@@ -89,6 +89,58 @@ test("el ticket de Mayorista 2 reimprime lectura, merma y pesos calculados sin a
   );
 });
 
+test("el título predeterminado se conserva exacto en tickets mayoristas y minoristas", () => {
+  const expectedTitle = "DISTRIBUIDORA DIEGO ALBERTO";
+  const wholesaleHtml = compactHtml(buildWeightControlTicketHtml({
+    code: "T-TITULO-DEFAULT",
+    operationType: "DESPACHO",
+    destinationName: "Cliente mayorista",
+    records: []
+  }, "2026-08-15T12:30:00-05:00"));
+  const retailHtml = compactHtml(buildWeightControlTicketHtml({
+    code: "M-TITULO-DEFAULT",
+    channel: "MINORISTA",
+    operationType: "DESPACHO",
+    operatingDate: "2026-08-15",
+    destinationName: "Cliente minorista",
+    records: []
+  }, "2026-08-15T12:30:00-05:00"));
+
+  assert.match(wholesaleHtml, new RegExp(`<h1 class="business-name">${expectedTitle}</h1>`));
+  assert.match(retailHtml, new RegExp(`<h1 class="business-name">${expectedTitle}</h1>`));
+});
+
+test("el título personalizado se conserva y se escapa en tickets mayoristas y minoristas", () => {
+  const ticketTitle = 'Pollos <Norte> & "Sur" \'Uno\'';
+  const escapedTitle = "Pollos &lt;Norte&gt; &amp; &quot;Sur&quot; &#39;Uno&#39;";
+  const wholesaleHtml = compactHtml(buildWeightControlTicketHtml({
+    code: "T-TITULO-PERSONALIZADO",
+    operationType: "DESPACHO",
+    destinationName: "Cliente mayorista",
+    ticketTitle: `  ${ticketTitle}  `,
+    records: []
+  }, "2026-08-15T12:30:00-05:00"));
+  const retailData = buildRetailTicketPrintData({
+    code: "M-TITULO-PERSONALIZADO",
+    channel: "MINORISTA",
+    operation_type: "DESPACHO",
+    operating_date: "2026-08-15",
+    customer_label: "Venta publico",
+    totals: { amount: 0 },
+    weighings: []
+  }, "", `  ${ticketTitle}  `);
+  const retailHtml = compactHtml(buildWeightControlTicketHtml(
+    retailData,
+    "2026-08-15T12:30:00-05:00"
+  ));
+
+  assert.equal(retailData.ticketTitle, ticketTitle);
+  assert.match(wholesaleHtml, new RegExp(`<h1 class="business-name">${escapedTitle}</h1>`));
+  assert.match(retailHtml, new RegExp(`<h1 class="business-name">${escapedTitle}</h1>`));
+  assert.doesNotMatch(wholesaleHtml, /<Norte>/);
+  assert.doesNotMatch(retailHtml, /<Norte>/);
+});
+
 test("el mensaje global aparece pequeño, escapado y antes de los campos finales en ambos tickets", () => {
   const message = '  Gracias <cliente> & vuelva "pronto"  ';
   const expectedMessage = 'Gracias &lt;cliente&gt; &amp; vuelva &quot;pronto&quot;';
@@ -200,7 +252,7 @@ test("el ticket minorista reproduce el encabezado, detalle y resumen del control
   assert.match(html, /\.detail-table td \{[\s\S]*font-size: 15\.5px;/);
   assert.match(html, /\.retail-summary-table td \{[\s\S]*font-size: 14\.5px;/);
   assert.match(html, /\.form-fields \{[\s\S]*font-size: 16px;/);
-  assert.match(compact, /DISTRIBUIDORA.*DIEGO ALBERTO.*GALLINA.*GD/);
+  assert.match(compact, /<h1 class="business-name">DISTRIBUIDORA DIEGO ALBERTO<\/h1>.*GALLINA.*GD/);
   assert.match(
     compact,
     /CONTROL DE PESO<\/span> <span>231271<\/span>.*FECHA 23\/07\/2026.*EDWIN/

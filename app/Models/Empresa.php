@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'zona_horaria',
     'hora_corte_operativo',
     'mensaje_ticket',
+    'titulo_ticket',
     'sunat_habilitado',
     'estado',
 ])]

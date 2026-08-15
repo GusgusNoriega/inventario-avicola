@@ -125,6 +125,7 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
         $response = $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
             ->assertCreated()
             ->assertJsonPath('already_registered', false)
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.weighing_count', 7);
 
         $ticketId = (int) $response->json('data.id');

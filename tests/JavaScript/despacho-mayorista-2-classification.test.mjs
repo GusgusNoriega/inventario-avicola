@@ -165,6 +165,36 @@ test("el impresor exclusivo M2 conserva los códigos iniciales y editados", () =
   }
 });
 
+test("el impresor exclusivo M2 conserva el título predeterminado exacto", () => {
+  const html = buildWholesaleTwoTicketHtml({
+    code: "M2-TITULO-DEFAULT",
+    operationType: "DESPACHO",
+    destinationName: "Cliente",
+    records: []
+  });
+
+  assert.match(
+    html,
+    /<h1 class="business-name">DISTRIBUIDORA DIEGO ALBERTO<\/h1>/
+  );
+});
+
+test("el impresor exclusivo M2 escapa el título personalizado", () => {
+  const html = buildWholesaleTwoTicketHtml({
+    code: "M2-TITULO-PERSONALIZADO",
+    operationType: "DESPACHO",
+    destinationName: "Cliente",
+    ticketTitle: 'Pollos <Norte> & "Sur" \'Uno\'',
+    records: []
+  });
+
+  assert.match(
+    html,
+    /<h1 class="business-name">Pollos &lt;Norte&gt; &amp; &quot;Sur&quot; &#39;Uno&#39;<\/h1>/
+  );
+  assert.doesNotMatch(html, /<Norte>/);
+});
+
 test("el impresor exclusivo M2 separa lectura, merma, tara y neto", () => {
   const html = buildWholesaleTwoTicketHtml({
     code: "M2-MERMA",

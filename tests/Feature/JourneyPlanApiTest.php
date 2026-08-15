@@ -215,6 +215,71 @@ class JourneyPlanApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 6);
     }
 
+    public function test_ticket_title_is_managed_through_its_own_endpoint_and_company(): void
+    {
+        $otherCompanyUser = User::factory()->create();
+        DB::table('empresas')->where('id', $otherCompanyUser->empresa_id)->update([
+            'titulo_ticket' => 'TITULO DE OTRA EMPRESA',
+        ]);
+
+        $this->getJson('/api/v1/operacion/precios-jornada')
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO');
+
+        $this->putJson('/api/v1/operacion/precios-jornada/titulo-ticket', [
+            'ticket_title' => '  AVICOLA EL CORRAL  ',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'AVICOLA EL CORRAL');
+
+        $this->assertDatabaseHas('empresas', [
+            'id' => $this->user->empresa_id,
+            'titulo_ticket' => 'AVICOLA EL CORRAL',
+        ]);
+        $this->assertDatabaseHas('empresas', [
+            'id' => $otherCompanyUser->empresa_id,
+            'titulo_ticket' => 'TITULO DE OTRA EMPRESA',
+        ]);
+
+        $this->getJson('/api/v1/operacion/precios-jornada')
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'AVICOLA EL CORRAL');
+    }
+
+    public function test_ticket_title_rejects_missing_blank_non_text_and_overlong_values(): void
+    {
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update([
+            'titulo_ticket' => 'TITULO VIGENTE',
+        ]);
+
+        $this->putJson('/api/v1/operacion/precios-jornada/titulo-ticket', [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ticket_title');
+
+        $this->putJson('/api/v1/operacion/precios-jornada/titulo-ticket', [
+            'ticket_title' => '   ',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ticket_title');
+
+        $this->putJson('/api/v1/operacion/precios-jornada/titulo-ticket', [
+            'ticket_title' => ['no', 'es', 'texto'],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ticket_title');
+
+        $this->putJson('/api/v1/operacion/precios-jornada/titulo-ticket', [
+            'ticket_title' => str_repeat('x', 121),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('ticket_title');
+
+        $this->assertDatabaseHas('empresas', [
+            'id' => $this->user->empresa_id,
+            'titulo_ticket' => 'TITULO VIGENTE',
+        ]);
+    }
+
     public function test_ticket_message_is_managed_through_its_own_endpoint(): void
     {
         $otherCompanyUser = User::factory()->create();

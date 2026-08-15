@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(102, $migrationFiles);
+        $this->assertCount(103, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -132,7 +132,7 @@ class DatabaseSchemaTest extends TestCase
     public function test_core_tables_include_the_columns_required_by_the_domain(): void
     {
         $expectations = [
-            'empresas' => ['mensaje_ticket'],
+            'empresas' => ['mensaje_ticket', 'titulo_ticket'],
             'usuarios' => ['empresa_id', 'sucursal_id', 'nombre', 'email', 'password_hash', 'estado'],
             'terceros' => ['empresa_id', 'nombre_razon_social', 'numero_documento', 'direccion', 'es_cliente_interno', 'estado'],
             'tipos_pollo' => ['codigo', 'nombre', 'permite_despacho', 'precio_fuente_tipo_pollo_id', 'estado'],
@@ -195,6 +195,7 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue(collect(Schema::getColumns('pagos'))->keyBy('name')->get('tercero_id')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('ticket_precio_ajuste_operaciones'))->keyBy('name')->get('resultado')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('empresas'))->keyBy('name')->get('mensaje_ticket')['nullable']);
+        $this->assertFalse(collect(Schema::getColumns('empresas'))->keyBy('name')->get('titulo_ticket')['nullable']);
         $this->assertFalse(Schema::hasColumn('cuentas_financieras', 'saldo_actual'));
 
         $paymentIndexes = collect(Schema::getIndexes('pagos'))->keyBy('name');
@@ -628,6 +629,36 @@ class DatabaseSchemaTest extends TestCase
         $this->assertNull(DB::table('empresas')
             ->where('id', $user->empresa_id)
             ->value('mensaje_ticket'));
+    }
+
+    public function test_ticket_title_schema_rolls_back_and_reapplies_with_its_default_on_sqlite(): void
+    {
+        $user = User::factory()->create();
+        DB::table('empresas')->where('id', $user->empresa_id)->update([
+            'titulo_ticket' => 'Titulo existente',
+        ]);
+        $migration = require database_path(
+            'migrations/2026_08_15_000001_add_ticket_title_to_empresas_table.php'
+        );
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn('empresas', 'titulo_ticket'));
+        $this->assertDatabaseHas('empresas', ['id' => $user->empresa_id]);
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn('empresas', 'titulo_ticket'));
+        $this->assertSame(
+            'DISTRIBUIDORA DIEGO ALBERTO',
+            DB::table('empresas')->where('id', $user->empresa_id)->value('titulo_ticket')
+        );
+
+        $newCompanyId = User::factory()->create()->empresa_id;
+        $this->assertSame(
+            'DISTRIBUIDORA DIEGO ALBERTO',
+            DB::table('empresas')->where('id', $newCompanyId)->value('titulo_ticket')
+        );
     }
 
     public function test_vehicle_ownership_migration_normalizes_legacy_data_and_default(): void

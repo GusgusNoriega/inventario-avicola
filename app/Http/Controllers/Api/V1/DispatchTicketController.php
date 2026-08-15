@@ -8,6 +8,7 @@ use App\Models\TicketDespacho;
 use App\Services\DispatchTicketService;
 use App\Services\OperationContextService;
 use App\Services\TicketMessageService;
+use App\Services\TicketTitleService;
 use Illuminate\Http\JsonResponse;
 
 class DispatchTicketController extends Controller
@@ -16,6 +17,7 @@ class DispatchTicketController extends Controller
         private readonly OperationContextService $context,
         private readonly DispatchTicketService $tickets,
         private readonly TicketMessageService $ticketMessages,
+        private readonly TicketTitleService $ticketTitles,
     ) {}
 
     public function store(StoreDispatchTicketRequest $request): JsonResponse
@@ -36,6 +38,7 @@ class DispatchTicketController extends Controller
             'already_registered' => $result['already_registered'],
             'data' => $this->formatTicket(
                 $result['ticket'],
+                $this->ticketTitles->current($companyId),
                 $this->ticketMessages->current($companyId)
             ),
         ], $result['already_registered'] ? 200 : 201);
@@ -44,7 +47,11 @@ class DispatchTicketController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function formatTicket(TicketDespacho $ticket, ?string $ticketMessage): array
+    private function formatTicket(
+        TicketDespacho $ticket,
+        string $ticketTitle,
+        ?string $ticketMessage
+    ): array
     {
         return [
             'id' => $ticket->id,
@@ -54,6 +61,7 @@ class DispatchTicketController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
+            'ticket_title' => $ticketTitle,
             'ticket_message' => $ticketMessage,
             'destination' => $ticket->clienteDestino
                 ? [

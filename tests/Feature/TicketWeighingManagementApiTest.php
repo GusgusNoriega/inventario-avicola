@@ -176,6 +176,7 @@ class TicketWeighingManagementApiTest extends TestCase
 
         $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
             ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.access.is_administrator', false)
             ->assertJsonPath('data.access.can_void_tickets', false)
             ->assertJsonPath('data.ticket.code', 'T-20260627-001')

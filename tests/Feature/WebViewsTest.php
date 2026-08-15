@@ -1269,7 +1269,8 @@ class WebViewsTest extends TestCase
 
         $template = substr($javascript, $templateStart, $templateEnd - $templateStart);
 
-        $this->assertStringContainsString('DISTRIBUIDORA<br>DIEGO ALBERTO', $template);
+        $this->assertStringContainsString('const ticketTitle = getTicketTitle(ticket);', $template);
+        $this->assertStringContainsString('<h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>', $template);
         $this->assertStringContainsString('CONTROL DE PESO', $template);
         $this->assertStringContainsString('<th>C/A</th>', $template);
         $this->assertStringContainsString('<th>CJ</th>', $template);
@@ -1301,8 +1302,8 @@ class WebViewsTest extends TestCase
 
         $template = substr($javascript, $templateStart, $templateEnd - $templateStart);
 
-        $this->assertStringContainsString('DISTRIBUIDORA</p>', $template);
-        $this->assertStringContainsString('DIEGO ALBERTO</h1>', $template);
+        $this->assertStringContainsString('const ticketTitle = getTicketTitle(ticket);', $template);
+        $this->assertStringContainsString('<h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>', $template);
         $this->assertStringContainsString('GALLINA</p>', $template);
         $this->assertStringContainsString('GD</p>', $template);
         $this->assertStringContainsString('CONTROL DE PESO', $template);
@@ -1585,6 +1586,14 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Precios de la jornada')
             ->assertSee('despacho minorista 1 y 2')
+            ->assertSee('id="ticketTitleForm"', false)
+            ->assertSee('id="ticketTitleInput"', false)
+            ->assertSee('name="ticket_title"', false)
+            ->assertSee('maxlength="120"', false)
+            ->assertSee('required', false)
+            ->assertSee('id="ticketTitleStatus"', false)
+            ->assertSee('id="ticketTitleSave"', false)
+            ->assertSee('Guardar título')
             ->assertSee('id="ticketMessageForm"', false)
             ->assertSee('id="ticketMessageInput"', false)
             ->assertSee('name="ticket_message"', false)
@@ -1603,9 +1612,13 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('expected_prices: Object.fromEntries(', $javascript);
         $this->assertStringContainsString('field.startsWith("expected_prices")', $javascript);
         $this->assertStringContainsString('Se cargaron los valores vigentes para que los revises.', $javascript);
+        $this->assertStringContainsString('renderTicketTitle(data.ticket_title);', $javascript);
         $this->assertStringContainsString('renderTicketMessage(data.ticket_message);', $javascript);
+        $this->assertStringContainsString('elements.ticketTitleForm.addEventListener("submit", saveTicketTitle);', $javascript);
         $this->assertStringContainsString('elements.ticketMessageForm.addEventListener("submit", saveTicketMessage);', $javascript);
         $this->assertStringContainsString('event.preventDefault();', $javascript);
+        $this->assertStringContainsString('apiRequest("/operacion/precios-jornada/titulo-ticket", {', $javascript);
+        $this->assertStringContainsString('ticket_title: elements.ticketTitleInput.value', $javascript);
         $this->assertStringContainsString('apiRequest("/operacion/precios-jornada/mensaje-ticket", {', $javascript);
         $this->assertStringContainsString('ticket_message: elements.ticketMessageInput.value', $javascript);
     }
@@ -1730,7 +1743,7 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('ticket?.sourceModule === "MODULO_DESPACHO_MAYORISTA_2"', $printerJavascript);
 
         $this->assertStringContainsString('buildRetailTicketPrintData,', $retailJavascript);
-        $this->assertStringContainsString('buildRetailTicketPrintData(ticket, ticketMessage)', $retailJavascript);
+        $this->assertStringContainsString('buildRetailTicketPrintData(ticket, ticketMessage, ticketTitle)', $retailJavascript);
         $this->assertStringContainsString('operatingDate: ticket?.operating_date', $printerJavascript);
         $this->assertStringContainsString('birds: Number(weighing.birds) || 0', $printerJavascript);
         $this->assertStringContainsString('readWeight: Number(weighing.read_weight_kg) || 0', $printerJavascript);

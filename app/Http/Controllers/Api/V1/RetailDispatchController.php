@@ -14,6 +14,7 @@ use App\Services\OperationContextService;
 use App\Services\RetailConfigurationService;
 use App\Services\RetailDispatchService;
 use App\Services\TicketMessageService;
+use App\Services\TicketTitleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,7 @@ class RetailDispatchController extends Controller
         private readonly RetailDispatchService $dispatches,
         private readonly RetailConfigurationService $configuration,
         private readonly TicketMessageService $ticketMessages,
+        private readonly TicketTitleService $ticketTitles,
     ) {}
 
     public function catalog(Request $request): JsonResponse
@@ -56,6 +58,7 @@ class RetailDispatchController extends Controller
 
         return response()->json([
             'data' => [
+                'ticket_title' => $this->ticketTitles->current($companyId),
                 'ticket_message' => $this->ticketMessages->current($companyId),
                 'branch' => [
                     'id' => $branch->id,
@@ -161,13 +164,19 @@ class RetailDispatchController extends Controller
             'data' => $this->formatTicket(
                 $result['ticket'],
                 $station,
+                $this->ticketTitles->current($companyId),
                 $this->ticketMessages->current($companyId)
             ),
         ], $result['already_registered'] ? 200 : 201);
     }
 
     /** @return array<string, mixed> */
-    private function formatTicket(TicketDespacho $ticket, int $station, ?string $ticketMessage): array
+    private function formatTicket(
+        TicketDespacho $ticket,
+        int $station,
+        string $ticketTitle,
+        ?string $ticketMessage
+    ): array
     {
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
         $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
@@ -193,6 +202,7 @@ class RetailDispatchController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),
+            'ticket_title' => $ticketTitle,
             'ticket_message' => $ticketMessage,
             'customer_type' => $ticket->clienteDestino ? 'CLIENTE_REGISTRADO' : 'VENTA_PUBLICO',
             'customer_label' => $customerLabel,

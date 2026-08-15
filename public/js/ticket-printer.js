@@ -1,5 +1,6 @@
 const TICKET_LOCALE = "es-PE";
 const TICKET_TIME_ZONE = "America/Lima";
+const DEFAULT_TICKET_TITLE = "DISTRIBUIDORA DIEGO ALBERTO";
 
 function escapeTicketHtml(value) {
   return String(value ?? "")
@@ -16,6 +17,10 @@ function buildTicketMessageHtml(ticket) {
   return message
     ? `<p class="ticket-message">${escapeTicketHtml(message)}</p>`
     : "";
+}
+
+function getTicketTitle(ticket) {
+  return String(ticket?.ticketTitle ?? ticket?.ticket_title ?? "").trim() || DEFAULT_TICKET_TITLE;
 }
 
 function roundTicketMoney(value) {
@@ -40,7 +45,11 @@ function retailChickenTypeCode(code) {
  * corresponde al precio congelado en ticket_precios, no a la tarifa vigente
  * que todavía conserva el cliente en Directorio.
  */
-export function buildRetailTicketPrintData(ticket, ticketMessage = ticket?.ticket_message) {
+export function buildRetailTicketPrintData(
+  ticket,
+  ticketMessage = ticket?.ticket_message,
+  ticketTitle = ticket?.ticket_title
+) {
   return {
     code: ticket?.code,
     channel: ticket?.channel,
@@ -50,6 +59,7 @@ export function buildRetailTicketPrintData(ticket, ticketMessage = ticket?.ticke
     operatingDate: ticket?.operating_date,
     emittedAt: ticket?.registered_at,
     totalAmount: roundTicketMoney(ticket?.totals?.amount),
+    ticketTitle: String(ticketTitle || "").trim(),
     ticketMessage: String(ticketMessage || "").trim(),
     delivery: ticket?.delivery,
     records: (ticket?.weighings || []).map((weighing) => ({
@@ -158,6 +168,7 @@ function formatTicketDate(operatingDate, fallbackDate) {
 
 function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isReturn) {
   const ticketCode = String(ticket?.code || "--");
+  const ticketTitle = getTicketTitle(ticket);
   const destinationName = String(ticket?.destinationName || "Venta externa");
   const deliveryVehicle = ticket?.delivery?.vehicle || null;
   const deliveryDriver = ticket?.delivery?.driver || null;
@@ -257,6 +268,8 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       font-weight: 900;
       line-height: 1;
       letter-spacing: 0.4px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
     .business-product {
@@ -439,8 +452,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 </head>
 <body class="retail-ticket">
   <header class="center">
-    <p class="business-distributor">DISTRIBUIDORA</p>
-    <h1 class="business-name">DIEGO ALBERTO</h1>
+    <h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>
     <p class="business-product">GALLINA</p>
     <p class="business-mark">GD</p>
   </header>
@@ -574,6 +586,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     ? suppliedTotalAmount
     : records.reduce((total, record) => total + record.amount, 0);
   const ticketCode = String(ticket?.code || "--");
+  const ticketTitle = getTicketTitle(ticket);
   const destinationName = String(ticket?.destinationName || "Sin destino asignado");
   const deliveryMode = String(ticket?.delivery?.mode || "");
   const deliveryVehicle = ticket?.delivery?.vehicle || null;
@@ -638,6 +651,8 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       font-size: 22px;
       font-weight: 900;
       line-height: 1.15;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
 
     .document-title {
@@ -790,7 +805,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
 </head>
 <body class="${isRetail ? "retail-ticket" : "wholesale-ticket"}">
   <header class="center">
-    <h1 class="business-name">DISTRIBUIDORA<br>DIEGO ALBERTO</h1>
+    <h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>
   </header>
 
   <h2 class="document-title">

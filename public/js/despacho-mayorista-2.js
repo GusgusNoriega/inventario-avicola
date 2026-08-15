@@ -647,6 +647,7 @@ function normalizeTicketRegistration(registration) {
     status: String(registration?.status || "CERRADO"),
     operatingDate: String(registration?.operatingDate || registration?.operating_date || ""),
     registeredAt: String(registration?.registeredAt || registration?.registered_at || ""),
+    ticketTitle: String(registration?.ticketTitle ?? registration?.ticket_title ?? "").trim(),
     hasTicketMessage,
     ticketMessage: String(registration?.ticketMessage ?? registration?.ticket_message ?? "").trim(),
     destination: registration?.destination
@@ -7324,6 +7325,7 @@ function buildDispatchTicketData(truck) {
     code: getTruckTicketLabel(truck),
     operationType,
     destinationName: getTruckClientName(truck),
+    ticketTitle: String(operationCatalog?.ticket_title || registration?.ticketTitle || "").trim(),
     ticketMessage: registration?.hasTicketMessage
       ? registration.ticketMessage
       : operationCatalog?.ticket_message || "",
@@ -7727,6 +7729,9 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
       status: response.data?.status,
       operating_date: response.data?.operating_date,
       registered_at: response.data?.registered_at,
+      ...(Object.prototype.hasOwnProperty.call(response.data || {}, "ticket_title")
+        ? { ticket_title: response.data.ticket_title }
+        : {}),
       ...(Object.prototype.hasOwnProperty.call(response.data || {}, "ticket_message")
         ? { ticket_message: response.data.ticket_message }
         : {}),

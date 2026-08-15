@@ -6,6 +6,10 @@ const elements = {
   window: document.getElementById("journeyPriceWindow"),
   message: document.getElementById("journeyPriceMessage"),
   save: document.getElementById("journeyPriceSave"),
+  ticketTitleForm: document.getElementById("ticketTitleForm"),
+  ticketTitleInput: document.getElementById("ticketTitleInput"),
+  ticketTitleStatus: document.getElementById("ticketTitleStatus"),
+  ticketTitleSave: document.getElementById("ticketTitleSave"),
   ticketMessageForm: document.getElementById("ticketMessageForm"),
   ticketMessageInput: document.getElementById("ticketMessageInput"),
   ticketMessageStatus: document.getElementById("ticketMessageStatus"),
@@ -43,6 +47,15 @@ function setMessage(message, isError = false) {
 function setTicketMessageStatus(message, isError = false) {
   elements.ticketMessageStatus.textContent = message;
   elements.ticketMessageStatus.classList.toggle("is-error", isError);
+}
+
+function setTicketTitleStatus(message, isError = false) {
+  elements.ticketTitleStatus.textContent = message;
+  elements.ticketTitleStatus.classList.toggle("is-error", isError);
+}
+
+function renderTicketTitle(title) {
+  elements.ticketTitleInput.value = typeof title === "string" ? title : "";
 }
 
 function renderTicketMessage(message) {
@@ -108,6 +121,7 @@ async function loadPrices(message = "Puedes actualizar los precios sin modificar
 
 async function loadPage() {
   const data = await loadPrices();
+  renderTicketTitle(data.ticket_title);
   renderTicketMessage(data.ticket_message);
 }
 
@@ -174,7 +188,30 @@ async function saveTicketMessage(event) {
   }
 }
 
+async function saveTicketTitle(event) {
+  event.preventDefault();
+  elements.ticketTitleSave.disabled = true;
+  setTicketTitleStatus("Guardando título...");
+
+  try {
+    const response = await apiRequest("/operacion/precios-jornada/titulo-ticket", {
+      method: "PUT",
+      body: JSON.stringify({
+        ticket_title: elements.ticketTitleInput.value
+      })
+    });
+    renderTicketTitle(response.data?.ticket_title);
+    setTicketTitleStatus(response.message || "Título actualizado correctamente.");
+  } catch (error) {
+    const validationMessage = Object.values(error.data?.errors || {})[0]?.[0];
+    setTicketTitleStatus(validationMessage || error.message, true);
+  } finally {
+    elements.ticketTitleSave.disabled = false;
+  }
+}
+
 elements.save.addEventListener("click", savePrices);
+elements.ticketTitleForm.addEventListener("submit", saveTicketTitle);
 elements.ticketMessageForm.addEventListener("submit", saveTicketMessage);
 
 loadPage()
