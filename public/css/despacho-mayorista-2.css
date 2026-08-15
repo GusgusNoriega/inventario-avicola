@@ -4596,16 +4596,13 @@ body.daily-ticket-modal-open {
 
 /* Popup de edicion de jaula */
 .item-modal-card {
-  width: min(900px, calc(100vw - 16px));
-  width: min(900px, calc(100dvw - 16px));
-  max-height: calc(100vh - 16px);
-  max-height: calc(100dvh - 16px);
-  height: min(84vh, 720px);
-  height: min(84dvh, 720px);
+  width: min(900px, 100%);
+  max-height: 100%;
+  height: min(760px, 100%);
   padding: 16px;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   overflow: hidden;
 }
@@ -4641,15 +4638,24 @@ body.daily-ticket-modal-open {
 .item-form {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 10px;
+  overflow: hidden;
 }
 
 .item-form-grid {
   min-height: 0;
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  align-content: start;
+  padding-inline-end: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .item-form-message {
@@ -4665,6 +4671,8 @@ body.daily-ticket-modal-open {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
   flex-wrap: wrap;
 }
 
@@ -4683,15 +4691,8 @@ body.daily-ticket-modal-open {
   }
 
   .item-modal-card {
-    width: min(98vw, 900px);
-    width: min(98dvw, 900px);
-    max-height: calc(100dvh - 12px);
-    height: min(92dvh, 780px);
     padding: 12px;
     gap: 10px;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
   }
 
   .item-highlight {
@@ -4725,18 +4726,37 @@ body.daily-ticket-modal-open {
   }
 }
 
+@media (min-width: 641px) and (max-width: 980px) {
+  .item-highlight {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .item-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .item-form-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .item-form-actions .btn {
+    width: auto;
+  }
+}
+
 @media (max-width: 640px) {
   .item-modal-card {
-    width: min(99vw, 900px);
-    width: min(99dvw, 900px);
-    max-height: calc(100dvh - 8px);
-    height: min(96dvh, 780px);
     padding: 10px;
     gap: 8px;
   }
 
   .item-pill strong {
     font-size: 0.96rem;
+  }
+
+  .item-form-grid .weight-adjustment-preview {
+    grid-column: 1 / -1;
   }
 }
 
