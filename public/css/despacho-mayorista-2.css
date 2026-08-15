@@ -11241,12 +11241,6 @@ body.journey-page {
   align-items: stretch;
 }
 
-#selectedTruckDetails.has-type-breakdown {
-  grid-template-areas:
-    "ticket summary actions"
-    "types types types";
-}
-
 #selectedTruckDetails .selected-truck-bar-head {
   grid-area: ticket;
   border-color: rgba(255, 208, 42, 0.56);
@@ -11397,12 +11391,6 @@ body.journey-page {
   color: #82f2ad;
 }
 
-#selectedTruckDetails .selected-truck-types {
-  grid-area: types;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 7px;
-}
-
 #selectedTruckDetails .selected-truck-actions {
   grid-area: actions;
   grid-column: auto;
@@ -11433,12 +11421,6 @@ body.journey-page {
       "summary summary";
   }
 
-  #selectedTruckDetails.has-type-breakdown {
-    grid-template-areas:
-      "ticket actions"
-      "summary summary"
-      "types types";
-  }
 }
 
 /* Tablet horizontal: cuatro tickets legibles y el resumen completo en una banda. */
@@ -11455,14 +11437,6 @@ body.journey-page {
     grid-template-areas:
       "ticket"
       "summary"
-      "actions";
-  }
-
-  #selectedTruckDetails.has-type-breakdown {
-    grid-template-areas:
-      "ticket"
-      "summary"
-      "types"
       "actions";
   }
 
@@ -11506,7 +11480,4 @@ body.journey-page {
     grid-column: 1 / -1;
   }
 
-  #selectedTruckDetails .selected-truck-types {
-    grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
-  }
 }

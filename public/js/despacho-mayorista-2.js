@@ -7761,20 +7761,6 @@ function buildSelectedTruckDetails(truck, totals) {
   const isRegistering = pendingTicketRegistrations.has(truck.id);
   const hasDestination = Boolean(getTruckDestination(truck));
   const isReturn = isReturnTicket(truck);
-  const typeItems = totals.byType
-    .filter((item) => item.records > 0)
-    .map((item) => {
-      const toneClass = `type-total-${item.id.replace(/_/g, "-")}`;
-
-      return `
-        <div class="selected-truck-type ${toneClass}">
-          <span>${item.shortLabel} · ${item.label}</span>
-          <strong>${item.records} registros | ${item.javas} javas | ${item.birds} aves</strong>
-          <small>Leído ${item.readWeight.toFixed(3)} + merma ${item.adjustmentWeight.toFixed(3)} · neto ${item.weight.toFixed(3)} kg</small>
-        </div>
-      `;
-    })
-    .join("");
 
   return `
     <div class="selected-truck-bar-head">
@@ -7840,12 +7826,6 @@ function buildSelectedTruckDetails(truck, totals) {
       </div>
     </div>
 
-    ${typeItems ? `
-      <div class="selected-truck-types">
-        ${typeItems}
-      </div>
-    ` : ""}
-
     <div class="selected-truck-actions">
       ${registration ? `
         <span class="ticket-registration-status">
@@ -7877,7 +7857,6 @@ function renderSelectedTruckDetails() {
   const truck = state.trucks.find((item) => item.id === activeTruckId);
 
   if (!truck) {
-    elements.selectedTruckDetails.classList.remove("has-type-breakdown");
     elements.selectedTruckDetails.innerHTML = `
       <div class="selected-truck-empty">Selecciona un ticket para ver sus totales.</div>
     `;
@@ -7885,10 +7864,6 @@ function renderSelectedTruckDetails() {
   }
 
   const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
-  elements.selectedTruckDetails.classList.toggle(
-    "has-type-breakdown",
-    totals.byType.some((item) => item.records > 0)
-  );
   elements.selectedTruckDetails.innerHTML = buildSelectedTruckDetails(truck, totals);
 }
 

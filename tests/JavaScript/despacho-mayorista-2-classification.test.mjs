@@ -95,13 +95,19 @@ test("la vista M2 configura seis mermas y mantiene beneficiado bloqueado en cero
   assert.match(wholesaleTwoCss, /\.weight-adjustment-settings-grid/);
 });
 
-test("los totales inferiores separan conteos y explican la formula del peso neto", () => {
+test("los totales inferiores omiten el desglose redundante y explican la formula del peso neto", () => {
   assert.match(wholesaleTwoSource, /class="selected-truck-counts"/);
   assert.match(wholesaleTwoSource, /class="selected-truck-weight-flow"/);
   assert.match(wholesaleTwoSource, /class="selected-truck-operator" aria-hidden="true">\+</);
   assert.match(wholesaleTwoSource, /class="selected-truck-operator" aria-hidden="true">−</);
   assert.match(wholesaleTwoSource, /class="selected-truck-stat is-net"/);
-  assert.match(wholesaleTwoSource, /classList\.toggle\(\s*"has-type-breakdown"/);
+  assert.doesNotMatch(wholesaleTwoSource, /class="selected-truck-types"/);
+  assert.doesNotMatch(wholesaleTwoSource, /class="selected-truck-type /);
+  assert.doesNotMatch(wholesaleTwoSource, /has-type-breakdown/);
+  assert.match(wholesaleTwoSource, /class="selected-truck-actions"/);
+  assert.match(wholesaleTwoSource, /data-register-ticket=/);
+  assert.match(wholesaleTwoSource, /data-print-ticket=/);
+  assert.doesNotMatch(wholesaleTwoCss, /#selectedTruckDetails\.has-type-breakdown/);
   assert.match(wholesaleTwoCss, /#selectedTruckDetails[\s\S]*grid-template-areas:\s*"ticket summary actions"/);
   assert.match(wholesaleTwoCss, /\.selected-truck-weight-flow[\s\S]*grid-template-columns:/);
   assert.match(wholesaleTwoCss, /\.selected-truck-stat\.is-net[\s\S]*border-color:/);
@@ -151,7 +157,6 @@ test("tabla e impresión distinguen las siete clasificaciones sin alterar mayori
   assert.match(wholesaleTwoSource, /cage\.chickenVariantCode\s*=\s*chickenVariant\.code/);
   assert.match(wholesaleTwoSource, /typeCode:\s*getTicketTypeCode\(cage, operationType\)/);
   assert.match(wholesaleTwoSource, /`\$\{typeMeta\.shortLabel\} · \$\{typeMeta\.label\}`/);
-  assert.match(wholesaleTwoSource, /\$\{item\.shortLabel\} · \$\{item\.label\}/);
   assert.doesNotMatch(wholesaleOneSource, /chicken_variant_code\s*:/);
   assert.doesNotMatch(wholesaleOneSource, /DRESSED_CHICKEN_VARIANTS/);
 });
