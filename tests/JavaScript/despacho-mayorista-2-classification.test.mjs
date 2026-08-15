@@ -92,6 +92,18 @@ test("los totales inferiores separan conteos y explican la formula del peso neto
   assert.match(wholesaleTwoCss, /\.selected-truck-weight-flow[\s\S]*grid-template-columns:/);
   assert.match(wholesaleTwoCss, /\.selected-truck-stat\.is-net[\s\S]*border-color:/);
   assert.doesNotMatch(wholesaleTwoCss, /\.selected-truck-summary\s*\{\s*grid-template-columns:\s*repeat\(8,/);
+  assert.match(
+    wholesaleTwoCss,
+    /@media \(min-width: 1280px\) and \(max-width: 1365px\) \{\s*\.truck-grid \{\s*grid-template-columns:\s*repeat\(10, calc\(25% - 6px\)\);/
+  );
+  assert.match(
+    wholesaleTwoCss,
+    /@media \(max-width: 1279px\) \{[\s\S]*?#selectedTruckDetails \{[\s\S]*?"ticket actions"\s*"summary summary"/
+  );
+  assert.doesNotMatch(
+    wholesaleTwoCss,
+    /@media \(max-width: 1365px\) \{\s*#selectedTruckDetails/
+  );
 });
 
 test("despacho directo omite origin y solo exige jornada cuando hay orígenes", () => {

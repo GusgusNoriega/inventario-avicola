@@ -11425,7 +11425,7 @@ body.journey-page {
   margin: 0;
 }
 
-@media (max-width: 1365px) {
+@media (max-width: 1279px) {
   #selectedTruckDetails {
     grid-template-columns: minmax(0, 1fr) minmax(190px, 230px);
     grid-template-areas:
@@ -11438,6 +11438,14 @@ body.journey-page {
       "ticket actions"
       "summary summary"
       "types types";
+  }
+}
+
+/* Tablet horizontal: cuatro tickets legibles y el resumen completo en una banda. */
+@media (min-width: 1280px) and (max-width: 1365px) {
+  .truck-grid {
+    grid-template-columns:
+      repeat(10, calc(25% - 6px));
   }
 }
 
