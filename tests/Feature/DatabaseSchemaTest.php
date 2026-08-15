@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(103, $migrationFiles);
+        $this->assertCount(104, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -34,7 +34,8 @@ class DatabaseSchemaTest extends TestCase
                 '2026_07_14_000005_backfill_legacy_dispatch_purchases.php',
                 '2026_07_15_000001_set_standard_tray_weight.php' => 0,
                 '2026_08_01_000002_add_provider_report_module.php',
-                '2026_08_14_000001_add_second_wholesale_dispatch_module.php' => 0,
+                '2026_08_14_000001_add_second_wholesale_dispatch_module.php',
+                '2026_08_15_000002_add_java_680_to_tipos_java_table.php' => 0,
                 '2026_07_12_000002_add_trays_to_java_movements.php' => 3,
                 '2026_07_12_000008_extend_pagos_and_pago_aplicaciones.php' => 2,
                 '2026_07_22_000001_add_station_to_retail_weight_adjustments.php' => 2,
@@ -360,6 +361,13 @@ class DatabaseSchemaTest extends TestCase
 
         $this->assertNotNull($administratorId);
         $this->assertSame(7, DB::table('metodos_pago')->count());
+        $this->assertDatabaseCount('tipos_java', 3);
+        $this->assertDatabaseHas('tipos_java', [
+            'codigo' => 'JAVA_680',
+            'nombre' => 'Java 6.80 kg',
+            'peso_kg' => 6.800,
+            'estado' => 'ACTIVO',
+        ]);
         $this->assertSame(
             8,
             DB::table('rol_permisos')
@@ -658,6 +666,40 @@ class DatabaseSchemaTest extends TestCase
         $this->assertSame(
             'DISTRIBUIDORA DIEGO ALBERTO',
             DB::table('empresas')->where('id', $newCompanyId)->value('titulo_ticket')
+        );
+    }
+
+    public function test_java_680_migration_rolls_back_reapplies_and_is_idempotent(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_08_15_000002_add_java_680_to_tipos_java_table.php'
+        );
+
+        DB::table('tipos_java')->where('codigo', 'JAVA_680')->update([
+            'nombre' => 'Java anterior',
+            'peso_kg' => 6.750,
+            'estado' => 'ACTIVO',
+        ]);
+
+        $migration->down();
+
+        $this->assertDatabaseHas('tipos_java', [
+            'codigo' => 'JAVA_680',
+            'estado' => 'INACTIVO',
+        ]);
+
+        $migration->up();
+        $migration->up();
+
+        $this->assertDatabaseHas('tipos_java', [
+            'codigo' => 'JAVA_680',
+            'nombre' => 'Java 6.80 kg',
+            'peso_kg' => 6.800,
+            'estado' => 'ACTIVO',
+        ]);
+        $this->assertSame(
+            1,
+            DB::table('tipos_java')->where('codigo', 'JAVA_680')->count()
         );
     }
 

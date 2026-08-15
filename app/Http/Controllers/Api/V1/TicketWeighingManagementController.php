@@ -1013,6 +1013,7 @@ class TicketWeighingManagementController extends Controller
                 ->values(),
             'cage_types' => TipoJava::query()
                 ->where('estado', 'ACTIVO')
+                ->orderByDesc('peso_kg')
                 ->orderBy('id')
                 ->get(['codigo', 'nombre', 'peso_kg'])
                 ->map(fn (TipoJava $type) => [

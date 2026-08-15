@@ -14,6 +14,10 @@ const wholesaleOneSource = readFileSync(
   new URL("../../public/js/app.js", import.meta.url),
   "utf8"
 );
+const wholesaleOneView = readFileSync(
+  new URL("../../resources/views/operacion.blade.php", import.meta.url),
+  "utf8"
+);
 const wholesaleTwoView = readFileSync(
   new URL("../../resources/views/despacho-mayorista-2.blade.php", import.meta.url),
   "utf8"
@@ -30,6 +34,16 @@ const dressedVariantCodes = [
   "HEMBRA_CERRADA",
   "POLLO_BENEFICIADO"
 ];
+
+test("mayorista 1 y 2 ofrecen la java de 6.80 kg con el mismo codigo de API", () => {
+  const java680Definition = /\{\s*id:\s*"java_680",\s*apiCode:\s*"JAVA_680",\s*label:\s*"Java 6\.80 kg",\s*weightKg:\s*6\.8\s*\}/;
+  const java680Option = /<option value="java_680">Java 6\.80 kg<\/option>/;
+
+  assert.match(wholesaleOneSource, java680Definition);
+  assert.match(wholesaleTwoSource, java680Definition);
+  assert.match(wholesaleOneView, java680Option);
+  assert.match(wholesaleTwoView, java680Option);
+});
 
 test("mayorista 2 expone M/H solo para vivo y cinco clasificaciones para pelado", () => {
   assert.match(wholesaleTwoView, /id="liveSexSelector"[\s\S]*data-sex="macho"[\s\S]*data-sex="hembra"/);

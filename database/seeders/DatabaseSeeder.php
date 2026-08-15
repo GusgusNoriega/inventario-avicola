@@ -68,6 +68,7 @@ class DatabaseSeeder extends Seeder
         collect([
             ['codigo' => 'JAVA_700', 'nombre' => 'Java 7.00 kg', 'peso_kg' => 7.000],
             ['codigo' => 'JAVA_690', 'nombre' => 'Java 6.90 kg', 'peso_kg' => 6.900],
+            ['codigo' => 'JAVA_680', 'nombre' => 'Java 6.80 kg', 'peso_kg' => 6.800],
         ])->each(fn (array $tipo) => DB::table('tipos_java')->updateOrInsert(
             ['codigo' => $tipo['codigo']],
             [...$tipo, 'estado' => 'ACTIVO', 'created_at' => now(), 'updated_at' => now()]

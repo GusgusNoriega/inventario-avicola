@@ -374,6 +374,39 @@ class TicketWeighingManagementApiTest extends TestCase
         ]);
     }
 
+    public function test_management_catalog_and_update_support_the_java_680_type(): void
+    {
+        $java680Id = (int) DB::table('tipos_java')
+            ->where('codigo', 'JAVA_680')
+            ->value('id');
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertOk()
+            ->assertJsonPath('data.catalogs.cage_types.1.code', 'JAVA_680')
+            ->assertJsonPath('data.catalogs.cage_types.1.name', 'Java 6.80 kg')
+            ->assertJsonPath('data.catalogs.cage_types.1.weight_kg', 6.8);
+
+        $payload = $this->updatePayload();
+        $payload['cage_type_code'] = 'JAVA_680';
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.cage_type.weight_kg', 6.8)
+            ->assertJsonPath('data.ticket.weighings.0.tare_weight_kg', 13.6)
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 16.4);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_java_id' => $java680Id,
+            'peso_java_kg_snapshot' => 6.8,
+            'tara_total_kg' => 13.6,
+            'peso_neto_kg' => 16.4,
+        ]);
+    }
+
     public function test_wholesale_two_update_derives_sex_and_presentation_from_its_variant(): void
     {
         $adjustment = $this->wholesaleTwoAdjustment(

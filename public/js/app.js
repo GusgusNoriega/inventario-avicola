@@ -159,7 +159,8 @@ const VALID_TYPES = new Set(DISPATCH_CHICKEN_TYPES.map((type) => type.id));
 const VALID_WEIGHT_SOURCES = new Set(["1", "2", "manual"]);
 const CRATE_TYPES = [
   { id: "java_700", apiCode: "JAVA_700", label: "Java 7.00 kg", weightKg: 7.0 },
-  { id: "java_690", apiCode: "JAVA_690", label: "Java 6.90 kg", weightKg: 6.9 }
+  { id: "java_690", apiCode: "JAVA_690", label: "Java 6.90 kg", weightKg: 6.9 },
+  { id: "java_680", apiCode: "JAVA_680", label: "Java 6.80 kg", weightKg: 6.8 }
 ];
 const DEFAULT_CRATE_TYPE_ID = CRATE_TYPES[0].id;
 const VALID_CRATE_TYPE_IDS = new Set(CRATE_TYPES.map((crate) => crate.id));

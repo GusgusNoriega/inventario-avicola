@@ -87,6 +87,7 @@ class OperationCatalogController extends Controller
                     ->values(),
                 'cage_types' => DB::table('tipos_java')
                     ->where('estado', 'ACTIVO')
+                    ->orderByDesc('peso_kg')
                     ->orderBy('id')
                     ->get(['id', 'codigo', 'nombre', 'peso_kg'])
                     ->map(fn (object $type) => [

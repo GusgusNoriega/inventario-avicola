@@ -709,8 +709,14 @@ class DispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.branch.id', $this->branchId)
             ->assertJsonPath('data.warehouses.0.id', $this->warehouseId)
             ->assertJsonPath('data.warehouses.0.code', 'ALMACEN_1')
+            ->assertJsonCount(3, 'data.cage_types')
             ->assertJsonPath('data.cage_types.0.code', 'JAVA_700')
             ->assertJsonPath('data.cage_types.0.weight_kg', 7)
+            ->assertJsonPath('data.cage_types.1.code', 'JAVA_690')
+            ->assertJsonPath('data.cage_types.1.weight_kg', 6.9)
+            ->assertJsonPath('data.cage_types.2.code', 'JAVA_680')
+            ->assertJsonPath('data.cage_types.2.name', 'Java 6.80 kg')
+            ->assertJsonPath('data.cage_types.2.weight_kg', 6.8)
             ->assertJsonPath('data.delivery_drivers.0.id', $this->deliveryDriverId)
             ->assertJsonPath('data.delivery_drivers.0.name', 'CHOFER DE REPARTO')
             ->assertJsonMissingPath('data.general_prices');
@@ -718,6 +724,37 @@ class DispatchTicketApiTest extends TestCase
         $response->assertJsonFragment([
             'id' => $this->deliveryVehicleId,
             'plate' => 'ENT-001',
+        ]);
+    }
+
+    public function test_java_680_weight_is_frozen_and_used_for_wholesale_tare_and_net_weight(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'] = [[
+            ...$payload['weighings'][0],
+            'cage_type_code' => 'JAVA_680',
+            'cage_count' => 2,
+            'read_weight_kg' => 30,
+            'gross_weight_kg' => 30,
+        ]];
+
+        $response = $this->postJson('/api/v1/operacion/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.weighing_count', 1);
+
+        $java680Id = DB::table('tipos_java')
+            ->where('codigo', 'JAVA_680')
+            ->value('id');
+
+        $this->assertNotNull($java680Id);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $response->json('data.id'),
+            'tipo_java_id' => $java680Id,
+            'cantidad_javas' => 2,
+            'peso_java_kg_snapshot' => 6.8,
+            'peso_bruto_kg' => 30,
+            'tara_total_kg' => 13.6,
+            'peso_neto_kg' => 16.4,
         ]);
     }
 

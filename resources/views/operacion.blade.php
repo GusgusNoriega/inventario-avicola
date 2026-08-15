@@ -175,6 +175,7 @@
               <select id="crateType" data-touch-label="Tipo de java">
                 <option value="java_700">Java 7.00 kg</option>
                 <option value="java_690">Java 6.90 kg</option>
+                <option value="java_680">Java 6.80 kg</option>
               </select>
             </label>
 

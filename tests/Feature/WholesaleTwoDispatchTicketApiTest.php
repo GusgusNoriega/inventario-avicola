@@ -76,12 +76,22 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
             ->where('codigo', TipoPollo::CHICKEN_DEAD)
             ->update(['precio_fuente_tipo_pollo_id' => $this->typeIds[TipoPollo::CHICKEN_LIVE]]);
         DB::table('tipos_java')->insert([
-            'codigo' => 'JAVA_700',
-            'nombre' => 'Java 7.00 kg',
-            'peso_kg' => 7,
-            'estado' => 'ACTIVO',
-            'created_at' => now(),
-            'updated_at' => now(),
+            [
+                'codigo' => 'JAVA_700',
+                'nombre' => 'Java 7.00 kg',
+                'peso_kg' => 7,
+                'estado' => 'ACTIVO',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'codigo' => 'JAVA_690',
+                'nombre' => 'Java 6.90 kg',
+                'peso_kg' => 6.9,
+                'estado' => 'ACTIVO',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ]);
 
         $this->clientId = $this->createParty(
@@ -160,6 +170,63 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
                 ->assertJsonPath("data.weighings.{$index}.chicken_sex", $sex)
                 ->assertJsonPath("data.weighings.{$index}.chicken_presentation", $presentation);
         }
+    }
+
+    public function test_catalog_returns_java_680_in_descending_weight_order(): void
+    {
+        $this->getJson('/api/v1/despacho-mayorista-2/catalogo')
+            ->assertOk()
+            ->assertJsonCount(3, 'data.cage_types')
+            ->assertJsonPath('data.cage_types.0.code', 'JAVA_700')
+            ->assertJsonPath('data.cage_types.0.weight_kg', 7)
+            ->assertJsonPath('data.cage_types.1.code', 'JAVA_690')
+            ->assertJsonPath('data.cage_types.1.weight_kg', 6.9)
+            ->assertJsonPath('data.cage_types.2.code', 'JAVA_680')
+            ->assertJsonPath('data.cage_types.2.name', 'Java 6.80 kg')
+            ->assertJsonPath('data.cage_types.2.weight_kg', 6.8);
+    }
+
+    public function test_java_680_weight_is_frozen_and_used_for_wholesale_two_tare_and_net_weight(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][0] = [
+            ...$payload['weighings'][0],
+            'cage_type_code' => 'JAVA_680',
+            'birds_per_cage' => 5,
+            'cage_count' => 2,
+            'read_weight_kg' => 30,
+            'gross_weight_kg' => 999,
+        ];
+
+        $response = $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.weighing_count', 1)
+            ->assertJsonPath('data.totals.read_weight_kg', 30)
+            ->assertJsonPath('data.totals.adjustment_weight_kg', 0)
+            ->assertJsonPath('data.totals.gross_weight_kg', 30)
+            ->assertJsonPath('data.totals.tare_weight_kg', 13.6)
+            ->assertJsonPath('data.totals.net_weight_kg', 16.4)
+            ->assertJsonPath('data.weighings.0.cage_type_code', 'JAVA_680')
+            ->assertJsonPath('data.weighings.0.cage_type', 'Java 6.80 kg')
+            ->assertJsonPath('data.weighings.0.cage_weight_kg', 6.8)
+            ->assertJsonPath('data.weighings.0.tare_weight_kg', 13.6)
+            ->assertJsonPath('data.weighings.0.net_weight_kg', 16.4);
+
+        $java680Id = DB::table('tipos_java')
+            ->where('codigo', 'JAVA_680')
+            ->value('id');
+
+        $this->assertNotNull($java680Id);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $response->json('data.id'),
+            'tipo_java_id' => $java680Id,
+            'cantidad_javas' => 2,
+            'peso_java_kg_snapshot' => 6.8,
+            'peso_leido_kg' => 30,
+            'peso_bruto_kg' => 30,
+            'tara_total_kg' => 13.6,
+            'peso_neto_kg' => 16.4,
+        ]);
     }
 
     public function test_wholesale_two_rejects_missing_or_incompatible_variants_and_spoofed_sex(): void
