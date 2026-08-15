@@ -7780,48 +7780,65 @@ function buildSelectedTruckDetails(truck, totals) {
     </div>
 
     <div class="selected-truck-summary">
-      <div class="selected-truck-stat">
-        <span>Registros</span>
-        <strong>${totals.records}</strong>
+      <div class="selected-truck-counts" aria-label="Conteos del ticket">
+        <div class="selected-truck-stat is-count">
+          <span>Registros</span>
+          <strong>${totals.records}</strong>
+        </div>
+        <div class="selected-truck-stat is-count">
+          <span>Javas</span>
+          <strong>${totals.javas}</strong>
+        </div>
+        <div class="selected-truck-stat is-count">
+          <span>Aves</span>
+          <strong>${totals.birds}</strong>
+          <small
+            class="selected-truck-sex-counts"
+            aria-label="${totals.maleBirds} pollos machos y ${totals.femaleBirds} pollos hembras"
+            title="Machos: ${totals.maleBirds} | Hembras: ${totals.femaleBirds}"
+          >M: ${totals.maleBirds} | H: ${totals.femaleBirds}</small>
+        </div>
       </div>
-      <div class="selected-truck-stat">
-        <span>Javas</span>
-        <strong>${totals.javas}</strong>
-      </div>
-      <div class="selected-truck-stat">
-        <span>Aves</span>
-        <strong>${totals.birds}</strong>
-        <small
-          class="selected-truck-sex-counts"
-          aria-label="${totals.maleBirds} pollos machos y ${totals.femaleBirds} pollos hembras"
-          title="Machos: ${totals.maleBirds} | Hembras: ${totals.femaleBirds}"
-        >M: ${totals.maleBirds} | H: ${totals.femaleBirds}</small>
-      </div>
-      <div class="selected-truck-stat">
-        <span>Leído kg</span>
-        <strong>${totals.readWeight.toFixed(3)}</strong>
-      </div>
-      <div class="selected-truck-stat selected-truck-stat-adjustment">
-        <span>Merma kg</span>
-        <strong>${totals.adjustmentWeight.toFixed(3)}</strong>
-      </div>
-      <div class="selected-truck-stat">
-        <span>Ajustado kg</span>
-        <strong>${totals.grossWeight.toFixed(3)}</strong>
-      </div>
-      <div class="selected-truck-stat">
-        <span>Javas kg</span>
-        <strong>${totals.tareWeight.toFixed(3)}</strong>
-      </div>
-      <div class="selected-truck-stat">
-        <span>Neto kg</span>
-        <strong>${totals.netWeight.toFixed(3)}</strong>
+
+      <div class="selected-truck-weight-panel">
+        <span class="selected-truck-weight-caption">Cálculo del peso · kg</span>
+        <div
+          class="selected-truck-weight-flow"
+          aria-label="Peso leído más merma es igual al peso ajustado, menos tara de javas, igual al peso neto; todos los valores están expresados en kilogramos"
+        >
+          <div class="selected-truck-stat is-read">
+            <span>Leído</span>
+            <strong>${totals.readWeight.toFixed(3)}</strong>
+          </div>
+          <span class="selected-truck-operator" aria-hidden="true">+</span>
+          <div class="selected-truck-stat selected-truck-stat-adjustment is-adjustment">
+            <span>Merma</span>
+            <strong>${totals.adjustmentWeight.toFixed(3)}</strong>
+          </div>
+          <span class="selected-truck-operator" aria-hidden="true">=</span>
+          <div class="selected-truck-stat is-gross">
+            <span>Ajustado</span>
+            <strong>${totals.grossWeight.toFixed(3)}</strong>
+          </div>
+          <span class="selected-truck-operator" aria-hidden="true">−</span>
+          <div class="selected-truck-stat is-tare">
+            <span>Tara</span>
+            <strong>${totals.tareWeight.toFixed(3)}</strong>
+          </div>
+          <span class="selected-truck-operator" aria-hidden="true">=</span>
+          <div class="selected-truck-stat is-net">
+            <span>Neto</span>
+            <strong>${totals.netWeight.toFixed(3)}</strong>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="selected-truck-types">
-      ${typeItems}
-    </div>
+    ${typeItems ? `
+      <div class="selected-truck-types">
+        ${typeItems}
+      </div>
+    ` : ""}
 
     <div class="selected-truck-actions">
       ${registration ? `
@@ -7854,6 +7871,7 @@ function renderSelectedTruckDetails() {
   const truck = state.trucks.find((item) => item.id === activeTruckId);
 
   if (!truck) {
+    elements.selectedTruckDetails.classList.remove("has-type-breakdown");
     elements.selectedTruckDetails.innerHTML = `
       <div class="selected-truck-empty">Selecciona un ticket para ver sus totales.</div>
     `;
@@ -7861,6 +7879,10 @@ function renderSelectedTruckDetails() {
   }
 
   const totals = calculateTruckTotals(truck.cages, getTruckOperationType(truck));
+  elements.selectedTruckDetails.classList.toggle(
+    "has-type-breakdown",
+    totals.byType.some((item) => item.records > 0)
+  );
   elements.selectedTruckDetails.innerHTML = buildSelectedTruckDetails(truck, totals);
 }
 

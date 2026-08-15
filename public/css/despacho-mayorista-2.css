@@ -245,12 +245,6 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-@media (min-width: 1280px) {
-  .selected-truck-summary {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 820px) {
   .weight-adjustment-settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -11229,14 +11223,282 @@ body.journey-page {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-@media (min-width: 1280px) {
-  .selected-truck-summary {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+@media (max-width: 560px) {
+  .truck-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Resumen inferior del ticket: conteos y fórmula de peso legibles. */
+#selectedTruckDetails {
+  grid-template-columns:
+    minmax(210px, 260px)
+    minmax(0, 1fr)
+    minmax(190px, 220px);
+  grid-template-areas: "ticket summary actions";
+  gap: 10px;
+  padding: 10px;
+  align-items: stretch;
+}
+
+#selectedTruckDetails.has-type-breakdown {
+  grid-template-areas:
+    "ticket summary actions"
+    "types types types";
+}
+
+#selectedTruckDetails .selected-truck-bar-head {
+  grid-area: ticket;
+  border-color: rgba(255, 208, 42, 0.56);
+  background: linear-gradient(145deg, #18160d, #080808 72%);
+  box-shadow: inset 4px 0 0 rgba(255, 208, 42, 0.88);
+}
+
+#selectedTruckDetails .selected-truck-bar-head > div {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+#selectedTruckDetails .selected-truck-bar-head strong {
+  color: var(--secondary);
+  font-family: "Consolas", "Courier New", monospace;
+  overflow-wrap: normal;
+}
+
+#selectedTruckDetails .selected-truck-bar-head small {
+  display: block;
+}
+
+#selectedTruckDetails .selected-truck-summary {
+  grid-area: summary;
+  display: grid;
+  grid-template-columns:
+    minmax(270px, 0.58fr)
+    minmax(0, 1.42fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.selected-truck-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.selected-truck-weight-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+
+.selected-truck-weight-caption {
+  color: #9e9784;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.selected-truck-weight-flow {
+  --selected-weight-card-min: max(86px, calc(var(--fs-selected-number) * 3.25));
+  display: grid;
+  grid-template-columns:
+    minmax(var(--selected-weight-card-min), 1fr) 12px
+    minmax(var(--selected-weight-card-min), 1fr) 12px
+    minmax(var(--selected-weight-card-min), 1fr) 12px
+    minmax(var(--selected-weight-card-min), 1fr) 12px
+    minmax(var(--selected-weight-card-min), 1.08fr);
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-color: rgba(255, 208, 42, 0.72) rgba(255, 255, 255, 0.08);
+}
+
+.selected-truck-operator {
+  display: grid;
+  place-items: center;
+  color: #8f8975;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 1.15rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+#selectedTruckDetails .selected-truck-stat {
+  min-height: 78px;
+  padding: 11px 8px;
+  align-content: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+#selectedTruckDetails .selected-truck-stat span {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+#selectedTruckDetails .selected-truck-stat strong {
+  font-size: max(var(--fs-selected-number), 24px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+#selectedTruckDetails .selected-truck-stat.is-count {
+  padding-inline: 6px;
+  border-color: rgba(255, 208, 42, 0.34);
+  background: linear-gradient(180deg, #17150f, #080808);
+}
+
+#selectedTruckDetails .selected-truck-stat.is-read {
+  border-color: rgba(111, 178, 255, 0.48);
+}
+
+#selectedTruckDetails .selected-truck-stat.is-read strong {
+  color: #9bc8ff;
+}
+
+#selectedTruckDetails .selected-truck-stat.is-adjustment {
+  border-color: rgba(84, 225, 190, 0.5);
+  background: linear-gradient(180deg, #10201d, #070c0b);
+}
+
+#selectedTruckDetails .selected-truck-stat.is-adjustment strong {
+  color: #7ff0ca;
+}
+
+#selectedTruckDetails .selected-truck-stat.is-gross {
+  border-color: rgba(184, 145, 255, 0.5);
+}
+
+#selectedTruckDetails .selected-truck-stat.is-gross strong {
+  color: #d8bdff;
+}
+
+#selectedTruckDetails .selected-truck-stat.is-tare {
+  border-color: rgba(255, 190, 89, 0.5);
+}
+
+#selectedTruckDetails .selected-truck-stat.is-tare strong {
+  color: #ffd17d;
+}
+
+#selectedTruckDetails .selected-truck-stat.is-net {
+  border-color: rgba(47, 211, 126, 0.82);
+  background: linear-gradient(180deg, #10291c, #07140d);
+  box-shadow: inset 0 0 0 1px rgba(47, 211, 126, 0.16);
+}
+
+#selectedTruckDetails .selected-truck-stat.is-net strong {
+  color: #82f2ad;
+}
+
+#selectedTruckDetails .selected-truck-types {
+  grid-area: types;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 7px;
+}
+
+#selectedTruckDetails .selected-truck-actions {
+  grid-area: actions;
+  grid-column: auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: center;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+}
+
+#selectedTruckDetails .selected-truck-actions .print-ticket-btn,
+#selectedTruckDetails .selected-truck-actions .register-ticket-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+#selectedTruckDetails .ticket-registration-status {
+  margin: 0;
+}
+
+@media (max-width: 1365px) {
+  #selectedTruckDetails {
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 230px);
+    grid-template-areas:
+      "ticket actions"
+      "summary summary";
+  }
+
+  #selectedTruckDetails.has-type-breakdown {
+    grid-template-areas:
+      "ticket actions"
+      "summary summary"
+      "types types";
+  }
+}
+
+@media (max-width: 840px) {
+  #selectedTruckDetails {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "ticket"
+      "summary"
+      "actions";
+  }
+
+  #selectedTruckDetails.has-type-breakdown {
+    grid-template-areas:
+      "ticket"
+      "summary"
+      "types"
+      "actions";
+  }
+
+  #selectedTruckDetails .selected-truck-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #selectedTruckDetails .selected-truck-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #selectedTruckDetails .ticket-registration-status {
+    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 560px) {
-  .truck-metrics {
+  #selectedTruckDetails {
+    padding: 8px;
+  }
+
+  #selectedTruckDetails .selected-truck-summary {
+    gap: 7px;
+  }
+
+  .selected-truck-counts {
+    gap: 5px;
+  }
+
+  .selected-truck-weight-flow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    overflow-x: visible;
+  }
+
+  .selected-truck-operator {
+    display: none;
+  }
+
+  #selectedTruckDetails .selected-truck-stat.is-net {
+    grid-column: 1 / -1;
+  }
+
+  #selectedTruckDetails .selected-truck-types {
+    grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
   }
 }
