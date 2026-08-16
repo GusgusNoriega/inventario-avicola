@@ -1,4 +1,5 @@
 export const WHOLESALE_TWO_PROCESSED_VARIANT_CODE = "POLLO_BENEFICIADO";
+export const WHOLESALE_TWO_OTHER_VARIANT_CODE = "OTROS";
 
 function roundWeight(value) {
   return Math.round((Number(value || 0) + Number.EPSILON) * 1000) / 1000;
@@ -16,7 +17,8 @@ export function wholesaleTwoAdjustmentGramsForVariant(
 ) {
   if (
     String(operationType || "").toUpperCase() !== "DESPACHO"
-    || String(variantCode || "").toUpperCase() === WHOLESALE_TWO_PROCESSED_VARIANT_CODE
+    || [WHOLESALE_TWO_PROCESSED_VARIANT_CODE, WHOLESALE_TWO_OTHER_VARIANT_CODE]
+      .includes(String(variantCode || "").toUpperCase())
   ) {
     return 0;
   }

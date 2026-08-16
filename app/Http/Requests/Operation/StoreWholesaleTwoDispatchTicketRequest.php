@@ -28,6 +28,7 @@ class StoreWholesaleTwoDispatchTicketRequest extends StoreDispatchTicketRequest
                 TipoPollo::CHICKEN_DEAD,
                 TipoPollo::CHICKEN_DRESSED,
                 TipoPollo::CHICKEN_PROCESSED,
+                ...TipoPollo::wholesaleTwoManualPriceCodes(),
             ]),
         ];
         $rules['weighings.*.chicken_variant_code'] = [
@@ -47,6 +48,22 @@ class StoreWholesaleTwoDispatchTicketRequest extends StoreDispatchTicketRequest
             'gt:0',
             'max:99999999.999',
         ];
+        $rules['manual_prices'] = [
+            Rule::requiredIf(fn (): bool => $this->requiredManualPriceCodes() !== []),
+            'array:'.implode(',', TipoPollo::wholesaleTwoManualPriceCodes()),
+        ];
+
+        foreach (TipoPollo::wholesaleTwoManualPriceCodes() as $code) {
+            $rules["manual_prices.{$code}"] = [
+                Rule::requiredIf(
+                    fn (): bool => in_array($code, $this->requiredManualPriceCodes(), true)
+                ),
+                'numeric',
+                'decimal:0,2',
+                'gt:0',
+                'max:99999999.99',
+            ];
+        }
 
         return $rules;
     }
@@ -70,7 +87,21 @@ class StoreWholesaleTwoDispatchTicketRequest extends StoreDispatchTicketRequest
             })
             ->all();
 
-        $this->merge(['weighings' => $weighings]);
+        $manualPrices = $this->input('manual_prices');
+        if (is_array($manualPrices)) {
+            $manualPrices = collect($manualPrices)
+                ->mapWithKeys(fn (mixed $price, mixed $code): array => [
+                    mb_strtoupper(trim((string) $code), 'UTF-8') => $price,
+                ])
+                ->all();
+        }
+
+        $normalized = ['weighings' => $weighings];
+        if ($this->exists('manual_prices')) {
+            $normalized['manual_prices'] = $manualPrices;
+        }
+
+        $this->merge($normalized);
     }
 
     public function withValidator(Validator $validator): void
@@ -83,6 +114,20 @@ class StoreWholesaleTwoDispatchTicketRequest extends StoreDispatchTicketRequest
                 $validator->errors()->add(
                     'destination.type',
                     'Las devoluciones deben registrarse contra un cliente.'
+                );
+            }
+
+            $requiredManualPrices = collect($this->requiredManualPriceCodes())->sort()->values();
+            $submittedManualPrices = collect(
+                is_array($this->input('manual_prices'))
+                    ? array_keys($this->input('manual_prices'))
+                    : []
+            )->sort()->values();
+
+            if ($requiredManualPrices->all() !== $submittedManualPrices->all()) {
+                $validator->errors()->add(
+                    'manual_prices',
+                    'Envía exactamente los precios manuales de Gallina roja, Gallina doble y Otros presentes en el ticket.'
                 );
             }
 
@@ -153,6 +198,30 @@ class StoreWholesaleTwoDispatchTicketRequest extends StoreDispatchTicketRequest
             ...parent::messages(),
             'weighings.*.chicken_variant_code.required' => 'Selecciona la clasificación de cada pesada.',
             'weighings.*.chicken_variant_code.in' => 'Una de las clasificaciones de pollo no está disponible.',
+            'manual_prices.required' => 'Asigna el precio de cada Gallina u Otro incluido antes de registrar el ticket.',
+            'manual_prices.array' => 'Los precios manuales no tienen un formato válido.',
+            'manual_prices.*.required' => 'Asigna el precio del producto especial incluido en el ticket.',
+            'manual_prices.*.numeric' => 'Cada precio manual debe ser un número válido.',
+            'manual_prices.*.decimal' => 'Los precios manuales solo pueden usar hasta dos decimales.',
+            'manual_prices.*.gt' => 'Cada precio manual debe ser mayor que cero.',
+            'manual_prices.*.max' => 'Uno de los precios manuales supera el máximo permitido.',
         ];
+    }
+
+    /** @return list<string> */
+    private function requiredManualPriceCodes(): array
+    {
+        if ($this->input('operation_type') !== TicketDespacho::OPERATION_DISPATCH) {
+            return [];
+        }
+
+        return collect($this->input('weighings', []))
+            ->filter(fn (mixed $weighing): bool => is_array($weighing))
+            ->pluck('chicken_type_code')
+            ->map(fn (mixed $code): string => mb_strtoupper(trim((string) $code), 'UTF-8'))
+            ->filter(fn (string $code): bool => TipoPollo::requiresWholesaleTwoManualPrice($code))
+            ->unique()
+            ->values()
+            ->all();
     }
 }

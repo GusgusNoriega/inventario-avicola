@@ -55,18 +55,25 @@ class WholesaleTwoWeightAdjustmentApiTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_configuration_creates_seven_independent_defaults_without_touching_timestamps_on_read(): void
+    public function test_configuration_creates_ten_independent_defaults_without_touching_timestamps_on_read(): void
     {
         Carbon::setTestNow('2026-08-14 10:00:00');
         $this->getJson('/api/v1/despacho-mayorista-2/configuracion-mermas')
             ->assertOk()
-            ->assertJsonCount(7, 'data.adjustments')
+            ->assertJsonCount(10, 'data.adjustments')
             ->assertJsonPath('data.adjustments.0.code', WholesaleTwoChickenVariant::MALE)
             ->assertJsonPath('data.adjustments.0.additional_grams', 0)
             ->assertJsonPath('data.adjustments.0.configurable', true)
             ->assertJsonPath('data.adjustments.6.code', WholesaleTwoChickenVariant::PROCESSED)
             ->assertJsonPath('data.adjustments.6.additional_grams', 0)
-            ->assertJsonPath('data.adjustments.6.configurable', false);
+            ->assertJsonPath('data.adjustments.6.configurable', false)
+            ->assertJsonPath('data.adjustments.7.code', WholesaleTwoChickenVariant::HEN_RED)
+            ->assertJsonPath('data.adjustments.7.configurable', true)
+            ->assertJsonPath('data.adjustments.8.code', WholesaleTwoChickenVariant::HEN_DOUBLE)
+            ->assertJsonPath('data.adjustments.8.configurable', true)
+            ->assertJsonPath('data.adjustments.9.code', WholesaleTwoChickenVariant::OTHER)
+            ->assertJsonPath('data.adjustments.9.additional_grams', 0)
+            ->assertJsonPath('data.adjustments.9.configurable', false);
 
         $timestamps = DB::table('ajustes_peso_mayorista_2')
             ->where('empresa_id', $this->user->empresa_id)
@@ -86,10 +93,10 @@ class WholesaleTwoWeightAdjustmentApiTest extends TestCase
                 ->pluck('updated_at', 'codigo')
                 ->all()
         );
-        $this->assertDatabaseCount('ajustes_peso_mayorista_2', 7);
+        $this->assertDatabaseCount('ajustes_peso_mayorista_2', 10);
     }
 
-    public function test_configuration_updates_exactly_six_variants_and_keeps_processed_at_zero(): void
+    public function test_configuration_updates_exactly_eight_variants_and_keeps_locked_variants_at_zero(): void
     {
         DB::table('ajustes_peso_minorista')->insert([
             'empresa_id' => $this->user->empresa_id,
@@ -109,14 +116,24 @@ class WholesaleTwoWeightAdjustmentApiTest extends TestCase
             'code' => WholesaleTwoChickenVariant::PROCESSED,
             'additional_grams' => 0,
         ];
+        $payload['adjustments'][] = [
+            'code' => WholesaleTwoChickenVariant::OTHER,
+            'additional_grams' => 0,
+        ];
 
         $this->putJson(
             '/api/v1/despacho-mayorista-2/configuracion-mermas',
             $payload
         )->assertOk()
-            ->assertJsonCount(7, 'data.adjustments')
+            ->assertJsonCount(10, 'data.adjustments')
             ->assertJsonPath('data.adjustments.6.additional_grams', 0)
-            ->assertJsonPath('data.adjustments.6.configurable', false);
+            ->assertJsonPath('data.adjustments.6.configurable', false)
+            ->assertJsonPath('data.adjustments.7.code', WholesaleTwoChickenVariant::HEN_RED)
+            ->assertJsonPath('data.adjustments.7.additional_grams', 175)
+            ->assertJsonPath('data.adjustments.8.code', WholesaleTwoChickenVariant::HEN_DOUBLE)
+            ->assertJsonPath('data.adjustments.8.additional_grams', 200)
+            ->assertJsonPath('data.adjustments.9.additional_grams', 0)
+            ->assertJsonPath('data.adjustments.9.configurable', false);
 
         foreach ($payload['adjustments'] as $adjustment) {
             $this->assertDatabaseHas('ajustes_peso_mayorista_2', [
@@ -133,7 +150,7 @@ class WholesaleTwoWeightAdjustmentApiTest extends TestCase
         ]);
     }
 
-    public function test_configuration_rejects_missing_variants_and_non_zero_processed_adjustment(): void
+    public function test_configuration_rejects_missing_variants_and_non_zero_locked_adjustments(): void
     {
         $missing = $this->configurationPayload();
         array_pop($missing['adjustments']);
@@ -149,6 +166,16 @@ class WholesaleTwoWeightAdjustmentApiTest extends TestCase
         ];
 
         $this->putJson('/api/v1/despacho-mayorista-2/configuracion-mermas', $processed)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('adjustments');
+
+        $other = $this->configurationPayload();
+        $other['adjustments'][] = [
+            'code' => WholesaleTwoChickenVariant::OTHER,
+            'additional_grams' => 1,
+        ];
+
+        $this->putJson('/api/v1/despacho-mayorista-2/configuracion-mermas', $other)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('adjustments');
 

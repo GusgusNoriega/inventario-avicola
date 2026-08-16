@@ -18,9 +18,26 @@ class TipoPollo extends Model
 
     public const CHICKEN_PROCESSED = 'POLLO_BENEFICIADO';
 
+    public const HEN_RED = 'GALLINA_ROJA';
+
+    public const HEN_DOUBLE = 'GALLINA_DOBLE';
+
+    public const OTHER = 'OTROS';
+
     public const STATUS_ACTIVE = 'ACTIVO';
 
     protected $table = 'tipos_pollo';
+
+    /** @return list<string> */
+    public static function wholesaleTwoManualPriceCodes(): array
+    {
+        return [self::HEN_RED, self::HEN_DOUBLE, self::OTHER];
+    }
+
+    public static function requiresWholesaleTwoManualPrice(?string $code): bool
+    {
+        return in_array($code, self::wholesaleTwoManualPriceCodes(), true);
+    }
 
     public function priceSourceTypeId(): int
     {

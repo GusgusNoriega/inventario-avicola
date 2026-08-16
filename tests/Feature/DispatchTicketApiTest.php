@@ -721,6 +721,19 @@ class DispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.delivery_drivers.0.name', 'CHOFER DE REPARTO')
             ->assertJsonMissingPath('data.general_prices');
 
+        $this->assertEqualsCanonicalizing(
+            [
+                TipoPollo::CHICKEN_LIVE,
+                TipoPollo::CHICKEN_DRESSED,
+                TipoPollo::CHICKEN_PROCESSED,
+            ],
+            collect($response->json('data.chicken_types'))->pluck('code')->all(),
+        );
+        $this->assertEmpty(array_intersect(
+            TipoPollo::wholesaleTwoManualPriceCodes(),
+            collect($response->json('data.chicken_types'))->pluck('code')->all(),
+        ));
+
         $response->assertJsonFragment([
             'id' => $this->deliveryVehicleId,
             'plate' => 'ENT-001',

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AjustePesoMayoristaDos;
 use App\Models\ProgramacionRecepcion;
 use App\Models\TicketDespacho;
+use App\Models\TipoPollo;
 use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -33,6 +34,59 @@ class WholesaleTwoDispatchTicketService extends DispatchTicketService
     {
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
             && $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO;
+    }
+
+    /**
+     * @param  Collection<string, TipoPollo>  $types
+     * @param  array<string, mixed>  $data
+     * @return array<int, array{history_id: ?int, price_kg: mixed, source: string}>
+     */
+    protected function registrationPrices(
+        int $companyId,
+        ?int $clientId,
+        Collection $types,
+        array $data,
+    ): array {
+        $specialTypes = $types->filter(
+            fn (TipoPollo $type): bool => TipoPollo::requiresWholesaleTwoManualPrice($type->codigo)
+        );
+        $standardTypes = $types->reject(
+            fn (TipoPollo $type): bool => TipoPollo::requiresWholesaleTwoManualPrice($type->codigo)
+        );
+        $manualPrices = collect($data['manual_prices'] ?? []);
+
+        if (
+            $manualPrices->keys()->sort()->values()->all()
+            !== $specialTypes->keys()->sort()->values()->all()
+        ) {
+            throw ValidationException::withMessages([
+                'manual_prices' => 'Envía exactamente los precios manuales de los productos especiales presentes en el ticket.',
+            ]);
+        }
+
+        $prices = parent::registrationPrices(
+            $companyId,
+            $clientId,
+            $standardTypes,
+            $data,
+        );
+
+        foreach ($specialTypes as $code => $type) {
+            $price = round((float) $manualPrices->get($code), 2, PHP_ROUND_HALF_UP);
+            if ($price <= 0 || $price > 99_999_999.99) {
+                throw ValidationException::withMessages([
+                    "manual_prices.{$code}" => "El precio manual de {$type->nombre} no es válido.",
+                ]);
+            }
+
+            $prices[(int) $type->id] = [
+                'history_id' => null,
+                'price_kg' => $price,
+                'source' => 'MANUAL',
+            ];
+        }
+
+        return $prices;
     }
 
     /** @param Collection<int, array<string, mixed>> $weighings */
@@ -81,8 +135,7 @@ class WholesaleTwoDispatchTicketService extends DispatchTicketService
         }
 
         $birdCount = $birdsPerCage * max($cageCount, 1);
-        $adjustmentGrams = $adjustment
-            && $adjustment->codigo !== WholesaleTwoChickenVariant::PROCESSED
+        $adjustmentGrams = $adjustment && $adjustment->isConfigurable()
                 ? (int) $adjustment->gramos_adicionales
                 : 0;
         $readWeight = round((float) $weighing['read_weight_kg'], 3);

@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Operation;
 
 use App\Models\AjustePesoMayoristaDos;
-use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -19,7 +18,12 @@ class UpdateWholesaleTwoWeightAdjustmentsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'adjustments' => ['required', 'array', 'min:6', 'max:7'],
+            'adjustments' => [
+                'required',
+                'array',
+                'min:'.count(AjustePesoMayoristaDos::configurableCodes()),
+                'max:'.count(AjustePesoMayoristaDos::codes()),
+            ],
             'adjustments.*' => ['required', 'array:code,additional_grams'],
             'adjustments.*.code' => [
                 'required',
@@ -67,18 +71,21 @@ class UpdateWholesaleTwoWeightAdjustmentsRequest extends FormRequest
             if ($missing->isNotEmpty()) {
                 $validator->errors()->add(
                     'adjustments',
-                    'Envía exactamente las seis mermas configurables de Despacho mayorista 2.'
+                    'Envía exactamente todas las mermas configurables de Despacho mayorista 2.'
                 );
             }
 
-            $processed = $adjustments->firstWhere(
-                'code',
-                WholesaleTwoChickenVariant::PROCESSED
+            $invalidLockedAdjustment = $adjustments->contains(
+                fn (array $adjustment): bool => in_array(
+                    $adjustment['code'] ?? null,
+                    AjustePesoMayoristaDos::nonConfigurableCodes(),
+                    true,
+                ) && (int) ($adjustment['additional_grams'] ?? 0) !== 0
             );
-            if (is_array($processed) && (int) ($processed['additional_grams'] ?? 0) !== 0) {
+            if ($invalidLockedAdjustment) {
                 $validator->errors()->add(
                     'adjustments',
-                    'El pollo beneficiado no admite merma.'
+                    'Las clasificaciones bloqueadas no admiten merma.'
                 );
             }
         });
@@ -89,7 +96,7 @@ class UpdateWholesaleTwoWeightAdjustmentsRequest extends FormRequest
     {
         return [
             'adjustments.required' => 'Envía la configuración de mermas.',
-            'adjustments.min' => 'Debes configurar las seis clasificaciones que admiten merma.',
+            'adjustments.min' => 'Debes configurar todas las clasificaciones que admiten merma.',
             'adjustments.max' => 'La configuración contiene clasificaciones adicionales.',
             'adjustments.*.code.distinct' => 'Cada clasificación solo puede aparecer una vez.',
             'adjustments.*.code.in' => 'Una de las clasificaciones no está disponible.',

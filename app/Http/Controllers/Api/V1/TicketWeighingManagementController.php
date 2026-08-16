@@ -304,6 +304,13 @@ class TicketWeighingManagementController extends Controller
             ->where('codigo', $typeCode)
             ->where('estado', TipoPollo::STATUS_ACTIVE)
             ->where('permite_despacho', true)
+            ->when(
+                ! $usesWholesaleTwoVariants,
+                fn ($query) => $query->whereNotIn(
+                    'codigo',
+                    TipoPollo::wholesaleTwoManualPriceCodes(),
+                ),
+            )
             ->first();
         $cageType = TipoJava::query()
             ->where('codigo', mb_strtoupper(trim($validated['cage_type_code']), 'UTF-8'))
@@ -362,6 +369,19 @@ class TicketWeighingManagementController extends Controller
                 ->firstOrFail();
             abort_unless($record->estado === Pesada::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
             $this->assertFinancialDocumentsAreEditable((int) $selected->id);
+            $currentTypeCode = $record->tipoPollo?->codigo;
+            if (
+                $usesWholesaleTwoVariants
+                && $currentTypeCode !== $type->codigo
+                && (
+                    TipoPollo::requiresWholesaleTwoManualPrice($currentTypeCode)
+                    || TipoPollo::requiresWholesaleTwoManualPrice($type->codigo)
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'chicken_variant_code' => 'No puedes cambiar hacia o desde Gallina roja, Gallina doble u Otros en Gestión de pesadas porque su precio pertenece al ticket. Corrige esa clasificación antes de registrar el ticket en Despacho mayorista 2.',
+                ]);
+            }
             $before = $this->auditValues($record);
             $origin = array_key_exists('origin_program_detail_id', $validated)
                 ? $this->journeyOrigin(
@@ -497,6 +517,7 @@ class TicketWeighingManagementController extends Controller
 
         DB::transaction(function () use ($request, $selected, $weighing, $validated, $branch, $actor): void {
             $record = Pesada::query()
+                ->with('tipoPollo')
                 ->where('ticket_id', $selected->id)
                 ->whereKey($weighing)
                 ->lockForUpdate()
@@ -511,6 +532,20 @@ class TicketWeighingManagementController extends Controller
                 'anulada_at' => now(),
                 'motivo_anulacion' => trim($validated['reason']),
             ]);
+
+            if (
+                TipoPollo::requiresWholesaleTwoManualPrice($record->tipoPollo?->codigo)
+                && ! Pesada::query()
+                    ->where('ticket_id', $selected->id)
+                    ->where('tipo_pollo_id', $record->tipo_pollo_id)
+                    ->where('estado', Pesada::STATUS_ACTIVE)
+                    ->exists()
+            ) {
+                DB::table('ticket_precios')
+                    ->where('ticket_id', $selected->id)
+                    ->where('tipo_pollo_id', $record->tipo_pollo_id)
+                    ->delete();
+            }
 
             $this->javaControl->syncDispatchMovement(
                 $selected,
@@ -593,6 +628,8 @@ class TicketWeighingManagementController extends Controller
         $deliveryEditable = $this->isDeliveryEditable($ticket, $currentOperatingDate);
         $isRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL;
         $usesWholesaleTwoVariants = $this->usesWholesaleTwoVariants($ticket);
+        $usesSalePrices = $isRetail
+            || $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO;
         $pricesByType = $ticket->precios->keyBy('tipo_pollo_id');
         $amount = $records->sum(function (Pesada $record) use ($ticket, $pricesByType): float {
             $price = $pricesByType->get($record->tipo_pollo_id);
@@ -628,7 +665,7 @@ class TicketWeighingManagementController extends Controller
             'delivery' => $this->formatDelivery($ticket),
             'internal_client' => (bool) $ticket->clienteDestino?->es_cliente_interno,
             'closed_at' => $ticket->cerrado_at?->toISOString(),
-            'prices' => $isRetail
+            'prices' => $usesSalePrices
                 ? $ticket->precios
                     ->mapWithKeys(fn ($price) => [
                         (string) ($price->tipoPollo?->codigo ?? $price->tipo_pollo_id) => [
@@ -661,9 +698,9 @@ class TicketWeighingManagementController extends Controller
                 'gross_weight_kg' => round((float) $records->sum('peso_bruto_kg'), 3),
                 'tare_weight_kg' => round((float) $records->sum('tara_total_kg'), 3),
                 'net_weight_kg' => round((float) $records->sum('peso_neto_kg'), 3),
-                'amount' => $isRetail ? round((float) $amount, 2) : null,
+                'amount' => $usesSalePrices ? round((float) $amount, 2) : null,
             ],
-            'weighings' => $records->map(function (Pesada $record) use ($ticket, $isRetail, $usesWholesaleTwoVariants, $pricesByType, $timezone): array {
+            'weighings' => $records->map(function (Pesada $record) use ($ticket, $usesSalePrices, $usesWholesaleTwoVariants, $pricesByType, $timezone): array {
                 $frozenPrice = $pricesByType->get($record->tipo_pollo_id);
 
                 return [
@@ -732,9 +769,12 @@ class TicketWeighingManagementController extends Controller
                     'gross_weight_kg' => (float) $record->peso_bruto_kg,
                     'tare_weight_kg' => (float) $record->tara_total_kg,
                     'net_weight_kg' => (float) $record->peso_neto_kg,
-                    'price_kg' => $isRetail && $frozenPrice ? (float) $frozenPrice->precio_kg : null,
-                    'price_origin' => $isRetail && $frozenPrice ? $frozenPrice->origen_precio : null,
-                    'amount' => $isRetail && $frozenPrice
+                    'price_kg' => $usesSalePrices && $frozenPrice ? (float) $frozenPrice->precio_kg : null,
+                    'price_origin' => $usesSalePrices && $frozenPrice ? $frozenPrice->origen_precio : null,
+                    'price_history_id' => $usesSalePrices && $frozenPrice
+                        ? $frozenPrice->precio_historial_id
+                        : null,
+                    'amount' => $usesSalePrices && $frozenPrice
                         ? $this->signedAmount(
                             $ticket,
                             (float) $record->peso_neto_kg,
@@ -972,9 +1012,23 @@ class TicketWeighingManagementController extends Controller
     /** @return array<string, mixed> */
     private function catalogsFor(TicketDespacho $ticket, int $companyId): array
     {
-        $typeCodes = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN
-            ? [TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DEAD]
-            : [TipoPollo::CHICKEN_LIVE, TipoPollo::CHICKEN_DRESSED, TipoPollo::CHICKEN_PROCESSED];
+        $typeCodes = match (true) {
+            $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN => [
+                TipoPollo::CHICKEN_LIVE,
+                TipoPollo::CHICKEN_DEAD,
+            ],
+            $this->usesWholesaleTwoVariants($ticket) => [
+                TipoPollo::CHICKEN_LIVE,
+                TipoPollo::CHICKEN_DRESSED,
+                TipoPollo::CHICKEN_PROCESSED,
+                ...TipoPollo::wholesaleTwoManualPriceCodes(),
+            ],
+            default => [
+                TipoPollo::CHICKEN_LIVE,
+                TipoPollo::CHICKEN_DRESSED,
+                TipoPollo::CHICKEN_PROCESSED,
+            ],
+        };
 
         return [
             'delivery_trucks' => DB::table('vehiculos')

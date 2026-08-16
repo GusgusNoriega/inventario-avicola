@@ -1085,13 +1085,15 @@ class FinancialTicketService
         }
     }
 
-    /** @return array<string, int|string> */
+    /** @return array<string, int|string|null> */
     private function priceAuditValues(TicketPrecio $price): array
     {
         return [
             'ticket_id' => (int) $price->ticket_id,
             'tipo_pollo_id' => (int) $price->tipo_pollo_id,
-            'precio_historial_id' => (int) $price->precio_historial_id,
+            'precio_historial_id' => $price->precio_historial_id === null
+                ? null
+                : (int) $price->precio_historial_id,
             'precio_kg' => bcadd((string) $price->precio_kg, '0', 4),
             'origen_precio' => (string) $price->origen_precio,
             'congelado_por' => (int) $price->congelado_por,

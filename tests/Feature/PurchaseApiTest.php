@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\TipoPollo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,35 @@ class PurchaseApiTest extends TestCase
         );
         $this->user->roles()->attach($this->role);
         Sanctum::actingAs($this->user, ['api']);
+    }
+
+    public function test_purchase_catalog_and_registration_exclude_wholesale_two_special_products(): void
+    {
+        $response = $this->getJson('/api/v1/compras/catalogo')->assertOk();
+        $catalogCodes = collect($response->json('data.tipos_pollo'))->pluck('codigo')->all();
+
+        $this->assertEmpty(array_intersect(
+            TipoPollo::wholesaleTwoManualPriceCodes(),
+            $catalogCodes,
+        ));
+
+        $provider = $this->provider('PROVEEDOR AISLAMIENTO', '20100000999');
+        $specialTypeId = (int) DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::HEN_RED)
+            ->value('id');
+        $payload = $this->purchasePayload(
+            $provider,
+            $specialTypeId,
+            'CREDITO',
+            (string) Str::uuid(),
+        );
+
+        $this->postJson('/api/v1/compras', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('detalles');
+
+        $this->assertDatabaseCount('compras', 0);
+        $this->assertDatabaseCount('compra_detalles', 0);
     }
 
     public function test_credit_purchase_creates_an_independent_payable_and_is_strictly_idempotent(): void

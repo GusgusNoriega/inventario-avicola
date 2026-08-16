@@ -1763,8 +1763,14 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('netWeight: Number(weighing.net_weight_kg) || 0', $managementJavascript);
         $this->assertStringContainsString('delivery: ticket.delivery', $managementJavascript);
         $this->assertStringContainsString('cages: Number(retail ? weighing.trays : weighing.cages) || 0', $managementJavascript);
-        $this->assertStringContainsString('priceKg: Number(weighing.price_kg) || 0', $managementJavascript);
-        $this->assertStringContainsString('amount: Number(weighing.amount) || 0', $managementJavascript);
+        $this->assertStringContainsString('priceKg: optionalNumber(weighing.price_kg)', $managementJavascript);
+        $this->assertStringContainsString('amount: optionalNumber(weighing.amount)', $managementJavascript);
+        $this->assertStringContainsString('{ code: "GALLINA_ROJA", label: "Gallina roja", shortLabel: "GR"', $managementJavascript);
+        $this->assertStringContainsString('{ code: "GALLINA_DOBLE", label: "Gallina doble", shortLabel: "GD"', $managementJavascript);
+        $this->assertStringContainsString('{ code: "OTROS", label: "Otros", shortLabel: "OT"', $managementJavascript);
+        $this->assertStringContainsString('missingWholesaleTwoPrices(ticket)', $managementJavascript);
+        $this->assertStringContainsString('RESUMEN MONETARIO', $printerJavascript);
+        $this->assertStringContainsString('assertWholesaleTwoSpecialPrices(ticket, records)', $printerJavascript);
     }
 
     public function test_customer_history_view_is_available_without_database_queries(): void

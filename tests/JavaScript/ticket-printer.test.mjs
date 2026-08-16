@@ -29,10 +29,12 @@ test("el ticket mayorista usa tipografia grande y muestra el camion y chofer sel
       {
         typeCode: "PV",
         birdsPerCage: 10,
-        cages: 2,
-        grossWeight: 30,
-        tareWeight: 14,
-        netWeight: 16
+         cages: 2,
+         grossWeight: 30,
+         tareWeight: 14,
+         netWeight: 16,
+         priceKg: 9,
+         amount: 144
       }
     ]
   }, "2026-07-23T12:30:00-05:00");
@@ -46,6 +48,7 @@ test("el ticket mayorista usa tipografia grande y muestra el camion y chofer sel
   assert.match(html, /CHOFER: María &lt;Prueba&gt;/);
   assert.match(html, /<th>PB<\/th><th>TARA<\/th><th>PN<\/th>/);
   assert.doesNotMatch(html, /<th>LECT<\/th><th>MERM<\/th>/);
+  assert.doesNotMatch(html, /RESUMEN MONETARIO|TOTAL TICKET/);
 });
 
 test("el ticket de Mayorista 2 reimprime lectura, merma y pesos calculados sin alterar Mayorista 1", () => {
@@ -87,6 +90,70 @@ test("el ticket de Mayorista 2 reimprime lectura, merma y pesos calculados sin a
     html,
     /<th>TIPO<\/th> <th>LECT<\/th><th>MERM<\/th><th>PB<\/th><th>TARA<\/th><th>PN<\/th>.*<td>HA<\/td> <td>12\.00<\/td> <td>2\.50<\/td> <td>14\.50<\/td> <td>1\.00<\/td> <td>13\.50<\/td>/
   );
+  assert.doesNotMatch(html, /RESUMEN MONETARIO/);
+});
+
+test("Mayorista 2 agrega un resumen monetario separado cuando las pesadas tienen precio", () => {
+  const html = compactHtml(buildWeightControlTicketHtml({
+    code: "M2-20260815-001",
+    channel: "MAYORISTA",
+    sourceModule: "MODULO_DESPACHO_MAYORISTA_2",
+    operationType: "DESPACHO",
+    destinationName: "Cliente gallinas",
+    totalAmount: 140.55,
+    records: [
+      {
+        typeCode: "GR",
+        birds: 10,
+        birdsPerCage: 5,
+        cages: 2,
+        readWeight: 12,
+        adjustment: { total_weight_kg: 1 },
+        grossWeight: 13,
+        tareWeight: 2,
+        netWeight: 11,
+        priceKg: 10.05,
+        amount: 110.55
+      },
+      {
+        typeCode: "OT",
+        birds: 0,
+        birdsPerCage: 0,
+        cages: 0,
+        readWeight: 3,
+        grossWeight: 3,
+        tareWeight: 0,
+        netWeight: 3,
+        priceKg: 10,
+        amount: 30
+      }
+    ]
+  }, "2026-08-15T12:30:00-05:00"));
+
+  assert.match(
+    html,
+    /RESUMEN MONETARIO.*<td>GR<\/td> <td>11\.00<\/td> <td>S\/ 10\.05<\/td> <td>S\/ 110\.55<\/td>.*<td>OT<\/td> <td>3\.00<\/td> <td>S\/ 10\.00<\/td> <td>S\/ 30\.00<\/td>/
+  );
+  assert.match(html, /TOTAL TICKET<\/span> <span>S\/ 140\.55<\/span>/);
+  assert.match(html, /<th>LECT<\/th><th>MERM<\/th><th>PB<\/th><th>TARA<\/th><th>PN<\/th>/);
+});
+
+test("Mayorista 2 rechaza defensivamente una gallina u Otros sin precio", () => {
+  assert.throws(() => buildWeightControlTicketHtml({
+    code: "M2-20260815-002",
+    channel: "MAYORISTA",
+    sourceModule: "MODULO_DESPACHO_MAYORISTA_2",
+    operationType: "DESPACHO",
+    records: [{
+      typeCode: "GALLINA_DOBLE",
+      readWeight: 8,
+      grossWeight: 8.5,
+      tareWeight: 1,
+      netWeight: 7.5,
+      priceKg: null,
+      amount: null
+    }]
+  }), /Falta asignar precio para: GALLINA_DOBLE/);
 });
 
 test("el título predeterminado se conserva exacto en tickets mayoristas y minoristas", () => {

@@ -39,6 +39,16 @@ class AjustePesoMayoristaDos extends Model
             ->all();
     }
 
+    /** @return list<string> */
+    public static function nonConfigurableCodes(): array
+    {
+        return collect(self::definitions())
+            ->reject(fn (array $definition): bool => $definition['configurable'])
+            ->keys()
+            ->values()
+            ->all();
+    }
+
     /**
      * @return array<string, array{name: string, sex: ?string, presentation: ?string, configurable: bool}>
      */
@@ -83,6 +93,24 @@ class AjustePesoMayoristaDos extends Model
             ],
             WholesaleTwoChickenVariant::PROCESSED => [
                 'name' => 'Pollo beneficiado',
+                'sex' => null,
+                'presentation' => null,
+                'configurable' => false,
+            ],
+            WholesaleTwoChickenVariant::HEN_RED => [
+                'name' => 'Gallina roja',
+                'sex' => null,
+                'presentation' => null,
+                'configurable' => true,
+            ],
+            WholesaleTwoChickenVariant::HEN_DOUBLE => [
+                'name' => 'Gallina doble',
+                'sex' => null,
+                'presentation' => null,
+                'configurable' => true,
+            ],
+            WholesaleTwoChickenVariant::OTHER => [
+                'name' => 'Otros',
                 'sex' => null,
                 'presentation' => null,
                 'configurable' => false,

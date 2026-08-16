@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\AjustePesoMayoristaDos;
-use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -32,7 +31,7 @@ class WholesaleTwoWeightAdjustmentService
 
         DB::table('ajustes_peso_mayorista_2')
             ->where('empresa_id', $companyId)
-            ->where('codigo', WholesaleTwoChickenVariant::PROCESSED)
+            ->whereIn('codigo', AjustePesoMayoristaDos::nonConfigurableCodes())
             ->where('gramos_adicionales', '!=', 0)
             ->update([
                 'gramos_adicionales' => 0,
@@ -77,9 +76,9 @@ class WholesaleTwoWeightAdjustmentService
                     'name' => $adjustment->nombre,
                     'sex' => $adjustment->sexo,
                     'presentation' => $adjustment->presentacion,
-                    'additional_grams' => $code === WholesaleTwoChickenVariant::PROCESSED
-                        ? 0
-                        : (int) $adjustment->gramos_adicionales,
+                    'additional_grams' => $definition['configurable']
+                        ? (int) $adjustment->gramos_adicionales
+                        : 0,
                     'configurable' => $definition['configurable'],
                 ];
             })
@@ -127,14 +126,20 @@ class WholesaleTwoWeightAdjustmentService
             || $submittedCodes->diff($allowedCodes)->isNotEmpty()
         ) {
             throw ValidationException::withMessages([
-                'adjustments' => 'Envía exactamente las seis mermas configurables de Despacho mayorista 2.',
+                'adjustments' => 'Envía exactamente todas las mermas configurables de Despacho mayorista 2.',
             ]);
         }
 
-        $processed = $normalized->firstWhere('code', WholesaleTwoChickenVariant::PROCESSED);
-        if ($processed && (int) $processed['additional_grams'] !== 0) {
+        $invalidLockedAdjustment = $normalized->contains(
+            fn (array $adjustment): bool => in_array(
+                $adjustment['code'],
+                AjustePesoMayoristaDos::nonConfigurableCodes(),
+                true,
+            ) && (int) $adjustment['additional_grams'] !== 0
+        );
+        if ($invalidLockedAdjustment) {
             throw ValidationException::withMessages([
-                'adjustments' => 'El pollo beneficiado no admite merma.',
+                'adjustments' => 'Las clasificaciones bloqueadas no admiten merma.',
             ]);
         }
 
@@ -162,9 +167,9 @@ class WholesaleTwoWeightAdjustmentService
                 ]);
             }
 
-            $stored->get(WholesaleTwoChickenVariant::PROCESSED)->update([
-                'gramos_adicionales' => 0,
-            ]);
+            foreach (AjustePesoMayoristaDos::nonConfigurableCodes() as $code) {
+                $stored->get($code)->update(['gramos_adicionales' => 0]);
+            }
         }, 3);
 
         return $this->configuration($companyId);

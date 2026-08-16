@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(104, $migrationFiles);
+        $this->assertCount(105, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -191,6 +191,9 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue($weighingColumns->get('presentacion_pollo')['nullable']);
         $this->assertTrue($weighingColumns->get('ajuste_peso_gramos')['nullable']);
         $this->assertTrue($weighingColumns->get('ajuste_peso_mayorista_2_gramos')['nullable']);
+
+        $ticketPriceColumns = collect(Schema::getColumns('ticket_precios'))->keyBy('name');
+        $this->assertTrue($ticketPriceColumns->get('precio_historial_id')['nullable']);
 
         $this->assertTrue(collect(Schema::getColumns('comprobantes'))->keyBy('name')->get('tercero_id')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('pagos'))->keyBy('name')->get('tercero_id')['nullable']);
@@ -901,6 +904,102 @@ class DatabaseSchemaTest extends TestCase
         $this->assertSame(
             7,
             DB::table('ajustes_peso_mayorista_2')->where('empresa_id', $companyId)->count()
+        );
+    }
+
+    public function test_wholesale_two_special_product_migration_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_08_15_000003_add_wholesale_two_special_products.php'
+        );
+
+        $this->assertEqualsCanonicalizing(
+            ['GALLINA_ROJA', 'GALLINA_DOBLE', 'OTROS'],
+            DB::table('tipos_pollo')
+                ->whereIn('codigo', ['GALLINA_ROJA', 'GALLINA_DOBLE', 'OTROS'])
+                ->pluck('codigo')
+                ->all()
+        );
+        $this->assertTrue(
+            collect(Schema::getColumns('ticket_precios'))
+                ->keyBy('name')
+                ->get('precio_historial_id')['nullable']
+        );
+
+        $migration->down();
+
+        $this->assertDatabaseMissing('tipos_pollo', ['codigo' => 'GALLINA_ROJA']);
+        $this->assertDatabaseMissing('tipos_pollo', ['codigo' => 'GALLINA_DOBLE']);
+        $this->assertDatabaseMissing('tipos_pollo', ['codigo' => 'OTROS']);
+        $this->assertFalse(
+            collect(Schema::getColumns('ticket_precios'))
+                ->keyBy('name')
+                ->get('precio_historial_id')['nullable']
+        );
+
+        $migration->up();
+        $migration->up();
+
+        $this->assertSame(
+            3,
+            DB::table('tipos_pollo')
+                ->whereIn('codigo', ['GALLINA_ROJA', 'GALLINA_DOBLE', 'OTROS'])
+                ->count()
+        );
+        $this->assertTrue(
+            collect(Schema::getColumns('ticket_precios'))
+                ->keyBy('name')
+                ->get('precio_historial_id')['nullable']
+        );
+    }
+
+    public function test_wholesale_two_special_product_migration_refuses_partial_rollback_with_history(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_08_15_000003_add_wholesale_two_special_products.php'
+        );
+        $user = User::factory()->create();
+        $branchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'ROLLBACK-SPECIAL',
+            'nombre' => 'Sucursal de prueba',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $warehouseId = DB::table('almacenes')->insertGetId([
+            'sucursal_id' => $branchId,
+            'codigo' => 'ROLLBACK-SPECIAL',
+            'nombre' => 'Almacén de prueba',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $specialTypeId = DB::table('tipos_pollo')
+            ->where('codigo', 'GALLINA_ROJA')
+            ->value('id');
+
+        DB::table('existencias_almacen')->insert([
+            'almacen_id' => $warehouseId,
+            'tipo_pollo_id' => $specialTypeId,
+            'cantidad_aves' => 0,
+            'peso_neto_kg' => 0,
+            'updated_at' => now(),
+        ]);
+
+        try {
+            $migration->down();
+            $this->fail('La reversión debía detenerse antes de modificar el esquema.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('movimientos o historiales', $exception->getMessage());
+        }
+
+        $this->assertDatabaseHas('tipos_pollo', ['codigo' => 'GALLINA_ROJA']);
+        $this->assertTrue(
+            collect(Schema::getColumns('ticket_precios'))
+                ->keyBy('name')
+                ->get('precio_historial_id')['nullable']
         );
     }
 }

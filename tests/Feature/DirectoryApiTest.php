@@ -4,10 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\Tercero;
+use App\Models\TerceroRole;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\TerceroDirectoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -70,6 +74,124 @@ class DirectoryApiTest extends TestCase
         $this->assertDatabaseHas('tercero_roles', ['rol' => 'CLIENTE']);
         $this->assertDatabaseHas('listas_precios', ['operacion' => 'VENTA']);
         $this->assertDatabaseCount('precios_historial', 3);
+    }
+
+    public function test_directory_service_rejects_special_prices_when_form_requests_are_bypassed(): void
+    {
+        $service = app(TerceroDirectoryService::class);
+
+        foreach (TipoPollo::wholesaleTwoManualPriceCodes() as $index => $code) {
+            $submittedCode = $index === 0 ? mb_strtolower($code, 'UTF-8') : $code;
+            $document = '201234568'.str_pad((string) $index, 2, '0', STR_PAD_LEFT);
+            $directoryRole = $index === 1 ? TerceroRole::PROVIDER : TerceroRole::CLIENT;
+            $payload = $this->payload([
+                'numero_documento' => $document,
+                'precios' => [$submittedCode => 12.5],
+            ]);
+
+            $this->assertDirectoryValidationError(
+                fn () => $service->create(
+                    (int) $this->user->empresa_id,
+                    (int) $this->user->id,
+                    $directoryRole,
+                    $payload,
+                ),
+                'precios',
+            );
+
+            $this->assertDatabaseMissing('terceros', ['numero_documento' => $document]);
+        }
+
+        $this->assertDatabaseCount('listas_precios', 0);
+        $this->assertDatabaseCount('precios_historial', 0);
+    }
+
+    public function test_directory_service_rejects_special_price_sync_and_rolls_back_party_changes(): void
+    {
+        $recordId = (int) $this->postJson('/api/v1/clientes', $this->payload())
+            ->assertCreated()
+            ->json('data.id');
+        $service = app(TerceroDirectoryService::class);
+        $record = Tercero::query()->findOrFail($recordId);
+        $payload = $this->payload([
+            'nombre_razon_social' => 'Nombre que debe revertirse',
+            'precios' => [TipoPollo::HEN_DOUBLE => 12.5],
+        ]);
+
+        $this->assertDirectoryValidationError(
+            fn () => $service->update(
+                $record,
+                (int) $this->user->id,
+                TerceroRole::CLIENT,
+                $payload,
+            ),
+            'precios',
+        );
+
+        $this->assertDatabaseHas('terceros', [
+            'id' => $recordId,
+            'nombre_razon_social' => 'COMERCIAL EL SOL',
+        ]);
+        $this->assertDatabaseCount('precios_historial', 3);
+        $this->assertDatabaseMissing('precios_historial', [
+            'tipo_pollo_id' => DB::table('tipos_pollo')
+                ->where('codigo', TipoPollo::HEN_DOUBLE)
+                ->value('id'),
+        ]);
+    }
+
+    public function test_directory_price_adjustment_rejects_special_products_without_deleting_history(): void
+    {
+        $recordId = (int) $this->postJson('/api/v1/clientes', $this->payload())
+            ->assertCreated()
+            ->json('data.id');
+        $listId = (int) DB::table('listas_precios')
+            ->where('tercero_id', $recordId)
+            ->where('operacion', 'VENTA')
+            ->value('id');
+        $specialTypeId = (int) DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::OTHER)
+            ->value('id');
+        $historicalPriceId = (int) DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $listId,
+            'tipo_pollo_id' => $specialTypeId,
+            'precio_kg' => 4,
+            'vigente_desde' => now()->subDay(),
+            'vigente_hasta' => null,
+            'motivo_cambio' => 'Registro histórico anterior a la defensa de dominio',
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        $service = app(TerceroDirectoryService::class);
+
+        $this->assertDirectoryValidationError(
+            fn () => $service->adjustPrices(
+                (int) $this->user->empresa_id,
+                (int) $this->user->id,
+                TerceroRole::CLIENT,
+                TipoPollo::OTHER,
+                1,
+                'AUMENTAR',
+            ),
+            'tipo_pollo',
+        );
+
+        $this->assertDatabaseCount('precios_historial', 4);
+        $this->assertDatabaseHas('precios_historial', [
+            'id' => $historicalPriceId,
+            'tipo_pollo_id' => $specialTypeId,
+            'precio_kg' => 4,
+            'vigente_hasta' => null,
+        ]);
+        $loaded = $service->loadForDirectory(
+            Tercero::query()->findOrFail($recordId),
+            TerceroRole::CLIENT,
+        );
+        $this->assertTrue(
+            $loaded->listasPrecios
+                ->flatMap->preciosVigentes
+                ->contains('tipo_pollo_id', $specialTypeId)
+        );
     }
 
     public function test_client_can_be_created_without_specific_prices(): void
@@ -243,5 +365,18 @@ class DirectoryApiTest extends TestCase
                 TipoPollo::CHICKEN_PROCESSED => 10.5,
             ],
         ], $overrides);
+    }
+
+    private function assertDirectoryValidationError(callable $callback, string $field): void
+    {
+        try {
+            $callback();
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey($field, $exception->errors());
+
+            return;
+        }
+
+        $this->fail("Se esperaba un error de validación en {$field}.");
     }
 }

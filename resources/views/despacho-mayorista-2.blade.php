@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -123,9 +123,11 @@
         </div>
 
         <form id="cageForm" novalidate>
-          <div class="type-switch" role="group" aria-label="Tipo de pollo">
+          <div class="type-switch" role="group" aria-label="Familia de producto">
             <button class="type-btn is-active" data-type="pollo_vivo" type="button">Pollo vivo</button>
             <button class="type-btn" data-type="pollo_pelado" type="button">Pollo pelado</button>
+            <button class="type-btn" data-type="gallina" type="button">Gallina</button>
+            <button class="type-btn" data-type="otros" type="button">Otros</button>
           </div>
 
           <div class="form-grid">
@@ -156,6 +158,14 @@
                 <div class="sex-selector-buttons">
                   <button class="sex-btn sex-btn-male is-active" type="button" data-sex="macho" aria-pressed="true" aria-label="Macho" title="Macho">M</button>
                   <button class="sex-btn sex-btn-female" type="button" data-sex="hembra" aria-pressed="false" aria-label="Hembra" title="Hembra">H</button>
+                </div>
+              </fieldset>
+
+              <fieldset id="henVariantSelector" class="hen-variant-selector dispatch-hen-variant-selector" aria-label="Tipo de gallina" hidden>
+                <legend>Tipo de gallina</legend>
+                <div class="hen-variant-buttons">
+                  <button class="hen-variant-btn is-red is-active" type="button" data-hen-variant="GALLINA_ROJA" aria-pressed="true">Roja</button>
+                  <button class="hen-variant-btn is-double" type="button" data-hen-variant="GALLINA_DOBLE" aria-pressed="false">Doble</button>
                 </div>
               </fieldset>
 
@@ -264,7 +274,7 @@
       <div class="section-head weight-adjustment-settings-head">
         <div>
           <p class="weight-adjustment-settings-caption">Configuración exclusiva de Despacho mayorista 2</p>
-          <h2 id="weightAdjustmentSettingsTitle">Mermas por tipo de pollo</h2>
+          <h2 id="weightAdjustmentSettingsTitle">Mermas por tipo de producto</h2>
         </div>
         <button id="closeWeightAdjustmentSettingsBtn" class="btn btn-primary" type="button">Cerrar</button>
       </div>
@@ -296,10 +306,23 @@
           <strong>HC · Hembra cerrada</strong>
           <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="HEMBRA_CERRADA" readonly inputmode="none" data-keypad-label="Merma en gramos para hembra cerrada" data-keypad-decimal="false"></label>
         </article>
+        <article class="weight-adjustment-setting is-hen is-hen-red">
+          <strong>GR · Gallina roja</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="GALLINA_ROJA" readonly inputmode="none" data-keypad-label="Merma en gramos para gallina roja" data-keypad-decimal="false"></label>
+        </article>
+        <article class="weight-adjustment-setting is-hen is-hen-double">
+          <strong>GD · Gallina doble</strong>
+          <label><span>Gramos por ave</span><input type="number" min="0" max="1000000" step="1" value="0" data-weight-adjustment-variant="GALLINA_DOBLE" readonly inputmode="none" data-keypad-label="Merma en gramos para gallina doble" data-keypad-decimal="false"></label>
+        </article>
         <article class="weight-adjustment-setting is-processed is-locked" aria-disabled="true">
           <strong>PB · Pollo beneficiado</strong>
           <label><span>Gramos por ave</span><input type="number" value="0" disabled aria-describedby="processedWeightAdjustmentHelp"></label>
           <small id="processedWeightAdjustmentHelp">Sin merma por regla del sistema.</small>
+        </article>
+        <article class="weight-adjustment-setting is-other is-locked" aria-disabled="true">
+          <strong>OT · Otros</strong>
+          <label><span>Gramos por producto</span><input type="number" value="0" disabled aria-describedby="otherWeightAdjustmentHelp"></label>
+          <small id="otherWeightAdjustmentHelp">Otros se pesa sin opciones adicionales ni merma.</small>
         </article>
       </div>
 
@@ -550,6 +573,14 @@
             </div>
           </fieldset>
 
+          <fieldset id="editHenVariantSelector" class="hen-variant-selector edit-hen-variant-selector" aria-label="Tipo de gallina" hidden>
+            <legend>Tipo de gallina</legend>
+            <div class="hen-variant-buttons">
+              <button class="hen-variant-btn is-red is-active" type="button" data-edit-hen-variant="GALLINA_ROJA" aria-pressed="true">Gallina roja</button>
+              <button class="hen-variant-btn is-double" type="button" data-edit-hen-variant="GALLINA_DOBLE" aria-pressed="false">Gallina doble</button>
+            </div>
+          </fieldset>
+
           <fieldset id="editDressedVariantSelector" class="dressed-variant-selector edit-dressed-variant-selector" aria-label="Clasificación del pollo pelado" hidden>
             <legend>Clasificación del pollo pelado</legend>
             <div class="dressed-variant-buttons">
@@ -634,6 +665,33 @@
       <p id="providerModalSelection" class="provider-modal-selection">Despacho directo seleccionado: sin proveedor ni placa.</p>
       <div id="providerList" class="provider-list" role="listbox" aria-label="Lista de proveedores y almacenes"></div>
     </div>
+  </div>
+
+  <div id="specialPriceModal" class="modal special-price-modal" hidden>
+    <form id="specialPriceForm" class="special-price-card card" role="dialog" aria-modal="true" aria-labelledby="specialPriceTitle" novalidate>
+      <div class="section-head special-price-head">
+        <div>
+          <p class="special-price-caption">Precios exclusivos de este ticket</p>
+          <h2 id="specialPriceTitle">Asignar precios de gallinas y otros</h2>
+        </div>
+        <button id="closeSpecialPriceBtn" class="btn btn-primary" type="button">Cerrar</button>
+      </div>
+
+      <p class="special-price-help">Estos precios se guardarán únicamente en el ticket seleccionado. No modificarán los precios generales ni los precios exclusivos de ningún cliente.</p>
+
+      <div class="special-price-ticket">
+        <span>Ticket seleccionado</span>
+        <strong id="specialPriceTicketLabel">Ticket --</strong>
+      </div>
+
+      <div id="specialPriceFields" class="special-price-fields" aria-live="polite"></div>
+
+      <p id="specialPriceMessage" class="special-price-message" role="status" aria-live="polite"></p>
+      <div class="special-price-actions">
+        <button id="cancelSpecialPriceBtn" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="saveSpecialPriceBtn" class="btn btn-success" type="submit">Guardar precios</button>
+      </div>
+    </form>
   </div>
 
   <div id="errorModal" class="modal error-modal" hidden>

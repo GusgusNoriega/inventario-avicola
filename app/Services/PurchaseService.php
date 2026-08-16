@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Compra;
+use App\Models\TipoPollo;
 use App\Models\User;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
@@ -568,10 +569,11 @@ class PurchaseService
         $existing = DB::table('tipos_pollo')
             ->whereIn('id', $ids->all())
             ->where('estado', 'ACTIVO')
+            ->whereNotIn('codigo', TipoPollo::wholesaleTwoManualPriceCodes())
             ->count();
         if ($existing !== $ids->count()) {
             throw ValidationException::withMessages([
-                'detalles' => 'Uno o mas tipos de pollo no existen o estan inactivos.',
+                'detalles' => 'Uno o mas tipos de pollo no están disponibles para compras.',
             ]);
         }
     }

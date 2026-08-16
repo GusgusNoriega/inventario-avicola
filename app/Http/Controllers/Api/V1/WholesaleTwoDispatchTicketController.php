@@ -50,14 +50,27 @@ class WholesaleTwoDispatchTicketController extends Controller
         TicketDespacho $ticket,
         string $ticketTitle,
         ?string $ticketMessage
-    ): array
-    {
+    ): array {
         $ticket->loadMissing([
             'pesadas.tipoPollo',
             'pesadas.tipoJava',
             'pesadas.ajustePesoMayoristaDos',
+            'precios.tipoPollo',
         ]);
         $records = $ticket->pesadas->values();
+        $prices = $ticket->precios->keyBy('tipo_pollo_id');
+        $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
+        $totalAmount = $records->sum(function ($weighing) use ($prices, $sign): float {
+            $price = $prices->get($weighing->tipo_pollo_id);
+
+            return $price
+                ? $sign * round(
+                    (float) $weighing->peso_neto_kg * (float) $price->precio_kg,
+                    2,
+                    PHP_ROUND_HALF_UP,
+                )
+                : 0;
+        });
 
         return [
             'id' => $ticket->id,
@@ -93,6 +106,15 @@ class WholesaleTwoDispatchTicketController extends Controller
                     ],
                 ]
                 : null,
+            'prices' => $ticket->precios->mapWithKeys(fn ($price): array => [
+                $price->tipoPollo?->codigo ?? (string) $price->tipo_pollo_id => [
+                    'price_kg' => round((float) $price->precio_kg, 2, PHP_ROUND_HALF_UP),
+                    'source' => $price->origen_precio,
+                    'history_id' => $price->precio_historial_id === null
+                        ? null
+                        : (int) $price->precio_historial_id,
+                ],
+            ]),
             'weighing_count' => $records->count(),
             'totals' => [
                 'weighings' => $records->count(),
@@ -109,11 +131,16 @@ class WholesaleTwoDispatchTicketController extends Controller
                 'gross_weight_kg' => round((float) $records->sum('peso_bruto_kg'), 3),
                 'tare_weight_kg' => round((float) $records->sum('tara_total_kg'), 3),
                 'net_weight_kg' => round((float) $records->sum('peso_neto_kg'), 3),
+                'amount' => round($totalAmount, 2, PHP_ROUND_HALF_UP),
             ],
             'weighings' => $records
-                ->map(function ($weighing): array {
+                ->map(function ($weighing) use ($prices, $sign): array {
                     $adjustmentGrams = (int) ($weighing->ajuste_peso_mayorista_2_gramos ?? 0);
                     $totalAdjustmentGrams = $adjustmentGrams * (int) $weighing->cantidad_aves;
+                    $frozenPrice = $prices->get($weighing->tipo_pollo_id);
+                    $price = $frozenPrice
+                        ? round((float) $frozenPrice->precio_kg, 2, PHP_ROUND_HALF_UP)
+                        : null;
 
                     return [
                         'id' => $weighing->id,
@@ -149,6 +176,16 @@ class WholesaleTwoDispatchTicketController extends Controller
                         'gross_weight_kg' => (float) $weighing->peso_bruto_kg,
                         'tare_weight_kg' => (float) $weighing->tara_total_kg,
                         'net_weight_kg' => (float) $weighing->peso_neto_kg,
+                        'price_kg' => $price,
+                        'price_origin' => $frozenPrice?->origen_precio,
+                        'price_history_id' => $frozenPrice?->precio_historial_id,
+                        'amount' => $price === null
+                            ? null
+                            : $sign * round(
+                                (float) $weighing->peso_neto_kg * $price,
+                                2,
+                                PHP_ROUND_HALF_UP,
+                            ),
                         'weighed_at' => $weighing->pesada_at?->toISOString(),
                     ];
                 })

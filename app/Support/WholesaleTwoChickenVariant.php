@@ -21,6 +21,12 @@ final class WholesaleTwoChickenVariant
 
     public const PROCESSED = 'POLLO_BENEFICIADO';
 
+    public const HEN_RED = 'GALLINA_ROJA';
+
+    public const HEN_DOUBLE = 'GALLINA_DOBLE';
+
+    public const OTHER = 'OTROS';
+
     /** @return list<string> */
     public static function codes(): array
     {
@@ -91,6 +97,21 @@ final class WholesaleTwoChickenVariant
             ],
             self::PROCESSED => [
                 'chicken_type_code' => TipoPollo::CHICKEN_PROCESSED,
+                'sex' => null,
+                'presentation' => null,
+            ],
+            self::HEN_RED => [
+                'chicken_type_code' => TipoPollo::HEN_RED,
+                'sex' => null,
+                'presentation' => null,
+            ],
+            self::HEN_DOUBLE => [
+                'chicken_type_code' => TipoPollo::HEN_DOUBLE,
+                'sex' => null,
+                'presentation' => null,
+            ],
+            self::OTHER => [
+                'chicken_type_code' => TipoPollo::OTHER,
                 'sex' => null,
                 'presentation' => null,
             ],

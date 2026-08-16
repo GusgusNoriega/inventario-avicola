@@ -174,7 +174,7 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonCount(1, 'data.tickets')
             ->assertJsonPath('data.tickets.0.destination.name', 'Distribuidora Central');
 
-        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+        $response = $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
             ->assertOk()
             ->assertJsonPath('data.ticket_title', 'DISTRIBUIDORA DIEGO ALBERTO')
             ->assertJsonPath('data.access.is_administrator', false)
@@ -198,7 +198,16 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonPath('data.ticket.weighings.0.chicken_sex', Pesada::SEX_MALE)
             ->assertJsonPath('data.ticket.source_module', null)
             ->assertJsonPath('data.ticket.weighings.0.chicken_variant_code', null)
+            ->assertJsonPath('data.ticket.prices', [])
+            ->assertJsonPath('data.ticket.weighings.0.price_kg', null)
+            ->assertJsonPath('data.ticket.weighings.0.amount', null)
+            ->assertJsonPath('data.ticket.summary.amount', null)
             ->assertJsonPath('data.ticket.summary.net_weight_kg', 26);
+
+        $this->assertEmpty(array_intersect(
+            TipoPollo::wholesaleTwoManualPriceCodes(),
+            collect($response->json('data.catalogs.chicken_types'))->pluck('code')->all(),
+        ));
     }
 
     public function test_wholesale_two_exposes_its_source_and_null_safe_processed_variant(): void
@@ -218,7 +227,7 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.tickets.0.source_module', TicketDespacho::SOURCE_WHOLESALE_TWO);
 
-        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+        $response = $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
             ->assertOk()
             ->assertJsonPath('data.ticket.source_module', TicketDespacho::SOURCE_WHOLESALE_TWO)
             ->assertJsonPath(
@@ -228,12 +237,170 @@ class TicketWeighingManagementApiTest extends TestCase
             ->assertJsonPath('data.ticket.weighings.0.chicken_sex', null)
             ->assertJsonPath('data.ticket.weighings.0.presentation', null)
             ->assertJsonPath('data.ticket.weighings.0.adjustment', null)
-            ->assertJsonCount(7, 'data.catalogs.weight_adjustments')
+            ->assertJsonCount(10, 'data.catalogs.weight_adjustments')
             ->assertJsonFragment([
                 'code' => WholesaleTwoChickenVariant::PROCESSED,
                 'additional_grams' => 0,
                 'configurable' => false,
             ]);
+
+        $this->assertEmpty(array_diff(
+            TipoPollo::wholesaleTwoManualPriceCodes(),
+            collect($response->json('data.catalogs.chicken_types'))->pluck('code')->all(),
+        ));
+    }
+
+    public function test_standard_wholesale_management_rejects_wholesale_two_only_products(): void
+    {
+        $payload = $this->updatePayload();
+        $payload['chicken_type_code'] = TipoPollo::HEN_RED;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('chicken_type_code');
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $this->liveTypeId,
+        ]);
+    }
+
+    public function test_wholesale_two_exposes_the_frozen_special_price_and_amount_for_reprinting(): void
+    {
+        $henRedTypeId = (int) TipoPollo::query()
+            ->where('codigo', TipoPollo::HEN_RED)
+            ->value('id');
+
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_pollo_id' => $henRedTypeId,
+                'sexo' => null,
+                'presentacion_pollo' => null,
+            ]);
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $henRedTypeId,
+            'precio_historial_id' => null,
+            'precio_kg' => 9.75,
+            'origen_precio' => 'MANUAL',
+            'congelado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        $this->getJson("/api/v1/operacion/tickets/{$this->ticketId}/pesadas")
+            ->assertOk()
+            ->assertJsonPath(
+                'data.ticket.weighings.0.chicken_variant_code',
+                WholesaleTwoChickenVariant::HEN_RED
+            )
+            ->assertJsonPath('data.ticket.prices.GALLINA_ROJA.chicken_type.name', 'Gallina roja')
+            ->assertJsonPath('data.ticket.prices.GALLINA_ROJA.price_kg', 9.75)
+            ->assertJsonPath('data.ticket.prices.GALLINA_ROJA.source', 'MANUAL')
+            ->assertJsonPath('data.ticket.prices.GALLINA_ROJA.history_id', null)
+            ->assertJsonPath('data.ticket.weighings.0.price_kg', 9.75)
+            ->assertJsonPath('data.ticket.weighings.0.price_origin', 'MANUAL')
+            ->assertJsonPath('data.ticket.weighings.0.price_history_id', null)
+            ->assertJsonPath('data.ticket.weighings.0.amount', 253.5)
+            ->assertJsonPath('data.ticket.summary.amount', 253.5);
+    }
+
+    public function test_wholesale_two_can_edit_the_weight_of_a_special_product_without_changing_its_ticket_price(): void
+    {
+        $henRedTypeId = $this->configureWholesaleTwoSpecialWeighing();
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_type_code'] = TipoPollo::HEN_RED;
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::HEN_RED;
+        $payload['read_weight_kg'] = 30;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.chicken_variant_code', WholesaleTwoChickenVariant::HEN_RED)
+            ->assertJsonPath('data.ticket.weighings.0.price_kg', 9.75)
+            ->assertJsonPath('data.ticket.weighings.0.price_origin', 'MANUAL')
+            ->assertJsonPath('data.ticket.weighings.0.read_weight_kg', 30)
+            ->assertJsonPath('data.ticket.weighings.0.adjustment.additional_grams', 100)
+            ->assertJsonPath('data.ticket.weighings.0.gross_weight_kg', 32.4)
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 22.4);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $henRedTypeId,
+            'ajuste_peso_mayorista_2_gramos' => 100,
+            'peso_leido_kg' => 30,
+            'peso_neto_kg' => 22.4,
+        ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $henRedTypeId,
+            'precio_historial_id' => null,
+            'precio_kg' => 9.75,
+            'origen_precio' => 'MANUAL',
+        ]);
+    }
+
+    public function test_wholesale_two_management_blocks_classification_changes_that_would_orphan_a_special_price(): void
+    {
+        $henRedTypeId = $this->configureWholesaleTwoSpecialWeighing();
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_type_code'] = TipoPollo::HEN_DOUBLE;
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::HEN_DOUBLE;
+        $payload['read_weight_kg'] = 30;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['chicken_variant_code']);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $henRedTypeId,
+            'estado' => Pesada::STATUS_ACTIVE,
+        ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $henRedTypeId,
+            'precio_kg' => 9.75,
+        ]);
+        $this->assertDatabaseMissing('ticket_precios', [
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => TipoPollo::query()->where('codigo', TipoPollo::HEN_DOUBLE)->value('id'),
+        ]);
+    }
+
+    public function test_voiding_the_last_special_weighing_removes_its_now_unused_ticket_price(): void
+    {
+        $henRedTypeId = $this->configureWholesaleTwoSpecialWeighing();
+
+        $this->deleteJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            ['reason' => 'Registro especial duplicado']
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings', []);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $henRedTypeId,
+            'estado' => Pesada::STATUS_VOIDED,
+        ]);
+        $this->assertDatabaseMissing('ticket_precios', [
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $henRedTypeId,
+        ]);
     }
 
     public function test_administrator_can_void_a_ticket_from_weighing_management(): void
@@ -1315,6 +1482,41 @@ class TicketWeighingManagementApiTest extends TestCase
         $adjustment->update(['gramos_adicionales' => $grams]);
 
         return $adjustment->refresh();
+    }
+
+    private function configureWholesaleTwoSpecialWeighing(): int
+    {
+        $typeId = (int) TipoPollo::query()
+            ->where('codigo', TipoPollo::HEN_RED)
+            ->value('id');
+        $adjustment = $this->wholesaleTwoAdjustment(WholesaleTwoChickenVariant::HEN_RED, 100);
+
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_pollo_id' => $typeId,
+                'sexo' => null,
+                'presentacion_pollo' => null,
+                'ajuste_peso_mayorista_2_id' => $adjustment->id,
+                'ajuste_peso_mayorista_2_gramos' => 100,
+                'peso_leido_kg' => 40,
+                'peso_bruto_kg' => 42,
+                'peso_neto_kg' => 28,
+            ]);
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $typeId,
+            'precio_historial_id' => null,
+            'precio_kg' => 9.75,
+            'origen_precio' => 'MANUAL',
+            'congelado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        return $typeId;
     }
 
     /** @return array<string, mixed> */

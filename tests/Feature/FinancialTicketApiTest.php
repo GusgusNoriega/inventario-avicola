@@ -536,10 +536,16 @@ class FinancialTicketApiTest extends TestCase
             $this->sourceClientId,
             $this->twoTypeValues(),
         );
+        $priceId = $ticket['price_ids'][$this->firstChickenTypeId];
+
+        DB::table('ticket_precios')->where('id', $priceId)->update([
+            'precio_historial_id' => null,
+            'origen_precio' => 'MANUAL',
+        ]);
 
         $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/precios", [
             'precios' => [[
-                'id' => $ticket['price_ids'][$this->firstChickenTypeId],
+                'id' => $priceId,
                 'precio_kg' => '9.1000',
             ]],
         ])
@@ -549,22 +555,28 @@ class FinancialTicketApiTest extends TestCase
 
         $this->assertDecimalValue(
             'ticket_precios',
-            $ticket['price_ids'][$this->firstChickenTypeId],
+            $priceId,
             'precio_kg',
             '9.1000',
             4,
         );
         $this->assertDatabaseHas('ticket_precios', [
-            'id' => $ticket['price_ids'][$this->firstChickenTypeId],
+            'id' => $priceId,
             'origen_precio' => 'MANUAL',
             'congelado_por' => $this->user->id,
         ]);
         $this->assertDatabaseHas('auditoria_eventos', [
             'empresa_id' => $this->user->empresa_id,
             'entidad' => 'ticket_precios',
-            'entidad_id' => (string) $ticket['price_ids'][$this->firstChickenTypeId],
+            'entidad_id' => (string) $priceId,
             'accion' => 'EDITAR_PRECIO',
         ]);
+        $audit = DB::table('auditoria_eventos')
+            ->where('entidad', 'ticket_precios')
+            ->where('entidad_id', (string) $priceId)
+            ->where('accion', 'EDITAR_PRECIO')
+            ->firstOrFail();
+        $this->assertNull(json_decode($audit->datos_antes, true, flags: JSON_THROW_ON_ERROR)['precio_historial_id']);
         $this->assertDatabaseHas('comprobantes', [
             'empresa_id' => $this->user->empresa_id,
             'tercero_id' => $this->sourceClientId,

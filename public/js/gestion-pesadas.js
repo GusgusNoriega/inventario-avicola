@@ -12,7 +12,15 @@ const WHOLESALE_TWO_CHICKEN_VARIANTS = Object.freeze([
   { code: "MACHO_CERRADO", label: "Macho cerrado", shortLabel: "MC", typeCode: "POLLO_PELADO", sex: "MACHO", presentation: "CERRADO" },
   { code: "HEMBRA_ABIERTA", label: "Hembra abierta", shortLabel: "HA", typeCode: "POLLO_PELADO", sex: "HEMBRA", presentation: "ABIERTA" },
   { code: "HEMBRA_CERRADA", label: "Hembra cerrada", shortLabel: "HC", typeCode: "POLLO_PELADO", sex: "HEMBRA", presentation: "CERRADA" },
-  { code: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "PB", typeCode: "POLLO_BENEFICIADO", sex: null, presentation: null }
+  { code: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "PB", typeCode: "POLLO_BENEFICIADO", sex: null, presentation: null },
+  { code: "GALLINA_ROJA", label: "Gallina roja", shortLabel: "GR", typeCode: "GALLINA_ROJA", sex: null, presentation: null },
+  { code: "GALLINA_DOBLE", label: "Gallina doble", shortLabel: "GD", typeCode: "GALLINA_DOBLE", sex: null, presentation: null },
+  { code: "OTROS", label: "Otros", shortLabel: "OT", typeCode: "OTROS", sex: null, presentation: null }
+]);
+const WHOLESALE_TWO_PRICE_REQUIRED_VARIANTS = new Set([
+  "GALLINA_ROJA",
+  "GALLINA_DOBLE",
+  "OTROS"
 ]);
 
 const elements = {
@@ -153,6 +161,10 @@ function usesWholesaleTwoVariants(ticket) {
 function wholesaleTwoVariantByCode(value) {
   const code = String(value || "").trim().toUpperCase();
   return WHOLESALE_TWO_CHICKEN_VARIANTS.find((variant) => variant.code === code) || null;
+}
+
+function requiresWholesaleTwoTicketPrice(value) {
+  return WHOLESALE_TWO_PRICE_REQUIRED_VARIANTS.has(String(value || "").trim().toUpperCase());
 }
 
 function wholesaleTwoVariantForWeighing(weighing) {
@@ -322,6 +334,35 @@ function getPrintedTypeCode(weighing, ticket) {
   return printedCodes[typeCode] || typeCode || "PV";
 }
 
+function optionalNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function missingWholesaleTwoPrices(ticket) {
+  if (!usesWholesaleTwoVariants(ticket)) {
+    return [];
+  }
+
+  const missingByCode = new Map();
+  (ticket.weighings || []).forEach((weighing) => {
+    const variant = wholesaleTwoVariantForWeighing(weighing);
+    if (
+      variant
+      && WHOLESALE_TWO_PRICE_REQUIRED_VARIANTS.has(variant.code)
+      && !(optionalNumber(weighing.price_kg) > 0)
+    ) {
+      missingByCode.set(variant.code, variant.label);
+    }
+  });
+
+  return Array.from(missingByCode.values());
+}
+
 function buildSelectedTicketPrintData(ticket) {
   const retail = isRetailTicket(ticket);
 
@@ -347,8 +388,8 @@ function buildSelectedTicketPrintData(ticket) {
       grossWeight: Number(weighing.gross_weight_kg) || 0,
       tareWeight: Number(weighing.tare_weight_kg) || 0,
       netWeight: Number(weighing.net_weight_kg) || 0,
-      priceKg: Number(weighing.price_kg) || 0,
-      amount: Number(weighing.amount) || 0,
+      priceKg: optionalNumber(weighing.price_kg),
+      amount: optionalNumber(weighing.amount),
       adjustment: weighing.adjustment || null
     }))
   };
@@ -364,6 +405,12 @@ function printSelectedTicket() {
 
   if (!ticket.weighings?.length) {
     setMessage("El ticket seleccionado no tiene pesadas para imprimir.", true);
+    return;
+  }
+
+  const missingPrices = missingWholesaleTwoPrices(ticket);
+  if (missingPrices.length) {
+    setMessage(`Asigna un precio a ${missingPrices.join(", ")} antes de imprimir el ticket.`, true);
     return;
   }
 
@@ -746,12 +793,20 @@ async function saveDelivery(event) {
 }
 
 function renderEditOptions() {
+  const originalVariant = wholesaleTwoVariantForWeighing(state.editingWeighing);
+  const originalRequiresTicketPrice = requiresWholesaleTwoTicketPrice(originalVariant?.code);
   elements.chickenType.innerHTML = (state.catalogs.chicken_types || [])
     .map((type) => `<option value="${escapeHtml(type.code)}">${escapeHtml(type.name)}</option>`)
     .join("");
   elements.chickenVariant.innerHTML = WHOLESALE_TWO_CHICKEN_VARIANTS
-    .map((variant) => `<option value="${escapeHtml(variant.code)}">${escapeHtml(variant.label)}</option>`)
+    .map((variant) => {
+      const disabled = originalRequiresTicketPrice
+        ? variant.code !== originalVariant.code
+        : requiresWholesaleTwoTicketPrice(variant.code);
+      return `<option value="${escapeHtml(variant.code)}"${disabled ? " disabled" : ""}>${escapeHtml(variant.label)}</option>`;
+    })
     .join("");
+  elements.chickenVariant.disabled = originalRequiresTicketPrice;
   elements.cageType.innerHTML = (state.catalogs.cage_types || [])
     .map((type) => `<option value="${escapeHtml(type.code)}">${escapeHtml(type.name)} (${Number(type.weight_kg).toFixed(3)} kg)</option>`)
     .join("");
@@ -839,7 +894,12 @@ function openEditModal(weighingId) {
     ? weighing.weight_source
     : "MANUAL";
   elements.weighedAt.value = String(weighing.weighed_at || "").slice(0, 16);
-  setModalMessage(elements.editMessage, "");
+  setModalMessage(
+    elements.editMessage,
+    requiresWholesaleTwoTicketPrice(state.editingChickenVariantCode)
+      ? "La clasificación queda bloqueada para conservar el precio asignado al ticket. Puedes corregir cantidades, java, peso, origen y fecha."
+      : ""
+  );
   updateWeightPreview();
   elements.editModal.hidden = false;
   elements.birdsPerCage.focus();

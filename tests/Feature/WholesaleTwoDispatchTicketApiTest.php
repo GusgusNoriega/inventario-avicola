@@ -58,6 +58,9 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
             TipoPollo::CHICKEN_DRESSED => 'Pollo pelado',
             TipoPollo::CHICKEN_PROCESSED => 'Pollo beneficiado',
             TipoPollo::CHICKEN_DEAD => 'Pollo muerto',
+            TipoPollo::HEN_RED => 'Gallina roja',
+            TipoPollo::HEN_DOUBLE => 'Gallina doble',
+            TipoPollo::OTHER => 'Otros',
         ])->each(function (string $name, string $code): void {
             DB::table('tipos_pollo')->updateOrInsert([
                 'codigo' => $code,
@@ -172,9 +175,182 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
         }
     }
 
+    public function test_gallinas_and_others_store_independent_adjustments_and_manual_ticket_prices(): void
+    {
+        $this->getJson('/api/v1/despacho-mayorista-2/configuracion-mermas')->assertOk();
+        DB::table('ajustes_peso_mayorista_2')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', WholesaleTwoChickenVariant::HEN_RED)
+            ->update(['gramos_adicionales' => 100]);
+        DB::table('ajustes_peso_mayorista_2')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', WholesaleTwoChickenVariant::HEN_DOUBLE)
+            ->update(['gramos_adicionales' => 200]);
+        DB::table('ajustes_peso_mayorista_2')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->where('codigo', WholesaleTwoChickenVariant::OTHER)
+            ->update(['gramos_adicionales' => 900]);
+
+        $payload = $this->ticketPayload();
+        $red = $this->weighing(1, TipoPollo::HEN_RED, WholesaleTwoChickenVariant::HEN_RED);
+        $red['birds_per_cage'] = 10;
+        $red['read_weight_kg'] = 20;
+        $double = $this->weighing(2, TipoPollo::HEN_DOUBLE, WholesaleTwoChickenVariant::HEN_DOUBLE);
+        $double['birds_per_cage'] = 5;
+        $double['read_weight_kg'] = 30;
+        $other = $this->weighing(3, TipoPollo::OTHER, WholesaleTwoChickenVariant::OTHER);
+        $other['read_weight_kg'] = 7.5;
+        $payload['weighings'] = [$red, $double, $other];
+        $payload['manual_prices'] = [
+            TipoPollo::HEN_RED => 8.5,
+            TipoPollo::HEN_DOUBLE => 9.25,
+            TipoPollo::OTHER => 4,
+        ];
+
+        $response = $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.prices.GALLINA_ROJA.price_kg', 8.5)
+            ->assertJsonPath('data.prices.GALLINA_ROJA.source', 'MANUAL')
+            ->assertJsonPath('data.prices.GALLINA_ROJA.history_id', null)
+            ->assertJsonPath('data.prices.GALLINA_DOBLE.price_kg', 9.25)
+            ->assertJsonPath('data.prices.GALLINA_DOBLE.source', 'MANUAL')
+            ->assertJsonPath('data.prices.OTROS.price_kg', 4)
+            ->assertJsonPath('data.prices.OTROS.source', 'MANUAL')
+            ->assertJsonPath('data.totals.net_weight_kg', 59.5)
+            ->assertJsonPath('data.totals.amount', 495.25)
+            ->assertJsonPath('data.weighings.0.chicken_variant_code', WholesaleTwoChickenVariant::HEN_RED)
+            ->assertJsonPath('data.weighings.0.adjustment.additional_grams', 100)
+            ->assertJsonPath('data.weighings.0.net_weight_kg', 21)
+            ->assertJsonPath('data.weighings.0.price_kg', 8.5)
+            ->assertJsonPath('data.weighings.0.price_origin', 'MANUAL')
+            ->assertJsonPath('data.weighings.0.price_history_id', null)
+            ->assertJsonPath('data.weighings.0.amount', 178.5)
+            ->assertJsonPath('data.weighings.1.chicken_variant_code', WholesaleTwoChickenVariant::HEN_DOUBLE)
+            ->assertJsonPath('data.weighings.1.adjustment.additional_grams', 200)
+            ->assertJsonPath('data.weighings.1.net_weight_kg', 31)
+            ->assertJsonPath('data.weighings.1.amount', 286.75)
+            ->assertJsonPath('data.weighings.2.chicken_variant_code', WholesaleTwoChickenVariant::OTHER)
+            ->assertJsonPath('data.weighings.2.adjustment.code', WholesaleTwoChickenVariant::OTHER)
+            ->assertJsonPath('data.weighings.2.adjustment.additional_grams', 0)
+            ->assertJsonPath('data.weighings.2.adjustment.configurable', false)
+            ->assertJsonPath('data.weighings.2.gross_weight_kg', 7.5)
+            ->assertJsonPath('data.weighings.2.price_kg', 4)
+            ->assertJsonPath('data.weighings.2.amount', 30);
+
+        $ticketId = (int) $response->json('data.id');
+        foreach ($payload['manual_prices'] as $code => $price) {
+            $this->assertDatabaseHas('ticket_precios', [
+                'ticket_id' => $ticketId,
+                'tipo_pollo_id' => $this->typeIds[$code],
+                'precio_historial_id' => null,
+                'precio_kg' => $price,
+                'origen_precio' => 'MANUAL',
+            ]);
+        }
+        $this->assertDatabaseCount('ticket_precios', 3);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_RED],
+            'ajuste_peso_mayorista_2_gramos' => 100,
+            'peso_bruto_kg' => 21,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_DOUBLE],
+            'ajuste_peso_mayorista_2_gramos' => 200,
+            'peso_bruto_kg' => 31,
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::OTHER],
+            'ajuste_peso_mayorista_2_gramos' => 0,
+            'peso_bruto_kg' => 7.5,
+        ]);
+        $this->assertDatabaseHas('ajustes_peso_mayorista_2', [
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => WholesaleTwoChickenVariant::OTHER,
+            'gramos_adicionales' => 0,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticketId}",
+            'total' => 495.25,
+        ]);
+    }
+
+    public function test_special_manual_prices_must_match_exactly_the_products_in_the_ticket(): void
+    {
+        $missing = $this->ticketPayload();
+        $missing['weighings'] = [
+            $this->weighing(1, TipoPollo::HEN_RED, WholesaleTwoChickenVariant::HEN_RED),
+        ];
+        $this->postJson('/api/v1/despacho-mayorista-2/tickets', $missing)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('manual_prices');
+
+        $partial = $this->ticketPayload();
+        $partial['weighings'] = [
+            $this->weighing(1, TipoPollo::HEN_RED, WholesaleTwoChickenVariant::HEN_RED),
+            $this->weighing(2, TipoPollo::HEN_DOUBLE, WholesaleTwoChickenVariant::HEN_DOUBLE),
+        ];
+        $partial['manual_prices'] = [TipoPollo::HEN_RED => 8.5];
+        $this->postJson('/api/v1/despacho-mayorista-2/tickets', $partial)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'manual_prices',
+                'manual_prices.'.TipoPollo::HEN_DOUBLE,
+            ]);
+
+        $extra = $this->ticketPayload();
+        $extra['manual_prices'] = [TipoPollo::OTHER => 4];
+        $this->postJson('/api/v1/despacho-mayorista-2/tickets', $extra)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('manual_prices');
+
+        $precision = $this->ticketPayload();
+        $precision['weighings'] = [
+            $this->weighing(1, TipoPollo::OTHER, WholesaleTwoChickenVariant::OTHER),
+        ];
+        $precision['manual_prices'] = [TipoPollo::OTHER => 4.001];
+        $this->postJson('/api/v1/despacho-mayorista-2/tickets', $precision)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('manual_prices.'.TipoPollo::OTHER);
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('ticket_precios', 0);
+    }
+
+    public function test_standard_and_special_prices_are_frozen_together_without_a_special_client_rate(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][] = $this->weighing(
+            2,
+            TipoPollo::HEN_RED,
+            WholesaleTwoChickenVariant::HEN_RED,
+        );
+        $payload['manual_prices'] = [TipoPollo::HEN_RED => 8.5];
+
+        $response = $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.prices.POLLO_VIVO.price_kg', 5)
+            ->assertJsonPath('data.prices.POLLO_VIVO.source', 'CLIENTE')
+            ->assertJsonPath('data.prices.GALLINA_ROJA.price_kg', 8.5)
+            ->assertJsonPath('data.prices.GALLINA_ROJA.source', 'MANUAL')
+            ->assertJsonPath('data.prices.GALLINA_ROJA.history_id', null)
+            ->assertJsonPath('data.totals.amount', 135);
+
+        $this->assertDatabaseCount('ticket_precios', 2);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $response->json('data.id'),
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_RED],
+            'precio_historial_id' => null,
+            'precio_kg' => 8.5,
+            'origen_precio' => 'MANUAL',
+        ]);
+    }
+
     public function test_catalog_returns_java_680_in_descending_weight_order(): void
     {
-        $this->getJson('/api/v1/despacho-mayorista-2/catalogo')
+        $response = $this->getJson('/api/v1/despacho-mayorista-2/catalogo')
             ->assertOk()
             ->assertJsonCount(3, 'data.cage_types')
             ->assertJsonPath('data.cage_types.0.code', 'JAVA_700')
@@ -184,6 +360,11 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.cage_types.2.code', 'JAVA_680')
             ->assertJsonPath('data.cage_types.2.name', 'Java 6.80 kg')
             ->assertJsonPath('data.cage_types.2.weight_kg', 6.8);
+
+        $this->assertEmpty(array_diff(
+            TipoPollo::wholesaleTwoManualPriceCodes(),
+            collect($response->json('data.chicken_types'))->pluck('code')->all(),
+        ));
     }
 
     public function test_java_680_weight_is_frozen_and_used_for_wholesale_two_tare_and_net_weight(): void

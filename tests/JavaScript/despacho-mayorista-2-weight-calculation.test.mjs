@@ -12,10 +12,12 @@ const configurableVariants = [
   "MACHO_ABIERTO",
   "MACHO_CERRADO",
   "HEMBRA_ABIERTA",
-  "HEMBRA_CERRADA"
+  "HEMBRA_CERRADA",
+  "GALLINA_ROJA",
+  "GALLINA_DOBLE"
 ];
 
-test("las seis variantes configurables suman la merma por cada ave antes de la tara", () => {
+test("las ocho variantes configurables suman la merma por cada ave antes de la tara", () => {
   for (const variantCode of configurableVariants) {
     const result = calculateWholesaleTwoWeightBreakdown({
       variantCode,
@@ -51,6 +53,22 @@ test("pollo beneficiado fuerza merma cero aunque llegue un valor configurado", (
   assert.equal(result.totalAdjustmentGrams, 0);
   assert.equal(result.grossWeight, 12.345);
   assert.equal(result.netWeightKg, 9.845);
+});
+
+test("otros fuerza merma cero aunque llegue un valor configurado", () => {
+  const result = calculateWholesaleTwoWeightBreakdown({
+    variantCode: "OTROS",
+    readWeightKg: 15.5,
+    cageCount: 1,
+    birdsPerCage: 1,
+    crateWeightKg: 7,
+    configuredAdjustmentGrams: 750
+  });
+
+  assert.equal(result.adjustmentGrams, 0);
+  assert.equal(result.totalAdjustmentGrams, 0);
+  assert.equal(result.grossWeight, 15.5);
+  assert.equal(result.netWeightKg, 8.5);
 });
 
 test("las devoluciones no reciben merma y cero javas conserva las aves como total", () => {

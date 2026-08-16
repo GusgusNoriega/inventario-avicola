@@ -91,6 +91,8 @@ const CUSTOM_FONT_SIZE_ITEMS = CUSTOM_FONT_SIZE_GROUPS.flatMap((group) => group.
 const CHICKEN_TYPES = [
   { id: "pollo_vivo", apiCode: "POLLO_VIVO", label: "Pollo vivo", shortLabel: "Vivo", tagClass: "tag-pollo-vivo" },
   { id: "pollo_pelado", apiCode: "POLLO_PELADO", label: "Pollo pelado", shortLabel: "Pelado", tagClass: "tag-pollo-pelado" },
+  { id: "gallina", apiCode: "GALLINA_ROJA", label: "Gallina", shortLabel: "Gallina", tagClass: "tag-gallina-roja" },
+  { id: "otros", apiCode: "OTROS", label: "Otros", shortLabel: "Otros", tagClass: "tag-otros" },
   { id: "pollo_beneficiado", apiCode: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "Benef.", tagClass: "tag-pollo-beneficiado" }
 ];
 const DISPATCH_CHICKEN_TYPES = CHICKEN_TYPES.filter((type) => type.id !== "pollo_beneficiado");
@@ -104,15 +106,38 @@ const DRESSED_CHICKEN_VARIANTS = [
 const DEFAULT_DRESSED_CHICKEN_VARIANT = DRESSED_CHICKEN_VARIANTS[0].code;
 const VALID_DRESSED_CHICKEN_VARIANTS = new Set(DRESSED_CHICKEN_VARIANTS.map((variant) => variant.code));
 const LIVE_CHICKEN_VARIANTS = [
-  { code: "MACHO", label: "Vivo macho", shortLabel: "PV-M", typeId: "pollo_vivo", sex: "macho", presentation: null, tagClass: "tag-pollo-vivo" },
-  { code: "HEMBRA", label: "Vivo hembra", shortLabel: "PV-H", typeId: "pollo_vivo", sex: "hembra", presentation: null, tagClass: "tag-pollo-vivo" }
+  { code: "MACHO", apiCode: "POLLO_VIVO", label: "Vivo macho", shortLabel: "PV-M", typeId: "pollo_vivo", sex: "macho", presentation: null, tagClass: "tag-pollo-vivo" },
+  { code: "HEMBRA", apiCode: "POLLO_VIVO", label: "Vivo hembra", shortLabel: "PV-H", typeId: "pollo_vivo", sex: "hembra", presentation: null, tagClass: "tag-pollo-vivo" }
 ];
-const DISPATCH_CHICKEN_VARIANTS = [...LIVE_CHICKEN_VARIANTS, ...DRESSED_CHICKEN_VARIANTS];
+const HEN_VARIANTS = [
+  { code: "GALLINA_ROJA", apiCode: "GALLINA_ROJA", label: "Gallina roja", shortLabel: "GR", typeId: "gallina", sex: null, presentation: null, tagClass: "tag-gallina-roja" },
+  { code: "GALLINA_DOBLE", apiCode: "GALLINA_DOBLE", label: "Gallina doble", shortLabel: "GD", typeId: "gallina", sex: null, presentation: null, tagClass: "tag-gallina-doble" }
+];
+const OTHER_PRODUCT_VARIANT = {
+  code: "OTROS",
+  apiCode: "OTROS",
+  label: "Otros",
+  shortLabel: "OT",
+  typeId: "otros",
+  sex: null,
+  presentation: null,
+  tagClass: "tag-otros"
+};
+const DEFAULT_HEN_VARIANT = HEN_VARIANTS[0].code;
+const VALID_HEN_VARIANTS = new Set(HEN_VARIANTS.map((variant) => variant.code));
+const MANUAL_PRICE_PRODUCTS = [...HEN_VARIANTS, OTHER_PRODUCT_VARIANT];
+const MANUAL_PRICE_PRODUCT_CODES = new Set(MANUAL_PRICE_PRODUCTS.map((product) => product.apiCode));
+const DISPATCH_CHICKEN_VARIANTS = [
+  ...LIVE_CHICKEN_VARIANTS,
+  ...DRESSED_CHICKEN_VARIANTS,
+  ...HEN_VARIANTS,
+  OTHER_PRODUCT_VARIANT
+];
 const DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS = DISPATCH_CHICKEN_VARIANTS.map((variant) => ({
   variantCode: variant.code,
   name: variant.label,
   additionalGrams: 0,
-  configurable: variant.code !== "POLLO_BENEFICIADO"
+  configurable: !["POLLO_BENEFICIADO", "OTROS"].includes(variant.code)
 }));
 const TICKET_OPERATIONS = {
   DISPATCH: "DESPACHO",
@@ -137,7 +162,12 @@ const LEGACY_TYPE_MAP = {
   hembra_cerrada: "pollo_vivo",
   hembra_abierta: "pollo_vivo",
   macho_cerrado: "pollo_pelado",
-  macho_abierto: "pollo_pelado"
+  macho_abierto: "pollo_pelado",
+  gallina_roja: "gallina",
+  gallina_doble: "gallina",
+  roja: "gallina",
+  doble: "gallina",
+  ot: "otros"
 };
 
 const CLIENTS = [
@@ -320,6 +350,8 @@ const elements = {
   sexButtons: document.querySelectorAll("[data-sex]"),
   dressedVariantSelector: document.getElementById("dressedVariantSelector"),
   dressedVariantButtons: document.querySelectorAll("[data-dressed-variant]"),
+  henVariantSelector: document.getElementById("henVariantSelector"),
+  henVariantButtons: document.querySelectorAll("[data-hen-variant]"),
   truckSelect: document.getElementById("truckSelect"),
   selectProviderBtn: document.getElementById("selectProviderBtn"),
   selectedOriginSummary: document.querySelector(".selected-origin-summary"),
@@ -404,6 +436,8 @@ const elements = {
   editSexButtons: document.querySelectorAll("[data-edit-sex]"),
   editDressedVariantSelector: document.getElementById("editDressedVariantSelector"),
   editDressedVariantButtons: document.querySelectorAll("[data-edit-dressed-variant]"),
+  editHenVariantSelector: document.getElementById("editHenVariantSelector"),
+  editHenVariantButtons: document.querySelectorAll("[data-edit-hen-variant]"),
   editCrateType: document.getElementById("editCrateType"),
   editWeight: document.getElementById("editWeight"),
   editWeightBreakdown: document.getElementById("editWeightBreakdown"),
@@ -424,6 +458,14 @@ const elements = {
   errorModalTitle: document.getElementById("errorModalTitle"),
   errorModalMessage: document.getElementById("errorModalMessage"),
   errorModalDetails: document.getElementById("errorModalDetails"),
+  specialPriceModal: document.getElementById("specialPriceModal"),
+  specialPriceForm: document.getElementById("specialPriceForm"),
+  specialPriceTicketLabel: document.getElementById("specialPriceTicketLabel"),
+  specialPriceFields: document.getElementById("specialPriceFields"),
+  specialPriceMessage: document.getElementById("specialPriceMessage"),
+  closeSpecialPriceBtn: document.getElementById("closeSpecialPriceBtn"),
+  cancelSpecialPriceBtn: document.getElementById("cancelSpecialPriceBtn"),
+  saveSpecialPriceBtn: document.getElementById("saveSpecialPriceBtn"),
   touchSelectModal: document.getElementById("touchSelectModal"),
   touchSelectTitle: document.getElementById("touchSelectTitle"),
   touchSelectCurrentValue: document.getElementById("touchSelectCurrentValue"),
@@ -533,6 +575,8 @@ let providerPickerContext = null;
 let editSelectedOrigin = null;
 let editingChickenSex = DEFAULT_CHICKEN_SEX;
 let editingDressedVariantCode = DEFAULT_DRESSED_CHICKEN_VARIANT;
+let editingHenVariantCode = DEFAULT_HEN_VARIANT;
+let specialPriceContext = null;
 let scaleTextDecoder = new TextDecoder("utf-8");
 let scaleConnections = { 1: null, 2: null };
 let scaleConnectionGenerations = { 1: 0, 2: 0 };
@@ -606,6 +650,73 @@ function normalizeReturnCondition(condition) {
   return "vivo";
 }
 
+function normalizeManualPrice(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 99999999.99) {
+    return null;
+  }
+
+  return Math.round((numeric + Number.EPSILON) * 100) / 100;
+}
+
+function getManualPriceProductMeta(code) {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  return MANUAL_PRICE_PRODUCTS.find((product) => product.apiCode === normalizedCode) || null;
+}
+
+function normalizeManualPrices(prices) {
+  const source = prices && typeof prices === "object" ? prices : {};
+  const normalized = {};
+
+  MANUAL_PRICE_PRODUCTS.forEach((product) => {
+    const raw = source[product.apiCode];
+    const value = normalizeManualPrice(
+      raw && typeof raw === "object"
+        ? raw.priceKg ?? raw.price_kg ?? raw.value
+        : raw
+    );
+    if (value !== null) {
+      normalized[product.apiCode] = value;
+    }
+  });
+
+  return normalized;
+}
+
+function normalizeRegisteredTicketPrices(prices) {
+  const entries = Array.isArray(prices)
+    ? prices.map((price) => [price?.code || price?.chicken_type_code, price])
+    : Object.entries(prices && typeof prices === "object" ? prices : {});
+
+  return entries.reduce((result, [rawCode, rawPrice]) => {
+    const code = String(
+      rawCode
+        || rawPrice?.code
+        || rawPrice?.chicken_type_code
+        || rawPrice?.chickenTypeCode
+        || ""
+    ).trim().toUpperCase();
+    const priceKg = normalizeManualPrice(
+      rawPrice && typeof rawPrice === "object"
+        ? rawPrice.price_kg ?? rawPrice.priceKg
+        : rawPrice
+    );
+
+    if (!code || priceKg === null) {
+      return result;
+    }
+
+    result[code] = {
+      code,
+      name: String(rawPrice?.name || rawPrice?.chicken_type_name || getManualPriceProductMeta(code)?.label || code),
+      priceKg,
+      source: String(rawPrice?.source || rawPrice?.origin || "MANUAL").toUpperCase(),
+      historyId: Number(rawPrice?.history_id || rawPrice?.price_history_id) || null
+    };
+    return result;
+  }, {});
+}
+
 function getReturnConditionMeta(condition) {
   const normalizedCondition = normalizeReturnCondition(condition);
   return RETURN_CONDITIONS.find((item) => item.id === normalizedCondition) || RETURN_CONDITIONS[0];
@@ -651,6 +762,9 @@ function normalizeTicketRegistration(registration) {
     ticketTitle: String(registration?.ticketTitle ?? registration?.ticket_title ?? "").trim(),
     hasTicketMessage,
     ticketMessage: String(registration?.ticketMessage ?? registration?.ticket_message ?? "").trim(),
+    prices: normalizeRegisteredTicketPrices(
+      registration?.prices || registration?.manualPrices || registration?.manual_prices
+    ),
     destination: registration?.destination
       ? {
           type: String(registration.destination.type || ""),
@@ -684,6 +798,7 @@ function createDefaultTruck(index) {
     draftId: createDraftId(),
     operationType: TICKET_OPERATIONS.DISPATCH,
     registration: null,
+    manualPrices: {},
     clientId: null,
     destination: null,
     cages: []
@@ -702,6 +817,7 @@ function resetTruckColumn(truck) {
   truck.draftId = createDraftId();
   truck.operationType = TICKET_OPERATIONS.DISPATCH;
   truck.registration = null;
+  truck.manualPrices = {};
   truck.clientId = null;
   truck.destination = null;
   truck.cages = [];
@@ -921,6 +1037,16 @@ function normalizeDispatchFamily(type) {
   return normalizedType === "pollo_beneficiado" ? "pollo_pelado" : normalizedType;
 }
 
+function normalizeHenVariant(value, fallback = DEFAULT_HEN_VARIANT) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return VALID_HEN_VARIANTS.has(normalized) ? normalized : fallback;
+}
+
+function getHenVariantMeta(value) {
+  const normalized = normalizeHenVariant(value);
+  return HEN_VARIANTS.find((variant) => variant.code === normalized) || HEN_VARIANTS[0];
+}
+
 function normalizeDressedChickenVariant(value, fallback = DEFAULT_DRESSED_CHICKEN_VARIANT) {
   const normalized = String(value || "").trim().toUpperCase();
   return VALID_DRESSED_CHICKEN_VARIANTS.has(normalized) ? normalized : fallback;
@@ -948,6 +1074,14 @@ function inferChickenVariantCode(typeId, sex, variantCode = null) {
     return normalizeChickenSex(sex) === "hembra" ? "HEMBRA_CERRADA" : "MACHO_CERRADO";
   }
 
+  if (normalizedType === "gallina") {
+    return normalizeHenVariant(requestedVariant);
+  }
+
+  if (normalizedType === "otros") {
+    return OTHER_PRODUCT_VARIANT.code;
+  }
+
   if (requestedVariant === "MACHO" || requestedVariant === "HEMBRA") {
     return requestedVariant;
   }
@@ -967,6 +1101,43 @@ function getCageChickenVariantMeta(cage) {
     cage?.tipo,
     cage?.chickenSex || cage?.sexo
   );
+}
+
+function getCageProductCode(cage) {
+  const variant = getCageChickenVariantMeta(cage);
+  return variant.apiCode || getTypeMeta(variant.typeId).apiCode;
+}
+
+function getRequiredManualPriceProducts(truck) {
+  if (!truck || isReturnTicket(truck)) {
+    return [];
+  }
+
+  const requiredCodes = new Set(
+    (truck.cages || [])
+      .map((cage) => getCageProductCode(cage))
+      .filter((code) => MANUAL_PRICE_PRODUCT_CODES.has(code))
+  );
+
+  return MANUAL_PRICE_PRODUCTS.filter((product) => requiredCodes.has(product.apiCode));
+}
+
+function getTruckProductPrice(truck, productCode, persistedOnly = false) {
+  const code = String(productCode || "").trim().toUpperCase();
+  const registration = normalizeTicketRegistration(truck?.registration);
+  const persisted = normalizeManualPrice(registration?.prices?.[code]?.priceKg);
+  if (persisted !== null) {
+    return persisted;
+  }
+
+  return persistedOnly
+    ? null
+    : normalizeManualPrice(normalizeManualPrices(truck?.manualPrices)[code]);
+}
+
+function getMissingManualPriceProducts(truck, persistedOnly = false) {
+  return getRequiredManualPriceProducts(truck)
+    .filter((product) => getTruckProductPrice(truck, product.apiCode, persistedOnly) === null);
 }
 
 function normalizeWeightAdjustmentConfiguration(payload) {
@@ -1026,6 +1197,14 @@ function getEntryChickenVariant(truck = getSelectedTruck()) {
       "pollo_vivo",
       chickenSex
     );
+  }
+
+  if (normalizeDispatchFamily(state.selectedType) === "gallina") {
+    return getHenVariantMeta(state.entryDefaults?.henVariantCode);
+  }
+
+  if (normalizeDispatchFamily(state.selectedType) === "otros") {
+    return OTHER_PRODUCT_VARIANT;
   }
 
   return getDressedChickenVariantMeta(state.entryDefaults?.dressedVariantCode);
@@ -1896,6 +2075,7 @@ function createDefaultState() {
       javaCount: 1,
       chickenSex: DEFAULT_CHICKEN_SEX,
       dressedVariantCode: DEFAULT_DRESSED_CHICKEN_VARIANT,
+      henVariantCode: DEFAULT_HEN_VARIANT,
       crateTypeId: DEFAULT_CRATE_TYPE_ID,
       originId: null,
       journeyKey: "",
@@ -2843,6 +3023,12 @@ function loadState(storageKey = activeStorageKey) {
             draftId: String(truck.draftId || truck.draft_id || "").trim() || createDraftId(),
             operationType,
             registration,
+            manualPrices: normalizeManualPrices(
+              truck.manualPrices
+                || truck.specialPrices
+                || truck.preciosEspeciales
+                || registration?.prices
+            ),
             clientId,
             destination: clientId ? destination : null,
             cages: Array.isArray(truck.cages)
@@ -2881,6 +3067,13 @@ function loadState(storageKey = activeStorageKey) {
           || parsed.selectedDressedVariantCode
           || parsed.selectedType,
         fallback.entryDefaults.dressedVariantCode
+      ),
+      henVariantCode: normalizeHenVariant(
+        parsedEntryDefaults.henVariantCode
+          || parsedEntryDefaults.gallinaVariantCode
+          || parsedEntryDefaults.varianteGallina
+          || parsed.selectedHenVariantCode,
+        fallback.entryDefaults.henVariantCode
       ),
       crateTypeId: normalizeCrateTypeId(
         parsedEntryDefaults.crateTypeId
@@ -3323,6 +3516,9 @@ async function saveWeightAdjustmentSettings(event) {
   event.preventDefault();
   const adjustments = [];
   let invalid = false;
+  const expectedConfigurableCodes = DEFAULT_WHOLESALE_TWO_WEIGHT_ADJUSTMENTS
+    .filter((adjustment) => adjustment.configurable)
+    .map((adjustment) => adjustment.variantCode);
 
   elements.weightAdjustmentSettingsInputs.forEach((input) => {
     const grams = Number(input.value);
@@ -3335,7 +3531,12 @@ async function saveWeightAdjustmentSettings(event) {
     });
   });
 
-  if (invalid || adjustments.length !== 6) {
+  const submittedCodes = adjustments.map((adjustment) => adjustment.code);
+  if (
+    invalid
+    || submittedCodes.length !== expectedConfigurableCodes.length
+    || expectedConfigurableCodes.some((code) => !submittedCodes.includes(code))
+  ) {
     setWeightAdjustmentSettingsMessage(
       "Todas las mermas deben ser números enteros entre 0 y 1000000 gramos por ave.",
       true
@@ -6426,6 +6627,136 @@ function closeErrorModal() {
   }
 }
 
+function setSpecialPriceMessage(message, isError = false) {
+  if (!elements.specialPriceMessage) {
+    return;
+  }
+
+  elements.specialPriceMessage.textContent = message || "";
+  elements.specialPriceMessage.classList.toggle("is-error", Boolean(isError));
+}
+
+function renderSpecialPriceFields(truck) {
+  if (!elements.specialPriceFields) {
+    return;
+  }
+
+  const products = getRequiredManualPriceProducts(truck);
+  const prices = normalizeManualPrices(truck?.manualPrices);
+  elements.specialPriceFields.innerHTML = products.map((product) => `
+    <label class="special-price-field" for="specialPrice-${product.apiCode}">
+      <span>
+        <strong>${escapeHtml(product.shortLabel)} · ${escapeHtml(product.label)}</strong>
+        <small>Precio por kilogramo para este ticket</small>
+      </span>
+      <span class="special-price-input-wrap">
+        <span aria-hidden="true">S/</span>
+        <input
+          id="specialPrice-${product.apiCode}"
+          type="number"
+          min="0.01"
+          max="99999999.99"
+          step="0.01"
+          required
+          value="${prices[product.apiCode] ?? ""}"
+          readonly
+          inputmode="none"
+          data-special-price-code="${product.apiCode}"
+          data-keypad-label="Precio por kg de ${escapeHtml(product.label)}"
+        >
+      </span>
+    </label>
+  `).join("");
+  bindNumericInputs();
+}
+
+function openSpecialPriceModal(truckId, options = {}) {
+  const truck = state.trucks.find((item) => item.id === truckId);
+  if (!truck) {
+    setFormMessage("No se encontró el ticket para asignar sus precios.", true);
+    return;
+  }
+
+  const requiredProducts = getRequiredManualPriceProducts(truck);
+  if (!requiredProducts.length) {
+    setFormMessage(`${truck.name} no contiene gallinas ni otros productos que requieran precio manual.`);
+    return;
+  }
+
+  closeTextTouchKeyboard(true, false);
+  closeNumericPad();
+  closeTouchSelect();
+  specialPriceContext = {
+    truckId: truck.id,
+    deliverySelection: options.deliverySelection || null,
+    registerAfterSave: options.registerAfterSave === true
+  };
+  elements.specialPriceTicketLabel.textContent = getTruckTicketLabel(truck);
+  elements.saveSpecialPriceBtn.textContent = specialPriceContext.registerAfterSave
+    ? "Guardar precios y registrar"
+    : "Guardar precios";
+  renderSpecialPriceFields(truck);
+  setSpecialPriceMessage(
+    `Asigna ${requiredProducts.length === 1 ? "el precio" : "los precios"} de ${requiredProducts.map((product) => product.label).join(" y ")}.`
+  );
+  elements.specialPriceModal.hidden = false;
+}
+
+function closeSpecialPriceModal() {
+  if (!elements.specialPriceModal) {
+    return;
+  }
+
+  if (keypadContext.targetInput?.closest?.("#specialPriceModal")) {
+    closeNumericPad();
+  }
+  elements.specialPriceModal.hidden = true;
+  specialPriceContext = null;
+  setSpecialPriceMessage("");
+}
+
+function saveSpecialPrices(event) {
+  event.preventDefault();
+  const context = specialPriceContext;
+  const truck = state.trucks.find((item) => item.id === context?.truckId);
+  if (!context || !truck) {
+    closeSpecialPriceModal();
+    setFormMessage("El ticket seleccionado ya no está disponible.", true);
+    return;
+  }
+
+  const requiredProducts = getRequiredManualPriceProducts(truck);
+  const values = {};
+  for (const product of requiredProducts) {
+    const input = elements.specialPriceFields.querySelector(`[data-special-price-code="${product.apiCode}"]`);
+    const rawValue = String(input?.value || "").trim();
+    const price = normalizeManualPrice(rawValue);
+    if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(rawValue) || price === null) {
+      setSpecialPriceMessage(`Ingresa un precio válido mayor que cero para ${product.label}, con máximo dos decimales.`, true);
+      return;
+    }
+    values[product.apiCode] = price;
+  }
+
+  truck.manualPrices = {
+    ...normalizeManualPrices(truck.manualPrices),
+    ...values
+  };
+  const registerAfterSave = context.registerAfterSave;
+  const deliverySelection = context.deliverySelection;
+  const truckId = truck.id;
+  saveState();
+  closeSpecialPriceModal();
+  renderSelectedTruckDetails();
+
+  if (registerAfterSave) {
+    void registerDispatchTicket(truckId, deliverySelection, { specialPricesConfirmed: true });
+    return;
+  }
+
+  setFormMessage(`Precios especiales guardados para ${truck.name}. Se confirmarán al registrar el ticket.`);
+}
+
 function setFormMessage(message, isError = false, options = {}) {
   elements.formMessage.textContent = message;
   elements.formMessage.style.color = isError ? "var(--danger)" : "var(--info)";
@@ -6452,20 +6783,32 @@ function renderTypeButtons() {
     ? normalizeReturnCondition(state.selectedReturnCondition)
     : normalizeDispatchFamily(state.selectedType);
   const dressedMode = !isReturn && activeValue === "pollo_pelado";
+  const henMode = !isReturn && activeValue === "gallina";
+  const liveMode = isReturn || activeValue === "pollo_vivo";
 
   elements.form?.classList.toggle("is-return-mode", isReturn);
   elements.form?.classList.toggle("is-dressed-mode", dressedMode);
+  elements.form?.classList.toggle("is-hen-mode", henMode);
+  elements.form?.classList.toggle("is-other-mode", !isReturn && activeValue === "otros");
   if (elements.liveSexSelector) {
-    elements.liveSexSelector.hidden = dressedMode;
+    elements.liveSexSelector.hidden = !liveMode;
   }
   if (elements.dressedVariantSelector) {
     elements.dressedVariantSelector.hidden = !dressedMode;
   }
+  if (elements.henVariantSelector) {
+    elements.henVariantSelector.hidden = !henMode;
+  }
 
-  elements.typeButtons.forEach((button) => {
-    const option = options[Number(button.dataset.optionIndex) || Array.from(elements.typeButtons).indexOf(button)] || options[0];
+  elements.typeButtons.forEach((button, index) => {
+    const option = options[index];
+    button.hidden = !option;
+    if (!option) {
+      button.classList.remove("is-active", "is-return-option");
+      return;
+    }
     button.dataset.type = option.id;
-    button.dataset.optionIndex = String(options.indexOf(option));
+    button.dataset.optionIndex = String(index);
     button.textContent = option.label;
     button.classList.toggle("is-active", option.id === activeValue);
     button.classList.toggle("is-return-option", isReturn);
@@ -6492,6 +6835,16 @@ function renderDressedVariantButtons(buttons, selectedVariantCode) {
   });
 }
 
+function renderHenVariantButtons(buttons, selectedVariantCode) {
+  const normalizedVariant = normalizeHenVariant(selectedVariantCode);
+  buttons.forEach((button) => {
+    const selected = String(button.dataset.henVariant || button.dataset.editHenVariant || "").toUpperCase()
+      === normalizedVariant;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function selectEntryChickenSex(sex) {
   state.entryDefaults = {
     ...(state.entryDefaults || {}),
@@ -6512,6 +6865,17 @@ function selectEntryDressedVariant(variantCode) {
   renderDressedVariantButtons(elements.dressedVariantButtons, state.entryDefaults.dressedVariantCode);
   renderWeightPreview();
   setFormMessage(`${getDressedChickenVariantMeta(state.entryDefaults.dressedVariantCode).label} seleccionado para la siguiente pesada.`);
+}
+
+function selectEntryHenVariant(variantCode) {
+  state.entryDefaults = {
+    ...(state.entryDefaults || {}),
+    henVariantCode: normalizeHenVariant(variantCode)
+  };
+  saveState();
+  renderHenVariantButtons(elements.henVariantButtons, state.entryDefaults.henVariantCode);
+  renderWeightPreview();
+  setFormMessage(`${getHenVariantMeta(state.entryDefaults.henVariantCode).label} seleccionada para la siguiente pesada.`);
 }
 
 function handleEntryBirdCountInput() {
@@ -6547,15 +6911,22 @@ function renderEditTypeOptions(operationType = TICKET_OPERATIONS.DISPATCH) {
 
 function renderEditClassificationControls(operationType = TICKET_OPERATIONS.DISPATCH) {
   const isReturn = normalizeTicketOperation(operationType) === TICKET_OPERATIONS.RETURN;
-  const dressedMode = !isReturn && normalizeDispatchFamily(elements.editType.value) === "pollo_pelado";
+  const selectedFamily = normalizeDispatchFamily(elements.editType.value);
+  const dressedMode = !isReturn && selectedFamily === "pollo_pelado";
+  const henMode = !isReturn && selectedFamily === "gallina";
+  const liveMode = isReturn || selectedFamily === "pollo_vivo";
   if (elements.editLiveSexSelector) {
-    elements.editLiveSexSelector.hidden = dressedMode;
+    elements.editLiveSexSelector.hidden = !liveMode;
   }
   if (elements.editDressedVariantSelector) {
     elements.editDressedVariantSelector.hidden = !dressedMode;
   }
+  if (elements.editHenVariantSelector) {
+    elements.editHenVariantSelector.hidden = !henMode;
+  }
   renderChickenSexButtons(elements.editSexButtons, editingChickenSex);
   renderDressedVariantButtons(elements.editDressedVariantButtons, editingDressedVariantCode);
+  renderHenVariantButtons(elements.editHenVariantButtons, editingHenVariantCode);
   renderEditWeightPreview();
 }
 
@@ -6580,6 +6951,7 @@ function renderEntryDefaults() {
     defaults.dressedVariantCode,
     DEFAULT_DRESSED_CHICKEN_VARIANT
   );
+  const henVariantCode = normalizeHenVariant(defaults.henVariantCode, DEFAULT_HEN_VARIANT);
   const crateTypeId = normalizeCrateTypeId(defaults.crateTypeId, DEFAULT_CRATE_TYPE_ID);
   const originId = normalizeOriginId(defaults.originId || defaults.providerId);
   const truckPlate = normalizeTruckPlate(defaults.truckPlate || defaults.plate || "");
@@ -6589,6 +6961,7 @@ function renderEntryDefaults() {
     javaCount,
     chickenSex,
     dressedVariantCode,
+    henVariantCode,
     crateTypeId,
     originId,
     journeyKey: String(defaults.journeyKey || getJourneyKey()),
@@ -6599,6 +6972,7 @@ function renderEntryDefaults() {
   elements.crateType.value = crateTypeId;
   renderChickenSexButtons(elements.sexButtons, chickenSex);
   renderDressedVariantButtons(elements.dressedVariantButtons, dressedVariantCode);
+  renderHenVariantButtons(elements.henVariantButtons, henVariantCode);
   renderEntryProviderSelection();
 }
 
@@ -6939,7 +7313,11 @@ function renderEditWeightPreview() {
   );
   const variant = isReturn || selectedFamily === "pollo_vivo"
     ? getChickenVariantMeta(chickenSex === "hembra" ? "HEMBRA" : "MACHO", "pollo_vivo", chickenSex)
-    : getDressedChickenVariantMeta(editingDressedVariantCode);
+    : selectedFamily === "gallina"
+      ? getHenVariantMeta(editingHenVariantCode)
+      : selectedFamily === "otros"
+        ? OTHER_PRODUCT_VARIANT
+        : getDressedChickenVariantMeta(editingDressedVariantCode);
   const crate = getCrateTypeMeta(elements.editCrateType.value);
   const readWeight = Number(elements.editWeight.value);
 
@@ -7321,19 +7699,14 @@ function getTicketTypeCode(cage, operationType = TICKET_OPERATIONS.DISPATCH) {
 function buildDispatchTicketData(truck) {
   const registration = normalizeTicketRegistration(truck?.registration);
   const operationType = getTruckOperationType(truck);
+  const records = truck.cages.map((cage) => {
+    const productCode = getCageProductCode(cage);
+    const priceKg = getTruckProductPrice(truck, productCode, true);
+    const netWeight = Number(cage.pesoNetoKg ?? cage.pesoKg) || 0;
 
-  return {
-    code: getTruckTicketLabel(truck),
-    operationType,
-    destinationName: getTruckClientName(truck),
-    ticketTitle: String(operationCatalog?.ticket_title || registration?.ticketTitle || "").trim(),
-    ticketMessage: registration?.hasTicketMessage
-      ? registration.ticketMessage
-      : operationCatalog?.ticket_message || "",
-    emittedAt: registration?.registeredAt || null,
-    delivery: registration?.delivery || null,
-    records: truck.cages.map((cage) => ({
+    return {
       typeCode: getTicketTypeCode(cage, operationType),
+      productCode,
       birdsPerCage: normalizeBirdCountPerJava(
         cage.cantidadAvesPorJava ?? cage.cantidadPollosPorJava,
         0
@@ -7344,8 +7717,25 @@ function buildDispatchTicketData(truck) {
       adjustmentWeight: Number(cage.mermaTotalKg) || 0,
       grossWeight: Number(cage.pesoBrutoKg ?? cage.pesoKg) || 0,
       tareWeight: Number(cage.taraTotalKg) || 0,
-      netWeight: Number(cage.pesoNetoKg ?? cage.pesoKg) || 0
-    }))
+      netWeight,
+      priceKg,
+      amount: priceKg === null ? null : Math.round((netWeight * priceKg + Number.EPSILON) * 100) / 100
+    };
+  });
+
+  return {
+    code: getTruckTicketLabel(truck),
+    sourceModule: "MODULO_DESPACHO_MAYORISTA_2",
+    operationType,
+    destinationName: getTruckClientName(truck),
+    ticketTitle: String(operationCatalog?.ticket_title || registration?.ticketTitle || "").trim(),
+    ticketMessage: registration?.hasTicketMessage
+      ? registration.ticketMessage
+      : operationCatalog?.ticket_message || "",
+    emittedAt: registration?.registeredAt || null,
+    delivery: registration?.delivery || null,
+    totalAmount: records.reduce((total, record) => total + (Number(record.amount) || 0), 0),
+    records
   };
 }
 
@@ -7364,6 +7754,15 @@ function printDispatchTicket(truckId) {
 
   if (!isTruckRegistered(truck)) {
     setFormMessage("Primero registra el ticket en la base de datos.", true);
+    return;
+  }
+
+  const missingPrices = getMissingManualPriceProducts(truck, true);
+  if (missingPrices.length) {
+    setFormMessage(
+      `No se puede imprimir: el ticket registrado no tiene precio guardado para ${missingPrices.map((product) => product.label).join(" y ")}.`,
+      true
+    );
     return;
   }
 
@@ -7570,7 +7969,7 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
         local_id: Number(cage.id),
         chicken_type_code: isReturn && returnCondition?.id === "muerto"
           ? "POLLO_MUERTO"
-          : type.apiCode,
+          : (chickenVariant.apiCode || type.apiCode),
         chicken_condition: isReturn
           ? returnCondition.apiCode
           : "VIVO",
@@ -7617,6 +8016,20 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
       return payload;
     })
   };
+
+  const requiredManualProducts = getRequiredManualPriceProducts(truck);
+  if (requiredManualProducts.length) {
+    const manualPrices = normalizeManualPrices(truck.manualPrices);
+    const missingProduct = requiredManualProducts.find(
+      (product) => normalizeManualPrice(manualPrices[product.apiCode]) === null
+    );
+    if (missingProduct) {
+      throw new Error(`Asigna el precio por kg de ${missingProduct.label} antes de registrar el ticket.`);
+    }
+    ticketPayload.manual_prices = Object.fromEntries(
+      requiredManualProducts.map((product) => [product.apiCode, manualPrices[product.apiCode]])
+    );
+  }
 
   if (!isReturn && !isInternalClientDestination(destination)) {
     ticketPayload.delivery = {
@@ -7668,7 +8081,7 @@ function applyRegisteredWeighingSnapshots(truck, weighings) {
   });
 }
 
-async function registerDispatchTicket(truckId, deliverySelection = null) {
+async function registerDispatchTicket(truckId, deliverySelection = null, options = {}) {
   const truck = state.trucks.find((item) => item.id === truckId);
 
   if (!truck) {
@@ -7700,16 +8113,24 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
     return;
   }
 
+  if (requiresDelivery(truck) && !deliverySelection) {
+    openDeliveryTruckModal(truck);
+    return;
+  }
+
+  if (getRequiredManualPriceProducts(truck).length && options.specialPricesConfirmed !== true) {
+    openSpecialPriceModal(truck.id, {
+      deliverySelection,
+      registerAfterSave: true
+    });
+    return;
+  }
+
   let payload;
   try {
     payload = buildDispatchTicketPayload(truck, deliverySelection);
   } catch (error) {
     setFormMessage(error.message, true);
-    return;
-  }
-
-  if (requiresDelivery(truck) && !deliverySelection) {
-    openDeliveryTruckModal(truck);
     return;
   }
 
@@ -7723,6 +8144,10 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
       body: JSON.stringify(payload)
     });
     applyRegisteredWeighingSnapshots(truck, response.data?.weighings);
+    truck.manualPrices = {
+      ...normalizeManualPrices(truck.manualPrices),
+      ...normalizeManualPrices(response.data?.prices)
+    };
     truck.registration = normalizeTicketRegistration({
       id: response.data?.id,
       code: response.data?.code,
@@ -7736,6 +8161,7 @@ async function registerDispatchTicket(truckId, deliverySelection = null) {
       ...(Object.prototype.hasOwnProperty.call(response.data || {}, "ticket_message")
         ? { ticket_message: response.data.ticket_message }
         : {}),
+      prices: response.data?.prices,
       destination: response.data?.destination,
       delivery: response.data?.delivery
     });
@@ -7761,6 +8187,10 @@ function buildSelectedTruckDetails(truck, totals) {
   const isRegistering = pendingTicketRegistrations.has(truck.id);
   const hasDestination = Boolean(getTruckDestination(truck));
   const isReturn = isReturnTicket(truck);
+  const requiredPriceProducts = getRequiredManualPriceProducts(truck);
+  const persistedOnly = Boolean(registration);
+  const missingPriceProducts = getMissingManualPriceProducts(truck, persistedOnly);
+  const assignedPriceCount = requiredPriceProducts.length - missingPriceProducts.length;
 
   return `
     <div class="selected-truck-bar-head">
@@ -7831,6 +8261,14 @@ function buildSelectedTruckDetails(truck, totals) {
         <span class="ticket-registration-status">
           Registrado · ${escapeHtml(registration.code)}
         </span>
+      ` : ""}
+      ${requiredPriceProducts.length ? `
+        <button
+          class="special-price-open-btn ${missingPriceProducts.length ? "is-missing" : ""}"
+          type="button"
+          data-special-price-ticket="${escapeHtml(truck.id)}"
+          ${registration || isRegistering ? "disabled" : ""}
+        >Precios especiales · ${assignedPriceCount}/${requiredPriceProducts.length}</button>
       ` : ""}
       <button
         class="register-ticket-btn"
@@ -8200,6 +8638,10 @@ function updateEntryDefaults(showMessage = false) {
     state.entryDefaults?.dressedVariantCode,
     DEFAULT_DRESSED_CHICKEN_VARIANT
   );
+  const henVariantCode = normalizeHenVariant(
+    state.entryDefaults?.henVariantCode,
+    DEFAULT_HEN_VARIANT
+  );
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
   const truckPlate = normalizeTruckPlate(elements.truckPlate.value || state.entryDefaults?.truckPlate);
@@ -8209,6 +8651,7 @@ function updateEntryDefaults(showMessage = false) {
     javaCount,
     chickenSex,
     dressedVariantCode,
+    henVariantCode,
     crateTypeId: crateMeta.id,
     originId: normalizeOriginId(state.entryDefaults?.originId),
     journeyKey: String(state.entryDefaults?.journeyKey || getJourneyKey()),
@@ -8220,14 +8663,20 @@ function updateEntryDefaults(showMessage = false) {
   elements.crateType.value = crateMeta.id;
   renderChickenSexButtons(elements.sexButtons, chickenSex);
   renderDressedVariantButtons(elements.dressedVariantButtons, dressedVariantCode);
+  renderHenVariantButtons(elements.henVariantButtons, henVariantCode);
 
   saveState();
   renderWeightPreview();
 
   if (showMessage) {
-    const classification = normalizeDispatchFamily(state.selectedType) === "pollo_pelado"
+    const selectedFamily = normalizeDispatchFamily(state.selectedType);
+    const classification = selectedFamily === "pollo_pelado"
       ? getDressedChickenVariantMeta(dressedVariantCode).label
-      : getChickenSexMeta(chickenSex).label;
+      : selectedFamily === "gallina"
+        ? getHenVariantMeta(henVariantCode).label
+        : selectedFamily === "otros"
+          ? OTHER_PRODUCT_VARIANT.label
+          : getChickenSexMeta(chickenSex).label;
     setFormMessage(`Configuración fija: ${birdCountPerJava} aves/java, ${javaCount} javas, ${classification.toLowerCase()}, java de ${crateMeta.weightKg.toFixed(2)} kg.`);
   }
 }
@@ -8348,6 +8797,10 @@ function addCage(event) {
     state.entryDefaults?.dressedVariantCode,
     DEFAULT_DRESSED_CHICKEN_VARIANT
   );
+  const henVariantCode = normalizeHenVariant(
+    state.entryDefaults?.henVariantCode,
+    DEFAULT_HEN_VARIANT
+  );
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.crateType.value, state.entryDefaults?.crateTypeId || DEFAULT_CRATE_TYPE_ID);
   const crateMeta = getCrateTypeMeta(crateTypeId);
@@ -8360,7 +8813,11 @@ function addCage(event) {
   const isReturn = isReturnTicket(truck);
   const chickenVariant = isReturn || selectedFamily === "pollo_vivo"
     ? getChickenVariantMeta(chickenSex === "hembra" ? "HEMBRA" : "MACHO", "pollo_vivo", chickenSex)
-    : getDressedChickenVariantMeta(dressedVariantCode);
+    : selectedFamily === "gallina"
+      ? getHenVariantMeta(henVariantCode)
+      : selectedFamily === "otros"
+        ? OTHER_PRODUCT_VARIANT
+        : getDressedChickenVariantMeta(dressedVariantCode);
   const breakdown = calculateWeightBreakdown(
     readWeight,
     javaCount,
@@ -8521,6 +8978,7 @@ function addCage(event) {
         javaCount,
         chickenSex,
         dressedVariantCode,
+        henVariantCode,
         crateTypeId: crateMeta.id
       }
     : {
@@ -8528,6 +8986,7 @@ function addCage(event) {
         javaCount,
         chickenSex,
         dressedVariantCode,
+        henVariantCode,
         crateTypeId: crateMeta.id,
         originId: origin?.id || null,
         journeyKey: getJourneyKey(),
@@ -8882,6 +9341,10 @@ function openCageModal(truckId, cageId) {
     getCageChickenVariantMeta(cage).code,
     DEFAULT_DRESSED_CHICKEN_VARIANT
   );
+  editingHenVariantCode = normalizeHenVariant(
+    getCageChickenVariantMeta(cage).code,
+    DEFAULT_HEN_VARIANT
+  );
   renderEditClassificationControls(getTruckOperationType(truck));
   elements.editCrateType.value = normalizeCrateTypeId(cage.crateTypeId || getCrateTypeIdByWeight(cage.pesoJavaKg) || DEFAULT_CRATE_TYPE_ID);
   elements.editWeight.value = Number(cage.pesoLeidoKg ?? cage.pesoBrutoKg ?? cage.pesoKg).toFixed(3);
@@ -8925,6 +9388,7 @@ function closeItemModal() {
   editSelectedOrigin = null;
   editingChickenSex = DEFAULT_CHICKEN_SEX;
   editingDressedVariantCode = DEFAULT_DRESSED_CHICKEN_VARIANT;
+  editingHenVariantCode = DEFAULT_HEN_VARIANT;
   delete elements.editTruckPlate.dataset.historicalPlate;
   if (!elements.providerModal.hidden && providerPickerContext === "edit") {
     closeProviderModal();
@@ -8967,7 +9431,11 @@ function saveCageChanges(event) {
   );
   const chickenVariant = isReturn || selectedFamily === "pollo_vivo"
     ? getChickenVariantMeta(chickenSex === "hembra" ? "HEMBRA" : "MACHO", "pollo_vivo", chickenSex)
-    : getDressedChickenVariantMeta(editingDressedVariantCode);
+    : selectedFamily === "gallina"
+      ? getHenVariantMeta(editingHenVariantCode)
+      : selectedFamily === "otros"
+        ? OTHER_PRODUCT_VARIANT
+        : getDressedChickenVariantMeta(editingDressedVariantCode);
   const type = chickenVariant.typeId;
   const totalBirds = calculateBirdTotal(birdsPerJava, javaCount);
   const crateTypeId = normalizeCrateTypeId(elements.editCrateType.value, DEFAULT_CRATE_TYPE_ID);
@@ -9370,6 +9838,9 @@ function bindEvents() {
   elements.dressedVariantButtons.forEach((button) => {
     button.addEventListener("click", () => selectEntryDressedVariant(button.dataset.dressedVariant));
   });
+  elements.henVariantButtons.forEach((button) => {
+    button.addEventListener("click", () => selectEntryHenVariant(button.dataset.henVariant));
+  });
   elements.editSexButtons.forEach((button) => {
     button.addEventListener("click", () => {
       editingChickenSex = normalizeChickenSex(button.dataset.editSex);
@@ -9381,6 +9852,13 @@ function bindEvents() {
     button.addEventListener("click", () => {
       editingDressedVariantCode = normalizeDressedChickenVariant(button.dataset.editDressedVariant);
       renderDressedVariantButtons(elements.editDressedVariantButtons, editingDressedVariantCode);
+      renderEditWeightPreview();
+    });
+  });
+  elements.editHenVariantButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      editingHenVariantCode = normalizeHenVariant(button.dataset.editHenVariant);
+      renderHenVariantButtons(elements.editHenVariantButtons, editingHenVariantCode);
       renderEditWeightPreview();
     });
   });
@@ -9545,6 +10023,9 @@ function bindEvents() {
   elements.deleteItemBtn.addEventListener("click", deleteCageRecord);
   elements.closeItemModalBtn.addEventListener("click", closeItemModal);
   elements.closeErrorModalBtn?.addEventListener("click", closeErrorModal);
+  elements.specialPriceForm?.addEventListener("submit", saveSpecialPrices);
+  elements.closeSpecialPriceBtn?.addEventListener("click", closeSpecialPriceModal);
+  elements.cancelSpecialPriceBtn?.addEventListener("click", closeSpecialPriceModal);
 
   elements.numericPadKeys.forEach((button) => {
     button.addEventListener("click", () => {
@@ -9619,6 +10100,12 @@ function bindEvents() {
     }
   });
 
+  elements.specialPriceModal?.addEventListener("click", (event) => {
+    if (event.target === elements.specialPriceModal) {
+      closeSpecialPriceModal();
+    }
+  });
+
   elements.numericPadModal.addEventListener("click", (event) => {
     if (event.target === elements.numericPadModal) {
       closeNumericPad();
@@ -9688,6 +10175,11 @@ function bindEvents() {
       return;
     }
 
+    if (elements.specialPriceModal && !elements.specialPriceModal.hidden) {
+      closeSpecialPriceModal();
+      return;
+    }
+
     if (elements.deliveryDriverModal && !elements.deliveryDriverModal.hidden) {
       closeDeliverySelection();
       return;
@@ -9740,6 +10232,12 @@ function bindEvents() {
   });
 
   elements.selectedTruckDetails.addEventListener("click", (event) => {
+    const specialPriceBtn = event.target.closest(".special-price-open-btn");
+    if (specialPriceBtn) {
+      openSpecialPriceModal(specialPriceBtn.dataset.specialPriceTicket);
+      return;
+    }
+
     const registerBtn = event.target.closest(".register-ticket-btn");
     if (registerBtn) {
       void registerDispatchTicket(registerBtn.dataset.registerTicket);

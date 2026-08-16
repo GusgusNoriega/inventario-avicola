@@ -137,6 +137,8 @@ class TerceroDirectoryService
         float $amount,
         string $direction
     ): int {
+        $this->assertDirectoryPriceCodesAllowed([$chickenTypeCode], 'tipo_pollo');
+
         return DB::transaction(function () use (
             $companyId,
             $actorId,
@@ -276,6 +278,8 @@ class TerceroDirectoryService
         array $prices,
         string $reason
     ): void {
+        $this->assertDirectoryPriceCodesAllowed(array_keys($prices), 'precios');
+
         if ($role === TerceroRole::PROVIDER) {
             $priceList = $this->ensurePriceList($tercero, $role, $actorId);
             $priceList->update(['nombre' => $this->priceListName($tercero, $role)]);
@@ -349,6 +353,8 @@ class TerceroDirectoryService
         int $actorId,
         string $reason
     ): void {
+        $this->assertDirectoryPriceCodesAllowed(array_keys($prices), 'precios');
+
         $types = TipoPollo::query()
             ->whereIn('codigo', array_keys($prices))
             ->where('estado', TipoPollo::STATUS_ACTIVE)
@@ -389,6 +395,24 @@ class TerceroDirectoryService
                 'motivo_cambio' => $reason,
                 'reemplaza_precio_id' => $current?->id,
                 'registrado_por' => $actorId,
+            ]);
+        }
+    }
+
+    /** @param iterable<int, mixed> $codes */
+    private function assertDirectoryPriceCodesAllowed(
+        iterable $codes,
+        string $field,
+    ): void {
+        $containsWholesaleTwoOnlyProduct = collect($codes)
+            ->map(fn (mixed $code): string => mb_strtoupper(trim((string) $code), 'UTF-8'))
+            ->contains(
+                fn (string $code): bool => TipoPollo::requiresWholesaleTwoManualPrice($code)
+            );
+
+        if ($containsWholesaleTwoOnlyProduct) {
+            throw ValidationException::withMessages([
+                $field => 'Gallina roja, Gallina doble y Otros no admiten precios exclusivos de cliente o proveedor. Su precio se asigna manualmente en cada ticket de Despacho mayorista 2.',
             ]);
         }
     }

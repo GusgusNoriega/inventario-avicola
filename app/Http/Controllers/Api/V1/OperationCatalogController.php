@@ -23,6 +23,7 @@ class OperationCatalogController extends Controller
     {
         $branch = $this->context->branch($request);
         $companyId = $this->context->companyId($request);
+        $isWholesaleTwoCatalog = (bool) $request->route('wholesale_two_catalog', false);
 
         return response()->json([
             'data' => [
@@ -77,6 +78,13 @@ class OperationCatalogController extends Controller
                     ->where('estado', TipoPollo::STATUS_ACTIVE)
                     ->where('permite_despacho', true)
                     ->where('codigo', '!=', TipoPollo::CHICKEN_DEAD)
+                    ->when(
+                        ! $isWholesaleTwoCatalog,
+                        fn ($query) => $query->whereNotIn(
+                            'codigo',
+                            TipoPollo::wholesaleTwoManualPriceCodes(),
+                        ),
+                    )
                     ->orderBy('id')
                     ->get(['id', 'codigo', 'nombre'])
                     ->map(fn (TipoPollo $type) => [

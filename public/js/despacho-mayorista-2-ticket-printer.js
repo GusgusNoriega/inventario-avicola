@@ -1,6 +1,14 @@
 const TICKET_LOCALE = "es-PE";
 const TICKET_TIME_ZONE = "America/Lima";
 const DEFAULT_TICKET_TITLE = "DISTRIBUIDORA DIEGO ALBERTO";
+const MANUAL_PRICE_PRODUCT_CODE_BY_TICKET_CODE = new Map([
+  ["GALLINA_ROJA", "GALLINA_ROJA"],
+  ["GR", "GALLINA_ROJA"],
+  ["GALLINA_DOBLE", "GALLINA_DOBLE"],
+  ["GD", "GALLINA_DOBLE"],
+  ["OTROS", "OTROS"],
+  ["OT", "OTROS"]
+]);
 
 function escapeTicketHtml(value) {
   return String(value ?? "")
@@ -83,13 +91,17 @@ function normalizeTicketRecord(record) {
   const suppliedReadWeight = Number(record?.readWeight);
   const suppliedNetWeight = Number(record?.netWeight);
   const suppliedAdjustmentWeight = Number(record?.adjustmentWeight);
-  const priceKg = Number(record?.priceKg) || 0;
+  const suppliedPriceKg = Number(record?.priceKg);
+  const priceKg = Number.isFinite(suppliedPriceKg) && suppliedPriceKg > 0
+    ? suppliedPriceKg
+    : null;
   const suppliedAmount = Number(record?.amount);
   const readWeight = Number.isFinite(suppliedReadWeight) ? suppliedReadWeight : grossWeight;
   const netWeight = Number.isFinite(suppliedNetWeight) ? suppliedNetWeight : grossWeight - tareWeight;
 
   return {
     typeCode: String(record?.typeCode || "PV").trim() || "PV",
+    productCode: String(record?.productCode || "").trim().toUpperCase(),
     birdsPerCage: Math.max(0, Number(record?.birdsPerCage) || 0),
     cages: Math.max(0, Number(record?.cages) || 0),
     birds: Math.max(
@@ -106,8 +118,31 @@ function normalizeTicketRecord(record) {
       ? Math.max(0, suppliedAdjustmentWeight)
       : Math.max(0, grossWeight - readWeight),
     priceKg,
-    amount: Number.isFinite(suppliedAmount) ? suppliedAmount : netWeight * priceKg
+    amount: Number.isFinite(suppliedAmount)
+      ? suppliedAmount
+      : (priceKg === null ? null : netWeight * priceKg)
   };
+}
+
+function getManualPriceProductCode(record) {
+  const productCode = String(record?.productCode || "").trim().toUpperCase();
+  if (MANUAL_PRICE_PRODUCT_CODE_BY_TICKET_CODE.has(productCode)) {
+    return MANUAL_PRICE_PRODUCT_CODE_BY_TICKET_CODE.get(productCode);
+  }
+
+  return MANUAL_PRICE_PRODUCT_CODE_BY_TICKET_CODE.get(
+    String(record?.typeCode || "").trim().toUpperCase()
+  ) || null;
+}
+
+function assertManualPriceProductsArePriced(records) {
+  const missingCodes = [...new Set(records
+    .filter((record) => getManualPriceProductCode(record) && record.priceKg === null)
+    .map((record) => getManualPriceProductCode(record)))];
+
+  if (missingCodes.length) {
+    throw new Error(`Falta asignar precio para: ${missingCodes.join(", ")}`);
+  }
 }
 
 function summarizeTicketRecords(records) {
@@ -134,8 +169,8 @@ function summarizeTicketRecords(records) {
     current.tareWeight += record.tareWeight;
     current.netWeight += record.netWeight;
     current.adjustmentWeight += record.adjustmentWeight;
-    current.priceKg = record.priceKg;
-    current.amount += record.amount;
+    current.priceKg = record.priceKg ?? current.priceKg;
+    current.amount += Number(record.amount) || 0;
     totalsByType.set(record.typeCode, current);
   });
 
@@ -187,7 +222,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
   const suppliedTotalAmount = Number(ticket?.totalAmount);
   const totalAmount = Number.isFinite(suppliedTotalAmount)
     ? suppliedTotalAmount
-    : records.reduce((total, record) => total + record.amount, 0);
+    : records.reduce((total, record) => total + (Number(record.amount) || 0), 0);
   const distinctPrices = [...new Set(
     records.map((record) => Number(record.priceKg || 0).toFixed(2))
   )];
@@ -526,6 +561,7 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
   const printDate = requestedPrintDate ? new Date(requestedPrintDate) : new Date();
   const safePrintDate = Number.isNaN(printDate.getTime()) ? new Date() : printDate;
   const records = (ticket?.records || []).map(normalizeTicketRecord);
+  assertManualPriceProductsArePriced(records);
   const typeTotals = summarizeTicketRecords(records);
   const isReturn = ticket?.operationType === "DEVOLUCION";
   const isRetail = ticket?.channel === "MINORISTA";
@@ -569,6 +605,17 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
         <td>${total.tareWeight.toFixed(3)}</td>
         <td class="net">${total.netWeight.toFixed(3)}</td>
       `}
+    </tr>
+  `).join("");
+  const pricedTypeTotals = typeTotals.filter(
+    (total) => Number.isFinite(Number(total.priceKg)) && Number(total.priceKg) > 0
+  );
+  const priceRows = pricedTypeTotals.map((total) => `
+    <tr>
+      <td>${escapeTicketHtml(total.typeCode)}</td>
+      <td class="number">${total.netWeight.toFixed(3)}</td>
+      <td class="number">${escapeTicketHtml(formatTicketMoney(total.priceKg))}</td>
+      <td class="number">${escapeTicketHtml(formatTicketMoney(total.amount))}</td>
     </tr>
   `).join("");
   const suppliedTotalAmount = Number(ticket?.totalAmount);
@@ -775,6 +822,22 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
       text-align: left;
     }
 
+    .price-summary-title {
+      margin-top: 5mm;
+    }
+
+    .price-summary-table th,
+    .price-summary-table td {
+      padding-left: 0.2mm;
+      padding-right: 0.2mm;
+      font-size: 12px;
+    }
+
+    .price-summary-table th:nth-child(1) { width: 16%; }
+    .price-summary-table th:nth-child(2) { width: 22%; }
+    .price-summary-table th:nth-child(3) { width: 29%; }
+    .price-summary-table th:nth-child(4) { width: 33%; }
+
     .ticket-message {
       text-align: center;
       font-size: 14px;
@@ -847,6 +910,20 @@ export function buildWeightControlTicketHtml(ticket, emittedAt = null) {
     </thead>
     <tbody>${totalRows}</tbody>
   </table>
+
+  ${!isRetail && pricedTypeTotals.length ? `
+    <p class="summary-title price-summary-title">PRECIOS ASIGNADOS</p>
+    <table class="summary-table price-summary-table">
+      <thead>
+        <tr><th>TIPO</th><th>NETO KG</th><th>PRECIO/KG</th><th>SUBTOTAL</th></tr>
+      </thead>
+      <tbody>${priceRows}</tbody>
+    </table>
+    <p class="sale-total">
+      <span>TOTAL VALORIZADO</span>
+      <span>${escapeTicketHtml(formatTicketMoney(totalAmount))}</span>
+    </p>
+  ` : ""}
 
   ${isRetail ? `
     <p class="sale-total">

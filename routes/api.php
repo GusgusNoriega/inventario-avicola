@@ -301,7 +301,8 @@ Route::prefix('v1')->group(function (): void {
     Route::prefix('despacho-mayorista-2')
         ->middleware($wholesaleTwoMiddleware)
         ->group(function (): void {
-            Route::get('/catalogo', [OperationCatalogController::class, 'index']);
+            Route::get('/catalogo', [OperationCatalogController::class, 'index'])
+                ->defaults('wholesale_two_catalog', true);
 
             foreach ([
                 'clientes' => TerceroRole::CLIENT,

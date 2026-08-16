@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\TipoPollo;
 use App\Support\FinancialMoney;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -41,6 +42,7 @@ class PurchaseQueryService
             'proveedores' => $providers,
             'tipos_pollo' => DB::table('tipos_pollo')
                 ->where('estado', 'ACTIVO')
+                ->whereNotIn('codigo', TipoPollo::wholesaleTwoManualPriceCodes())
                 ->orderBy('nombre')
                 ->get(['id', 'codigo', 'nombre'])
                 ->map(fn (object $type): array => [

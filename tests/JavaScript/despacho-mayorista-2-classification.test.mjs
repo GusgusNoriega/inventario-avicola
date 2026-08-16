@@ -59,6 +59,18 @@ test("mayorista 2 expone M/H solo para vivo y cinco clasificaciones para pelado"
   assert.match(wholesaleTwoCss, /\.dressed-variant-buttons[\s\S]*repeat\(5,/);
 });
 
+test("mayorista 2 agrega Gallina Roja/Doble y Otros sin modificar mayorista 1", () => {
+  assert.match(wholesaleTwoView, /data-type="gallina"[^>]*>Gallina</);
+  assert.match(wholesaleTwoView, /data-type="otros"[^>]*>Otros</);
+  assert.match(wholesaleTwoView, /id="henVariantSelector"[^>]*hidden[\s\S]*data-hen-variant="GALLINA_ROJA"[\s\S]*data-hen-variant="GALLINA_DOBLE"/);
+  assert.match(wholesaleTwoView, /id="editHenVariantSelector"[^>]*hidden[\s\S]*data-edit-hen-variant="GALLINA_ROJA"[\s\S]*data-edit-hen-variant="GALLINA_DOBLE"/);
+  assert.match(wholesaleTwoSource, /code: "GALLINA_ROJA"[^\n]+shortLabel: "GR"/);
+  assert.match(wholesaleTwoSource, /code: "GALLINA_DOBLE"[^\n]+shortLabel: "GD"/);
+  assert.match(wholesaleTwoSource, /const OTHER_PRODUCT_VARIANT = \{[\s\S]*?code: "OTROS"[\s\S]*?shortLabel: "OT"[\s\S]*?\};/);
+  assert.doesNotMatch(wholesaleOneView, /data-type="gallina"|data-type="otros"/);
+  assert.doesNotMatch(wholesaleOneSource, /GALLINA_ROJA|GALLINA_DOBLE/);
+});
+
 test("el payload M2 usa chicken_variant_code y beneficiado admite sexo nulo", () => {
   assert.match(wholesaleTwoSource, /chicken_variant_code:\s*chickenVariant\.code/);
   assert.match(wholesaleTwoSource, /chicken_sex:\s*chickenVariant\.sex\s*\?[^\n]+:\s*null/);
@@ -69,11 +81,11 @@ test("el payload M2 usa chicken_variant_code y beneficiado admite sexo nulo", ()
   assert.match(wholesaleTwoSource, /read_weight_kg:\s*roundBusinessWeight/);
 });
 
-test("la vista M2 configura seis mermas y mantiene beneficiado bloqueado en cero", () => {
+test("la vista M2 configura ocho mermas y mantiene beneficiado y otros sin merma", () => {
   assert.match(wholesaleTwoView, /id="openWeightAdjustmentSettingsBtn"/);
   assert.match(wholesaleTwoView, /id="weightAdjustmentSettingsModal"/);
-  assert.equal((wholesaleTwoView.match(/data-weight-adjustment-variant=/g) || []).length, 6);
-  assert.equal((wholesaleTwoView.match(/max="1000000"[^>]*data-weight-adjustment-variant=/g) || []).length, 6);
+  assert.equal((wholesaleTwoView.match(/data-weight-adjustment-variant=/g) || []).length, 8);
+  assert.equal((wholesaleTwoView.match(/max="1000000"[^>]*data-weight-adjustment-variant=/g) || []).length, 8);
 
   for (const code of [
     "MACHO",
@@ -81,16 +93,19 @@ test("la vista M2 configura seis mermas y mantiene beneficiado bloqueado en cero
     "MACHO_ABIERTO",
     "MACHO_CERRADO",
     "HEMBRA_ABIERTA",
-    "HEMBRA_CERRADA"
+    "HEMBRA_CERRADA",
+    "GALLINA_ROJA",
+    "GALLINA_DOBLE"
   ]) {
     assert.match(wholesaleTwoView, new RegExp(`data-weight-adjustment-variant="${code}"`));
   }
 
   assert.match(wholesaleTwoView, /PB · Pollo beneficiado[\s\S]*value="0" disabled/);
+  assert.match(wholesaleTwoView, /OT · Otros[\s\S]*sin opciones adicionales ni merma/i);
   assert.match(wholesaleTwoSource, /apiRequest\("\/despacho-mayorista-2\/configuracion-mermas"/);
   assert.match(wholesaleTwoSource, /code:\s*String\(input\.dataset\.weightAdjustmentVariant/);
   assert.match(wholesaleTwoSource, /additional_grams:\s*grams/);
-  assert.match(wholesaleTwoSource, /adjustments\.length !== 6/);
+  assert.match(wholesaleTwoSource, /expectedConfigurableCodes/);
   assert.match(wholesaleTwoSource, /recalculatePendingWeightAdjustments/);
   assert.match(wholesaleTwoCss, /\.weight-adjustment-settings-grid/);
 });
@@ -147,8 +162,8 @@ test("despacho directo omite origin y solo exige jornada cuando hay orígenes", 
   );
 });
 
-test("tabla e impresión distinguen las siete clasificaciones sin alterar mayorista 1", () => {
-  for (const code of ["PV-M", "PV-H", "MA", "MC", "HA", "HC", "PB"]) {
+test("tabla e impresión distinguen las diez clasificaciones sin alterar mayorista 1", () => {
+  for (const code of ["PV-M", "PV-H", "MA", "MC", "HA", "HC", "PB", "GR", "GD", "OT"]) {
     assert.match(wholesaleTwoSource, new RegExp(`shortLabel: "${code}"`));
   }
 
@@ -162,7 +177,8 @@ test("tabla e impresión distinguen las siete clasificaciones sin alterar mayori
 });
 
 test("el impresor exclusivo M2 conserva los códigos iniciales y editados", () => {
-  const classificationCodes = ["PV-M", "PV-H", "MA", "MC", "HA", "HC", "PB"];
+  const classificationCodes = ["PV-M", "PV-H", "MA", "MC", "HA", "HC", "PB", "GR", "GD", "OT"];
+  const manualPriceCodes = new Set(["GR", "GD", "OT"]);
   const html = buildWholesaleTwoTicketHtml({
     code: "M2-PRUEBA",
     operationType: "DESPACHO",
@@ -175,13 +191,32 @@ test("el impresor exclusivo M2 conserva los códigos iniciales y editados", () =
       readWeight: 10,
       grossWeight: 10,
       tareWeight: 1,
-      netWeight: 9
+      netWeight: 9,
+      ...(manualPriceCodes.has(typeCode) ? { priceKg: 5, amount: 45 } : {})
     }))
   });
 
   for (const code of classificationCodes) {
     assert.match(html, new RegExp(`>${code}<`));
   }
+});
+
+test("el impresor M2 muestra precio, subtotal y total de gallinas y otros", () => {
+  const html = buildWholesaleTwoTicketHtml({
+    code: "M2-PRECIOS",
+    operationType: "DESPACHO",
+    destinationName: "Cliente",
+    records: [
+      { typeCode: "GR", birdsPerCage: 1, cages: 0, readWeight: 10, grossWeight: 10, tareWeight: 0, netWeight: 10, priceKg: 8, amount: 80 },
+      { typeCode: "OT", birdsPerCage: 1, cages: 0, readWeight: 2, grossWeight: 2, tareWeight: 0, netWeight: 2, priceKg: 5, amount: 10 }
+    ]
+  });
+
+  assert.match(html, /PRECIOS ASIGNADOS/);
+  assert.match(html, /PRECIO\/KG/);
+  assert.match(html, /S\/ 8\.00/);
+  assert.match(html, /S\/ 5\.00/);
+  assert.match(html, /TOTAL VALORIZADO[\s\S]*S\/ 90\.00/);
 });
 
 test("el impresor exclusivo M2 conserva el título predeterminado exacto", () => {

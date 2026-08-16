@@ -113,8 +113,21 @@
   border-color: rgba(255, 117, 189, 0.52);
 }
 
+.weight-adjustment-setting.is-hen-red {
+  border-color: rgba(239, 104, 82, 0.58);
+}
+
+.weight-adjustment-setting.is-hen-double {
+  border-color: rgba(184, 145, 255, 0.58);
+}
+
 .weight-adjustment-setting.is-processed {
   border-color: rgba(101, 232, 211, 0.5);
+}
+
+.weight-adjustment-setting.is-other {
+  border-color: rgba(190, 190, 190, 0.42);
+  background: linear-gradient(180deg, #202020, #101010);
 }
 
 .weight-adjustment-setting > strong {
@@ -281,10 +294,11 @@
 
 /* Clasificación exclusiva de Despacho mayorista 2 */
 #cageForm .type-switch {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.dressed-variant-selector {
+.dressed-variant-selector,
+.hen-variant-selector {
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -292,11 +306,13 @@
 }
 
 .dressed-variant-selector[hidden],
+.hen-variant-selector[hidden],
 .sex-selector[hidden] {
   display: none !important;
 }
 
-.dressed-variant-selector legend {
+.dressed-variant-selector legend,
+.hen-variant-selector legend {
   margin-bottom: 6px;
   padding: 0;
   color: #ceddf2;
@@ -305,8 +321,60 @@
 }
 
 .dispatch-dressed-variant-selector,
-.edit-dressed-variant-selector {
+.edit-dressed-variant-selector,
+.edit-hen-variant-selector {
   grid-column: 1 / -1;
+}
+
+.hen-variant-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hen-variant-btn {
+  min-width: 0;
+  min-height: 50px;
+  border: 1px solid #596173;
+  border-radius: 10px;
+  padding: 7px 8px;
+  background: linear-gradient(180deg, #24262d, #121318);
+  color: #f1f2f5;
+  font: inherit;
+  font-size: var(--fs-button-text, 15px);
+  font-weight: 850;
+  line-height: 1.1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hen-variant-btn:hover,
+.hen-variant-btn:focus-visible {
+  border-color: #aab2c2;
+  filter: brightness(1.08);
+}
+
+.hen-variant-btn.is-red.is-active {
+  border-color: #ff826f;
+  background: linear-gradient(180deg, #c84a38, #81291f);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.hen-variant-btn.is-double.is-active {
+  border-color: #c5a7ff;
+  background: linear-gradient(180deg, #7653bd, #463078);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.dispatch-hen-variant-selector .hen-variant-buttons {
+  gap: 4px;
+}
+
+.dispatch-hen-variant-selector .hen-variant-btn {
+  min-height: var(--dispatch-control-height, 60px);
+  padding-inline: 6px;
 }
 
 .dressed-variant-buttons {
@@ -422,6 +490,24 @@
   border-color: rgba(255, 117, 189, 0.42);
 }
 
+.tag.tag-gallina-roja {
+  background: rgba(200, 74, 56, 0.2);
+  color: #ffb5a9;
+  border-color: rgba(255, 130, 111, 0.52);
+}
+
+.tag.tag-gallina-doble {
+  background: rgba(118, 83, 189, 0.22);
+  color: #d9c7ff;
+  border-color: rgba(197, 167, 255, 0.52);
+}
+
+.tag.tag-otros {
+  background: rgba(175, 183, 197, 0.14);
+  color: #d8dde6;
+  border-color: rgba(190, 198, 211, 0.42);
+}
+
 .chicken-sex-none {
   color: #8fa4c1;
   border-color: #40516a;
@@ -455,12 +541,258 @@
 }
 
 @media (max-width: 600px) {
+  #cageForm .type-switch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dressed-variant-buttons {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dressed-variant-btn.is-processed {
     grid-column: 1 / -1;
+  }
+}
+
+/* Precios manuales exclusivos del ticket de Despacho mayorista 2 */
+.special-price-modal {
+  z-index: 180;
+  padding: 14px;
+}
+
+.special-price-card {
+  width: min(820px, calc(100vw - 20px));
+  width: min(820px, calc(100dvw - 20px));
+  max-height: calc(100vh - 20px);
+  max-height: calc(100dvh - 20px);
+  margin: auto;
+  padding: 18px;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.special-price-head {
+  align-items: flex-start;
+  margin: 0;
+}
+
+.special-price-caption {
+  margin: 0 0 4px;
+  color: #f4dc87;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.special-price-head h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.15rem, 2.5vw, 1.55rem);
+  line-height: 1.15;
+}
+
+.special-price-help {
+  margin: 0;
+  border: 1px solid #625526;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #1c1808;
+  color: #eee1ae;
+  line-height: 1.35;
+}
+
+.special-price-ticket {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #365b50;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #081b17;
+}
+
+.special-price-ticket span {
+  color: #a9c9c0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.special-price-ticket strong {
+  color: #7ff0ca;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 1.15rem;
+  text-align: right;
+}
+
+.special-price-fields {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.special-price-fields:empty::before {
+  content: "Selecciona o agrega gallinas u otros para asignar sus precios.";
+  grid-column: 1 / -1;
+  border: 1px dashed #4d4d4d;
+  border-radius: 10px;
+  padding: 18px 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.special-price-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  border: 1px solid #4b5362;
+  border-radius: 12px;
+  padding: 12px;
+  background: linear-gradient(180deg, #1b1d23, #0d0e12);
+  color: #eef1f6;
+  font-weight: 800;
+}
+
+.special-price-field > span,
+.special-price-field > small {
+  color: #bfc6d2;
+}
+
+.special-price-field > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.special-price-field > span:first-child small {
+  display: block;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.special-price-input-wrap {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.special-price-input-wrap > span {
+  color: var(--secondary);
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.special-price-field input,
+.special-price-fields input[data-special-price-code] {
+  width: 100%;
+  min-height: 56px;
+  border: 1px solid #696f7a;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #050505;
+  color: var(--secondary);
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 1.35rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.special-price-field.is-missing,
+.special-price-field:has(input[aria-invalid="true"]) {
+  border-color: rgba(255, 91, 91, 0.72);
+  background: linear-gradient(180deg, #2a1111, #100707);
+}
+
+.special-price-message {
+  min-height: 1.35em;
+  margin: 0;
+  color: #8fe4c9;
+  font-weight: 750;
+}
+
+.special-price-message.is-error {
+  color: #ff9c9c;
+}
+
+.special-price-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.special-price-actions .btn {
+  min-width: 150px;
+  min-height: 48px;
+}
+
+.special-price-open-btn {
+  min-height: 42px;
+  border: 1px solid #b59629;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #3a3213, #211c09);
+  color: #ffe98d;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.special-price-open-btn:hover,
+.special-price-open-btn:focus-visible {
+  border-color: var(--secondary);
+  background: linear-gradient(180deg, #514519, #2d260c);
+}
+
+.special-price-open-btn.is-missing {
+  border-color: #ff826f;
+  color: #ffc0b6;
+  background: linear-gradient(180deg, #542018, #2b0e0a);
+}
+
+@media (max-width: 700px) {
+  .special-price-modal {
+    padding: 7px;
+  }
+
+  .special-price-card {
+    width: calc(100dvw - 14px);
+    max-height: calc(100dvh - 14px);
+    padding: 12px;
+    gap: 9px;
+  }
+
+  .special-price-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .special-price-ticket {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .special-price-ticket strong {
+    text-align: left;
+  }
+
+  .special-price-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .special-price-actions .btn {
+    min-width: 0;
   }
 }
 
@@ -6364,7 +6696,8 @@ button:focus-visible {
 }
 
 .selected-truck-actions .print-ticket-btn,
-.selected-truck-actions .register-ticket-btn {
+.selected-truck-actions .register-ticket-btn,
+.selected-truck-actions .special-price-open-btn {
   min-width: 180px;
   min-height: 42px;
   padding: 8px 16px;
@@ -7923,7 +8256,8 @@ body.menu-page {
   }
 
   .selected-truck-actions .print-ticket-btn,
-  .selected-truck-actions .register-ticket-btn {
+  .selected-truck-actions .register-ticket-btn,
+  .selected-truck-actions .special-price-open-btn {
     width: 100%;
     min-width: 0;
     min-height: 36px;
@@ -8165,6 +8499,7 @@ body.menu-page {
 .operation-touch-page .print-ticket-btn,
 .operation-touch-page .type-btn,
 .operation-touch-page .sex-btn,
+.operation-touch-page .hen-variant-btn,
 .operation-touch-page .mobile-tab,
 .operation-touch-page .menu-return-btn {
   min-width: 44px;
@@ -11423,7 +11758,8 @@ body.journey-page {
 }
 
 #selectedTruckDetails .selected-truck-actions .print-ticket-btn,
-#selectedTruckDetails .selected-truck-actions .register-ticket-btn {
+#selectedTruckDetails .selected-truck-actions .register-ticket-btn,
+#selectedTruckDetails .selected-truck-actions .special-price-open-btn {
   width: 100%;
   min-width: 0;
   min-height: 44px;

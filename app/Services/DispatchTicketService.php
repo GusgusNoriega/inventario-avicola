@@ -142,20 +142,19 @@ class DispatchTicketService
                 'cerrado_at' => now(),
                 'created_by' => $actor->id,
             ]);
-            $ticketPrices = $destination['client_id']
-                ? $this->freezePrices(
-                    $companyId,
-                    $destination['client_id'],
-                    $types
-                )
-                : [];
+            $ticketPrices = $this->registrationPrices(
+                $companyId,
+                $destination['client_id'],
+                $types,
+                $data,
+            );
 
             foreach ($ticketPrices as $typeId => $price) {
                 TicketPrecio::query()->create([
                     'ticket_id' => $ticket->id,
                     'tipo_pollo_id' => $typeId,
-                    'precio_historial_id' => $price['history']->id,
-                    'precio_kg' => $price['history']->precio_kg,
+                    'precio_historial_id' => $price['history_id'],
+                    'precio_kg' => $price['price_kg'],
                     'origen_precio' => $price['source'],
                     'congelado_por' => $actor->id,
                 ]);
@@ -255,6 +254,30 @@ class DispatchTicketService
     protected function sourceModule(): ?string
     {
         return null;
+    }
+
+    /**
+     * @param  Collection<string, TipoPollo>  $types
+     * @param  array<string, mixed>  $data
+     * @return array<int, array{history_id: ?int, price_kg: mixed, source: string}>
+     */
+    protected function registrationPrices(
+        int $companyId,
+        ?int $clientId,
+        Collection $types,
+        array $data,
+    ): array {
+        if (! $clientId || $types->isEmpty()) {
+            return [];
+        }
+
+        return collect($this->freezePrices($companyId, $clientId, $types))
+            ->map(fn (array $price): array => [
+                'history_id' => (int) $price['history']->id,
+                'price_kg' => $price['history']->precio_kg,
+                'source' => $price['source'],
+            ])
+            ->all();
     }
 
     /** @param Collection<int, array<string, mixed>> $weighings */
