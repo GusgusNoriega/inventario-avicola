@@ -1640,6 +1640,8 @@ class WebViewsTest extends TestCase
             ->assertSee('editWeightHelp', false)
             ->assertSee('MACHO_ABIERTO', false)
             ->assertSee('POLLO_BENEFICIADO', false)
+            ->assertSee('Clasificación y merma del pollo')
+            ->assertSee('Las opciones sin precio asignado en este ticket permanecerán bloqueadas.')
             ->assertSee('voidTicketModal', false)
             ->assertSee('voidTicketReason', false)
             ->assertSee('Acción exclusiva de administrador')
@@ -1692,6 +1694,9 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('shortLabel: "PB"', $managementJavascript);
         $this->assertStringContainsString('payload.chicken_variant_code = selectedVariant.code', $managementJavascript);
         $this->assertStringContainsString('payload.read_weight_kg = Number(elements.grossWeight.value)', $managementJavascript);
+        $this->assertStringContainsString('const pricedTypeCodes = new Set(', $managementJavascript);
+        $this->assertStringContainsString('sin precio en este ticket', $managementJavascript);
+        $this->assertStringContainsString('para evitar que el total quede en cero', $managementJavascript);
         $this->assertStringContainsString('weight_adjustments', $managementJavascript);
         $this->assertStringContainsString('sourceModule: ticket.source_module', $managementJavascript);
         $this->assertStringContainsString('adjustment: weighing.adjustment || null', $managementJavascript);

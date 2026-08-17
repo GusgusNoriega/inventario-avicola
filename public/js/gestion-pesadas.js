@@ -795,15 +795,30 @@ async function saveDelivery(event) {
 function renderEditOptions() {
   const originalVariant = wholesaleTwoVariantForWeighing(state.editingWeighing);
   const originalRequiresTicketPrice = requiresWholesaleTwoTicketPrice(originalVariant?.code);
+  const pricedTypeCodes = new Set(
+    Object.values(state.selectedTicket?.prices || {})
+      .map((price) => String(price?.chicken_type?.code || "").trim().toUpperCase())
+      .filter(Boolean)
+  );
   elements.chickenType.innerHTML = (state.catalogs.chicken_types || [])
-    .map((type) => `<option value="${escapeHtml(type.code)}">${escapeHtml(type.name)}</option>`)
+    .map((type) => {
+      const typeCode = String(type?.code || "").trim().toUpperCase();
+      const disabled = pricedTypeCodes.size > 0 && !pricedTypeCodes.has(typeCode);
+      const suffix = disabled ? " (sin precio en este ticket)" : "";
+
+      return `<option value="${escapeHtml(type.code)}"${disabled ? " disabled" : ""}>${escapeHtml(type.name)}${suffix}</option>`;
+    })
     .join("");
   elements.chickenVariant.innerHTML = WHOLESALE_TWO_CHICKEN_VARIANTS
     .map((variant) => {
-      const disabled = originalRequiresTicketPrice
+      const unavailablePrice = pricedTypeCodes.size > 0 && !pricedTypeCodes.has(variant.typeCode);
+      const disabledBySpecialPrice = originalRequiresTicketPrice
         ? variant.code !== originalVariant.code
         : requiresWholesaleTwoTicketPrice(variant.code);
-      return `<option value="${escapeHtml(variant.code)}"${disabled ? " disabled" : ""}>${escapeHtml(variant.label)}</option>`;
+      const disabled = disabledBySpecialPrice || unavailablePrice;
+      const suffix = unavailablePrice ? " (sin precio en este ticket)" : "";
+
+      return `<option value="${escapeHtml(variant.code)}"${disabled ? " disabled" : ""}>${escapeHtml(variant.label)}${suffix}</option>`;
     })
     .join("");
   elements.chickenVariant.disabled = originalRequiresTicketPrice;
@@ -898,7 +913,9 @@ function openEditModal(weighingId) {
     elements.editMessage,
     requiresWholesaleTwoTicketPrice(state.editingChickenVariantCode)
       ? "La clasificación queda bloqueada para conservar el precio asignado al ticket. Puedes corregir cantidades, java, peso, origen y fecha."
-      : ""
+      : (useWholesaleTwoVariants && Object.keys(state.selectedTicket?.prices || {}).length > 0
+        ? "Cambiar la clasificación también puede cambiar el producto y la merma. Las clasificaciones sin precio en este ticket están bloqueadas para evitar que el total quede en cero."
+        : "")
   );
   updateWeightPreview();
   elements.editModal.hidden = false;

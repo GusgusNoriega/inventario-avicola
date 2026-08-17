@@ -13,6 +13,7 @@ use App\Services\FinancialObligationService;
 use App\Services\TerceroDirectoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class FinancialObligationServiceTest extends TestCase
@@ -158,6 +159,63 @@ class FinancialObligationServiceTest extends TestCase
         $this->assertDatabaseCount('comprobante_tickets', 1);
         $this->assertDatabaseCount('comprobante_pesadas', 0);
         $this->assertDatabaseCount('costos_compra_pesadas', 0);
+    }
+
+    public function test_it_rejects_an_active_weighing_without_a_frozen_price_and_preserves_the_existing_document(): void
+    {
+        $ticket = $this->createTicket([$this->firstProviderId]);
+        $saleDocumentId = $this->sync($ticket)['sale_document_id'];
+        $otherChickenTypeId = DB::table('tipos_pollo')->insertGetId([
+            'codigo' => TipoPollo::CHICKEN_DRESSED,
+            'nombre' => 'Pollo pelado',
+            'permite_despacho' => true,
+            'estado' => TipoPollo::STATUS_ACTIVE,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('pesadas')
+            ->where('ticket_id', $ticket->id)
+            ->update(['tipo_pollo_id' => $otherChickenTypeId]);
+
+        try {
+            $this->sync($ticket->fresh());
+            $this->fail('Se esperaba un error de validación por una pesada activa sin precio congelado.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('ticket', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $saleDocumentId,
+            'total' => 100,
+            'saldo_pendiente' => 100,
+            'estado' => 'PENDIENTE',
+            'anulada_por' => null,
+            'anulada_at' => null,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $saleDocumentId,
+            'tipo_pollo_id' => $this->chickenTypeId,
+            'cantidad_aves' => 10,
+            'peso_neto_kg' => 10,
+            'precio_kg' => 10,
+            'subtotal' => 100,
+        ]);
+        $this->assertDatabaseHas('comprobante_tickets', [
+            'comprobante_id' => $saleDocumentId,
+            'ticket_id' => $ticket->id,
+            'importe_aplicado' => 100,
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $saleDocumentId,
+            'accion' => 'ANULAR_AUTOMATICO',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $saleDocumentId,
+            'accion' => 'REVALORIZAR',
+        ]);
     }
 
     public function test_a_return_creates_a_sale_credit_and_no_purchase_obligation(): void

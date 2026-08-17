@@ -74,7 +74,7 @@
           </select>
         </label>
         <label id="editChickenVariantField" class="field" hidden>
-          Clasificación del pollo
+          Clasificación y merma del pollo
           <select id="editChickenVariant">
             <option value="MACHO">Pollo vivo macho</option>
             <option value="HEMBRA">Pollo vivo hembra</option>
@@ -84,6 +84,7 @@
             <option value="HEMBRA_CERRADA">Hembra cerrada</option>
             <option value="POLLO_BENEFICIADO">Pollo beneficiado</option>
           </select>
+          <small class="field-help">Cambiar la clasificación también puede cambiar el producto valorizado. Las opciones sin precio asignado en este ticket permanecerán bloqueadas.</small>
         </label>
         <fieldset id="editChickenSexField" class="sex-selector management-sex-selector" aria-label="Sexo de los pollos">
           <legend>Sexo</legend>

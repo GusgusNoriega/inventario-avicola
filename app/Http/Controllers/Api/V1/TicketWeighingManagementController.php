@@ -382,6 +382,23 @@ class TicketWeighingManagementController extends Controller
                     'chicken_variant_code' => 'No puedes cambiar hacia o desde Gallina roja, Gallina doble u Otros en Gestión de pesadas porque su precio pertenece al ticket. Corrige esa clasificación antes de registrar el ticket en Despacho mayorista 2.',
                 ]);
             }
+
+            $pricedTypeIds = DB::table('ticket_precios')
+                ->where('ticket_id', $selected->id)
+                ->lockForUpdate()
+                ->pluck('tipo_pollo_id')
+                ->map(fn (mixed $typeId): int => (int) $typeId);
+
+            if ($pricedTypeIds->isNotEmpty() && ! $pricedTypeIds->contains((int) $type->id)) {
+                $validationField = $usesWholesaleTwoVariants
+                    ? 'chicken_variant_code'
+                    : 'chicken_type_code';
+
+                throw ValidationException::withMessages([
+                    $validationField => "No puedes cambiar esta pesada a {$type->nombre} porque el ticket no tiene un precio asignado para ese producto. La pesada no se modificó para evitar que el total quede en cero.",
+                ]);
+            }
+
             $before = $this->auditValues($record);
             $origin = array_key_exists('origin_program_detail_id', $validated)
                 ? $this->journeyOrigin(

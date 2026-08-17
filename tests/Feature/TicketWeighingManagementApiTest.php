@@ -381,6 +381,142 @@ class TicketWeighingManagementApiTest extends TestCase
         ]);
     }
 
+    public function test_wholesale_two_management_does_not_orphan_a_standard_price_or_void_its_sale_document(): void
+    {
+        $processedAdjustment = $this->wholesaleTwoAdjustment(
+            WholesaleTwoChickenVariant::PROCESSED,
+            0,
+        );
+        $this->wholesaleTwoAdjustment(
+            WholesaleTwoChickenVariant::FEMALE_CLOSED,
+            200,
+        );
+        DB::table('tickets_despacho')
+            ->where('id', $this->ticketId)
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        DB::table('pesadas')
+            ->where('id', $this->weighingId)
+            ->update([
+                'tipo_pollo_id' => $this->processedTypeId,
+                'sexo' => null,
+                'presentacion_pollo' => null,
+                'ajuste_peso_mayorista_2_id' => $processedAdjustment->id,
+                'ajuste_peso_mayorista_2_gramos' => 0,
+                'aves_por_java' => 12,
+                'cantidad_javas' => 0,
+                'cantidad_aves' => 12,
+                'peso_leido_kg' => 40.8,
+                'peso_bruto_kg' => 40.8,
+                'tara_total_kg' => 0,
+                'peso_neto_kg' => 40.8,
+            ]);
+
+        $saleList = $this->createFinancialPriceList($this->clientId, 'VENTA');
+        $saleHistory = DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $saleList,
+            'tipo_pollo_id' => $this->processedTypeId,
+            'precio_kg' => 5.35,
+            'vigente_desde' => now()->subDay(),
+            'vigente_hasta' => null,
+            'motivo_cambio' => 'Precio congelado de pollo beneficiado',
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $this->processedTypeId,
+            'precio_historial_id' => $saleHistory,
+            'precio_kg' => 5.35,
+            'origen_precio' => 'CLIENTE',
+            'congelado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        $saleDocumentId = app(FinancialObligationService::class)->syncTicket(
+            (int) $this->user->empresa_id,
+            TicketDespacho::query()->findOrFail($this->ticketId),
+            $this->user,
+        )['sale_document_id'];
+
+        $this->assertNotNull($saleDocumentId);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $saleDocumentId,
+            'total' => 218.28,
+            'saldo_pendiente' => 218.28,
+            'estado' => 'PENDIENTE',
+        ]);
+
+        $payload = $this->updatePayload();
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+        $payload['chicken_type_code'] = TipoPollo::CHICKEN_DRESSED;
+        $payload['chicken_variant_code'] = WholesaleTwoChickenVariant::FEMALE_CLOSED;
+        $payload['cage_type_code'] = 'JAVA_700';
+        $payload['weight_source'] = 'BALANZA';
+        $payload['birds_per_cage'] = 12;
+        $payload['cages'] = 0;
+        $payload['read_weight_kg'] = 40.8;
+
+        $this->putJson(
+            "/api/v1/operacion/tickets/{$this->ticketId}/pesadas/{$this->weighingId}",
+            $payload,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['chicken_variant_code']);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $this->weighingId,
+            'tipo_pollo_id' => $this->processedTypeId,
+            'sexo' => null,
+            'presentacion_pollo' => null,
+            'ajuste_peso_mayorista_2_id' => $processedAdjustment->id,
+            'ajuste_peso_mayorista_2_gramos' => 0,
+            'peso_leido_kg' => 40.8,
+            'peso_bruto_kg' => 40.8,
+            'peso_neto_kg' => 40.8,
+            'estado' => Pesada::STATUS_ACTIVE,
+        ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $this->processedTypeId,
+            'precio_kg' => 5.35,
+        ]);
+        $this->assertDatabaseMissing('ticket_precios', [
+            'ticket_id' => $this->ticketId,
+            'tipo_pollo_id' => $this->dressedTypeId,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $saleDocumentId,
+            'total' => 218.28,
+            'saldo_pendiente' => 218.28,
+            'estado' => 'PENDIENTE',
+            'anulada_por' => null,
+            'anulada_at' => null,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $saleDocumentId,
+            'tipo_pollo_id' => $this->processedTypeId,
+            'cantidad_aves' => 12,
+            'peso_neto_kg' => 40.8,
+            'precio_kg' => 5.35,
+            'subtotal' => 218.28,
+        ]);
+        $this->assertDatabaseHas('comprobante_tickets', [
+            'comprobante_id' => $saleDocumentId,
+            'ticket_id' => $this->ticketId,
+            'importe_aplicado' => 218.28,
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'pesadas',
+            'entidad_id' => (string) $this->weighingId,
+            'accion' => 'ACTUALIZAR',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $saleDocumentId,
+            'accion' => 'ANULAR_AUTOMATICO',
+        ]);
+    }
+
     public function test_voiding_the_last_special_weighing_removes_its_now_unused_ticket_price(): void
     {
         $henRedTypeId = $this->configureWholesaleTwoSpecialWeighing();

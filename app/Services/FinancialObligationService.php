@@ -103,6 +103,22 @@ class FinancialObligationService
         }
 
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
+        $recordsWithoutPrice = $prices->isNotEmpty()
+            ? $records->reject(fn (Pesada $record): bool => $prices->has((int) $record->tipo_pollo_id))
+            : collect();
+
+        if ($recordsWithoutPrice->isNotEmpty()) {
+            $typeNames = $recordsWithoutPrice
+                ->map(fn (Pesada $record): string => (string) ($record->tipoPollo?->nombre ?? 'Pollo'))
+                ->unique()
+                ->values()
+                ->implode(', ');
+
+            throw ValidationException::withMessages([
+                'ticket' => "El ticket tiene pesadas activas sin precio asignado ({$typeNames}). No se modificó el comprobante para evitar un total incorrecto.",
+            ]);
+        }
+
         $lines = $records
             ->groupBy('tipo_pollo_id')
             ->map(function (Collection $typeRecords, int|string $typeId) use ($prices): array {
