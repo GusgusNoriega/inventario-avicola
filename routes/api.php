@@ -77,6 +77,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/descuentos-clientes', [CustomerDiscountController::class, 'index']);
             Route::get('/tickets', [FinancialTicketController::class, 'index']);
             Route::get('/tickets/clientes', [FinancialTicketController::class, 'clients']);
+            Route::get('/tickets/{ticket}/pesadas', [TicketWeighingManagementController::class, 'showForFinance'])
+                ->whereNumber('ticket');
             Route::get('/clientes/{tercero}/resumen', [FinancialCounterpartyController::class, 'customer'])
                 ->whereNumber('tercero');
             Route::get('/proveedores/{tercero}/resumen', [FinancialCounterpartyController::class, 'provider'])
@@ -158,6 +160,9 @@ Route::prefix('v1')->group(function (): void {
             ->middleware('permission:SALDOS_AJUSTAR');
         Route::put('/tickets/{ticket}/fecha-hora', [FinancialTicketController::class, 'updateDateTime'])
             ->whereNumber('ticket')
+            ->middleware('permission:SALDOS_AJUSTAR');
+        Route::put('/tickets/{ticket}/pesadas/{weighing}', [TicketWeighingManagementController::class, 'updateForFinance'])
+            ->whereNumber(['ticket', 'weighing'])
             ->middleware('permission:SALDOS_AJUSTAR');
         Route::post('/tickets/{ticket}/anular', [FinancialTicketController::class, 'void'])
             ->whereNumber('ticket')

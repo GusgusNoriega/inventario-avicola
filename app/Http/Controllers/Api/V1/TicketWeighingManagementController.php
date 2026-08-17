@@ -113,9 +113,23 @@ class TicketWeighingManagementController extends Controller
 
     public function show(Request $request, int $ticket): JsonResponse
     {
-        $branch = $this->context->branch($request);
-        $selected = $this->ticketForBranch($request, $ticket);
+        return $this->showTicket($request, $ticket, false);
+    }
+
+    public function showForFinance(Request $request, int $ticket): JsonResponse
+    {
+        return $this->showTicket($request, $ticket, true);
+    }
+
+    private function showTicket(Request $request, int $ticket, bool $allowHistoricalEditing): JsonResponse
+    {
+        $selected = $allowHistoricalEditing
+            ? $this->ticketForCompany($request, $ticket)
+            : $this->ticketForBranch($request, $ticket);
         $this->loadTicket($selected);
+        $branch = $allowHistoricalEditing
+            ? $this->branchForTicket($selected, $this->context->companyId($request))
+            : $this->context->branch($request);
         $currentOperatingDate = $this->currentOperatingDate(
             (int) $branch->empresa_id,
             $branch->zona_horaria
@@ -130,7 +144,8 @@ class TicketWeighingManagementController extends Controller
                     $selected,
                     $branch->zona_horaria,
                     $currentOperatingDate,
-                    $isAdministrator
+                    $isAdministrator,
+                    $allowHistoricalEditing
                 ),
                 'catalogs' => $this->catalogsFor($selected, (int) $branch->empresa_id),
                 'access' => [
@@ -214,14 +229,36 @@ class TicketWeighingManagementController extends Controller
 
     public function update(Request $request, int $ticket, int $weighing): JsonResponse
     {
-        $selected = $this->ticketForBranch($request, $ticket);
-        $branch = $this->context->branch($request);
+        return $this->updateWeighing($request, $ticket, $weighing, false);
+    }
+
+    public function updateForFinance(Request $request, int $ticket, int $weighing): JsonResponse
+    {
+        return $this->updateWeighing($request, $ticket, $weighing, true);
+    }
+
+    private function updateWeighing(
+        Request $request,
+        int $ticket,
+        int $weighing,
+        bool $allowHistoricalEditing,
+    ): JsonResponse {
+        $selected = $allowHistoricalEditing
+            ? $this->ticketForCompany($request, $ticket)
+            : $this->ticketForBranch($request, $ticket);
+        $branch = $allowHistoricalEditing
+            ? $this->branchForTicket($selected, $this->context->companyId($request))
+            : $this->context->branch($request);
         $companyId = (int) $branch->empresa_id;
         $currentOperatingDate = $this->currentOperatingDate(
             $companyId,
             $branch->zona_horaria
         );
-        $this->assertEditable($selected, $currentOperatingDate);
+        if ($allowHistoricalEditing) {
+            $this->assertFinanceEditable($selected);
+        } else {
+            $this->assertEditable($selected, $currentOperatingDate);
+        }
         $usesWholesaleTwoVariants = $this->usesWholesaleTwoVariants($selected);
         $validated = $request->validate([
             'chicken_type_code' => ['required', 'string', 'max:40'],
@@ -260,8 +297,35 @@ class TicketWeighingManagementController extends Controller
                 'integer',
                 'min:1',
             ],
+            'correction_reason' => $allowHistoricalEditing
+                ? ['required', 'string', 'min:3', 'max:250']
+                : ['prohibited'],
+            'expected_updated_at' => $allowHistoricalEditing
+                ? ['sometimes', 'required', 'date']
+                : ['prohibited'],
         ]);
+        if ($allowHistoricalEditing) {
+            $this->assertWeighedAtBelongsToTicketJourney(
+                $selected,
+                (string) $validated['weighed_at'],
+                (string) $branch->zona_horaria,
+                $companyId,
+            );
+        }
         $actor = $this->context->actor($request, (int) $branch->id);
+        $historicalRecord = $allowHistoricalEditing
+            ? Pesada::query()
+                ->where('ticket_id', $selected->id)
+                ->whereKey($weighing)
+                ->firstOrFail(['id', 'tipo_pollo_id', 'tipo_java_id', 'estado'])
+            : null;
+        if ($historicalRecord) {
+            abort_unless(
+                $historicalRecord->estado === Pesada::STATUS_ACTIVE,
+                409,
+                'La pesada ya fue anulada.'
+            );
+        }
         $typeCode = mb_strtoupper(trim($validated['chicken_type_code']), 'UTF-8');
         $condition = $validated['chicken_condition'];
         $variantDefinition = $usesWholesaleTwoVariants
@@ -302,8 +366,15 @@ class TicketWeighingManagementController extends Controller
 
         $type = TipoPollo::query()
             ->where('codigo', $typeCode)
-            ->where('estado', TipoPollo::STATUS_ACTIVE)
-            ->where('permite_despacho', true)
+            ->where(function (Builder $query) use ($historicalRecord): void {
+                $query->where(function (Builder $active): void {
+                    $active->where('estado', TipoPollo::STATUS_ACTIVE)
+                        ->where('permite_despacho', true);
+                });
+                if ($historicalRecord?->tipo_pollo_id) {
+                    $query->orWhere('id', $historicalRecord->tipo_pollo_id);
+                }
+            })
             ->when(
                 ! $usesWholesaleTwoVariants,
                 fn ($query) => $query->whereNotIn(
@@ -314,7 +385,12 @@ class TicketWeighingManagementController extends Controller
             ->first();
         $cageType = TipoJava::query()
             ->where('codigo', mb_strtoupper(trim($validated['cage_type_code']), 'UTF-8'))
-            ->where('estado', 'ACTIVO')
+            ->where(function (Builder $query) use ($historicalRecord): void {
+                $query->where('estado', 'ACTIVO');
+                if ($historicalRecord?->tipo_java_id) {
+                    $query->orWhere('id', $historicalRecord->tipo_java_id);
+                }
+            })
             ->first();
 
         if (! $type) {
@@ -334,7 +410,7 @@ class TicketWeighingManagementController extends Controller
         $tareWeight = round($cages * $cageWeight, 3);
         $netWeight = $grossWeight !== null ? round($grossWeight - $tareWeight, 3) : null;
 
-        if ($netWeight !== null && $netWeight <= 0) {
+        if (! $allowHistoricalEditing && $netWeight !== null && $netWeight <= 0) {
             throw ValidationException::withMessages([
                 'gross_weight_kg' => 'El peso bruto debe ser mayor que la tara total de las javas.',
             ]);
@@ -359,16 +435,69 @@ class TicketWeighingManagementController extends Controller
             $actor,
             $companyId,
             $usesWholesaleTwoVariants,
-            $variantDefinition
+            $variantDefinition,
+            $allowHistoricalEditing,
+            $currentOperatingDate
         ): void {
+            $lockedTicket = TicketDespacho::query()
+                ->whereKey($selected->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            if ($allowHistoricalEditing) {
+                $this->assertFinanceEditable($lockedTicket);
+            } else {
+                $this->assertEditable($lockedTicket, $currentOperatingDate);
+            }
+            $lockedBranch = $allowHistoricalEditing
+                ? $this->branchForTicket($lockedTicket, $companyId)
+                : $branch;
+            if ($allowHistoricalEditing) {
+                $this->assertWeighedAtBelongsToTicketJourney(
+                    $lockedTicket,
+                    (string) $validated['weighed_at'],
+                    (string) $lockedBranch->zona_horaria,
+                    $companyId,
+                );
+            }
+
             $record = Pesada::query()
                 ->with(['tipoPollo', 'ajustePesoMayoristaDos'])
-                ->where('ticket_id', $selected->id)
+                ->where('ticket_id', $lockedTicket->id)
                 ->whereKey($weighing)
                 ->lockForUpdate()
                 ->firstOrFail();
             abort_unless($record->estado === Pesada::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
-            $this->assertFinancialDocumentsAreEditable((int) $selected->id);
+            if (
+                $allowHistoricalEditing
+                && array_key_exists('expected_updated_at', $validated)
+                && $record->updated_at
+            ) {
+                $expectedTimestamp = CarbonImmutable::parse(
+                    (string) $validated['expected_updated_at']
+                )->getTimestamp();
+                abort_if(
+                    $expectedTimestamp !== $record->updated_at->getTimestamp(),
+                    409,
+                    'La pesada fue modificada por otro usuario. Vuelve a abrirla antes de guardar tu corrección.'
+                );
+            }
+            $this->assertFinancialDocumentsAreEditable((int) $lockedTicket->id);
+            if (
+                $allowHistoricalEditing
+                && (int) $record->tipo_java_id === (int) $cageType->id
+            ) {
+                $cageWeight = round((float) $record->peso_java_kg_snapshot, 3);
+            }
+            $tareWeight = round($cages * $cageWeight, 3);
+            if (! $usesWholesaleTwoVariants) {
+                $grossWeight = $readWeight;
+                $netWeight = round($grossWeight - $tareWeight, 3);
+                if ($netWeight <= 0) {
+                    throw ValidationException::withMessages([
+                        'gross_weight_kg' => 'El peso bruto debe ser mayor que la tara total de las javas.',
+                    ]);
+                }
+            }
             $currentTypeCode = $record->tipoPollo?->codigo;
             if (
                 $usesWholesaleTwoVariants
@@ -384,7 +513,7 @@ class TicketWeighingManagementController extends Controller
             }
 
             $pricedTypeIds = DB::table('ticket_precios')
-                ->where('ticket_id', $selected->id)
+                ->where('ticket_id', $lockedTicket->id)
                 ->lockForUpdate()
                 ->pluck('tipo_pollo_id')
                 ->map(fn (mixed $typeId): int => (int) $typeId);
@@ -402,7 +531,7 @@ class TicketWeighingManagementController extends Controller
             $before = $this->auditValues($record);
             $origin = array_key_exists('origin_program_detail_id', $validated)
                 ? $this->journeyOrigin(
-                    $selected,
+                    $lockedTicket,
                     (int) $validated['origin_program_detail_id'],
                     $companyId
                 )
@@ -460,7 +589,7 @@ class TicketWeighingManagementController extends Controller
                 'peso_neto_kg' => $netWeight,
                 'pesada_at' => CarbonImmutable::parse(
                     $validated['weighed_at'],
-                    $branch->zona_horaria
+                    $lockedBranch->zona_horaria
                 )->format('Y-m-d H:i:s'),
             ];
 
@@ -484,13 +613,13 @@ class TicketWeighingManagementController extends Controller
             $record->update($changes);
 
             $this->javaControl->syncDispatchMovement(
-                $selected,
+                $lockedTicket,
                 $companyId,
-                (int) $branch->id
+                (int) $lockedBranch->id
             );
             $this->financialObligations->syncTicket(
                 $companyId,
-                $selected->fresh(),
+                $lockedTicket->fresh(),
                 $actor,
             );
 
@@ -498,12 +627,17 @@ class TicketWeighingManagementController extends Controller
                 $companyId,
                 $actor->id,
                 $record->id,
-                'ACTUALIZAR',
+                $allowHistoricalEditing ? 'ACTUALIZAR_FINANZAS' : 'ACTUALIZAR',
                 $before,
-                $this->auditValues($record->fresh()),
+                [
+                    ...$this->auditValues($record->fresh()),
+                    ...($allowHistoricalEditing ? [
+                        'motivo_correccion' => trim((string) $validated['correction_reason']),
+                    ] : []),
+                ],
                 $request->ip()
             );
-        });
+        }, 3);
 
         $this->loadTicket($selected);
 
@@ -513,7 +647,8 @@ class TicketWeighingManagementController extends Controller
                 $selected,
                 $branch->zona_horaria,
                 $currentOperatingDate,
-                $request->user()?->isAdministrator() === true
+                $request->user()?->isAdministrator() === true,
+                $allowHistoricalEditing
             )],
         ]);
     }
@@ -610,10 +745,39 @@ class TicketWeighingManagementController extends Controller
             ->firstOrFail();
     }
 
+    private function ticketForCompany(Request $request, int $ticketId): TicketDespacho
+    {
+        $companyId = $this->context->companyId($request);
+
+        return TicketDespacho::query()
+            ->whereKey($ticketId)
+            ->where('estado', '!=', TicketDespacho::STATUS_VOIDED)
+            ->whereHas('jornada.sucursal', fn (Builder $query) => $query
+                ->where('empresa_id', $companyId))
+            ->firstOrFail();
+    }
+
+    /** @return object{id: int, empresa_id: int, codigo: string, nombre: string, zona_horaria: string} */
+    private function branchForTicket(TicketDespacho $ticket, int $companyId): object
+    {
+        $ticket->loadMissing('jornada.sucursal');
+        $branch = $ticket->jornada?->sucursal;
+
+        abort_unless($branch && (int) $branch->empresa_id === $companyId, 404);
+
+        return (object) [
+            'id' => (int) $branch->id,
+            'empresa_id' => (int) $branch->empresa_id,
+            'codigo' => (string) $branch->codigo,
+            'nombre' => (string) $branch->nombre,
+            'zona_horaria' => (string) $branch->zona_horaria,
+        ];
+    }
+
     private function loadTicket(TicketDespacho $ticket): void
     {
         $ticket->load([
-            'jornada',
+            'jornada.sucursal',
             'clienteDestino',
             'almacenDestino',
             'vehiculoEntrega',
@@ -638,10 +802,13 @@ class TicketWeighingManagementController extends Controller
         TicketDespacho $ticket,
         string $timezone,
         string $currentOperatingDate,
-        bool $isAdministrator = false
+        bool $isAdministrator = false,
+        bool $allowHistoricalEditing = false,
     ): array {
         $records = $ticket->pesadas->where('estado', Pesada::STATUS_ACTIVE)->values();
-        $editable = $this->isEditable($ticket, $currentOperatingDate);
+        $editable = $allowHistoricalEditing
+            ? $this->isFinanceEditable($ticket)
+            : $this->isEditable($ticket, $currentOperatingDate);
         $deliveryEditable = $this->isDeliveryEditable($ticket, $currentOperatingDate);
         $isRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL;
         $usesWholesaleTwoVariants = $this->usesWholesaleTwoVariants($ticket);
@@ -671,11 +838,15 @@ class TicketWeighingManagementController extends Controller
                 && $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'edit_restriction' => $editable
                 ? null
-                : ($isRetail
-                    ? ($deliveryEditable
-                        ? 'Las pesadas minoristas son de solo consulta; el camión y el chofer se gestionan por separado.'
-                        : 'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.')
-                    : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.'),
+                : ($allowHistoricalEditing
+                    ? ($ticket->estado !== TicketDespacho::STATUS_CLOSED
+                        ? 'Solo se pueden corregir pesadas de tickets cerrados.'
+                        : 'La edición histórica de pesadas está disponible únicamente para tickets mayoristas.')
+                    : ($isRetail
+                        ? ($deliveryEditable
+                            ? 'Las pesadas minoristas son de solo consulta; el camión y el chofer se gestionan por separado.'
+                            : 'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.')
+                        : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.')),
             'customer_type' => $this->customerType($ticket),
             'client' => $this->formatClient($ticket),
             'destination' => $this->formatDestination($ticket),
@@ -805,6 +976,7 @@ class TicketWeighingManagementController extends Controller
                             $timezone
                         )->toIso8601String()
                         : null,
+                    'updated_at' => $record->updated_at?->toISOString(),
                 ];
             })->values(),
         ];
@@ -833,6 +1005,12 @@ class TicketWeighingManagementController extends Controller
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
             && $ticket->estado !== TicketDespacho::STATUS_VOIDED
             && $this->isFromOperatingDate($ticket, $operatingDate);
+    }
+
+    private function isFinanceEditable(TicketDespacho $ticket): bool
+    {
+        return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $ticket->estado === TicketDespacho::STATUS_CLOSED;
     }
 
     private function usesWholesaleTwoVariants(TicketDespacho $ticket): bool
@@ -913,6 +1091,49 @@ class TicketWeighingManagementController extends Controller
             409,
             $message
         );
+    }
+
+    private function assertFinanceEditable(TicketDespacho $ticket): void
+    {
+        abort_unless(
+            $ticket->estado !== TicketDespacho::STATUS_VOIDED,
+            409,
+            'Un ticket anulado es de solo consulta.'
+        );
+        abort_unless(
+            $ticket->estado === TicketDespacho::STATUS_CLOSED,
+            409,
+            'Solo se pueden corregir pesadas de tickets cerrados desde Finanzas.'
+        );
+        abort_unless(
+            $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE,
+            409,
+            'La edición histórica de pesadas está disponible únicamente para tickets mayoristas.'
+        );
+    }
+
+    private function assertWeighedAtBelongsToTicketJourney(
+        TicketDespacho $ticket,
+        string $weighedAt,
+        string $timezone,
+        int $companyId,
+    ): void {
+        $ticket->loadMissing('jornada');
+        $cutoff = (string) DB::table('empresas')
+            ->where('id', $companyId)
+            ->value('hora_corte_operativo') ?: '21:00:00';
+        $localTime = CarbonImmutable::parse($weighedAt, $timezone);
+        $cutoffAt = $localTime->startOfDay()->setTimeFromTimeString($cutoff);
+        $operatingDate = $localTime->greaterThanOrEqualTo($cutoffAt)
+            ? $localTime->addDay()->toDateString()
+            : $localTime->toDateString();
+        $ticketOperatingDate = $ticket->jornada?->fecha_operativa?->format('Y-m-d');
+
+        if ($operatingDate !== $ticketOperatingDate) {
+            throw ValidationException::withMessages([
+                'weighed_at' => 'La fecha de la pesada debe permanecer dentro de la jornada del ticket. Para mover todo el ticket, usa Cambiar fecha/hora.',
+            ]);
+        }
     }
 
     private function assertFinancialDocumentsAreEditable(int $ticketId): void

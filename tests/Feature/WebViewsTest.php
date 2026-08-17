@@ -299,6 +299,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeTicketStatus"', false)
             ->assertSee('value="ANULADOS"', false)
             ->assertSee('id="financeTicketRows"', false)
+            ->assertSee('id="financeTicketWeighingDialog"', false)
+            ->assertSee('id="financeTicketWeighingForm"', false)
+            ->assertSee('id="financeTicketWeighingRows"', false)
+            ->assertSee('id="financeWeighingReason"', false)
+            ->assertSee('Editar ticket y pesadas')
+            ->assertSee('Motivo de la corrección')
             ->assertSee('id="financeTicketPriceDialog"', false)
             ->assertSee('id="financeTicketClientDialog"', false)
             ->assertSee('id="financeTicketDateTimeDialog"', false)
@@ -451,6 +457,11 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/catalogo', $ticketsJavascript);
         $this->assertStringContainsString('/finanzas/tickets/clientes?', $ticketsJavascript);
         $this->assertStringContainsString('/ajustar-precios', $ticketsJavascript);
+        $this->assertStringContainsString('data-edit-ticket-weighings', $ticketsJavascript);
+        $this->assertStringContainsString('Editar ticket/pesadas', $ticketsJavascript);
+        $this->assertStringContainsString('/finanzas/tickets/${encodeURIComponent(ticketId)}/pesadas', $ticketsJavascript);
+        $this->assertStringContainsString('/finanzas/tickets/${encodeURIComponent(state.editingWeighingTicketId)}/pesadas/${encodeURIComponent(state.editingWeighingId)}', $ticketsJavascript);
+        $this->assertStringContainsString('correction_reason:', $ticketsJavascript);
         $this->assertStringContainsString('data-edit-date-time', $ticketsJavascript);
         $this->assertStringContainsString('/fecha-hora`', $ticketsJavascript);
         $this->assertStringContainsString('filters.cliente_id', $ticketsJavascript);

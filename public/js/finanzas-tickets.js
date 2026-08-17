@@ -13,6 +13,25 @@ import {
   setMessage
 } from "./finanzas-common.js";
 
+const WHOLESALE_TWO_SOURCE_MODULE = "MODULO_DESPACHO_MAYORISTA_2";
+const WHOLESALE_TWO_CHICKEN_VARIANTS = Object.freeze([
+  { code: "MACHO", label: "Pollo vivo macho", shortLabel: "PV-M", typeCode: "POLLO_VIVO", sex: "MACHO", presentation: null },
+  { code: "HEMBRA", label: "Pollo vivo hembra", shortLabel: "PV-H", typeCode: "POLLO_VIVO", sex: "HEMBRA", presentation: null },
+  { code: "MACHO_ABIERTO", label: "Macho abierto", shortLabel: "MA", typeCode: "POLLO_PELADO", sex: "MACHO", presentation: "ABIERTO" },
+  { code: "MACHO_CERRADO", label: "Macho cerrado", shortLabel: "MC", typeCode: "POLLO_PELADO", sex: "MACHO", presentation: "CERRADO" },
+  { code: "HEMBRA_ABIERTA", label: "Hembra abierta", shortLabel: "HA", typeCode: "POLLO_PELADO", sex: "HEMBRA", presentation: "ABIERTA" },
+  { code: "HEMBRA_CERRADA", label: "Hembra cerrada", shortLabel: "HC", typeCode: "POLLO_PELADO", sex: "HEMBRA", presentation: "CERRADA" },
+  { code: "POLLO_BENEFICIADO", label: "Pollo beneficiado", shortLabel: "PB", typeCode: "POLLO_BENEFICIADO", sex: null, presentation: null },
+  { code: "GALLINA_ROJA", label: "Gallina roja", shortLabel: "GR", typeCode: "GALLINA_ROJA", sex: null, presentation: null },
+  { code: "GALLINA_DOBLE", label: "Gallina doble", shortLabel: "GD", typeCode: "GALLINA_DOBLE", sex: null, presentation: null },
+  { code: "OTROS", label: "Otros", shortLabel: "OT", typeCode: "OTROS", sex: null, presentation: null }
+]);
+const WHOLESALE_TWO_PRICE_REQUIRED_VARIANTS = new Set([
+  "GALLINA_ROJA",
+  "GALLINA_DOBLE",
+  "OTROS"
+]);
+
 const elements = {
   filters: document.getElementById("financeTicketFilters"),
   ticket: document.getElementById("financeTicketNumber"),
@@ -29,6 +48,43 @@ const elements = {
   next: document.getElementById("financeTicketNext"),
   page: document.getElementById("financeTicketPage"),
   bulkOpen: document.getElementById("financeTicketBulkOpen"),
+  weighingDialog: document.getElementById("financeTicketWeighingDialog"),
+  weighingCard: document.getElementById("financeTicketWeighingCard"),
+  weighingTitle: document.getElementById("financeTicketWeighingTitle"),
+  weighingDescription: document.getElementById("financeTicketWeighingDescription"),
+  weighingGeneralActions: document.getElementById("financeTicketWeighingGeneralActions"),
+  weighingSummary: document.getElementById("financeTicketWeighingSummary"),
+  weighingCount: document.getElementById("financeTicketWeighingCount"),
+  weighingRows: document.getElementById("financeTicketWeighingRows"),
+  weighingEditor: document.getElementById("financeTicketWeighingEditor"),
+  weighingEditorTitle: document.getElementById("financeTicketWeighingEditorTitle"),
+  weighingEditCancelTop: document.getElementById("financeTicketWeighingEditCancelTop"),
+  weighingForm: document.getElementById("financeTicketWeighingForm"),
+  weighingChickenTypeField: document.getElementById("financeWeighingChickenTypeField"),
+  weighingChickenType: document.getElementById("financeWeighingChickenType"),
+  weighingChickenConditionField: document.getElementById("financeWeighingChickenConditionField"),
+  weighingChickenCondition: document.getElementById("financeWeighingChickenCondition"),
+  weighingChickenVariantField: document.getElementById("financeWeighingChickenVariantField"),
+  weighingChickenVariant: document.getElementById("financeWeighingChickenVariant"),
+  weighingChickenSexField: document.getElementById("financeWeighingChickenSexField"),
+  weighingChickenSex: document.getElementById("financeWeighingChickenSex"),
+  weighingBirdsPerCage: document.getElementById("financeWeighingBirdsPerCage"),
+  weighingCages: document.getElementById("financeWeighingCages"),
+  weighingCageType: document.getElementById("financeWeighingCageType"),
+  weighingWeightLabel: document.getElementById("financeWeighingWeightLabel"),
+  weighingWeight: document.getElementById("financeWeighingWeight"),
+  weighingWeightHelp: document.getElementById("financeWeighingWeightHelp"),
+  weighingOriginField: document.getElementById("financeWeighingOriginField"),
+  weighingOrigin: document.getElementById("financeWeighingOrigin"),
+  weighingOriginHelp: document.getElementById("financeWeighingOriginHelp"),
+  weighingSource: document.getElementById("financeWeighingSource"),
+  weighingDateTime: document.getElementById("financeWeighingDateTime"),
+  weighingReason: document.getElementById("financeWeighingReason"),
+  weighingPreview: document.getElementById("financeTicketWeighingPreview"),
+  weighingEditorMessage: document.getElementById("financeTicketWeighingEditorMessage"),
+  weighingEditCancel: document.getElementById("financeTicketWeighingEditCancel"),
+  weighingSave: document.getElementById("financeTicketWeighingSave"),
+  weighingMessage: document.getElementById("financeTicketWeighingMessage"),
   priceDialog: document.getElementById("financeTicketPriceDialog"),
   priceForm: document.getElementById("financeTicketPriceForm"),
   priceTitle: document.getElementById("financeTicketPriceTitle"),
@@ -93,6 +149,20 @@ const state = {
   editingPriceTicketId: null,
   editingClientTicketId: null,
   editingDateTimeTicketId: null,
+  editingWeighingTicketId: null,
+  editingWeighingId: null,
+  weighingRecord: null,
+  weighingTicket: null,
+  weighingCatalogs: {
+    chicken_types: [],
+    cage_types: [],
+    origin_trucks: [],
+    weight_adjustments: []
+  },
+  weighingRequestGeneration: 0,
+  weighingRequestController: null,
+  weighingLoading: false,
+  weighingSaving: false,
   voidingTicketId: null,
   restoringTicketId: null,
   selectedClientId: null,
@@ -260,6 +330,114 @@ function dateTimeLocalValue(value) {
   return match?.[1] || "";
 }
 
+function formatCount(value) {
+  return new Intl.NumberFormat("es-PE").format(Number(value || 0));
+}
+
+function formatWeight(value) {
+  return `${Number(value || 0).toFixed(3)} kg`;
+}
+
+function ticketCustomerName(ticket) {
+  return ticket?.client?.name || ticket?.destination?.name || "Sin cliente registrado";
+}
+
+function usesWholesaleTwoVariants(ticket) {
+  return ticket?.source_module === WHOLESALE_TWO_SOURCE_MODULE
+    && ticket?.operation_type === "DESPACHO";
+}
+
+function normalizeChickenSex(value) {
+  return String(value || "").toUpperCase() === "HEMBRA" ? "HEMBRA" : "MACHO";
+}
+
+function wholesaleTwoVariantByCode(value) {
+  const code = String(value || "").trim().toUpperCase();
+  return WHOLESALE_TWO_CHICKEN_VARIANTS.find((variant) => variant.code === code) || null;
+}
+
+function wholesaleTwoVariantForWeighing(weighing) {
+  const explicit = wholesaleTwoVariantByCode(weighing?.chicken_variant_code);
+  if (explicit) return explicit;
+
+  const typeCode = String(
+    weighing?.chicken_type?.code || weighing?.chicken_type_code || ""
+  ).toUpperCase();
+  const sex = String(weighing?.chicken_sex || "").toUpperCase() || null;
+  const presentation = String(weighing?.presentation || "").toUpperCase() || null;
+
+  return WHOLESALE_TWO_CHICKEN_VARIANTS.find((variant) => (
+    variant.typeCode === typeCode
+      && variant.sex === sex
+      && variant.presentation === presentation
+  )) || null;
+}
+
+function requiresWholesaleTwoTicketPrice(value) {
+  return WHOLESALE_TWO_PRICE_REQUIRED_VARIANTS.has(
+    String(value || "").trim().toUpperCase()
+  );
+}
+
+function wholesaleTwoAdjustmentForVariant(value) {
+  const code = String(value || "").trim().toUpperCase();
+  return (state.weighingCatalogs.weight_adjustments || [])
+    .find((adjustment) => String(adjustment?.code || "").toUpperCase() === code) || null;
+}
+
+function currentEditingWeighing() {
+  return state.weighingTicket?.weighings?.find(
+    (weighing) => String(weighing.id) === String(state.editingWeighingId)
+  ) || null;
+}
+
+function editingWholesaleTwoAdjustmentGrams() {
+  const weighing = currentEditingWeighing();
+  if (!weighing || !usesWholesaleTwoVariants(state.weighingTicket)) return 0;
+
+  const selectedCode = String(elements.weighingChickenVariant.value || "").toUpperCase();
+  const originalCode = wholesaleTwoVariantForWeighing(weighing)?.code || "";
+  if (selectedCode === originalCode) {
+    return Math.max(0, Number(weighing.adjustment?.additional_grams) || 0);
+  }
+
+  return Math.max(
+    0,
+    Number(wholesaleTwoAdjustmentForVariant(selectedCode)?.additional_grams) || 0
+  );
+}
+
+function weighingClassificationLabel(weighing, ticket) {
+  if (usesWholesaleTwoVariants(ticket)) {
+    return wholesaleTwoVariantForWeighing(weighing)?.label || "Sin clasificación";
+  }
+  if (ticket?.operation_type === "DEVOLUCION") {
+    return weighing?.chicken_condition === "MUERTO" ? "Pollo muerto" : "Pollo vivo";
+  }
+  return normalizeChickenSex(weighing?.chicken_sex) === "HEMBRA" ? "Hembra" : "Macho";
+}
+
+function recordForTicket(ticketId) {
+  if (
+    String(state.editingWeighingTicketId) === String(ticketId)
+    && String(state.weighingRecord?.id) === String(ticketId)
+  ) {
+    return state.weighingRecord;
+  }
+  return state.records.get(String(ticketId)) || null;
+}
+
+function rememberWeighingRecord(record) {
+  if (
+    !record?.id
+    || String(record.id) !== String(state.editingWeighingTicketId)
+  ) return;
+  state.weighingRecord = {
+    ...(state.weighingRecord || {}),
+    ...record
+  };
+}
+
 function operationLabel(record) {
   const operation = String(record.operation_type || "").toUpperCase();
   const channel = String(record.channel || "").toUpperCase();
@@ -302,6 +480,9 @@ function actionsHtml(record) {
   const actions = [];
 
   if (canManage && record.status !== "ANULADO") {
+    if (record.can_edit_weighings) {
+      actions.push(`<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-edit-ticket-weighings="${record.id}">Editar ticket/pesadas</button>`);
+    }
     actions.push(record.can_edit_prices
       ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-prices="${record.id}">Editar precio</button>`
       : '<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" disabled>Sin precios</button>');
@@ -327,6 +508,8 @@ function actionsHtml(record) {
 
 function renderTickets(records) {
   state.records = new Map(records.map((record) => [String(record.id), record]));
+  const refreshedWeighingRecord = state.records.get(String(state.editingWeighingTicketId));
+  if (refreshedWeighingRecord) rememberWeighingRecord(refreshedWeighingRecord);
 
   if (!records.length) {
     elements.rows.innerHTML = '<tr><td class="fin-empty-cell" colspan="7">No hay tickets que coincidan con los filtros.</td></tr>';
@@ -356,6 +539,535 @@ function renderTickets(records) {
       <td>${actionsHtml(record)}</td>
     </tr>
   `).join("");
+}
+
+function renderWeighingDialogLoading() {
+  elements.weighingTitle.textContent = "Editar ticket y pesadas";
+  elements.weighingDescription.textContent = "Cargando información completa del ticket...";
+  elements.weighingGeneralActions.innerHTML = "";
+  elements.weighingSummary.innerHTML = "";
+  elements.weighingCount.textContent = "0 pesadas";
+  elements.weighingRows.innerHTML = '<tr><td class="fin-empty-cell" colspan="10">Cargando pesadas...</td></tr>';
+  elements.weighingEditor.hidden = true;
+  setMessage(elements.weighingEditorMessage, "");
+  setMessage(elements.weighingMessage, "Cargando pesadas del ticket...");
+}
+
+function renderWeighingGeneralActions() {
+  const record = recordForTicket(state.editingWeighingTicketId);
+  if (!record) {
+    elements.weighingGeneralActions.innerHTML = "";
+    return;
+  }
+
+  const actions = [];
+  if (record.can_edit_prices) {
+    actions.push('<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-weighing-general-action="prices">Editar precios</button>');
+  }
+  if (record.can_change_client) {
+    actions.push('<button class="fin-btn fin-btn-primary fin-btn-small" type="button" data-weighing-general-action="client">Cambiar cliente</button>');
+  }
+  if (record.can_edit_datetime) {
+    actions.push('<button class="fin-btn fin-btn-accent fin-btn-small" type="button" data-weighing-general-action="datetime">Cambiar fecha/hora general</button>');
+  }
+
+  elements.weighingGeneralActions.innerHTML = actions.length
+    ? `<span>Datos generales:</span>${actions.join("")}`
+    : '<span class="fin-management-muted">Este ticket no tiene datos generales editables.</span>';
+  const actionsLocked = Boolean(state.editingWeighingId)
+    || state.weighingSaving
+    || state.weighingLoading;
+  elements.weighingGeneralActions.querySelectorAll("button").forEach((button) => {
+    button.disabled = actionsLocked;
+    if (actionsLocked) {
+      button.title = "Guarda o cancela la edición de la pesada antes de cambiar datos generales.";
+    }
+  });
+}
+
+function weighingSummaryItem(label, value, tone = "") {
+  return `
+    <article class="${escapeHtml(tone)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function renderWeighingSummary() {
+  const ticket = state.weighingTicket;
+  const summary = ticket?.summary || {};
+  const record = recordForTicket(state.editingWeighingTicketId);
+  const items = [
+    weighingSummaryItem("Pesadas", formatCount(summary.weighings)),
+    weighingSummaryItem("Javas", formatCount(summary.cages)),
+    weighingSummaryItem("Aves", formatCount(summary.birds))
+  ];
+
+  if (usesWholesaleTwoVariants(ticket)) {
+    items.push(
+      weighingSummaryItem("Peso leído", formatWeight(summary.read_weight_kg)),
+      weighingSummaryItem("Merma", formatWeight(summary.adjustment_weight_kg))
+    );
+  }
+
+  items.push(
+    weighingSummaryItem("Peso bruto", formatWeight(summary.gross_weight_kg)),
+    weighingSummaryItem("Tara", formatWeight(summary.tare_weight_kg)),
+    weighingSummaryItem("Peso neto", formatWeight(summary.net_weight_kg), "is-accent")
+  );
+
+  const amount = summary.amount ?? record?.amount;
+  if (amount !== null && amount !== undefined) {
+    items.push(weighingSummaryItem(
+      "Monto del ticket",
+      formatMoney(amount, record?.currency || "PEN"),
+      "is-total"
+    ));
+  }
+
+  elements.weighingSummary.innerHTML = items.join("");
+}
+
+function weighingProductHtml(weighing, ticket) {
+  return `
+    <div class="fin-ticket-weighing-product">
+      <strong>${escapeHtml(weighing.chicken_type?.name || "Sin tipo")}</strong>
+      <small>${escapeHtml(weighingClassificationLabel(weighing, ticket))}</small>
+    </div>
+  `;
+}
+
+function renderWeighingRows() {
+  const ticket = state.weighingTicket;
+  const weighings = Array.isArray(ticket?.weighings) ? ticket.weighings : [];
+  elements.weighingCount.textContent = `${formatCount(weighings.length)} pesada${weighings.length === 1 ? "" : "s"}`;
+
+  if (!weighings.length) {
+    elements.weighingRows.innerHTML = '<tr><td class="fin-empty-cell" colspan="10">Este ticket no tiene pesadas activas.</td></tr>';
+    return;
+  }
+
+  elements.weighingRows.innerHTML = weighings.map((weighing) => {
+    const selected = String(weighing.id) === String(state.editingWeighingId);
+    const canEdit = Boolean(ticket.editable) && !state.weighingSaving && !state.weighingLoading;
+    const origin = weighing.origin || "Sin origen";
+    const plate = weighing.plate ? ` · ${weighing.plate}` : "";
+    const cages = Number(weighing.cages || 0);
+    const birdsPerCage = Number(weighing.birds_per_cage || 0);
+
+    return `
+      <tr class="${selected ? "is-editing" : ""}">
+        <td><strong>#${escapeHtml(weighing.number)}</strong></td>
+        <td>${weighingProductHtml(weighing, ticket)}</td>
+        <td><strong>${escapeHtml(origin)}</strong><small>${escapeHtml(plate.replace(/^ · /, ""))}</small></td>
+        <td><strong>${escapeHtml(weighing.cage_type?.name || "Sin java")}</strong><small>${formatCount(cages)} java${cages === 1 ? "" : "s"}</small></td>
+        <td><strong>${formatCount(weighing.birds)}</strong><small>${formatCount(birdsPerCage)} por java</small></td>
+        <td class="fin-text-right">${escapeHtml(formatWeight(weighing.gross_weight_kg))}</td>
+        <td class="fin-text-right">${escapeHtml(formatWeight(weighing.tare_weight_kg))}</td>
+        <td class="fin-text-right"><strong>${escapeHtml(formatWeight(weighing.net_weight_kg))}</strong></td>
+        <td>${escapeHtml(formatTicketDateTime(weighing.weighed_at))}</td>
+        <td>
+          ${canEdit
+            ? `<button class="fin-btn fin-btn-ghost fin-btn-small" type="button" data-edit-finance-weighing="${weighing.id}">Editar</button>`
+            : '<span class="fin-management-muted">Solo consulta</span>'}
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderWeighingTicketDetail() {
+  const ticket = state.weighingTicket;
+  if (!ticket) return;
+
+  const record = recordForTicket(state.editingWeighingTicketId);
+  const currentDate = record?.registered_at
+    ? formatTicketDateTime(record.registered_at).replace(/[.]$/, "")
+    : ticket.operating_date || "Sin fecha";
+  elements.weighingTitle.textContent = `Editar ticket y pesadas · ${ticket.code}`;
+  elements.weighingDescription.textContent = `Cliente: ${ticketCustomerName(ticket)} · ${operationLabel(ticket)} · ${currentDate}.`;
+  renderWeighingGeneralActions();
+  renderWeighingSummary();
+  renderWeighingRows();
+}
+
+function weighingRequestWasCancelled(error, requestId, controller) {
+  return requestId !== state.weighingRequestGeneration
+    || controller.signal.aborted
+    || error?.name === "AbortError";
+}
+
+async function loadWeighingTicketDetail(
+  ticketId,
+  { showLoading = true, successMessage = "" } = {}
+) {
+  state.weighingRequestController?.abort();
+  const requestId = state.weighingRequestGeneration + 1;
+  const controller = new AbortController();
+  state.weighingRequestGeneration = requestId;
+  state.weighingRequestController = controller;
+  state.weighingLoading = true;
+  elements.weighingCard.setAttribute("aria-busy", "true");
+  if (showLoading) renderWeighingDialogLoading();
+
+  try {
+    const response = await apiRequest(
+      `/finanzas/tickets/${encodeURIComponent(ticketId)}/pesadas`,
+      { signal: controller.signal }
+    );
+    if (requestId !== state.weighingRequestGeneration) return { ok: false, stale: true };
+
+    const ticket = response?.data?.ticket;
+    if (!ticket) throw new Error("La respuesta no incluyó el detalle del ticket.");
+
+    state.editingWeighingTicketId = ticket.id;
+    state.editingWeighingId = null;
+    state.weighingTicket = ticket;
+    state.weighingCatalogs = response?.data?.catalogs || {
+      chicken_types: [],
+      cage_types: [],
+      origin_trucks: [],
+      weight_adjustments: []
+    };
+    state.weighingLoading = false;
+    elements.weighingEditor.hidden = true;
+    renderWeighingTicketDetail();
+    setMessage(elements.weighingMessage, successMessage, successMessage ? "success" : "");
+    return { ok: true, ticket };
+  } catch (error) {
+    if (weighingRequestWasCancelled(error, requestId, controller)) {
+      return { ok: false, aborted: true };
+    }
+    setMessage(
+      elements.weighingMessage,
+      errorMessage(error, "No se pudieron cargar las pesadas del ticket."),
+      "error"
+    );
+    return { ok: false, error };
+  } finally {
+    if (requestId === state.weighingRequestGeneration) {
+      if (state.weighingRequestController === controller) {
+        state.weighingRequestController = null;
+      }
+      state.weighingLoading = false;
+      elements.weighingCard.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+function openWeighingTicketDialog(ticketId) {
+  const record = state.records.get(String(ticketId));
+  if (!canManage || !record?.can_edit_weighings || state.weighingSaving) return;
+
+  state.editingWeighingTicketId = record.id;
+  state.editingWeighingId = null;
+  state.weighingRecord = record;
+  state.weighingTicket = null;
+  state.weighingCatalogs = {
+    chicken_types: [],
+    cage_types: [],
+    origin_trucks: [],
+    weight_adjustments: []
+  };
+  renderWeighingDialogLoading();
+  elements.weighingDialog.showModal();
+  void loadWeighingTicketDetail(record.id);
+}
+
+function renderWeighingEditOptions(weighing) {
+  const originalVariant = wholesaleTwoVariantForWeighing(weighing);
+  const originalRequiresTicketPrice = requiresWholesaleTwoTicketPrice(originalVariant?.code);
+  const record = recordForTicket(state.editingWeighingTicketId);
+  const detailPrices = Object.values(state.weighingTicket?.prices || {});
+  const availablePrices = detailPrices.length ? detailPrices : (record?.prices || []);
+  const chickenTypes = [...(state.weighingCatalogs.chicken_types || [])];
+  const currentChickenCode = String(weighing.chicken_type?.code || "");
+  if (currentChickenCode && !chickenTypes.some((type) => String(type.code) === currentChickenCode)) {
+    chickenTypes.unshift({
+      code: currentChickenCode,
+      name: `${weighing.chicken_type?.name || currentChickenCode} (catálogo histórico)`
+    });
+  }
+  const cageTypes = [...(state.weighingCatalogs.cage_types || [])];
+  const currentCageCode = String(weighing.cage_type?.code || "");
+  if (currentCageCode && !cageTypes.some((type) => String(type.code) === currentCageCode)) {
+    cageTypes.unshift({
+      code: currentCageCode,
+      name: `${weighing.cage_type?.name || currentCageCode} (catálogo histórico)`,
+      weight_kg: weighing.cage_type?.weight_kg
+    });
+  }
+  const pricedTypeCodes = new Set(
+    availablePrices
+      .map((price) => String(price?.chicken_type?.code || "").trim().toUpperCase())
+      .filter(Boolean)
+  );
+
+  elements.weighingChickenType.innerHTML = chickenTypes
+    .map((type) => {
+      const code = String(type?.code || "").trim().toUpperCase();
+      const disabled = pricedTypeCodes.size > 0 && !pricedTypeCodes.has(code);
+      return `<option value="${escapeHtml(type.code)}"${disabled ? " disabled" : ""}>${escapeHtml(type.name)}${disabled ? " (sin precio en este ticket)" : ""}</option>`;
+    })
+    .join("");
+
+  elements.weighingChickenVariant.innerHTML = WHOLESALE_TWO_CHICKEN_VARIANTS
+    .map((variant) => {
+      const unavailablePrice = pricedTypeCodes.size > 0 && !pricedTypeCodes.has(variant.typeCode);
+      const disabledBySpecialPrice = originalRequiresTicketPrice
+        ? variant.code !== originalVariant?.code
+        : requiresWholesaleTwoTicketPrice(variant.code);
+      const disabled = unavailablePrice || disabledBySpecialPrice;
+      const suffix = unavailablePrice ? " (sin precio en este ticket)" : "";
+      return `<option value="${escapeHtml(variant.code)}"${disabled ? " disabled" : ""}>${escapeHtml(variant.label)}${suffix}</option>`;
+    })
+    .join("");
+  elements.weighingChickenVariant.disabled = originalRequiresTicketPrice;
+
+  elements.weighingCageType.innerHTML = cageTypes
+    .map((type) => `<option value="${escapeHtml(type.code)}">${escapeHtml(type.name)} (${Number(type.weight_kg).toFixed(3)} kg)</option>`)
+    .join("");
+  elements.weighingOrigin.innerHTML = `
+    <option value="">Mantener el origen actual</option>
+    ${(state.weighingCatalogs.origin_trucks || []).map((truck) => `
+      <option value="${escapeHtml(truck.program_detail_id)}">${escapeHtml(truck.provider_name)} · ${escapeHtml(truck.plate)}</option>
+    `).join("")}
+  `;
+}
+
+function updateWeighingPreview() {
+  const weighing = currentEditingWeighing();
+  if (!weighing) {
+    elements.weighingPreview.innerHTML = "";
+    return;
+  }
+
+  const selectedCage = (state.weighingCatalogs.cage_types || [])
+    .find((type) => type.code === elements.weighingCageType.value);
+  const sameCageType = String(elements.weighingCageType.value)
+    === String(weighing.cage_type?.code || "");
+  const cageWeight = sameCageType
+    ? Number(weighing.cage_type?.weight_kg || selectedCage?.weight_kg || 0)
+    : Number(selectedCage?.weight_kg || 0);
+  const cages = Math.max(0, Number(elements.weighingCages.value) || 0);
+  const birdsPerCage = Math.max(0, Number(elements.weighingBirdsPerCage.value) || 0);
+  const enteredWeight = Math.max(0, Number(elements.weighingWeight.value) || 0);
+  const tare = cages * cageWeight;
+  const wholesaleTwo = usesWholesaleTwoVariants(state.weighingTicket);
+  const adjustmentGrams = wholesaleTwo ? editingWholesaleTwoAdjustmentGrams() : 0;
+  const birds = birdsPerCage * Math.max(cages, 1);
+  const adjustmentWeight = wholesaleTwo ? (adjustmentGrams * birds) / 1000 : 0;
+  const gross = enteredWeight + adjustmentWeight;
+  const net = gross - tare;
+
+  elements.weighingWeight.setCustomValidity(
+    enteredWeight > 0 && net <= 0
+      ? "El peso debe ser mayor que la tara total de las javas."
+      : ""
+  );
+  elements.weighingPreview.innerHTML = wholesaleTwo ? `
+    <span><small>Aves totales</small><strong>${formatCount(birds)}</strong></span>
+    <span><small>Merma aplicada</small><strong>${escapeHtml(formatWeight(adjustmentWeight))}</strong></span>
+    <span><small>Peso bruto ajustado</small><strong>${escapeHtml(formatWeight(gross))}</strong></span>
+    <span><small>Tara calculada</small><strong>${escapeHtml(formatWeight(tare))}</strong></span>
+    <span class="${net <= 0 ? "is-invalid" : "is-valid"}"><small>Peso neto</small><strong>${escapeHtml(formatWeight(net))}</strong></span>
+  ` : `
+    <span><small>Aves totales</small><strong>${formatCount(birds)}</strong></span>
+    <span><small>Tara calculada</small><strong>${escapeHtml(formatWeight(tare))}</strong></span>
+    <span class="${net <= 0 ? "is-invalid" : "is-valid"}"><small>Peso neto</small><strong>${escapeHtml(formatWeight(net))}</strong></span>
+  `;
+}
+
+function openWeighingEditor(weighingId) {
+  if (
+    state.saving
+    || state.weighingSaving
+    || state.weighingLoading
+    || !state.weighingTicket?.editable
+  ) return;
+  const weighing = state.weighingTicket.weighings?.find(
+    (item) => String(item.id) === String(weighingId)
+  );
+  if (!weighing) {
+    setMessage(elements.weighingMessage, "La pesada seleccionada ya no existe.", "error");
+    return;
+  }
+
+  state.editingWeighingId = weighing.id;
+  renderWeighingEditOptions(weighing);
+  const isReturn = state.weighingTicket.operation_type === "DEVOLUCION";
+  const wholesaleTwo = usesWholesaleTwoVariants(state.weighingTicket);
+  elements.weighingChickenTypeField.hidden = isReturn || wholesaleTwo;
+  elements.weighingChickenConditionField.hidden = !isReturn;
+  elements.weighingChickenVariantField.hidden = !wholesaleTwo;
+  elements.weighingChickenSexField.hidden = wholesaleTwo;
+  elements.weighingOriginField.hidden = isReturn;
+  elements.weighingChickenVariant.required = wholesaleTwo;
+  elements.weighingChickenType.value = weighing.chicken_type?.code || "";
+  elements.weighingChickenCondition.value = weighing.chicken_condition || "VIVO";
+  elements.weighingChickenVariant.value = wholesaleTwoVariantForWeighing(weighing)?.code || "";
+  elements.weighingChickenSex.value = normalizeChickenSex(weighing.chicken_sex);
+  elements.weighingBirdsPerCage.value = weighing.birds_per_cage;
+  elements.weighingCages.value = weighing.cages;
+  elements.weighingCageType.value = weighing.cage_type?.code || "";
+  elements.weighingWeight.value = Number(
+    wholesaleTwo ? weighing.read_weight_kg : weighing.gross_weight_kg
+  ).toFixed(3);
+  elements.weighingWeightLabel.innerHTML = wholesaleTwo
+    ? "Peso leído (kg) <b>*</b>"
+    : "Peso bruto (kg) <b>*</b>";
+  elements.weighingWeightHelp.textContent = wholesaleTwo
+    ? "Lectura original; la merma configurada se calculará automáticamente."
+    : "Peso antes de descontar la tara de las javas.";
+
+  const originId = String(weighing.origin_program_detail_id || "");
+  const originIsAvailable = (state.weighingCatalogs.origin_trucks || [])
+    .some((truck) => String(truck.program_detail_id) === originId);
+  elements.weighingOrigin.value = originIsAvailable ? originId : "";
+  elements.weighingOriginHelp.textContent = originIsAvailable
+    ? "Origen actual preseleccionado. Puedes elegir otro camión de esta jornada."
+    : `Origen actual: ${weighing.origin || "sin origen"}${weighing.plate ? ` · ${weighing.plate}` : ""}.`;
+  elements.weighingSource.value = [...elements.weighingSource.options]
+    .some((option) => option.value === weighing.weight_source)
+    ? weighing.weight_source
+    : "MANUAL";
+  elements.weighingDateTime.value = dateTimeLocalValue(weighing.weighed_at);
+  elements.weighingReason.value = "";
+  elements.weighingEditorTitle.textContent = `Editar pesada #${weighing.number}`;
+  setMessage(elements.weighingEditorMessage, "");
+  setMessage(elements.weighingMessage, "");
+  elements.weighingEditor.hidden = false;
+  renderWeighingGeneralActions();
+  renderWeighingRows();
+  updateWeighingPreview();
+  elements.weighingEditor.scrollIntoView({ behavior: "smooth", block: "start" });
+  window.requestAnimationFrame(() => elements.weighingBirdsPerCage.focus());
+}
+
+function closeWeighingEditor({ force = false } = {}) {
+  if (state.weighingSaving && !force) return;
+  state.editingWeighingId = null;
+  elements.weighingEditor.hidden = true;
+  elements.weighingWeight.setCustomValidity("");
+  setMessage(elements.weighingEditorMessage, "");
+  if (state.weighingTicket) {
+    renderWeighingGeneralActions();
+    renderWeighingRows();
+  }
+}
+
+function setWeighingSaving(isSaving) {
+  state.weighingSaving = isSaving;
+  elements.weighingCard.setAttribute("aria-busy", String(isSaving));
+  elements.weighingForm.querySelectorAll("input, select, textarea").forEach((control) => {
+    if (isSaving) {
+      control.dataset.weighingWasDisabled = control.disabled ? "1" : "0";
+      control.disabled = true;
+    } else {
+      control.disabled = control.dataset.weighingWasDisabled === "1";
+      delete control.dataset.weighingWasDisabled;
+    }
+  });
+  elements.weighingSave.disabled = isSaving;
+  elements.weighingEditCancel.disabled = isSaving;
+  elements.weighingEditCancelTop.disabled = isSaving;
+  elements.weighingSave.textContent = isSaving ? "Guardando pesada..." : "Guardar pesada";
+  elements.weighingGeneralActions.querySelectorAll("button").forEach((button) => {
+    button.disabled = isSaving;
+  });
+  elements.weighingRows.querySelectorAll("button").forEach((button) => {
+    button.disabled = isSaving;
+  });
+}
+
+async function saveWeighing(event) {
+  event.preventDefault();
+  if (
+    state.saving
+    || state.weighingSaving
+    || !state.editingWeighingTicketId
+    || !state.editingWeighingId
+  ) return;
+
+  elements.weighingReason.value = elements.weighingReason.value.trim();
+  updateWeighingPreview();
+  if (!elements.weighingForm.checkValidity()) {
+    elements.weighingForm.reportValidity();
+    setMessage(
+      elements.weighingEditorMessage,
+      "Revisa los campos obligatorios, el peso neto y el motivo de la corrección.",
+      "error"
+    );
+    return;
+  }
+
+  const weighing = currentEditingWeighing();
+  if (!weighing) return;
+  const wholesaleTwo = usesWholesaleTwoVariants(state.weighingTicket);
+  const selectedVariant = wholesaleTwo
+    ? wholesaleTwoVariantByCode(elements.weighingChickenVariant.value)
+    : null;
+  if (wholesaleTwo && !selectedVariant) {
+    setMessage(elements.weighingEditorMessage, "Selecciona una clasificación válida.", "error");
+    elements.weighingChickenVariant.focus();
+    return;
+  }
+
+  const payload = {
+    chicken_type_code: selectedVariant?.typeCode
+      || elements.weighingChickenType.value
+      || weighing.chicken_type?.code,
+    chicken_condition: elements.weighingChickenCondition.value,
+    cage_type_code: elements.weighingCageType.value,
+    weight_source: elements.weighingSource.value,
+    birds_per_cage: Number(elements.weighingBirdsPerCage.value),
+    cages: Number(elements.weighingCages.value),
+    weighed_at: elements.weighingDateTime.value,
+    correction_reason: elements.weighingReason.value
+  };
+  if (weighing.updated_at) payload.expected_updated_at = weighing.updated_at;
+  if (wholesaleTwo) {
+    payload.chicken_variant_code = selectedVariant.code;
+    payload.read_weight_kg = Number(elements.weighingWeight.value);
+  } else {
+    payload.chicken_sex = normalizeChickenSex(elements.weighingChickenSex.value);
+    payload.gross_weight_kg = Number(elements.weighingWeight.value);
+  }
+  if (state.weighingTicket.operation_type !== "DEVOLUCION" && elements.weighingOrigin.value) {
+    payload.origin_program_detail_id = Number(elements.weighingOrigin.value);
+  }
+
+  state.saving = true;
+  setWeighingSaving(true);
+  updateBulkAvailability();
+  setMessage(elements.weighingEditorMessage, "Guardando la corrección y recalculando el ticket...");
+  try {
+    const response = await apiRequest(
+      `/finanzas/tickets/${encodeURIComponent(state.editingWeighingTicketId)}/pesadas/${encodeURIComponent(state.editingWeighingId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      }
+    );
+    state.weighingTicket = response?.data?.ticket || state.weighingTicket;
+    closeWeighingEditor({ force: true });
+    renderWeighingTicketDetail();
+    const successMessage = response?.message || "Pesada actualizada correctamente.";
+    setMessage(elements.weighingMessage, successMessage, "success");
+    await refreshAfterMutation(successMessage);
+  } catch (error) {
+    setMessage(
+      elements.weighingEditorMessage,
+      errorMessage(error, "No se pudo actualizar la pesada."),
+      "error"
+    );
+  } finally {
+    state.saving = false;
+    setWeighingSaving(false);
+    updateBulkAvailability();
+    if (state.weighingTicket) renderWeighingTicketDetail();
+  }
 }
 
 async function loadTickets(
@@ -431,10 +1143,22 @@ async function loadTickets(
   }
 }
 
+async function refreshOpenWeighingDialog(successMessage) {
+  if (!elements.weighingDialog.open || !state.editingWeighingTicketId) {
+    return { ok: true, skipped: true };
+  }
+
+  return loadWeighingTicketDetail(state.editingWeighingTicketId, {
+    showLoading: false,
+    successMessage
+  });
+}
+
 async function refreshAfterMutation(successMessage) {
   const filters = state.appliedFilters ? { ...state.appliedFilters } : null;
   if (!filters) {
     setMessage(elements.message, successMessage, "success");
+    await refreshOpenWeighingDialog(successMessage);
     return { ok: true, skipped: true };
   }
 
@@ -443,6 +1167,7 @@ async function refreshAfterMutation(successMessage) {
   });
   if (result.ok) {
     setMessage(elements.message, successMessage, "success");
+    await refreshOpenWeighingDialog(successMessage);
   } else if (!result.aborted && !result.stale) {
     setMessage(
       elements.message,
@@ -530,7 +1255,7 @@ async function savePrices(event) {
   state.saving = true;
   setMessage(elements.priceMessage, "Guardando precios...");
   try {
-    await apiRequest(`/finanzas/tickets/${encodeURIComponent(state.editingPriceTicketId)}/precios`, {
+    const response = await apiRequest(`/finanzas/tickets/${encodeURIComponent(state.editingPriceTicketId)}/precios`, {
       method: "PUT",
       body: JSON.stringify({
         precios: inputs.map((input) => ({
@@ -539,6 +1264,7 @@ async function savePrices(event) {
         }))
       })
     });
+    rememberWeighingRecord(response?.data);
     elements.priceDialog.close();
     state.editingPriceTicketId = null;
     await refreshAfterMutation("Precios actualizados y monto del ticket recalculado.");
@@ -859,10 +1585,11 @@ async function saveClient(event) {
   updateClientSelection();
   setMessage(elements.clientMessage, "Guardando cliente...");
   try {
-    await apiRequest(`/finanzas/tickets/${encodeURIComponent(state.editingClientTicketId)}/cliente`, {
+    const response = await apiRequest(`/finanzas/tickets/${encodeURIComponent(state.editingClientTicketId)}/cliente`, {
       method: "PUT",
       body: JSON.stringify({ cliente_id: Number(state.selectedClientId) })
     });
+    rememberWeighingRecord(response?.data);
     elements.clientDialog.close();
     state.editingClientTicketId = null;
     state.selectedClientId = null;
@@ -923,6 +1650,7 @@ async function saveDateTime(event) {
         body: JSON.stringify({ fecha_hora: elements.dateTimeInput.value })
       }
     );
+    rememberWeighingRecord(response?.data);
     elements.dateTimeDialog.close();
     state.editingDateTimeTicketId = null;
     await refreshAfterMutation(
@@ -1274,16 +2002,48 @@ elements.next.addEventListener("click", () => {
   void loadTickets(state.appliedFilters, state.page + 1);
 });
 elements.rows.addEventListener("click", (event) => {
+  const editWeighings = event.target.closest("[data-edit-ticket-weighings]");
   const editPrices = event.target.closest("[data-edit-prices]");
   const editDateTime = event.target.closest("[data-edit-date-time]");
   const changeClient = event.target.closest("[data-change-client]");
   const voidButton = event.target.closest("[data-void-ticket]");
   const restoreButton = event.target.closest("[data-restore-ticket]");
+  if (editWeighings) openWeighingTicketDialog(editWeighings.dataset.editTicketWeighings);
   if (editPrices) openPriceDialog(editPrices.dataset.editPrices);
   if (editDateTime) openDateTimeDialog(editDateTime.dataset.editDateTime);
   if (changeClient) void openClientDialog(changeClient.dataset.changeClient);
   if (voidButton) openVoidDialog(voidButton.dataset.voidTicket);
   if (restoreButton) openRestoreDialog(restoreButton.dataset.restoreTicket);
+});
+elements.weighingGeneralActions.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-weighing-general-action]");
+  if (
+    !button
+    || state.saving
+    || state.weighingSaving
+    || !state.editingWeighingTicketId
+  ) return;
+  const ticketId = state.editingWeighingTicketId;
+  if (button.dataset.weighingGeneralAction === "prices") openPriceDialog(ticketId);
+  if (button.dataset.weighingGeneralAction === "client") void openClientDialog(ticketId);
+  if (button.dataset.weighingGeneralAction === "datetime") openDateTimeDialog(ticketId);
+});
+elements.weighingRows.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-edit-finance-weighing]");
+  if (button) openWeighingEditor(button.dataset.editFinanceWeighing);
+});
+elements.weighingForm.addEventListener("submit", saveWeighing);
+elements.weighingEditCancel.addEventListener("click", () => closeWeighingEditor());
+elements.weighingEditCancelTop.addEventListener("click", () => closeWeighingEditor());
+[
+  elements.weighingChickenVariant,
+  elements.weighingBirdsPerCage,
+  elements.weighingCages,
+  elements.weighingCageType,
+  elements.weighingWeight
+].forEach((control) => {
+  control.addEventListener("input", updateWeighingPreview);
+  control.addEventListener("change", updateWeighingPreview);
 });
 elements.priceForm.addEventListener("submit", savePrices);
 elements.clientForm.addEventListener("submit", saveClient);
@@ -1321,6 +2081,14 @@ document.querySelectorAll("[data-dialog-close]").forEach((button) => {
       setMessage(elements.dateTimeMessage, "Espera a que termine la actualización antes de cerrar.", "error");
       return;
     }
+    if (dialog === elements.weighingDialog && state.weighingSaving) {
+      setMessage(
+        elements.weighingMessage,
+        "Espera a que termine la actualización de la pesada antes de cerrar.",
+        "error"
+      );
+      return;
+    }
     if (state.lifecycleSaving && dialog === elements.voidDialog) {
       setMessage(elements.voidMessage, "Espera a que termine la anulación antes de cerrar.", "error");
       return;
@@ -1336,6 +2104,15 @@ elements.bulkDialog.addEventListener("cancel", (event) => {
   if (!state.bulkSaving) return;
   event.preventDefault();
   setMessage(elements.bulkMessage, "Espera a que termine el ajuste antes de cerrar.", "error");
+});
+elements.weighingDialog.addEventListener("cancel", (event) => {
+  if (!state.weighingSaving) return;
+  event.preventDefault();
+  setMessage(
+    elements.weighingMessage,
+    "Espera a que termine la actualización de la pesada antes de cerrar.",
+    "error"
+  );
 });
 elements.dateTimeDialog.addEventListener("cancel", (event) => {
   if (!state.dateTimeSaving) return;
@@ -1360,6 +2137,26 @@ elements.restoreDialog.addEventListener("close", () => {
 });
 elements.dateTimeDialog.addEventListener("close", () => {
   if (!state.dateTimeSaving) state.editingDateTimeTicketId = null;
+});
+elements.weighingDialog.addEventListener("close", () => {
+  if (state.weighingSaving) return;
+  state.weighingRequestGeneration += 1;
+  state.weighingRequestController?.abort();
+  state.weighingRequestController = null;
+  state.weighingLoading = false;
+  elements.weighingCard.setAttribute("aria-busy", "false");
+  state.editingWeighingTicketId = null;
+  state.editingWeighingId = null;
+  state.weighingRecord = null;
+  state.weighingTicket = null;
+  state.weighingCatalogs = {
+    chicken_types: [],
+    cage_types: [],
+    origin_trucks: [],
+    weight_adjustments: []
+  };
+  closeWeighingEditor({ force: true });
+  setMessage(elements.weighingMessage, "");
 });
 
 initFinanceAccess(() => {

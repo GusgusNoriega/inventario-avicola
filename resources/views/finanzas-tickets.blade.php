@@ -18,7 +18,7 @@
       'active' => 'tickets',
       'eyebrow' => 'Control de ventas',
       'title' => 'Consulta y edición de tickets',
-      'description' => 'Busca tickets históricos, incluidos los anulados, y administra su fecha, estado, cliente o precios.'
+      'description' => 'Busca tickets históricos, incluidos los anulados, y administra sus pesadas, fecha, estado, cliente o precios.'
     ])
 
     <section class="fin-card fin-management-notice" aria-label="Condición de consulta">
@@ -127,6 +127,144 @@
       </div>
     </section>
   </main>
+
+  <dialog id="financeTicketWeighingDialog" class="fin-purchase-dialog fin-ticket-weighing-dialog" aria-labelledby="financeTicketWeighingTitle">
+    <div id="financeTicketWeighingCard" class="fin-purchase-dialog-card">
+      <header class="fin-purchase-dialog-head">
+        <div>
+          <p class="fin-eyebrow">Corrección integral</p>
+          <h2 id="financeTicketWeighingTitle">Editar ticket y pesadas</h2>
+        </div>
+        <button class="fin-dialog-close" type="button" data-dialog-close aria-label="Cerrar">×</button>
+      </header>
+
+      <p id="financeTicketWeighingDescription" class="fin-section-copy">Cargando información del ticket...</p>
+      <div id="financeTicketWeighingGeneralActions" class="fin-ticket-weighing-general-actions" aria-label="Datos generales editables"></div>
+      <div id="financeTicketWeighingSummary" class="fin-ticket-weighing-summary" aria-live="polite"></div>
+
+      <section class="fin-ticket-weighing-list" aria-labelledby="financeTicketWeighingListTitle">
+        <div class="fin-ticket-weighing-section-head">
+          <div>
+            <p class="fin-eyebrow">Detalle del ticket</p>
+            <h3 id="financeTicketWeighingListTitle">Todas las pesadas activas</h3>
+          </div>
+          <span id="financeTicketWeighingCount" class="fin-management-status">0 pesadas</span>
+        </div>
+        <div class="fin-table-wrap fin-ticket-weighing-table-wrap">
+          <table class="fin-table fin-ticket-weighing-table">
+            <thead>
+              <tr>
+                <th>N.º</th>
+                <th>Producto</th>
+                <th>Origen</th>
+                <th>Java</th>
+                <th>Aves</th>
+                <th class="fin-text-right">Bruto</th>
+                <th class="fin-text-right">Tara</th>
+                <th class="fin-text-right">Neto</th>
+                <th>Fecha y hora</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="financeTicketWeighingRows">
+              <tr><td class="fin-empty-cell" colspan="10">Cargando pesadas...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="financeTicketWeighingEditor" class="fin-ticket-weighing-editor" aria-labelledby="financeTicketWeighingEditorTitle" hidden>
+        <div class="fin-ticket-weighing-section-head">
+          <div>
+            <p class="fin-eyebrow">Registro seleccionado</p>
+            <h3 id="financeTicketWeighingEditorTitle">Editar pesada</h3>
+          </div>
+          <button id="financeTicketWeighingEditCancelTop" class="fin-btn fin-btn-ghost fin-btn-small" type="button">Volver a la lista</button>
+        </div>
+
+        <form id="financeTicketWeighingForm" class="fin-ticket-weighing-form" novalidate>
+          <label id="financeWeighingChickenTypeField" class="fin-field">
+            <span>Tipo de pollo <b>*</b></span>
+            <select id="financeWeighingChickenType" required></select>
+          </label>
+          <label id="financeWeighingChickenConditionField" class="fin-field">
+            <span>Condición <b>*</b></span>
+            <select id="financeWeighingChickenCondition" required>
+              <option value="VIVO">Pollo vivo</option>
+              <option value="MUERTO">Pollo muerto</option>
+            </select>
+          </label>
+          <label id="financeWeighingChickenVariantField" class="fin-field" hidden>
+            <span>Clasificación y merma <b>*</b></span>
+            <select id="financeWeighingChickenVariant"></select>
+            <small>Las clasificaciones sin precio en este ticket permanecen bloqueadas.</small>
+          </label>
+          <label id="financeWeighingChickenSexField" class="fin-field">
+            <span>Sexo <b>*</b></span>
+            <select id="financeWeighingChickenSex" required>
+              <option value="MACHO">Macho</option>
+              <option value="HEMBRA">Hembra</option>
+            </select>
+          </label>
+          <label class="fin-field">
+            <span>Aves por java (o total sin javas) <b>*</b></span>
+            <input id="financeWeighingBirdsPerCage" type="number" min="1" max="1000" step="1" required>
+          </label>
+          <label class="fin-field">
+            <span>Cantidad de javas <b>*</b></span>
+            <input id="financeWeighingCages" type="number" min="0" max="10000" step="1" required>
+          </label>
+          <label class="fin-field">
+            <span>Tipo de java <b>*</b></span>
+            <select id="financeWeighingCageType" required></select>
+          </label>
+          <label class="fin-field">
+            <span id="financeWeighingWeightLabel">Peso bruto (kg) <b>*</b></span>
+            <input id="financeWeighingWeight" type="number" min="0.001" max="99999999.999" step="0.001" required>
+            <small id="financeWeighingWeightHelp">Peso antes de descontar la tara de las javas.</small>
+          </label>
+          <label id="financeWeighingOriginField" class="fin-field">
+            <span>Camión de origen de la jornada</span>
+            <select id="financeWeighingOrigin">
+              <option value="">Mantener el origen actual</option>
+            </select>
+            <small id="financeWeighingOriginHelp">Solo aparecen camiones válidos para la jornada del ticket.</small>
+          </label>
+          <label class="fin-field">
+            <span>Origen del peso <b>*</b></span>
+            <select id="financeWeighingSource" required>
+              <option value="MANUAL">Manual</option>
+              <option value="BALANZA_1">Balanza 1</option>
+              <option value="BALANZA_2">Balanza 2</option>
+              <option value="BALANZA">Balanza</option>
+            </select>
+          </label>
+          <label class="fin-field">
+            <span>Fecha y hora de la pesada <b>*</b></span>
+            <input id="financeWeighingDateTime" type="datetime-local" step="60" required>
+            <small>Debe permanecer dentro de la jornada del ticket.</small>
+          </label>
+          <label class="fin-field fin-ticket-weighing-reason">
+            <span>Motivo de la corrección <b>*</b></span>
+            <textarea id="financeWeighingReason" rows="3" minlength="3" maxlength="250" required placeholder="Explica por qué se corrige esta pesada"></textarea>
+          </label>
+
+          <div id="financeTicketWeighingPreview" class="fin-ticket-weighing-preview" aria-live="polite"></div>
+          <p class="fin-ticket-weighing-warning">La tara, el peso neto, el monto del ticket, el saldo de javas y la cuenta por cobrar se recalcularán automáticamente.</p>
+          <p id="financeTicketWeighingEditorMessage" class="fin-message fin-ticket-weighing-form-message" role="status" aria-live="polite"></p>
+          <div class="fin-purchase-dialog-actions fin-ticket-weighing-editor-actions">
+            <button id="financeTicketWeighingEditCancel" class="fin-btn fin-btn-ghost" type="button">Cancelar edición</button>
+            <button id="financeTicketWeighingSave" class="fin-btn fin-btn-primary" type="submit">Guardar pesada</button>
+          </div>
+        </form>
+      </section>
+
+      <p id="financeTicketWeighingMessage" class="fin-message" role="status" aria-live="polite"></p>
+      <footer class="fin-purchase-dialog-actions">
+        <button class="fin-btn fin-btn-ghost" type="button" data-dialog-close>Cerrar</button>
+      </footer>
+    </div>
+  </dialog>
 
   <dialog id="financeTicketPriceDialog" class="fin-purchase-dialog" aria-labelledby="financeTicketPriceTitle">
     <form id="financeTicketPriceForm" class="fin-purchase-dialog-card">
@@ -275,6 +413,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="{{ asset('js/finanzas-tickets.js') }}"></script>
+  <script type="module" src="{{ asset('js/finanzas-tickets.js') }}?v={{ filemtime(public_path('js/finanzas-tickets.js')) }}"></script>
 </body>
 </html>

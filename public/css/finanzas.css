@@ -2173,6 +2173,252 @@ body.fin-page {
   cursor: wait;
 }
 
+.fin-ticket-weighing-dialog {
+  width: min(1320px, calc(100% - 28px));
+}
+
+.fin-ticket-weighing-dialog .fin-purchase-dialog-card {
+  min-width: 0;
+}
+
+.fin-ticket-weighing-general-actions {
+  display: flex;
+  margin-top: 15px;
+  padding: 11px 12px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border: 1px solid var(--fin-border);
+  border-radius: 10px;
+  background: rgba(5, 10, 17, .58);
+}
+
+.fin-ticket-weighing-general-actions > span:first-child {
+  margin-right: 3px;
+  color: var(--fin-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.fin-ticket-weighing-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fin-ticket-weighing-summary article {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--fin-border);
+  border-radius: 9px;
+  background: rgba(5, 10, 17, .62);
+}
+
+.fin-ticket-weighing-summary span,
+.fin-ticket-weighing-summary strong {
+  display: block;
+}
+
+.fin-ticket-weighing-summary span {
+  color: var(--fin-muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.fin-ticket-weighing-summary strong {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  color: #fff;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-ticket-weighing-summary article.is-accent {
+  border-color: rgba(50, 202, 255, .38);
+  background: rgba(50, 202, 255, .075);
+}
+
+.fin-ticket-weighing-summary article.is-accent strong { color: var(--fin-blue); }
+.fin-ticket-weighing-summary article.is-total {
+  border-color: rgba(54, 216, 128, .34);
+  background: rgba(54, 216, 128, .07);
+}
+.fin-ticket-weighing-summary article.is-total strong { color: var(--fin-green); }
+
+.fin-ticket-weighing-list,
+.fin-ticket-weighing-editor {
+  margin-top: 15px;
+  padding: 14px;
+  border: 1px solid var(--fin-border);
+  border-radius: 11px;
+  background: rgba(5, 10, 17, .48);
+}
+
+.fin-ticket-weighing-editor {
+  border-color: rgba(50, 202, 255, .34);
+  background: rgba(50, 202, 255, .035);
+  scroll-margin-top: 14px;
+}
+
+.fin-ticket-weighing-editor[hidden],
+.fin-ticket-weighing-form > [hidden] {
+  display: none;
+}
+
+.fin-ticket-weighing-section-head {
+  display: flex;
+  margin-bottom: 11px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fin-ticket-weighing-section-head h3 {
+  margin: 2px 0 0;
+  color: #fff;
+  font-size: 16px;
+}
+
+.fin-ticket-weighing-table-wrap {
+  max-height: min(48vh, 520px);
+}
+
+.fin-ticket-weighing-table {
+  min-width: 1180px;
+}
+
+.fin-ticket-weighing-table th:nth-child(1) { width: 5%; }
+.fin-ticket-weighing-table th:nth-child(2) { width: 15%; }
+.fin-ticket-weighing-table th:nth-child(3) { width: 16%; }
+.fin-ticket-weighing-table th:nth-child(4) { width: 12%; }
+.fin-ticket-weighing-table th:nth-child(5) { width: 9%; }
+.fin-ticket-weighing-table th:nth-child(6),
+.fin-ticket-weighing-table th:nth-child(7),
+.fin-ticket-weighing-table th:nth-child(8) { width: 9%; }
+.fin-ticket-weighing-table th:nth-child(9) { width: 12%; }
+.fin-ticket-weighing-table th:nth-child(10) { width: 8%; }
+
+.fin-ticket-weighing-table td > strong,
+.fin-ticket-weighing-table td > small,
+.fin-ticket-weighing-product strong,
+.fin-ticket-weighing-product small {
+  display: block;
+}
+
+.fin-ticket-weighing-table td > small,
+.fin-ticket-weighing-product small {
+  margin-top: 4px;
+  color: var(--fin-muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fin-ticket-weighing-product strong {
+  color: #fff;
+}
+
+.fin-ticket-weighing-table tr.is-editing td {
+  background: rgba(50, 202, 255, .075);
+  box-shadow: inset 0 1px rgba(50, 202, 255, .18), inset 0 -1px rgba(50, 202, 255, .18);
+}
+
+.fin-ticket-weighing-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.fin-ticket-weighing-reason,
+.fin-ticket-weighing-preview,
+.fin-ticket-weighing-warning,
+.fin-ticket-weighing-form-message,
+.fin-ticket-weighing-editor-actions {
+  grid-column: 1 / -1;
+}
+
+.fin-ticket-weighing-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+
+.fin-ticket-weighing-preview > span {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--fin-border);
+  border-radius: 9px;
+  background: var(--fin-input);
+}
+
+.fin-ticket-weighing-preview small,
+.fin-ticket-weighing-preview strong {
+  display: block;
+}
+
+.fin-ticket-weighing-preview small {
+  color: var(--fin-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.fin-ticket-weighing-preview strong {
+  margin-top: 5px;
+  color: #fff;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-ticket-weighing-preview .is-valid strong { color: var(--fin-green); }
+.fin-ticket-weighing-preview .is-invalid {
+  border-color: rgba(255, 116, 116, .38);
+  background: rgba(255, 116, 116, .07);
+}
+.fin-ticket-weighing-preview .is-invalid strong { color: var(--fin-red); }
+
+.fin-ticket-weighing-warning {
+  margin: 0;
+  padding: 11px 12px;
+  color: #bceeff;
+  border: 1px solid rgba(50, 202, 255, .28);
+  border-radius: 9px;
+  background: rgba(50, 202, 255, .065);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fin-ticket-weighing-dialog .fin-field > small {
+  display: block;
+  margin-top: 5px;
+  color: var(--fin-muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.fin-ticket-weighing-dialog .fin-message:not(:empty) {
+  margin-top: 11px;
+}
+
+.fin-ticket-weighing-dialog .fin-purchase-dialog-card[aria-busy="true"] {
+  cursor: wait;
+}
+
+.fin-ticket-weighing-dialog [aria-busy="true"] .fin-dialog-close {
+  opacity: .48;
+}
+
+@media (max-width: 980px) {
+  .fin-ticket-weighing-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 860px) {
   .fin-ticket-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2192,6 +2438,17 @@ body.fin-page {
   .fin-ticket-filters .fin-filter-search,
   .fin-ticket-filters .fin-filter-actions { grid-column: span 1; }
   .fin-ticket-client-options { max-height: 52vh; }
+  .fin-ticket-weighing-dialog { width: calc(100% - 14px); }
+  .fin-ticket-weighing-dialog .fin-purchase-dialog-card { padding: 15px; }
+  .fin-ticket-weighing-form { grid-template-columns: 1fr; }
+  .fin-ticket-weighing-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-ticket-weighing-general-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .fin-ticket-weighing-general-actions .fin-btn { width: 100%; }
+  .fin-ticket-weighing-section-head { align-items: stretch; flex-direction: column; }
+  .fin-ticket-weighing-section-head .fin-btn { width: 100%; }
 }
 
 @media (max-width: 390px) {

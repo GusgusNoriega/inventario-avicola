@@ -814,8 +814,8 @@ class FinancialTicketService
         string $currency,
         string $timezone,
     ): array {
-        $recordsByType = $this->financialRecords($companyId, $ticket)
-            ->groupBy('tipo_pollo_id');
+        $records = $this->financialRecords($companyId, $ticket);
+        $recordsByType = $records->groupBy('tipo_pollo_id');
         $isReturn = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN;
         $amount = '0.00';
         $prices = $ticket->precios
@@ -892,6 +892,9 @@ class FinancialTicketService
             'amount' => $amount,
             'prices' => $prices,
             'weighing_count' => $ticket->pesadas->count(),
+            'can_edit_weighings' => $ticket->estado === TicketDespacho::STATUS_CLOSED
+                && $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+                && $records->isNotEmpty(),
             'can_edit_prices' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
                 && $prices !== [],
             'can_change_client' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
