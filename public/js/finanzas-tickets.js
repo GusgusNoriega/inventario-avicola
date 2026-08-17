@@ -74,6 +74,11 @@ const elements = {
   weighingWeightLabel: document.getElementById("financeWeighingWeightLabel"),
   weighingWeight: document.getElementById("financeWeighingWeight"),
   weighingWeightHelp: document.getElementById("financeWeighingWeightHelp"),
+  weighingPriceField: document.getElementById("financeWeighingPriceField"),
+  weighingPriceLabel: document.getElementById("financeWeighingPriceLabel"),
+  weighingPriceCurrency: document.getElementById("financeWeighingPriceCurrency"),
+  weighingPrice: document.getElementById("financeWeighingPrice"),
+  weighingPriceHelp: document.getElementById("financeWeighingPriceHelp"),
   weighingOriginField: document.getElementById("financeWeighingOriginField"),
   weighingOrigin: document.getElementById("financeWeighingOrigin"),
   weighingOriginHelp: document.getElementById("financeWeighingOriginHelp"),
@@ -389,6 +394,95 @@ function currentEditingWeighing() {
   return state.weighingTicket?.weighings?.find(
     (weighing) => String(weighing.id) === String(state.editingWeighingId)
   ) || null;
+}
+
+function availableWeighingPrices() {
+  const detailPrices = Array.isArray(state.weighingTicket?.prices)
+    ? state.weighingTicket.prices
+    : Object.values(state.weighingTicket?.prices || {});
+  const recordPrices = recordForTicket(state.editingWeighingTicketId)?.prices || [];
+
+  return [...detailPrices, ...recordPrices];
+}
+
+function selectedWeighingProduct() {
+  let code = "";
+  if (usesWholesaleTwoVariants(state.weighingTicket)) {
+    code = wholesaleTwoVariantByCode(elements.weighingChickenVariant.value)?.typeCode || "";
+  } else if (state.weighingTicket?.operation_type === "DEVOLUCION") {
+    code = elements.weighingChickenCondition.value === "MUERTO"
+      ? "POLLO_MUERTO"
+      : "POLLO_VIVO";
+  } else {
+    code = elements.weighingChickenType.value;
+  }
+
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  const type = (state.weighingCatalogs.chicken_types || []).find(
+    (item) => String(item?.code || "").trim().toUpperCase() === normalizedCode
+  );
+  return {
+    code: normalizedCode,
+    name: type?.name || normalizedCode || "producto seleccionado"
+  };
+}
+
+function weighingPriceForType(typeCode) {
+  const normalizedCode = String(typeCode || "").trim().toUpperCase();
+  const price = availableWeighingPrices().find(
+    (item) => String(item?.chicken_type?.code || "").trim().toUpperCase() === normalizedCode
+  );
+  if (price?.price_kg !== null && price?.price_kg !== undefined) return price;
+
+  const weighing = currentEditingWeighing();
+  if (
+    String(weighing?.chicken_type?.code || "").trim().toUpperCase() === normalizedCode
+    && weighing?.price_kg !== null
+    && weighing?.price_kg !== undefined
+  ) {
+    return { price_kg: weighing.price_kg, chicken_type: weighing.chicken_type };
+  }
+  return null;
+}
+
+function normalizedWeighingPrice(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number.toFixed(4) : "";
+}
+
+function updateWeighingPriceState() {
+  const currentPrice = normalizedWeighingPrice(elements.weighingPrice.value);
+  const originalPrice = elements.weighingPrice.dataset.originalPrice || "";
+  elements.weighingPriceField.classList.toggle(
+    "is-changed",
+    currentPrice !== "" && currentPrice !== originalPrice
+  );
+}
+
+function syncWeighingPriceField({ resetValue = false } = {}) {
+  const product = selectedWeighingProduct();
+  const price = weighingPriceForType(product.code);
+  const originalPrice = normalizedWeighingPrice(price?.price_kg);
+  const ticketUsesPrices = availableWeighingPrices().length > 0
+    || usesWholesaleTwoVariants(state.weighingTicket)
+    || Boolean(state.weighingTicket?.client?.id);
+
+  if (resetValue) {
+    elements.weighingPrice.value = originalPrice;
+    elements.weighingPrice.dataset.originalPrice = originalPrice;
+  }
+
+  elements.weighingPrice.required = Boolean(originalPrice || ticketUsesPrices);
+  elements.weighingPriceLabel.innerHTML = `Precio por kg de ${escapeHtml(product.name)} <b>${elements.weighingPrice.required ? "*" : ""}</b>`;
+  const currency = recordForTicket(state.editingWeighingTicketId)?.currency || "PEN";
+  elements.weighingPriceCurrency.textContent = currency === "PEN" ? "S/" : currency;
+  elements.weighingPriceField.classList.toggle("is-missing", !originalPrice && ticketUsesPrices);
+  elements.weighingPriceHelp.textContent = originalPrice
+    ? "Precio actual del ticket. Si lo cambias, se aplicará a todas sus pesadas de este producto."
+    : (ticketUsesPrices
+      ? "Este producto aún no tiene precio en el ticket. Asígnalo para poder guardar la pesada."
+      : "Puedes asignar un precio manual a este producto si el ticket debe valorizarse.");
+  updateWeighingPriceState();
 }
 
 function editingWholesaleTwoAdjustmentGrams() {
@@ -807,8 +901,8 @@ function renderWeighingEditOptions(weighing) {
   elements.weighingChickenType.innerHTML = chickenTypes
     .map((type) => {
       const code = String(type?.code || "").trim().toUpperCase();
-      const disabled = pricedTypeCodes.size > 0 && !pricedTypeCodes.has(code);
-      return `<option value="${escapeHtml(type.code)}"${disabled ? " disabled" : ""}>${escapeHtml(type.name)}${disabled ? " (sin precio en este ticket)" : ""}</option>`;
+      const requiresPrice = pricedTypeCodes.size > 0 && !pricedTypeCodes.has(code);
+      return `<option value="${escapeHtml(type.code)}">${escapeHtml(type.name)}${requiresPrice ? " (requiere asignar precio)" : ""}</option>`;
     })
     .join("");
 
@@ -818,9 +912,8 @@ function renderWeighingEditOptions(weighing) {
       const disabledBySpecialPrice = originalRequiresTicketPrice
         ? variant.code !== originalVariant?.code
         : requiresWholesaleTwoTicketPrice(variant.code);
-      const disabled = unavailablePrice || disabledBySpecialPrice;
-      const suffix = unavailablePrice ? " (sin precio en este ticket)" : "";
-      return `<option value="${escapeHtml(variant.code)}"${disabled ? " disabled" : ""}>${escapeHtml(variant.label)}${suffix}</option>`;
+      const suffix = unavailablePrice ? " (requiere asignar precio)" : "";
+      return `<option value="${escapeHtml(variant.code)}"${disabledBySpecialPrice ? " disabled" : ""}>${escapeHtml(variant.label)}${suffix}</option>`;
     })
     .join("");
   elements.weighingChickenVariant.disabled = originalRequiresTicketPrice;
@@ -860,6 +953,17 @@ function updateWeighingPreview() {
   const adjustmentWeight = wholesaleTwo ? (adjustmentGrams * birds) / 1000 : 0;
   const gross = enteredWeight + adjustmentWeight;
   const net = gross - tare;
+  const price = Number(elements.weighingPrice.value);
+  const validPrice = Number.isFinite(price) && price > 0;
+  const signedSubtotal = (state.weighingTicket?.operation_type === "DEVOLUCION" ? -1 : 1)
+    * Math.max(0, net)
+    * (validPrice ? price : 0);
+  const currency = recordForTicket(state.editingWeighingTicketId)?.currency || "PEN";
+  const priceTone = validPrice ? "is-valid" : (elements.weighingPrice.required ? "is-invalid" : "");
+  const pricePreview = `
+    <span class="${priceTone}"><small>Precio por kg</small><strong>${validPrice ? escapeHtml(formatUnitPrice(price, currency)) : "Pendiente"}</strong></span>
+    <span class="${priceTone}"><small>Subtotal de esta pesada</small><strong>${validPrice && net > 0 ? escapeHtml(formatMoney(signedSubtotal, currency)) : "--"}</strong></span>
+  `;
 
   elements.weighingWeight.setCustomValidity(
     enteredWeight > 0 && net <= 0
@@ -872,10 +976,12 @@ function updateWeighingPreview() {
     <span><small>Peso bruto ajustado</small><strong>${escapeHtml(formatWeight(gross))}</strong></span>
     <span><small>Tara calculada</small><strong>${escapeHtml(formatWeight(tare))}</strong></span>
     <span class="${net <= 0 ? "is-invalid" : "is-valid"}"><small>Peso neto</small><strong>${escapeHtml(formatWeight(net))}</strong></span>
+    ${pricePreview}
   ` : `
     <span><small>Aves totales</small><strong>${formatCount(birds)}</strong></span>
     <span><small>Tara calculada</small><strong>${escapeHtml(formatWeight(tare))}</strong></span>
     <span class="${net <= 0 ? "is-invalid" : "is-valid"}"><small>Peso neto</small><strong>${escapeHtml(formatWeight(net))}</strong></span>
+    ${pricePreview}
   `;
 }
 
@@ -934,6 +1040,7 @@ function openWeighingEditor(weighingId) {
     : "MANUAL";
   elements.weighingDateTime.value = dateTimeLocalValue(weighing.weighed_at);
   elements.weighingReason.value = "";
+  syncWeighingPriceField({ resetValue: true });
   elements.weighingEditorTitle.textContent = `Editar pesada #${weighing.number}`;
   setMessage(elements.weighingEditorMessage, "");
   setMessage(elements.weighingMessage, "");
@@ -950,6 +1057,8 @@ function closeWeighingEditor({ force = false } = {}) {
   state.editingWeighingId = null;
   elements.weighingEditor.hidden = true;
   elements.weighingWeight.setCustomValidity("");
+  elements.weighingPriceField.classList.remove("is-missing", "is-changed");
+  delete elements.weighingPrice.dataset.originalPrice;
   setMessage(elements.weighingEditorMessage, "");
   if (state.weighingTicket) {
     renderWeighingGeneralActions();
@@ -996,7 +1105,7 @@ async function saveWeighing(event) {
     elements.weighingForm.reportValidity();
     setMessage(
       elements.weighingEditorMessage,
-      "Revisa los campos obligatorios, el peso neto y el motivo de la corrección.",
+      "Revisa los campos obligatorios, el precio, el peso neto y el motivo de la corrección.",
       "error"
     );
     return;
@@ -1026,6 +1135,11 @@ async function saveWeighing(event) {
     weighed_at: elements.weighingDateTime.value,
     correction_reason: elements.weighingReason.value
   };
+  const normalizedPrice = normalizedWeighingPrice(elements.weighingPrice.value);
+  const originalPrice = elements.weighingPrice.dataset.originalPrice || "";
+  if (normalizedPrice && normalizedPrice !== originalPrice) {
+    payload.price_kg = elements.weighingPrice.value;
+  }
   if (weighing.updated_at) payload.expected_updated_at = weighing.updated_at;
   if (wholesaleTwo) {
     payload.chicken_variant_code = selectedVariant.code;
@@ -2035,6 +2149,20 @@ elements.weighingRows.addEventListener("click", (event) => {
 elements.weighingForm.addEventListener("submit", saveWeighing);
 elements.weighingEditCancel.addEventListener("click", () => closeWeighingEditor());
 elements.weighingEditCancelTop.addEventListener("click", () => closeWeighingEditor());
+[
+  elements.weighingChickenType,
+  elements.weighingChickenCondition,
+  elements.weighingChickenVariant
+].forEach((control) => {
+  control.addEventListener("change", () => {
+    syncWeighingPriceField({ resetValue: true });
+    updateWeighingPreview();
+  });
+});
+elements.weighingPrice.addEventListener("input", () => {
+  updateWeighingPriceState();
+  updateWeighingPreview();
+});
 [
   elements.weighingChickenVariant,
   elements.weighingBirdsPerCage,

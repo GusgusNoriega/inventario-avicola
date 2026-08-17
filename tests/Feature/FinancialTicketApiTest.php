@@ -9,6 +9,7 @@ use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Support\WholesaleTwoChickenVariant;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
@@ -667,6 +668,268 @@ class FinancialTicketApiTest extends TestCase
         $this->assertSame($this->user->id, (int) $audit->usuario_id);
     }
 
+    public function test_finance_assigns_the_missing_dressed_chicken_price_while_changing_to_female_closed(): void
+    {
+        DB::table('tipos_pollo')
+            ->where('id', $this->firstChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_LIVE]);
+        DB::table('tipos_pollo')
+            ->where('id', $this->secondChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_DRESSED]);
+        $ticket = $this->createTicket(
+            'PESADAS-PRECIO-NUEVO-001',
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $this->sourceClientId,
+        );
+        DB::table('tickets_despacho')
+            ->where('id', $ticket['id'])
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        $weighingId = (int) DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->value('id');
+        $payload = $this->financialWeighingPayload([
+            'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
+            'chicken_variant_code' => WholesaleTwoChickenVariant::FEMALE_CLOSED,
+            'read_weight_kg' => '20.000',
+            'weighed_at' => '2026-07-20T14:30:00-05:00',
+            'price_kg' => '6.2500',
+            'correction_reason' => 'Asignar precio de Pollo pelado al cambiar la clasificación',
+        ]);
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+
+        $this->putJson(
+            "/api/v1/finanzas/tickets/{$ticket['id']}/pesadas/{$weighingId}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.chicken_type.code', TipoPollo::CHICKEN_DRESSED)
+            ->assertJsonPath('data.ticket.weighings.0.chicken_variant_code', WholesaleTwoChickenVariant::FEMALE_CLOSED)
+            ->assertJsonPath('data.ticket.weighings.0.price_kg', 6.25)
+            ->assertJsonPath('data.ticket.weighings.0.net_weight_kg', 19)
+            ->assertJsonPath('data.ticket.weighings.0.amount', 118.75)
+            ->assertJsonPath('data.ticket.prices.'.TipoPollo::CHICKEN_DRESSED.'.price_kg', 6.25);
+
+        $newPrice = DB::table('ticket_precios')
+            ->where('ticket_id', $ticket['id'])
+            ->where('tipo_pollo_id', $this->secondChickenTypeId)
+            ->first();
+        $this->assertNotNull($newPrice);
+        $this->assertNull($newPrice->precio_historial_id);
+        $this->assertSame('6.2500', bcadd((string) $newPrice->precio_kg, '0', 4));
+        $this->assertSame('MANUAL', $newPrice->origen_precio);
+        $this->assertSame($this->user->id, (int) $newPrice->congelado_por);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingId,
+            'tipo_pollo_id' => $this->secondChickenTypeId,
+            'sexo' => Pesada::SEX_FEMALE,
+            'presentacion_pollo' => 'CERRADA',
+            'peso_leido_kg' => 20,
+            'peso_neto_kg' => 19,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'empresa_id' => $this->user->empresa_id,
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'total' => 118.75,
+            'saldo_pendiente' => 118.75,
+            'estado' => 'PENDIENTE',
+        ]);
+
+        $priceAudit = DB::table('auditoria_eventos')
+            ->where('entidad', 'ticket_precios')
+            ->where('entidad_id', (string) $newPrice->id)
+            ->where('accion', 'CREAR_PRECIO')
+            ->firstOrFail();
+        $this->assertNull($priceAudit->datos_antes);
+        $priceAfter = json_decode($priceAudit->datos_despues, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('6.2500', $priceAfter['precio_kg']);
+        $this->assertSame(
+            'Asignar precio de Pollo pelado al cambiar la clasificación',
+            $priceAfter['motivo_correccion'],
+        );
+    }
+
+    public function test_finance_requires_the_missing_target_price_and_rolls_back_the_classification_change(): void
+    {
+        DB::table('tipos_pollo')
+            ->where('id', $this->firstChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_LIVE]);
+        DB::table('tipos_pollo')
+            ->where('id', $this->secondChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_DRESSED]);
+        $ticket = $this->createTicket(
+            'PESADAS-PRECIO-FALTA-001',
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $this->sourceClientId,
+        );
+        DB::table('tickets_despacho')
+            ->where('id', $ticket['id'])
+            ->update(['modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO]);
+        $weighingId = (int) DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->value('id');
+        $payload = $this->financialWeighingPayload([
+            'chicken_type_code' => TipoPollo::CHICKEN_DRESSED,
+            'chicken_variant_code' => WholesaleTwoChickenVariant::FEMALE_CLOSED,
+            'read_weight_kg' => '20.000',
+            'weighed_at' => '2026-07-20T14:30:00-05:00',
+            'correction_reason' => 'Intento sin precio del nuevo producto',
+        ]);
+        unset($payload['chicken_sex'], $payload['gross_weight_kg']);
+
+        $this->putJson(
+            "/api/v1/finanzas/tickets/{$ticket['id']}/pesadas/{$weighingId}",
+            $payload,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['price_kg']);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingId,
+            'tipo_pollo_id' => $this->firstChickenTypeId,
+            'sexo' => Pesada::SEX_MALE,
+            'presentacion_pollo' => null,
+            'peso_neto_kg' => 10,
+        ]);
+        $this->assertDatabaseMissing('ticket_precios', [
+            'ticket_id' => $ticket['id'],
+            'tipo_pollo_id' => $this->secondChickenTypeId,
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'pesadas',
+            'entidad_id' => (string) $weighingId,
+            'accion' => 'ACTUALIZAR_FINANZAS',
+        ]);
+    }
+
+    public function test_finance_requires_a_price_when_a_legacy_customer_ticket_has_no_price_rows(): void
+    {
+        DB::table('tipos_pollo')
+            ->where('id', $this->firstChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_LIVE]);
+        $ticket = $this->createTicket(
+            'PESADAS-PRECIO-LEGACY-001',
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $this->sourceClientId,
+        );
+        DB::table('ticket_precios')
+            ->where('ticket_id', $ticket['id'])
+            ->delete();
+        $weighingId = (int) DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->value('id');
+
+        $this->putJson(
+            "/api/v1/finanzas/tickets/{$ticket['id']}/pesadas/{$weighingId}",
+            $this->financialWeighingPayload([
+                'gross_weight_kg' => '20.000',
+                'correction_reason' => 'Intento de corregir ticket legado sin precio',
+            ]),
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['price_kg']);
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingId,
+            'tipo_pollo_id' => $this->firstChickenTypeId,
+            'peso_bruto_kg' => 10,
+            'peso_neto_kg' => 10,
+        ]);
+        $this->assertDatabaseMissing('ticket_precios', [
+            'ticket_id' => $ticket['id'],
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'pesadas',
+            'entidad_id' => (string) $weighingId,
+            'accion' => 'ACTUALIZAR_FINANZAS',
+        ]);
+    }
+
+    public function test_finance_can_change_the_selected_product_price_in_the_same_weighing_update(): void
+    {
+        DB::table('tipos_pollo')
+            ->where('id', $this->firstChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_LIVE]);
+        $ticket = $this->createTicket(
+            'PESADAS-PRECIO-EDITAR-001',
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $this->sourceClientId,
+        );
+        $weighingId = (int) DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->value('id');
+
+        $this->putJson(
+            "/api/v1/finanzas/tickets/{$ticket['id']}/pesadas/{$weighingId}",
+            $this->financialWeighingPayload([
+                'gross_weight_kg' => '20.000',
+                'weighed_at' => '2026-07-20T14:30:00-05:00',
+                'price_kg' => '9.1250',
+                'correction_reason' => 'Corregir pesada y precio del producto',
+            ]),
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket.weighings.0.price_kg', 9.125)
+            ->assertJsonPath('data.ticket.weighings.0.amount', 173.38);
+
+        $priceId = $ticket['price_ids'][$this->firstChickenTypeId];
+        $this->assertDecimalValue('ticket_precios', $priceId, 'precio_kg', '9.1250', 4);
+        $this->assertDatabaseHas('ticket_precios', [
+            'id' => $priceId,
+            'origen_precio' => 'MANUAL',
+            'congelado_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'ticket_precios',
+            'entidad_id' => (string) $priceId,
+            'accion' => 'EDITAR_PRECIO',
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'total' => 173.38,
+            'saldo_pendiente' => 173.38,
+        ]);
+    }
+
+    public function test_finance_rejects_invalid_inline_product_prices_without_mutating_the_ticket(): void
+    {
+        DB::table('tipos_pollo')
+            ->where('id', $this->firstChickenTypeId)
+            ->update(['codigo' => TipoPollo::CHICKEN_LIVE]);
+        $ticket = $this->createTicket(
+            'PESADAS-PRECIO-INVALIDO-001',
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $this->sourceClientId,
+        );
+        $weighingId = (int) DB::table('pesadas')
+            ->where('ticket_id', $ticket['id'])
+            ->value('id');
+
+        foreach (['0', '-1', '100000000', '1.12345'] as $invalidPrice) {
+            $this->putJson(
+                "/api/v1/finanzas/tickets/{$ticket['id']}/pesadas/{$weighingId}",
+                $this->financialWeighingPayload([
+                    'gross_weight_kg' => '20.000',
+                    'price_kg' => $invalidPrice,
+                ]),
+            )
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['price_kg']);
+        }
+
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingId,
+            'peso_bruto_kg' => 10,
+            'peso_neto_kg' => 10,
+        ]);
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $ticket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '8.5000',
+            4,
+        );
+    }
+
     public function test_finance_can_retain_inactive_historical_catalog_values_without_replacing_their_snapshots(): void
     {
         DB::table('tipos_pollo')
@@ -734,6 +997,11 @@ class FinancialTicketApiTest extends TestCase
                 'precio_kg' => '8.5000',
             ]],
         ])->assertOk();
+        $priceAuditCountBefore = DB::table('auditoria_eventos')
+            ->where('entidad', 'ticket_precios')
+            ->where('entidad_id', (string) $ticket['price_ids'][$this->firstChickenTypeId])
+            ->where('accion', 'EDITAR_PRECIO')
+            ->count();
         $documentId = (int) DB::table('comprobantes')
             ->where('origen_clave', "VENTA:TICKET:{$ticket['id']}")
             ->value('id');
@@ -765,6 +1033,7 @@ class FinancialTicketApiTest extends TestCase
             "/api/v1/finanzas/tickets/{$ticket['id']}/pesadas/{$weighingId}",
             $this->financialWeighingPayload([
                 'gross_weight_kg' => '30.000',
+                'price_kg' => '9.7500',
                 'correction_reason' => 'No debe aplicarse por cobro existente',
             ]),
         )->assertStatus(409);
@@ -774,6 +1043,21 @@ class FinancialTicketApiTest extends TestCase
             'peso_bruto_kg' => 10,
             'peso_neto_kg' => 10,
         ]);
+        $this->assertDecimalValue(
+            'ticket_precios',
+            $ticket['price_ids'][$this->firstChickenTypeId],
+            'precio_kg',
+            '8.5000',
+            4,
+        );
+        $this->assertSame(
+            $priceAuditCountBefore,
+            DB::table('auditoria_eventos')
+                ->where('entidad', 'ticket_precios')
+                ->where('entidad_id', (string) $ticket['price_ids'][$this->firstChickenTypeId])
+                ->where('accion', 'EDITAR_PRECIO')
+                ->count(),
+        );
         $this->assertDatabaseMissing('auditoria_eventos', [
             'entidad' => 'pesadas',
             'entidad_id' => (string) $weighingId,

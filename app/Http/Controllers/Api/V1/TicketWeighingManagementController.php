@@ -8,8 +8,10 @@ use App\Models\ProgramacionRecepcionDetalle;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
+use App\Models\TicketPrecio;
 use App\Models\TipoJava;
 use App\Models\TipoPollo;
+use App\Services\FinancialAuditService;
 use App\Services\FinancialObligationService;
 use App\Services\JavaControlService;
 use App\Services\OperationContextService;
@@ -30,6 +32,7 @@ class TicketWeighingManagementController extends Controller
     public function __construct(
         private readonly OperationContextService $context,
         private readonly JavaControlService $javaControl,
+        private readonly FinancialAuditService $financialAudit,
         private readonly FinancialObligationService $financialObligations,
         private readonly TicketMessageService $ticketMessages,
         private readonly TicketTitleService $ticketTitles,
@@ -303,6 +306,15 @@ class TicketWeighingManagementController extends Controller
             'expected_updated_at' => $allowHistoricalEditing
                 ? ['sometimes', 'required', 'date']
                 : ['prohibited'],
+            'price_kg' => $allowHistoricalEditing
+                ? ['sometimes', 'required', 'numeric', 'decimal:0,4', 'gt:0', 'max:99999999.9999']
+                : ['prohibited'],
+        ], [
+            'price_kg.required' => 'Ingresa el precio por kilogramo del producto seleccionado.',
+            'price_kg.numeric' => 'El precio por kilogramo debe ser un número válido.',
+            'price_kg.decimal' => 'El precio por kilogramo puede tener hasta cuatro decimales.',
+            'price_kg.gt' => 'El precio por kilogramo debe ser mayor que cero.',
+            'price_kg.max' => 'El precio por kilogramo supera el máximo permitido.',
         ]);
         if ($allowHistoricalEditing) {
             $this->assertWeighedAtBelongsToTicketJourney(
@@ -512,13 +524,20 @@ class TicketWeighingManagementController extends Controller
                 ]);
             }
 
-            $pricedTypeIds = DB::table('ticket_precios')
+            $ticketPrices = TicketPrecio::query()
                 ->where('ticket_id', $lockedTicket->id)
+                ->orderBy('id')
                 ->lockForUpdate()
-                ->pluck('tipo_pollo_id')
-                ->map(fn (mixed $typeId): int => (int) $typeId);
+                ->get();
+            $ticketPrice = $ticketPrices->first(
+                fn (TicketPrecio $price): bool => (int) $price->tipo_pollo_id === (int) $type->id
+            );
+            $priceWasProvided = array_key_exists('price_kg', $validated);
+            $requiresTargetPrice = $ticketPrices->isNotEmpty()
+                || $usesWholesaleTwoVariants
+                || $lockedTicket->cliente_destino_id !== null;
 
-            if ($pricedTypeIds->isNotEmpty() && ! $pricedTypeIds->contains((int) $type->id)) {
+            if (! $ticketPrice && $ticketPrices->isNotEmpty() && ! $allowHistoricalEditing) {
                 $validationField = $usesWholesaleTwoVariants
                     ? 'chicken_variant_code'
                     : 'chicken_type_code';
@@ -526,6 +545,57 @@ class TicketWeighingManagementController extends Controller
                 throw ValidationException::withMessages([
                     $validationField => "No puedes cambiar esta pesada a {$type->nombre} porque el ticket no tiene un precio asignado para ese producto. La pesada no se modificó para evitar que el total quede en cero.",
                 ]);
+            }
+
+            if (
+                $allowHistoricalEditing
+                && ! $ticketPrice
+                && $requiresTargetPrice
+                && ! $priceWasProvided
+            ) {
+                throw ValidationException::withMessages([
+                    'price_kg' => "Asigna el precio por kilogramo de {$type->nombre} para guardar la pesada sin dejar su monto en cero.",
+                ]);
+            }
+
+            if ($allowHistoricalEditing && $priceWasProvided) {
+                $requestedPrice = bcadd((string) $validated['price_kg'], '0', 4);
+                $priceBefore = $ticketPrice
+                    ? $this->ticketPriceAuditValues($ticketPrice)
+                    : null;
+
+                if (! $ticketPrice) {
+                    $ticketPrice = TicketPrecio::query()->create([
+                        'ticket_id' => $lockedTicket->id,
+                        'tipo_pollo_id' => $type->id,
+                        'precio_historial_id' => null,
+                        'precio_kg' => $requestedPrice,
+                        'origen_precio' => 'MANUAL',
+                        'congelado_por' => $actor->id,
+                    ]);
+                } elseif (bccomp((string) $ticketPrice->precio_kg, $requestedPrice, 4) !== 0) {
+                    $ticketPrice->update([
+                        'precio_kg' => $requestedPrice,
+                        'origen_precio' => 'MANUAL',
+                        'congelado_por' => $actor->id,
+                    ]);
+                }
+
+                if ($priceBefore === null || $priceBefore['precio_kg'] !== $requestedPrice) {
+                    $this->financialAudit->record(
+                        $companyId,
+                        (int) $actor->id,
+                        'ticket_precios',
+                        (int) $ticketPrice->id,
+                        $priceBefore === null ? 'CREAR_PRECIO' : 'EDITAR_PRECIO',
+                        $priceBefore,
+                        [
+                            ...$this->ticketPriceAuditValues($ticketPrice->fresh()),
+                            'motivo_correccion' => trim((string) $validated['correction_reason']),
+                        ],
+                        $request->ip(),
+                    );
+                }
             }
 
             $before = $this->auditValues($record);
@@ -812,7 +882,8 @@ class TicketWeighingManagementController extends Controller
         $deliveryEditable = $this->isDeliveryEditable($ticket, $currentOperatingDate);
         $isRetail = $ticket->canal === TicketDespacho::CHANNEL_RETAIL;
         $usesWholesaleTwoVariants = $this->usesWholesaleTwoVariants($ticket);
-        $usesSalePrices = $isRetail
+        $usesSalePrices = $allowHistoricalEditing
+            || $isRetail
             || $ticket->modulo_origen === TicketDespacho::SOURCE_WHOLESALE_TWO;
         $pricesByType = $ticket->precios->keyBy('tipo_pollo_id');
         $amount = $records->sum(function (Pesada $record) use ($ticket, $pricesByType): float {
@@ -1439,6 +1510,21 @@ class TicketWeighingManagementController extends Controller
             'anulada_por' => $record->anulada_por,
             'anulada_at' => $record->anulada_at?->format('Y-m-d H:i:s'),
             'motivo_anulacion' => $record->motivo_anulacion,
+        ];
+    }
+
+    /** @return array<string, int|string|null> */
+    private function ticketPriceAuditValues(TicketPrecio $price): array
+    {
+        return [
+            'ticket_id' => (int) $price->ticket_id,
+            'tipo_pollo_id' => (int) $price->tipo_pollo_id,
+            'precio_historial_id' => $price->precio_historial_id === null
+                ? null
+                : (int) $price->precio_historial_id,
+            'precio_kg' => bcadd((string) $price->precio_kg, '0', 4),
+            'origen_precio' => (string) $price->origen_precio,
+            'congelado_por' => (int) $price->congelado_por,
         ];
     }
 

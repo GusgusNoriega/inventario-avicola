@@ -2401,6 +2401,25 @@ body.fin-page {
   line-height: 1.4;
 }
 
+.fin-ticket-weighing-price .fin-money-input {
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+.fin-ticket-weighing-price.is-missing .fin-money-input {
+  border-color: rgba(255, 194, 38, .72);
+  background: rgba(255, 194, 38, .07);
+  box-shadow: 0 0 0 3px rgba(255, 194, 38, .055);
+}
+
+.fin-ticket-weighing-price.is-missing > small {
+  color: #ffd66b;
+}
+
+.fin-ticket-weighing-price.is-changed:not(.is-missing) .fin-money-input {
+  border-color: rgba(50, 202, 255, .58);
+  background: rgba(50, 202, 255, .055);
+}
+
 .fin-ticket-weighing-dialog .fin-message:not(:empty) {
   margin-top: 11px;
 }

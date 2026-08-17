@@ -303,8 +303,12 @@ class WebViewsTest extends TestCase
             ->assertSee('id="financeTicketWeighingForm"', false)
             ->assertSee('id="financeTicketWeighingRows"', false)
             ->assertSee('id="financeWeighingReason"', false)
+            ->assertSee('id="financeWeighingPrice"', false)
+            ->assertSee('id="financeWeighingPriceHelp"', false)
             ->assertSee('Editar ticket y pesadas')
             ->assertSee('Motivo de la corrección')
+            ->assertSee('Si el producto elegido no tiene precio en este ticket, podrás asignarlo aquí mismo.')
+            ->assertSee('El precio se guardará junto con la pesada.')
             ->assertSee('id="financeTicketPriceDialog"', false)
             ->assertSee('id="financeTicketClientDialog"', false)
             ->assertSee('id="financeTicketDateTimeDialog"', false)
@@ -462,6 +466,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('/finanzas/tickets/${encodeURIComponent(ticketId)}/pesadas', $ticketsJavascript);
         $this->assertStringContainsString('/finanzas/tickets/${encodeURIComponent(state.editingWeighingTicketId)}/pesadas/${encodeURIComponent(state.editingWeighingId)}', $ticketsJavascript);
         $this->assertStringContainsString('correction_reason:', $ticketsJavascript);
+        $this->assertStringContainsString('syncWeighingPriceField({ resetValue: true })', $ticketsJavascript);
+        $this->assertStringContainsString('requiere asignar precio', $ticketsJavascript);
+        $this->assertStringContainsString('payload.price_kg = elements.weighingPrice.value', $ticketsJavascript);
+        $this->assertStringContainsString('Subtotal de esta pesada', $ticketsJavascript);
         $this->assertStringContainsString('data-edit-date-time', $ticketsJavascript);
         $this->assertStringContainsString('/fecha-hora`', $ticketsJavascript);
         $this->assertStringContainsString('filters.cliente_id', $ticketsJavascript);

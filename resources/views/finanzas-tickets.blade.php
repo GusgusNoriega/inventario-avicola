@@ -197,7 +197,15 @@
           <label id="financeWeighingChickenVariantField" class="fin-field" hidden>
             <span>Clasificación y merma <b>*</b></span>
             <select id="financeWeighingChickenVariant"></select>
-            <small>Las clasificaciones sin precio en este ticket permanecen bloqueadas.</small>
+            <small>Si el producto elegido no tiene precio en este ticket, podrás asignarlo aquí mismo.</small>
+          </label>
+          <label id="financeWeighingPriceField" class="fin-field fin-ticket-weighing-price">
+            <span id="financeWeighingPriceLabel">Precio por kg del producto <b>*</b></span>
+            <div class="fin-money-input">
+              <span id="financeWeighingPriceCurrency">S/</span>
+              <input id="financeWeighingPrice" type="number" min="0.0001" max="99999999.9999" step="0.0001" inputmode="decimal" placeholder="0.0000">
+            </div>
+            <small id="financeWeighingPriceHelp">Se aplicará al tipo de producto seleccionado en esta pesada.</small>
           </label>
           <label id="financeWeighingChickenSexField" class="fin-field">
             <span>Sexo <b>*</b></span>
@@ -250,7 +258,7 @@
           </label>
 
           <div id="financeTicketWeighingPreview" class="fin-ticket-weighing-preview" aria-live="polite"></div>
-          <p class="fin-ticket-weighing-warning">La tara, el peso neto, el monto del ticket, el saldo de javas y la cuenta por cobrar se recalcularán automáticamente.</p>
+          <p class="fin-ticket-weighing-warning">El precio se guardará junto con la pesada. La tara, el peso neto, el monto del ticket, el saldo de javas y la cuenta por cobrar se recalcularán automáticamente.</p>
           <p id="financeTicketWeighingEditorMessage" class="fin-message fin-ticket-weighing-form-message" role="status" aria-live="polite"></p>
           <div class="fin-purchase-dialog-actions fin-ticket-weighing-editor-actions">
             <button id="financeTicketWeighingEditCancel" class="fin-btn fin-btn-ghost" type="button">Cancelar edición</button>
