@@ -6816,6 +6816,38 @@ body.menu-page {
   height: 20px;
 }
 
+.system-credit {
+  width: 100%;
+  margin: 0;
+  padding: 9px 14px;
+  border: 1px solid rgba(143, 161, 181, 0.2);
+  border-radius: 10px;
+  color: #8f9dad;
+  background: rgba(7, 11, 16, 0.72);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.system-credit strong {
+  color: #dbe5ef;
+  font-weight: 850;
+}
+
+.system-credit-separator {
+  color: #607083;
+}
+
+.login-card > .system-credit {
+  margin-top: 16px;
+}
+
 @media (max-width: 760px) {
   .main-menu-view {
     padding: 10px;
@@ -6861,6 +6893,11 @@ body.menu-page {
 
   .menu-notice {
     text-align: left;
+  }
+
+  .system-credit {
+    padding: 8px 10px;
+    font-size: 0.69rem;
   }
 
   .menu-grid {

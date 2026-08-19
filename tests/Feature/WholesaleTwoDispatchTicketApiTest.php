@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Pesada;
+use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\TerceroDirectoryService;
 use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -344,6 +346,98 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
             'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_RED],
             'precio_historial_id' => null,
             'precio_kg' => 8.5,
+            'origen_precio' => 'MANUAL',
+        ]);
+    }
+
+    public function test_client_hen_price_is_the_fallback_but_a_manual_ticket_price_has_priority(): void
+    {
+        $listId = (int) DB::table('listas_precios')
+            ->where('tercero_id', $this->clientId)
+            ->where('operacion', 'VENTA')
+            ->value('id');
+        $clientPriceHistoryId = (int) DB::table('precios_historial')->insertGetId([
+            'lista_precio_id' => $listId,
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_RED],
+            'precio_kg' => 7.75,
+            'vigente_desde' => now()->subMinute(),
+            'vigente_hasta' => null,
+            'motivo_cambio' => 'Tarifa de gallina para el cliente',
+            'reemplaza_precio_id' => null,
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        $clientFallback = $this->ticketPayload();
+        $clientFallback['weighings'] = [
+            $this->weighing(1, TipoPollo::HEN_RED, WholesaleTwoChickenVariant::HEN_RED),
+        ];
+        $fallbackResponse = $this->postJson(
+            '/api/v1/despacho-mayorista-2/tickets',
+            $clientFallback,
+        )->assertCreated()
+            ->assertJsonPath('data.prices.GALLINA_ROJA.price_kg', 7.75)
+            ->assertJsonPath('data.prices.GALLINA_ROJA.source', 'CLIENTE')
+            ->assertJsonPath('data.prices.GALLINA_ROJA.history_id', $clientPriceHistoryId)
+            ->assertJsonPath('data.weighings.0.amount', 77.5);
+
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $fallbackResponse->json('data.id'),
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_RED],
+            'precio_historial_id' => $clientPriceHistoryId,
+            'precio_kg' => 7.75,
+            'origen_precio' => 'CLIENTE',
+        ]);
+
+        $manualOverride = $this->ticketPayload();
+        $manualOverride['weighings'] = [
+            $this->weighing(1, TipoPollo::HEN_RED, WholesaleTwoChickenVariant::HEN_RED),
+        ];
+        $manualOverride['manual_prices'] = [TipoPollo::HEN_RED => 9.1];
+        $manualResponse = $this->postJson(
+            '/api/v1/despacho-mayorista-2/tickets',
+            $manualOverride,
+        )->assertCreated()
+            ->assertJsonPath('data.prices.GALLINA_ROJA.price_kg', 9.1)
+            ->assertJsonPath('data.prices.GALLINA_ROJA.source', 'MANUAL')
+            ->assertJsonPath('data.prices.GALLINA_ROJA.history_id', null)
+            ->assertJsonPath('data.weighings.0.amount', 91);
+
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $manualResponse->json('data.id'),
+            'tipo_pollo_id' => $this->typeIds[TipoPollo::HEN_RED],
+            'precio_historial_id' => null,
+            'precio_kg' => 9.1,
+            'origen_precio' => 'MANUAL',
+        ]);
+
+        app(TerceroDirectoryService::class)->update(
+            Tercero::query()->findOrFail($this->clientId),
+            (int) $this->user->id,
+            TerceroRole::CLIENT,
+            [
+                'nombre_razon_social' => 'Cliente interno',
+                'numero_documento' => '20111111111',
+                'direccion' => 'Av. Principal 123',
+                'precios' => [TipoPollo::HEN_RED => 8.25],
+            ],
+        );
+        $updatedHistoryId = (int) DB::table('precios_historial')
+            ->where('lista_precio_id', $listId)
+            ->where('tipo_pollo_id', $this->typeIds[TipoPollo::HEN_RED])
+            ->whereNull('vigente_hasta')
+            ->value('id');
+
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $fallbackResponse->json('data.id'),
+            'precio_historial_id' => $updatedHistoryId,
+            'precio_kg' => 8.25,
+            'origen_precio' => 'CLIENTE',
+        ]);
+        $this->assertDatabaseHas('ticket_precios', [
+            'ticket_id' => $manualResponse->json('data.id'),
+            'precio_historial_id' => null,
+            'precio_kg' => 9.1,
             'origen_precio' => 'MANUAL',
         ]);
     }

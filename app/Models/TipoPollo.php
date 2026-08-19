@@ -34,6 +34,12 @@ class TipoPollo extends Model
         return [self::HEN_RED, self::HEN_DOUBLE, self::OTHER];
     }
 
+    /** @return list<string> */
+    public static function wholesaleTwoClientPriceCodes(): array
+    {
+        return [self::HEN_RED, self::HEN_DOUBLE];
+    }
+
     public static function requiresWholesaleTwoManualPrice(?string $code): bool
     {
         return in_array($code, self::wholesaleTwoManualPriceCodes(), true);

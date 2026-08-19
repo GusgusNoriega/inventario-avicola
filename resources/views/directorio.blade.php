@@ -120,6 +120,16 @@
               Precio pollo beneficiado (kg)
               <input id="priceBeneficiado" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el global">
             </label>
+
+            <label class="field" data-client-price-field="gallina_roja">
+              Precio gallina roja (kg)
+              <input id="priceGallinaRoja" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el precio del ticket">
+            </label>
+
+            <label class="field" data-client-price-field="gallina_doble">
+              Precio gallina doble (kg)
+              <input id="priceGallinaDoble" type="number" min="0.01" step="0.01" placeholder="Vacío: usa el precio del ticket">
+            </label>
           </div>
 
           <div class="directory-form-actions">
@@ -185,6 +195,8 @@
             <option value="pollo_vivo">Pollo vivo</option>
             <option value="pollo_pelado">Pollo pelado</option>
             <option value="pollo_beneficiado">Pollo beneficiado</option>
+            <option value="gallina_roja" data-client-price-option>Gallina roja</option>
+            <option value="gallina_doble" data-client-price-option>Gallina doble</option>
           </select>
         </label>
 

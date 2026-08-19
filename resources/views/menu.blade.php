@@ -340,6 +340,8 @@
         </a>
 
       </nav>
+
+      @include('partials.system-credit')
     </div>
   </section>
 

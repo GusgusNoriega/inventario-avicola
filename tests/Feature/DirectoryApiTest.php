@@ -76,6 +76,27 @@ class DirectoryApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 3);
     }
 
+    public function test_client_hen_prices_are_optional_and_exposed_by_the_directory_api(): void
+    {
+        $payload = $this->payload();
+        $payload['precios'][TipoPollo::HEN_RED] = 11.25;
+        $payload['precios'][TipoPollo::HEN_DOUBLE] = 12.5;
+
+        $this->postJson('/api/v1/clientes', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.pricesKg.gallina_roja', 11.25)
+            ->assertJsonPath('data.pricesKg.gallina_doble', 12.5);
+
+        $this->assertDatabaseCount('precios_historial', 5);
+        $this->assertDatabaseHas('precios_historial', [
+            'tipo_pollo_id' => DB::table('tipos_pollo')
+                ->where('codigo', TipoPollo::HEN_RED)
+                ->value('id'),
+            'precio_kg' => 11.25,
+            'vigente_hasta' => null,
+        ]);
+    }
+
     public function test_directory_service_rejects_special_prices_when_form_requests_are_bypassed(): void
     {
         $service = app(TerceroDirectoryService::class);
@@ -106,7 +127,7 @@ class DirectoryApiTest extends TestCase
         $this->assertDatabaseCount('precios_historial', 0);
     }
 
-    public function test_directory_service_rejects_special_price_sync_and_rolls_back_party_changes(): void
+    public function test_directory_service_allows_syncing_an_optional_client_hen_price(): void
     {
         $recordId = (int) $this->postJson('/api/v1/clientes', $this->payload())
             ->assertCreated()
@@ -114,30 +135,67 @@ class DirectoryApiTest extends TestCase
         $service = app(TerceroDirectoryService::class);
         $record = Tercero::query()->findOrFail($recordId);
         $payload = $this->payload([
-            'nombre_razon_social' => 'Nombre que debe revertirse',
-            'precios' => [TipoPollo::HEN_DOUBLE => 12.5],
+            'nombre_razon_social' => 'Cliente con gallina',
         ]);
-
-        $this->assertDirectoryValidationError(
-            fn () => $service->update(
-                $record,
-                (int) $this->user->id,
-                TerceroRole::CLIENT,
-                $payload,
-            ),
-            'precios',
+        $payload['precios'][TipoPollo::HEN_DOUBLE] = 12.5;
+        $updated = $service->update(
+            $record,
+            (int) $this->user->id,
+            TerceroRole::CLIENT,
+            $payload,
         );
 
-        $this->assertDatabaseHas('terceros', [
-            'id' => $recordId,
-            'nombre_razon_social' => 'COMERCIAL EL SOL',
-        ]);
-        $this->assertDatabaseCount('precios_historial', 3);
-        $this->assertDatabaseMissing('precios_historial', [
+        $this->assertSame('CLIENTE CON GALLINA', $updated->nombre_razon_social);
+        $this->assertDatabaseCount('precios_historial', 4);
+        $this->assertDatabaseHas('precios_historial', [
             'tipo_pollo_id' => DB::table('tipos_pollo')
                 ->where('codigo', TipoPollo::HEN_DOUBLE)
                 ->value('id'),
+            'precio_kg' => 12.5,
+            'vigente_hasta' => null,
         ]);
+    }
+
+    public function test_global_hen_adjustments_change_only_clients_with_that_optional_price(): void
+    {
+        $pricedPayload = $this->payload();
+        $pricedPayload['precios'][TipoPollo::HEN_RED] = 10;
+        $pricedClientId = (int) $this->postJson('/api/v1/clientes', $pricedPayload)
+            ->assertCreated()
+            ->json('data.id');
+        $this->postJson('/api/v1/clientes', $this->payload([
+            'nombre_razon_social' => 'Cliente sin precio de gallina',
+            'numero_documento' => '20456789012',
+        ]))->assertCreated();
+
+        $this->patchJson('/api/v1/clientes/precios/ajuste-global', [
+            'tipo_pollo' => TipoPollo::HEN_RED,
+            'monto' => 1.5,
+            'direccion' => 'AUMENTAR',
+        ])->assertOk()->assertJsonPath('affected', 1);
+        $this->patchJson('/api/v1/clientes/precios/ajuste-global', [
+            'tipo_pollo' => TipoPollo::HEN_RED,
+            'monto' => 0.25,
+            'direccion' => 'DISMINUIR',
+        ])->assertOk()->assertJsonPath('affected', 1);
+
+        $listId = DB::table('listas_precios')
+            ->where('tercero_id', $pricedClientId)
+            ->where('operacion', 'VENTA')
+            ->value('id');
+        $henTypeId = DB::table('tipos_pollo')
+            ->where('codigo', TipoPollo::HEN_RED)
+            ->value('id');
+        $this->assertDatabaseHas('precios_historial', [
+            'lista_precio_id' => $listId,
+            'tipo_pollo_id' => $henTypeId,
+            'precio_kg' => 11.25,
+            'vigente_hasta' => null,
+        ]);
+        $this->assertSame(1, DB::table('precios_historial')
+            ->where('tipo_pollo_id', $henTypeId)
+            ->whereNull('vigente_hasta')
+            ->count());
     }
 
     public function test_directory_price_adjustment_rejects_special_products_without_deleting_history(): void
@@ -203,7 +261,9 @@ class DirectoryApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.pricesKg.pollo_vivo', null)
             ->assertJsonPath('data.pricesKg.pollo_pelado', null)
-            ->assertJsonPath('data.pricesKg.pollo_beneficiado', null);
+            ->assertJsonPath('data.pricesKg.pollo_beneficiado', null)
+            ->assertJsonPath('data.pricesKg.gallina_roja', null)
+            ->assertJsonPath('data.pricesKg.gallina_doble', null);
 
         $this->assertDatabaseCount('listas_precios', 0);
         $this->assertDatabaseCount('precios_historial', 0);
@@ -240,6 +300,19 @@ class DirectoryApiTest extends TestCase
         $this->postJson('/api/v1/proveedores', $payload)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('precios');
+    }
+
+    public function test_provider_cannot_receive_client_only_hen_prices(): void
+    {
+        $payload = $this->payload();
+        $payload['precios'][TipoPollo::HEN_RED] = 11;
+
+        $this->postJson('/api/v1/proveedores', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'precios',
+                'precios.'.TipoPollo::HEN_RED,
+            ]);
     }
 
     public function test_client_specific_price_can_be_cleared_to_use_the_global_price(): void

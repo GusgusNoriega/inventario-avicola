@@ -179,6 +179,8 @@
                   <button class="dressed-variant-btn is-processed" type="button" data-dressed-variant="POLLO_BENEFICIADO" aria-pressed="false">Pollo beneficiado</button>
                 </div>
               </fieldset>
+
+              <p id="henPricePreview" class="hen-price-preview" role="status" aria-live="polite" hidden></p>
             </div>
 
             <div class="entry-origin-controls" aria-hidden="true">
@@ -677,7 +679,7 @@
         <button id="closeSpecialPriceBtn" class="btn btn-primary" type="button">Cerrar</button>
       </div>
 
-      <p class="special-price-help">Estos precios se guardarán únicamente en el ticket seleccionado. No modificarán los precios generales ni los precios exclusivos de ningún cliente.</p>
+      <p class="special-price-help">El precio guardado aquí pertenece únicamente al ticket y tiene prioridad sobre el precio opcional del cliente. No modificará los precios del directorio.</p>
 
       <div class="special-price-ticket">
         <span>Ticket seleccionado</span>

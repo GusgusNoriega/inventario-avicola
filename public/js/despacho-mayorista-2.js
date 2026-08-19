@@ -352,6 +352,7 @@ const elements = {
   dressedVariantButtons: document.querySelectorAll("[data-dressed-variant]"),
   henVariantSelector: document.getElementById("henVariantSelector"),
   henVariantButtons: document.querySelectorAll("[data-hen-variant]"),
+  henPricePreview: document.getElementById("henPricePreview"),
   truckSelect: document.getElementById("truckSelect"),
   selectProviderBtn: document.getElementById("selectProviderBtn"),
   selectedOriginSummary: document.querySelector(".selected-origin-summary"),
@@ -670,6 +671,33 @@ function normalizeManualPrices(prices) {
 
   MANUAL_PRICE_PRODUCTS.forEach((product) => {
     const raw = source[product.apiCode];
+    const value = normalizeManualPrice(
+      raw && typeof raw === "object"
+        ? raw.priceKg ?? raw.price_kg ?? raw.value
+        : raw
+    );
+    if (value !== null) {
+      normalized[product.apiCode] = value;
+    }
+  });
+
+  return normalized;
+}
+
+function normalizeClientHenPrices(record) {
+  const source = record?.henPricesKg
+    || record?.hen_prices_kg
+    || record?.pricesKg
+    || record?.prices_kg
+    || record?.precios
+    || {};
+  const normalized = {};
+
+  HEN_VARIANTS.forEach((product) => {
+    const snakeKey = product.apiCode.toLowerCase();
+    const raw = source[product.apiCode]
+      ?? source[snakeKey]
+      ?? (product.apiCode === "GALLINA_ROJA" ? source.gallinaRoja : source.gallinaDoble);
     const value = normalizeManualPrice(
       raw && typeof raw === "object"
         ? raw.priceKg ?? raw.price_kg ?? raw.value
@@ -1123,16 +1151,34 @@ function getRequiredManualPriceProducts(truck) {
 }
 
 function getTruckProductPrice(truck, productCode, persistedOnly = false) {
+  return getTruckProductPriceDetails(truck, productCode, persistedOnly).price;
+}
+
+function getTruckProductPriceDetails(truck, productCode, persistedOnly = false) {
   const code = String(productCode || "").trim().toUpperCase();
   const registration = normalizeTicketRegistration(truck?.registration);
   const persisted = normalizeManualPrice(registration?.prices?.[code]?.priceKg);
   if (persisted !== null) {
-    return persisted;
+    return { price: persisted, source: "TICKET" };
   }
 
-  return persistedOnly
+  if (persistedOnly) {
+    return { price: null, source: null };
+  }
+
+  const ticketPrice = normalizeManualPrice(normalizeManualPrices(truck?.manualPrices)[code]);
+  if (ticketPrice !== null) {
+    return { price: ticketPrice, source: "TICKET" };
+  }
+
+  const destination = getTruckDestination(truck);
+  const clientPrice = isWarehouseDestination(destination)
     ? null
-    : normalizeManualPrice(normalizeManualPrices(truck?.manualPrices)[code]);
+    : normalizeManualPrice(destination?.henPricesKg?.[code]);
+
+  return clientPrice === null
+    ? { price: null, source: null }
+    : { price: clientPrice, source: "CLIENTE" };
 }
 
 function getMissingManualPriceProducts(truck, persistedOnly = false) {
@@ -1361,6 +1407,7 @@ function normalizeCatalogClient(record, source = "directory") {
     dni: String(record?.dni || "").trim(),
     direccion: String(record?.direccion || "").trim(),
     isInternalClient: Boolean(record?.es_cliente_interno || record?.isInternalClient),
+    henPricesKg: normalizeClientHenPrices(record),
     source,
     destinationType: record?.destinationType === "almacen" ? "almacen" : "cliente",
     databaseId: String(record?.databaseId || (
@@ -1418,6 +1465,7 @@ function normalizeStoredDestination(record, fallbackId = null) {
     isInternalClient: Boolean(
       record.isInternalClient || record.es_cliente_interno || record.internal_client
     ),
+    henPricesKg: normalizeClientHenPrices(record),
     source: record.source || "saved",
     destinationType,
     databaseId: String(
@@ -6642,12 +6690,17 @@ function renderSpecialPriceFields(truck) {
   }
 
   const products = getRequiredManualPriceProducts(truck);
-  const prices = normalizeManualPrices(truck?.manualPrices);
-  elements.specialPriceFields.innerHTML = products.map((product) => `
+  elements.specialPriceFields.innerHTML = products.map((product) => {
+    const price = getTruckProductPriceDetails(truck, product.apiCode);
+    const priceHelp = price.source === "CLIENTE"
+      ? "Precio del cliente; al guardar quedará fijado en este ticket"
+      : "Precio por kilogramo para este ticket";
+
+    return `
     <label class="special-price-field" for="specialPrice-${product.apiCode}">
       <span>
         <strong>${escapeHtml(product.shortLabel)} · ${escapeHtml(product.label)}</strong>
-        <small>Precio por kilogramo para este ticket</small>
+        <small>${escapeHtml(priceHelp)}</small>
       </span>
       <span class="special-price-input-wrap">
         <span aria-hidden="true">S/</span>
@@ -6658,7 +6711,7 @@ function renderSpecialPriceFields(truck) {
           max="99999999.99"
           step="0.01"
           required
-          value="${prices[product.apiCode] ?? ""}"
+          value="${price.price ?? ""}"
           readonly
           inputmode="none"
           data-special-price-code="${product.apiCode}"
@@ -6666,7 +6719,8 @@ function renderSpecialPriceFields(truck) {
         >
       </span>
     </label>
-  `).join("");
+  `;
+  }).join("");
   bindNumericInputs();
 }
 
@@ -6748,6 +6802,7 @@ function saveSpecialPrices(event) {
   saveState();
   closeSpecialPriceModal();
   renderSelectedTruckDetails();
+  renderHenPricePreview();
 
   if (registerAfterSave) {
     void registerDispatchTicket(truckId, deliverySelection, { specialPricesConfirmed: true });
@@ -6799,6 +6854,9 @@ function renderTypeButtons() {
   if (elements.henVariantSelector) {
     elements.henVariantSelector.hidden = !henMode;
   }
+  if (elements.henPricePreview) {
+    elements.henPricePreview.hidden = !henMode;
+  }
 
   elements.typeButtons.forEach((button, index) => {
     const option = options[index];
@@ -6813,6 +6871,31 @@ function renderTypeButtons() {
     button.classList.toggle("is-active", option.id === activeValue);
     button.classList.toggle("is-return-option", isReturn);
   });
+
+  renderHenPricePreview();
+}
+
+function renderHenPricePreview() {
+  if (!elements.henPricePreview) {
+    return;
+  }
+
+  const truck = getSelectedTruck();
+  const product = getHenVariantMeta(state.entryDefaults?.henVariantCode);
+  const price = getTruckProductPriceDetails(truck, product.apiCode);
+  const destination = getTruckDestination(truck);
+
+  elements.henPricePreview.classList.toggle("is-missing", price.price === null);
+  if (price.price === null) {
+    elements.henPricePreview.textContent = destination && !isWarehouseDestination(destination)
+      ? `${product.label}: el cliente no tiene precio; se solicitará uno para el ticket.`
+      : `${product.label}: asigna el precio en el ticket.`;
+    return;
+  }
+
+  elements.henPricePreview.textContent = price.source === "TICKET"
+    ? `Precio del ticket: S/ ${price.price.toFixed(2)} por kg.`
+    : `Precio de ${destination?.name || "cliente"}: S/ ${price.price.toFixed(2)} por kg. El ticket puede reemplazarlo.`;
 }
 
 function renderChickenSexButtons(buttons, selectedSex) {
@@ -6874,6 +6957,7 @@ function selectEntryHenVariant(variantCode) {
   };
   saveState();
   renderHenVariantButtons(elements.henVariantButtons, state.entryDefaults.henVariantCode);
+  renderHenPricePreview();
   renderWeightPreview();
   setFormMessage(`${getHenVariantMeta(state.entryDefaults.henVariantCode).label} seleccionada para la siguiente pesada.`);
 }
@@ -8020,15 +8104,22 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
   const requiredManualProducts = getRequiredManualPriceProducts(truck);
   if (requiredManualProducts.length) {
     const manualPrices = normalizeManualPrices(truck.manualPrices);
-    const missingProduct = requiredManualProducts.find(
-      (product) => normalizeManualPrice(manualPrices[product.apiCode]) === null
-    );
+    const submittedManualPrices = {};
+    const missingProduct = requiredManualProducts.find((product) => {
+      const ticketPrice = normalizeManualPrice(manualPrices[product.apiCode]);
+      if (ticketPrice !== null) {
+        submittedManualPrices[product.apiCode] = ticketPrice;
+        return false;
+      }
+
+      return getTruckProductPriceDetails(truck, product.apiCode).source !== "CLIENTE";
+    });
     if (missingProduct) {
       throw new Error(`Asigna el precio por kg de ${missingProduct.label} antes de registrar el ticket.`);
     }
-    ticketPayload.manual_prices = Object.fromEntries(
-      requiredManualProducts.map((product) => [product.apiCode, manualPrices[product.apiCode]])
-    );
+    if (Object.keys(submittedManualPrices).length) {
+      ticketPayload.manual_prices = submittedManualPrices;
+    }
   }
 
   if (!isReturn && !isInternalClientDestination(destination)) {
@@ -8118,7 +8209,7 @@ async function registerDispatchTicket(truckId, deliverySelection = null, options
     return;
   }
 
-  if (getRequiredManualPriceProducts(truck).length && options.specialPricesConfirmed !== true) {
+  if (getMissingManualPriceProducts(truck).length && options.specialPricesConfirmed !== true) {
     openSpecialPriceModal(truck.id, {
       deliverySelection,
       registerAfterSave: true

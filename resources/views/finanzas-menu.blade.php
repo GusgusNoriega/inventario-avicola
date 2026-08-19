@@ -229,6 +229,8 @@
         </a>
       </nav>
     </section>
+
+    @include('partials.system-credit')
   </main>
 </body>
 </html>

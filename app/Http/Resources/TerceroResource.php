@@ -41,6 +41,8 @@ class TerceroResource extends JsonResource
                 'pollo_vivo' => $prices->get(TipoPollo::CHICKEN_LIVE),
                 'pollo_pelado' => $prices->get(TipoPollo::CHICKEN_DRESSED),
                 'pollo_beneficiado' => $prices->get(TipoPollo::CHICKEN_PROCESSED),
+                'gallina_roja' => $prices->get(TipoPollo::HEN_RED),
+                'gallina_doble' => $prices->get(TipoPollo::HEN_DOUBLE),
             ],
             'createdAt' => $this->created_at?->toISOString(),
             'updatedAt' => $this->updated_at?->toISOString(),

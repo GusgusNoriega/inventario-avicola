@@ -377,6 +377,26 @@
   padding-inline: 6px;
 }
 
+.hen-price-preview {
+  grid-column: 1 / -1;
+  min-height: 1.25em;
+  margin: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(79, 209, 134, 0.35);
+  border-radius: 8px;
+  background: rgba(21, 114, 65, 0.16);
+  color: #8ee7b2;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.hen-price-preview.is-missing {
+  border-color: rgba(255, 196, 91, 0.35);
+  background: rgba(128, 82, 5, 0.18);
+  color: #ffd080;
+}
+
 .dressed-variant-buttons {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

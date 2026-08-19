@@ -22,7 +22,23 @@ const DIRECTORY_TYPES = {
 const PRICE_FIELDS = [
   { key: "pollo_vivo", apiKey: "POLLO_VIVO", inputId: "priceVivo", label: "Vivo" },
   { key: "pollo_pelado", apiKey: "POLLO_PELADO", inputId: "pricePelado", label: "Pelado" },
-  { key: "pollo_beneficiado", apiKey: "POLLO_BENEFICIADO", inputId: "priceBeneficiado", label: "Beneficiado" }
+  { key: "pollo_beneficiado", apiKey: "POLLO_BENEFICIADO", inputId: "priceBeneficiado", label: "Beneficiado" },
+  {
+    key: "gallina_roja",
+    apiKey: "GALLINA_ROJA",
+    inputId: "priceGallinaRoja",
+    label: "Gallina roja",
+    clientOnly: true,
+    clientPlaceholder: "Vacío: usa el precio del ticket"
+  },
+  {
+    key: "gallina_doble",
+    apiKey: "GALLINA_DOBLE",
+    inputId: "priceGallinaDoble",
+    label: "Gallina doble",
+    clientOnly: true,
+    clientPlaceholder: "Vacío: usa el precio del ticket"
+  }
 ];
 
 const ICONS = {
@@ -86,6 +102,8 @@ const elements = {
   closeGlobalPriceModalBtn: document.getElementById("closeGlobalPriceModalBtn"),
   globalPriceScope: document.getElementById("globalPriceScope"),
   globalPriceType: document.getElementById("globalPriceType"),
+  clientPriceFields: document.querySelectorAll("[data-client-price-field]"),
+  clientPriceOptions: document.querySelectorAll("[data-client-price-option]"),
   globalPriceAmount: document.getElementById("globalPriceAmount"),
   increaseGlobalPriceBtn: document.getElementById("increaseGlobalPriceBtn"),
   decreaseGlobalPriceBtn: document.getElementById("decreaseGlobalPriceBtn"),
@@ -156,6 +174,10 @@ function getActiveRecords() {
 
 function getRecordLabel(type = activeType) {
   return DIRECTORY_TYPES[type] || DIRECTORY_TYPES.clientes;
+}
+
+function getPriceFields(type = activeType) {
+  return PRICE_FIELDS.filter((field) => !field.clientOnly || type === "clientes");
 }
 
 function getErrorMessage(error) {
@@ -232,7 +254,7 @@ function readFormRecord() {
   const name = elements.name.value.trim().toLocaleUpperCase("es-PE");
   const dni = elements.dni.value.replace(/\D+/g, "");
   const direccion = elements.address.value.trim();
-  const prices = PRICE_FIELDS.reduce((acc, field) => {
+  const prices = getPriceFields().reduce((acc, field) => {
     const rawValue = elements.priceInputs[field.key].value.trim();
     acc[field.apiKey] = rawValue === "" ? null : normalizePrice(rawValue);
     return acc;
@@ -250,7 +272,7 @@ function readFormRecord() {
     return { error: "Ingresa la dirección." };
   }
 
-  const invalidPrice = PRICE_FIELDS.find((field) => {
+  const invalidPrice = getPriceFields().find((field) => {
     const price = prices[field.apiKey];
     return activeType === "proveedores"
       ? price === null || price <= 0
@@ -371,7 +393,7 @@ function editRecord(id) {
   elements.dni.value = record.dni;
   elements.address.value = record.direccion;
   elements.internalClient.checked = record.isInternalClient;
-  PRICE_FIELDS.forEach((field) => {
+  getPriceFields().forEach((field) => {
     const price = record.pricesKg[field.key];
     elements.priceInputs[field.key].value = price === null || price === undefined
       ? ""
@@ -414,7 +436,8 @@ async function deleteRecord(id) {
 async function applyGlobalPriceAdjustment(direction) {
   const meta = getRecordLabel();
   const amount = normalizePrice(elements.globalPriceAmount.value);
-  const field = PRICE_FIELDS.find((item) => item.key === elements.globalPriceType.value) || PRICE_FIELDS[0];
+  const activePriceFields = getPriceFields();
+  const field = activePriceFields.find((item) => item.key === elements.globalPriceType.value) || activePriceFields[0];
 
   if (amount <= 0) {
     setGlobalPriceMessage("Ingresa un monto mayor a cero.", true);
@@ -458,7 +481,7 @@ function syncEditingFormPrices() {
     return;
   }
 
-  PRICE_FIELDS.forEach((field) => {
+  getPriceFields().forEach((field) => {
     const price = record.pricesKg[field.key];
     elements.priceInputs[field.key].value = price === null || price === undefined
       ? ""
@@ -468,16 +491,28 @@ function syncEditingFormPrices() {
 
 function renderFormHeader() {
   const meta = getRecordLabel();
+  const isClient = activeType === "clientes";
   elements.formTitle.textContent = editingId ? meta.editTitle : meta.formTitle;
   elements.saveBtn.querySelector("span").textContent = editingId ? "Guardar cambios" : meta.saveLabel;
   elements.editBadge.hidden = !editingId;
-  elements.internalClientField.hidden = activeType !== "clientes";
+  elements.internalClientField.hidden = !isClient;
+  elements.clientPriceFields.forEach((field) => {
+    field.hidden = !isClient;
+  });
+  elements.clientPriceOptions.forEach((option) => {
+    option.hidden = !isClient;
+    option.disabled = !isClient;
+  });
+  if (!getPriceFields().some((field) => field.key === elements.globalPriceType.value)) {
+    elements.globalPriceType.value = getPriceFields()[0].key;
+  }
   PRICE_FIELDS.forEach((field) => {
     const input = elements.priceInputs[field.key];
-    input.required = activeType === "proveedores";
+    input.disabled = Boolean(field.clientOnly && !isClient);
+    input.required = activeType === "proveedores" && !field.clientOnly;
     input.placeholder = activeType === "proveedores"
       ? "0.00"
-      : "Vacío: usa el global";
+      : field.clientPlaceholder || "Vacío: usa el global";
   });
 }
 
@@ -502,7 +537,7 @@ function renderRecordCard(record) {
   const meta = getRecordLabel();
   const icon = activeType === "proveedores" ? ICONS.truck : ICONS.user;
   const isConfirmingDelete = pendingDeleteId === record.id;
-  const priceItems = PRICE_FIELDS.map((field) => `
+  const priceItems = getPriceFields().map((field) => `
     <div class="directory-price">
       <span>${field.label}</span>
       <strong>${formatCurrency(record.pricesKg[field.key])}</strong>

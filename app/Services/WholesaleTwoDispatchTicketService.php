@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\AjustePesoMayoristaDos;
+use App\Models\ListaPrecio;
+use App\Models\PrecioHistorial;
 use App\Models\ProgramacionRecepcion;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
@@ -55,12 +57,9 @@ class WholesaleTwoDispatchTicketService extends DispatchTicketService
         );
         $manualPrices = collect($data['manual_prices'] ?? []);
 
-        if (
-            $manualPrices->keys()->sort()->values()->all()
-            !== $specialTypes->keys()->sort()->values()->all()
-        ) {
+        if ($manualPrices->keys()->diff($specialTypes->keys())->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'manual_prices' => 'Envía exactamente los precios manuales de los productos especiales presentes en el ticket.',
+                'manual_prices' => 'Solo puedes enviar precios manuales de los productos especiales presentes en el ticket.',
             ]);
         }
 
@@ -70,23 +69,88 @@ class WholesaleTwoDispatchTicketService extends DispatchTicketService
             $standardTypes,
             $data,
         );
+        $clientHenPrices = $this->clientHenPrices(
+            $companyId,
+            $clientId,
+            $specialTypes,
+        );
 
         foreach ($specialTypes as $code => $type) {
-            $price = round((float) $manualPrices->get($code), 2, PHP_ROUND_HALF_UP);
-            if ($price <= 0 || $price > 99_999_999.99) {
+            if ($manualPrices->has($code)) {
+                $price = round((float) $manualPrices->get($code), 2, PHP_ROUND_HALF_UP);
+                if ($price <= 0 || $price > 99_999_999.99) {
+                    throw ValidationException::withMessages([
+                        "manual_prices.{$code}" => "El precio manual de {$type->nombre} no es válido.",
+                    ]);
+                }
+
+                $prices[(int) $type->id] = [
+                    'history_id' => null,
+                    'price_kg' => $price,
+                    'source' => 'MANUAL',
+                ];
+
+                continue;
+            }
+
+            $clientPrice = $clientHenPrices->get($type->id);
+            if (! $clientPrice) {
                 throw ValidationException::withMessages([
-                    "manual_prices.{$code}" => "El precio manual de {$type->nombre} no es válido.",
+                    "manual_prices.{$code}" => "Asigna el precio de {$type->nombre}; el cliente seleccionado no tiene una tarifa vigente para esta gallina.",
                 ]);
             }
 
             $prices[(int) $type->id] = [
-                'history_id' => null,
-                'price_kg' => $price,
-                'source' => 'MANUAL',
+                'history_id' => (int) $clientPrice->id,
+                'price_kg' => $clientPrice->precio_kg,
+                'source' => 'CLIENTE',
             ];
         }
 
         return $prices;
+    }
+
+    /**
+     * @param  Collection<string, TipoPollo>  $specialTypes
+     * @return Collection<int, PrecioHistorial>
+     */
+    private function clientHenPrices(
+        int $companyId,
+        ?int $clientId,
+        Collection $specialTypes,
+    ): Collection {
+        if (! $clientId) {
+            return collect();
+        }
+
+        $henTypeIds = $specialTypes
+            ->filter(fn (TipoPollo $type): bool => in_array(
+                $type->codigo,
+                TipoPollo::wholesaleTwoClientPriceCodes(),
+                true,
+            ))
+            ->pluck('id');
+        if ($henTypeIds->isEmpty()) {
+            return collect();
+        }
+
+        $listId = ListaPrecio::query()
+            ->where('empresa_id', $companyId)
+            ->where('tercero_id', $clientId)
+            ->where('operacion', ListaPrecio::OPERATION_SALE)
+            ->where('estado', ListaPrecio::STATUS_ACTIVE)
+            ->value('id');
+        if (! $listId) {
+            return collect();
+        }
+
+        return PrecioHistorial::query()
+            ->where('lista_precio_id', $listId)
+            ->whereIn('tipo_pollo_id', $henTypeIds)
+            ->whereNull('vigente_hasta')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('tipo_pollo_id');
     }
 
     /** @param Collection<int, array<string, mixed>> $weighings */

@@ -33,23 +33,33 @@ function ticketWithRecord(record) {
   };
 }
 
-test("el alta conserva la entrega elegida y solo reanuda después de validar todos los precios", () => {
+test("el alta conserva la entrega y acepta la tarifa opcional del cliente como respaldo", () => {
   assert.match(
     source,
     /specialPriceContext\s*=\s*\{[\s\S]*?truckId:\s*truck\.id,[\s\S]*?deliverySelection:\s*options\.deliverySelection \|\| null,[\s\S]*?registerAfterSave:/
   );
   assert.match(
     source,
-    /getRequiredManualPriceProducts\(truck\)\.length && options\.specialPricesConfirmed !== true[\s\S]*?openSpecialPriceModal\(truck\.id,[\s\S]*?deliverySelection,[\s\S]*?registerAfterSave:\s*true/
+    /getMissingManualPriceProducts\(truck\)\.length && options\.specialPricesConfirmed !== true[\s\S]*?openSpecialPriceModal\(truck\.id,[\s\S]*?deliverySelection,[\s\S]*?registerAfterSave:\s*true/
   );
   assert.match(
     source,
-    /ticketPayload\.manual_prices\s*=\s*Object\.fromEntries\([\s\S]*?requiredManualProducts\.map\(\(product\) => \[product\.apiCode, manualPrices\[product\.apiCode\]\]\)/
+    /const submittedManualPrices = \{\};[\s\S]*?getTruckProductPriceDetails\(truck, product\.apiCode\)\.source !== "CLIENTE"[\s\S]*?ticketPayload\.manual_prices = submittedManualPrices/
   );
   assert.match(
     source,
     /registerDispatchTicket\(truckId, deliverySelection, \{ specialPricesConfirmed: true \}\)/
   );
+});
+
+test("el precio congelado o manual del ticket tiene prioridad y la tarifa del cliente queda como respaldo visible", () => {
+  assert.match(
+    source,
+    /const persisted = normalizeManualPrice[\s\S]*?source: "TICKET"[\s\S]*?const ticketPrice = normalizeManualPrice[\s\S]*?source: "TICKET"[\s\S]*?destination\?\.henPricesKg\?\.\[code\][\s\S]*?source: "CLIENTE"/
+  );
+  assert.match(view, /id="henPricePreview"/);
+  assert.match(source, /Precio del ticket: S\/ \$\{price\.price\.toFixed\(2\)\} por kg/);
+  assert.match(source, /El ticket puede reemplazarlo/);
 });
 
 test("el popup usa campos de precio por ticket compatibles con el teclado numérico", () => {

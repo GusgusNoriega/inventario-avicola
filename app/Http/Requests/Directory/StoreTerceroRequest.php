@@ -19,12 +19,15 @@ class StoreTerceroRequest extends FormRequest
      */
     public function rules(): array
     {
-        $priceCodes = [
+        $standardPriceCodes = [
             TipoPollo::CHICKEN_LIVE,
             TipoPollo::CHICKEN_DRESSED,
             TipoPollo::CHICKEN_PROCESSED,
         ];
         $pricesAreRequired = $this->route('directory_role') === TerceroRole::PROVIDER;
+        $priceCodes = $pricesAreRequired
+            ? $standardPriceCodes
+            : [...$standardPriceCodes, ...TipoPollo::wholesaleTwoClientPriceCodes()];
 
         return [
             'nombre_razon_social' => ['required', 'string', 'max:180'],
@@ -41,6 +44,8 @@ class StoreTerceroRequest extends FormRequest
             'precios.'.TipoPollo::CHICKEN_LIVE => $this->priceRules($pricesAreRequired),
             'precios.'.TipoPollo::CHICKEN_DRESSED => $this->priceRules($pricesAreRequired),
             'precios.'.TipoPollo::CHICKEN_PROCESSED => $this->priceRules($pricesAreRequired),
+            'precios.'.TipoPollo::HEN_RED => $this->clientHenPriceRules(),
+            'precios.'.TipoPollo::HEN_DOUBLE => $this->clientHenPriceRules(),
         ];
     }
 
@@ -82,5 +87,20 @@ class StoreTerceroRequest extends FormRequest
         return $required
             ? ['required', 'numeric', 'gt:0', 'max:99999999.9999']
             : ['sometimes', 'nullable', 'numeric', 'gt:0', 'max:99999999.9999'];
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function clientHenPriceRules(): array
+    {
+        return [
+            Rule::prohibitedIf($this->route('directory_role') !== TerceroRole::CLIENT),
+            'sometimes',
+            'nullable',
+            'numeric',
+            'gt:0',
+            'max:99999999.9999',
+        ];
     }
 }

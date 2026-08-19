@@ -137,7 +137,7 @@ class TerceroDirectoryService
         float $amount,
         string $direction
     ): int {
-        $this->assertDirectoryPriceCodesAllowed([$chickenTypeCode], 'tipo_pollo');
+        $this->assertDirectoryPriceCodesAllowed([$chickenTypeCode], $role, 'tipo_pollo');
 
         return DB::transaction(function () use (
             $companyId,
@@ -156,6 +156,8 @@ class TerceroDirectoryService
                 ->whereHas('tercero', fn ($query) => $query
                     ->where('estado', Tercero::STATUS_ACTIVE)
                     ->conRol($role))
+                ->whereHas('preciosVigentes', fn ($query) => $query
+                    ->where('tipo_pollo_id', $type->id))
                 ->with(['preciosVigentes' => fn ($query) => $query
                     ->where('tipo_pollo_id', $type->id)])
                 ->lockForUpdate()
@@ -163,10 +165,10 @@ class TerceroDirectoryService
 
             $changes = $lists->map(function (ListaPrecio $list) use ($amount, $direction): array {
                 $current = $list->preciosVigentes->first();
-                $newPrice = (float) ($current?->precio_kg ?? 0)
+                $newPrice = (float) $current->precio_kg
                     + ($direction === 'DISMINUIR' ? -$amount : $amount);
 
-                if (! $current || $newPrice <= 0) {
+                if ($newPrice <= 0) {
                     throw ValidationException::withMessages([
                         'monto' => 'El ajuste dejaría al menos un precio en cero o con valor negativo.',
                     ]);
@@ -180,7 +182,8 @@ class TerceroDirectoryService
                     $list,
                     [$chickenTypeCode => $newPrice],
                     $actorId,
-                    'Ajuste global desde el directorio'
+                    'Ajuste global desde el directorio',
+                    $role,
                 );
 
                 if ($role === TerceroRole::CLIENT && $list->tercero) {
@@ -278,12 +281,12 @@ class TerceroDirectoryService
         array $prices,
         string $reason
     ): void {
-        $this->assertDirectoryPriceCodesAllowed(array_keys($prices), 'precios');
+        $this->assertDirectoryPriceCodesAllowed(array_keys($prices), $role, 'precios');
 
         if ($role === TerceroRole::PROVIDER) {
             $priceList = $this->ensurePriceList($tercero, $role, $actorId);
             $priceList->update(['nombre' => $this->priceListName($tercero, $role)]);
-            $this->applyPrices($priceList, $prices, $actorId, $reason);
+            $this->applyPrices($priceList, $prices, $actorId, $reason, $role);
 
             return;
         }
@@ -340,7 +343,7 @@ class TerceroDirectoryService
         }
 
         if ($definedPrices) {
-            $this->applyPrices($priceList, $definedPrices, $actorId, $reason);
+            $this->applyPrices($priceList, $definedPrices, $actorId, $reason, $role);
         }
     }
 
@@ -351,9 +354,10 @@ class TerceroDirectoryService
         ListaPrecio $priceList,
         array $prices,
         int $actorId,
-        string $reason
+        string $reason,
+        string $role,
     ): void {
-        $this->assertDirectoryPriceCodesAllowed(array_keys($prices), 'precios');
+        $this->assertDirectoryPriceCodesAllowed(array_keys($prices), $role, 'precios');
 
         $types = TipoPollo::query()
             ->whereIn('codigo', array_keys($prices))
@@ -402,17 +406,26 @@ class TerceroDirectoryService
     /** @param iterable<int, mixed> $codes */
     private function assertDirectoryPriceCodesAllowed(
         iterable $codes,
+        string $role,
         string $field,
     ): void {
-        $containsWholesaleTwoOnlyProduct = collect($codes)
-            ->map(fn (mixed $code): string => mb_strtoupper(trim((string) $code), 'UTF-8'))
-            ->contains(
-                fn (string $code): bool => TipoPollo::requiresWholesaleTwoManualPrice($code)
-            );
+        $allowed = [
+            TipoPollo::CHICKEN_LIVE,
+            TipoPollo::CHICKEN_DRESSED,
+            TipoPollo::CHICKEN_PROCESSED,
+            ...($role === TerceroRole::CLIENT
+                ? TipoPollo::wholesaleTwoClientPriceCodes()
+                : []),
+        ];
+        $containsUnsupportedProduct = collect($codes)
+            ->map(fn (mixed $code): string => trim((string) $code))
+            ->contains(fn (string $code): bool => ! in_array($code, $allowed, true));
 
-        if ($containsWholesaleTwoOnlyProduct) {
+        if ($containsUnsupportedProduct) {
             throw ValidationException::withMessages([
-                $field => 'Gallina roja, Gallina doble y Otros no admiten precios exclusivos de cliente o proveedor. Su precio se asigna manualmente en cada ticket de Despacho mayorista 2.',
+                $field => $role === TerceroRole::CLIENT
+                    ? 'Solo se admiten precios de pollo y de Gallina roja o Gallina doble para clientes. Otros conserva su precio manual por ticket en Despacho mayorista 2.'
+                    : 'Los proveedores solo admiten los precios de pollo configurados para compras.',
             ]);
         }
     }

@@ -146,6 +146,7 @@
 
       <p class="login-help">Si no puedes ingresar, solicita a un administrador que revise tu estado o restablezca tu contraseña.</p>
       <noscript><p class="access-alert access-alert-danger">Debes habilitar JavaScript para iniciar sesión.</p></noscript>
+      @include('partials.system-credit')
     </section>
   </main>
 
