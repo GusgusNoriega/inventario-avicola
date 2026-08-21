@@ -16,12 +16,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'hora_corte_operativo',
     'mensaje_ticket',
     'titulo_ticket',
+    'paleta_reportes',
     'sunat_habilitado',
     'estado',
 ])]
 class Empresa extends Model
 {
     public const STATUS_ACTIVE = 'ACTIVO';
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'paleta_reportes' => 'array',
+        ];
+    }
 
     /**
      * @return HasMany<Tercero, $this>

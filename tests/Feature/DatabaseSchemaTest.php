@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(105, $migrationFiles);
+        $this->assertCount(106, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -133,7 +133,7 @@ class DatabaseSchemaTest extends TestCase
     public function test_core_tables_include_the_columns_required_by_the_domain(): void
     {
         $expectations = [
-            'empresas' => ['mensaje_ticket', 'titulo_ticket'],
+            'empresas' => ['mensaje_ticket', 'titulo_ticket', 'paleta_reportes'],
             'usuarios' => ['empresa_id', 'sucursal_id', 'nombre', 'email', 'password_hash', 'estado'],
             'terceros' => ['empresa_id', 'nombre_razon_social', 'numero_documento', 'direccion', 'es_cliente_interno', 'estado'],
             'tipos_pollo' => ['codigo', 'nombre', 'permite_despacho', 'precio_fuente_tipo_pollo_id', 'estado'],
@@ -200,6 +200,7 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue(collect(Schema::getColumns('ticket_precio_ajuste_operaciones'))->keyBy('name')->get('resultado')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('empresas'))->keyBy('name')->get('mensaje_ticket')['nullable']);
         $this->assertFalse(collect(Schema::getColumns('empresas'))->keyBy('name')->get('titulo_ticket')['nullable']);
+        $this->assertTrue(collect(Schema::getColumns('empresas'))->keyBy('name')->get('paleta_reportes')['nullable']);
         $this->assertFalse(Schema::hasColumn('cuentas_financieras', 'saldo_actual'));
 
         $paymentIndexes = collect(Schema::getIndexes('pagos'))->keyBy('name');
@@ -670,6 +671,29 @@ class DatabaseSchemaTest extends TestCase
             'DISTRIBUIDORA DIEGO ALBERTO',
             DB::table('empresas')->where('id', $newCompanyId)->value('titulo_ticket')
         );
+    }
+
+    public function test_report_palette_schema_rolls_back_and_reapplies_on_sqlite(): void
+    {
+        $user = User::factory()->create();
+        DB::table('empresas')->where('id', $user->empresa_id)->update([
+            'paleta_reportes' => json_encode(['primary' => '#123456'], JSON_THROW_ON_ERROR),
+        ]);
+        $migration = require database_path(
+            'migrations/2026_08_21_000001_add_report_palette_to_empresas_table.php'
+        );
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn('empresas', 'paleta_reportes'));
+        $this->assertDatabaseHas('empresas', ['id' => $user->empresa_id]);
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn('empresas', 'paleta_reportes'));
+        $this->assertNull(DB::table('empresas')
+            ->where('id', $user->empresa_id)
+            ->value('paleta_reportes'));
     }
 
     public function test_java_680_migration_rolls_back_reapplies_and_is_idempotent(): void

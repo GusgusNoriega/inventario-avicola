@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Finance\UpdateReportPaletteRequest;
 use App\Models\Empresa;
 use App\Models\EntidadFinanciera;
 use App\Models\Pago;
 use App\Services\ReportDataService;
 use App\Services\ReportImageRenderer;
+use App\Services\ReportPaletteService;
 use Carbon\CarbonImmutable;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +32,7 @@ class ReportController extends Controller
     public function __construct(
         private readonly ReportDataService $reports,
         private readonly ReportImageRenderer $images,
+        private readonly ReportPaletteService $reportPalettes,
     ) {}
 
     public function index(Request $request): View
@@ -58,12 +62,26 @@ class ReportController extends Controller
             'routeCollectionDate' => now($company->zona_horaria ?: config('app.timezone'))->format('Y-m-d'),
             'reportCurrencies' => $this->reportCurrencies($companyId, $company),
             'defaultReportCurrency' => $this->defaultReportCurrency($company),
+            'reportPalette' => $this->reportPalettes->current($company),
+            'reportPaletteFields' => $this->reportPalettes->fields(),
+            'canConfigureReportPalette' => $request->user()->isAdministrator(),
             'accounts' => $this->ownAccountsQuery($companyId)
                 ->orderBy('entidad.razon_social')
                 ->orderBy('cuenta.estado')
                 ->orderBy('cuenta.alias')
                 ->get(),
         ]);
+    }
+
+    public function updatePalette(UpdateReportPaletteRequest $request): RedirectResponse
+    {
+        $company = Empresa::query()->findOrFail((int) $request->user()->empresa_id);
+        $validated = $request->validated();
+
+        $this->reportPalettes->save($company, $validated['colors']);
+
+        return to_route('finanzas.reportes')
+            ->with('report_palette_status', 'La paleta de los reportes se actualizó correctamente.');
     }
 
     public function pdf(Request $request, string $type): Response
@@ -102,6 +120,8 @@ class ReportController extends Controller
             $type === 'ruta-cobranza-2'
                 ? (string) ($payload['company']->nombre_comercial ?: $payload['company']->razon_social)
                 : null,
+            $payload['reportPalette']['muted_text'],
+            $payload['reportPalette']['page_background'],
         );
         $dompdf->render();
 
@@ -326,6 +346,7 @@ class ReportController extends Controller
             'selectedAccount' => $selectedAccount,
             'selectedUser' => $selectedUser,
             'generatedAt' => now($company->zona_horaria ?: config('app.timezone')),
+            'reportPalette' => $this->reportPalettes->current($company),
             'validated' => $validated,
         ];
     }
@@ -403,66 +424,85 @@ class ReportController extends Controller
         Dompdf $dompdf,
         bool $legacyCollectionLayout = false,
         ?string $legacyHeader = null,
+        string $mutedText = '#59636E',
+        string $pageBackground = '#FFFFFF',
     ): void {
-        $dompdf->setCallbacks([[
-            'event' => 'end_page_render',
-            'f' => function (mixed $frame, mixed $canvas, mixed $fontMetrics) use (
-                $legacyCollectionLayout,
-                $legacyHeader,
-            ): void {
-                $wordSpacing = $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf') ? .3 : 0;
-                $characterSpacing = $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf') ? .12 : 0;
-                if ($legacyCollectionLayout && $legacyHeader !== null) {
-                    $headerFont = $fontMetrics->getFont(
-                        is_file('C:/Windows/Fonts/micross.ttf') ? 'Route MS Sans' : 'Helvetica',
+        $mutedColor = $this->reportPalettes->dompdfColor($mutedText);
+        $pageBackgroundColor = $this->reportPalettes->dompdfColor($pageBackground);
+        $dompdf->setCallbacks([
+            [
+                'event' => 'begin_page_render',
+                'f' => static function (mixed $frame, mixed $canvas) use ($pageBackgroundColor): void {
+                    $canvas->filled_rectangle(
+                        0,
+                        0,
+                        $canvas->get_width(),
+                        $canvas->get_height(),
+                        $pageBackgroundColor,
+                    );
+                },
+            ],
+            [
+                'event' => 'end_page_render',
+                'f' => function (mixed $frame, mixed $canvas, mixed $fontMetrics) use (
+                    $legacyCollectionLayout,
+                    $legacyHeader,
+                    $mutedColor,
+                ): void {
+                    $wordSpacing = $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf') ? .3 : 0;
+                    $characterSpacing = $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf') ? .12 : 0;
+                    if ($legacyCollectionLayout && $legacyHeader !== null) {
+                        $headerFont = $fontMetrics->getFont(
+                            is_file('C:/Windows/Fonts/micross.ttf') ? 'Route MS Sans' : 'Helvetica',
+                            'normal',
+                        ) ?: $fontMetrics->getFont('Helvetica', 'normal');
+                        $headerWidth = $fontMetrics->getTextWidth(
+                            $legacyHeader,
+                            $headerFont,
+                            7.8,
+                            $wordSpacing,
+                            $characterSpacing,
+                        );
+                        $canvas->text(
+                            (($canvas->get_width() - $headerWidth) / 2) - .55,
+                            36.17,
+                            $legacyHeader,
+                            $headerFont,
+                            7.8,
+                            $mutedColor,
+                            $wordSpacing,
+                            $characterSpacing,
+                        );
+                    }
+
+                    $text = 'Pagina '.$canvas->get_page_number();
+                    $size = $legacyCollectionLayout ? 7.8 : 8;
+                    $font = $fontMetrics->getFont(
+                        $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf')
+                            ? 'Route MS Sans'
+                            : ($legacyCollectionLayout ? 'Helvetica' : 'DejaVu Sans'),
                         'normal',
                     ) ?: $fontMetrics->getFont('Helvetica', 'normal');
-                    $headerWidth = $fontMetrics->getTextWidth(
-                        $legacyHeader,
-                        $headerFont,
-                        7.8,
+                    $width = $fontMetrics->getTextWidth(
+                        $text,
+                        $font,
+                        $size,
                         $wordSpacing,
                         $characterSpacing,
                     );
                     $canvas->text(
-                        (($canvas->get_width() - $headerWidth) / 2) - .55,
-                        36.17,
-                        $legacyHeader,
-                        $headerFont,
-                        7.8,
-                        [0, 0, 0],
+                        (($canvas->get_width() - $width) / 2) - ($legacyCollectionLayout ? .55 : 0),
+                        $canvas->get_height() - ($legacyCollectionLayout ? 47.83 : 22),
+                        $text,
+                        $font,
+                        $size,
+                        $mutedColor,
                         $wordSpacing,
                         $characterSpacing,
                     );
-                }
-
-                $text = 'Pagina '.$canvas->get_page_number();
-                $size = $legacyCollectionLayout ? 7.8 : 8;
-                $font = $fontMetrics->getFont(
-                    $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf')
-                        ? 'Route MS Sans'
-                        : ($legacyCollectionLayout ? 'Helvetica' : 'DejaVu Sans'),
-                    'normal',
-                ) ?: $fontMetrics->getFont('Helvetica', 'normal');
-                $width = $fontMetrics->getTextWidth(
-                    $text,
-                    $font,
-                    $size,
-                    $wordSpacing,
-                    $characterSpacing,
-                );
-                $canvas->text(
-                    (($canvas->get_width() - $width) / 2) - ($legacyCollectionLayout ? .55 : 0),
-                    $canvas->get_height() - ($legacyCollectionLayout ? 47.83 : 22),
-                    $text,
-                    $font,
-                    $size,
-                    $legacyCollectionLayout ? [0, 0, 0] : [0.32, 0.35, 0.4],
-                    $wordSpacing,
-                    $characterSpacing,
-                );
-            },
-        ]]);
+                },
+            ],
+        ]);
     }
 
     private function registerLegacyCollectionFonts(Dompdf $dompdf): void

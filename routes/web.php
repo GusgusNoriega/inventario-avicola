@@ -122,6 +122,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('compras.edit');
             Route::get('/finanzas/reportes', [ReportController::class, 'index'])
                 ->name('finanzas.reportes');
+            Route::put('/finanzas/reportes/paleta', [ReportController::class, 'updatePalette'])
+                ->name('finanzas.reportes.palette.update');
             Route::get('/finanzas/reportes/{type}/pdf', [ReportController::class, 'pdf'])
                 ->name('finanzas.reportes.pdf');
             Route::get('/finanzas/reportes/{type}/imagen', [ReportController::class, 'image'])

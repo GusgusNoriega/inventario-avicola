@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   @php
+    $reportPalette = $reportPalette ?? app(\App\Services\ReportPaletteService::class)->defaults();
     $routeTahomaRegular = 'C:/Windows/Fonts/tahoma.ttf';
     $routeTahomaBold = 'C:/Windows/Fonts/tahomabd.ttf';
     $routeHasTahoma = is_file($routeTahomaRegular) && is_file($routeTahomaBold);
@@ -36,7 +37,8 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      color: #000;
+      background: {{ $reportPalette['page_background'] }};
+      color: {{ $reportPalette['body_text'] }};
       font-family: "{{ $routeHasTahoma ? 'Route Tahoma' : 'Helvetica' }}", Arial, sans-serif;
       font-size: 7.2pt;
     }
@@ -83,9 +85,9 @@
     table.route-client td:nth-child(8) { width: 45.20pt; }
     .route-client-title td {
       overflow: hidden;
-      border-right: .2pt solid #000;
-      background: #000;
-      color: #fff;
+      border-right: .2pt solid {{ $reportPalette['primary'] }};
+      background: {{ $reportPalette['primary'] }};
+      color: {{ $reportPalette['primary_text'] }};
       font-weight: bold !important;
     }
     .route-client-name-clip {
@@ -100,14 +102,17 @@
       top: -1.28pt;
     }
     .route-columns td {
-      border-right: .2pt solid #ffff00;
-      border-bottom: .72pt solid #000;
-      background: #ffff00;
-      color: #0000ff;
+      border-right: .2pt solid {{ $reportPalette['border'] }};
+      border-bottom: .72pt solid {{ $reportPalette['primary'] }};
+      background: {{ $reportPalette['secondary'] }};
+      color: {{ $reportPalette['secondary_text'] }};
       font-weight: bold !important;
       text-align: center;
     }
-    .route-opening td { border-bottom: .72pt solid #000; }
+    .route-opening td {
+      border-bottom: .72pt solid {{ $reportPalette['primary'] }};
+      background: {{ $reportPalette['accent'] }};
+    }
     .route-opening-label {
       overflow: visible;
       padding-left: 0 !important;
@@ -128,26 +133,28 @@
     .route-shift-balance-header { position: relative; left: .62pt; }
     .route-shift-balance { position: relative; left: -.17pt; }
     .route-shift-income { position: relative; left: .8pt; }
-    .route-row.route-new-day td { border-top: .72pt solid #000; }
-    .route-row.route-last td { border-bottom: .72pt solid #000; }
+    .route-row.route-new-day td { border-top: .72pt solid {{ $reportPalette['primary'] }}; }
+    .route-row.route-last td { border-bottom: .72pt solid {{ $reportPalette['primary'] }}; }
     .route-left { text-align: left; }
     .route-num { text-align: right; }
     .route-return {
-      color: #0000ff;
+      color: {{ $reportPalette['debit'] }};
       font-weight: bold !important;
     }
     .route-return-date {
-      color: #0000ff;
+      color: {{ $reportPalette['debit'] }};
       font-weight: normal !important;
     }
     .route-income {
-      color: #ff0000;
+      color: {{ $reportPalette['credit'] }};
       font-weight: bold !important;
     }
     .route-empty {
       width: 367.75pt;
-      border-top: 9.84pt solid #000;
-      border-bottom: .72pt solid #000;
+      border-top: 9.84pt solid {{ $reportPalette['primary'] }};
+      border-bottom: .72pt solid {{ $reportPalette['primary'] }};
+      background: {{ $reportPalette['accent'] }};
+      color: {{ $reportPalette['muted_text'] }};
       padding: 10pt 2pt;
       text-align: center;
     }

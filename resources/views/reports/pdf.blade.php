@@ -2,39 +2,44 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  @php
+    $reportPalette = $reportPalette ?? app(\App\Services\ReportPaletteService::class)->defaults();
+  @endphp
   <style>
     @page { margin: 25px 30px 38px; }
     * { box-sizing: border-box; }
-    body { margin: 0; color: #17202a; font-family: "DejaVu Sans", sans-serif; font-size: 9px; }
-    .brand { color: #59636e; font-size: 9px; text-align: center; }
-    h1 { margin: 5px 0 2px; color: #14261b; font-size: 17px; text-align: center; text-transform: uppercase; }
-    .period { margin: 0 0 12px; color: #4f5b66; text-align: center; }
-    .updated { margin: -7px 0 10px; color: #4f5b66; text-align: center; }
-    .subject { margin: 8px 0 10px; border: 1px solid #ccd4cf; background: #f7faf8; padding: 7px 9px; }
-    .subject strong { color: #14261b; font-size: 11px; }
+    body { margin: 0; background: {{ $reportPalette['page_background'] }}; color: {{ $reportPalette['body_text'] }}; font-family: "DejaVu Sans", sans-serif; font-size: 9px; }
+    .brand { color: {{ $reportPalette['muted_text'] }}; font-size: 9px; text-align: center; }
+    h1 { margin: 5px 0 2px; color: {{ $reportPalette['primary'] }}; font-size: 17px; text-align: center; text-transform: uppercase; }
+    .period { margin: 0 0 12px; color: {{ $reportPalette['muted_text'] }}; text-align: center; }
+    .updated { margin: -7px 0 10px; color: {{ $reportPalette['muted_text'] }}; text-align: center; }
+    .subject { margin: 8px 0 10px; border: 1px solid {{ $reportPalette['border'] }}; background: {{ $reportPalette['accent'] }}; padding: 7px 9px; }
+    .subject strong { color: {{ $reportPalette['primary'] }}; font-size: 11px; }
     .summary { width: 100%; margin: 0 0 10px; border-collapse: separate; border-spacing: 4px 0; }
-    .summary td { border: 1px solid #d8dfda; background: #f5f8f6; padding: 6px 8px; text-align: right; }
-    .summary span { display: block; color: #67716b; font-size: 7px; text-transform: uppercase; }
-    .summary strong { color: #172b1e; font-size: 11px; }
+    .summary td { border: 1px solid {{ $reportPalette['border'] }}; background: {{ $reportPalette['accent'] }}; padding: 6px 8px; text-align: right; }
+    .summary span { display: block; color: {{ $reportPalette['muted_text'] }}; font-size: 7px; text-transform: uppercase; }
+    .summary strong { color: {{ $reportPalette['primary'] }}; font-size: 11px; }
     table.report { width: 100%; border-collapse: collapse; table-layout: fixed; }
     table.report thead { display: table-header-group; }
     table.report tr { page-break-inside: avoid; }
-    table.report th { border: 1px solid #1f2a24; background: #b8d8c3; color: #14261b; padding: 5px 3px; font-size: 7px; text-transform: uppercase; }
-    table.report td { border-bottom: 1px solid #d7ded9; padding: 4px 3px; vertical-align: top; }
-    table.report tbody tr:nth-child(even) td { background: #f8faf9; }
-    table.report tfoot td { border-top: 1.5px solid #1f2a24; border-bottom: 0; background: #e7f1ea; font-weight: bold; }
+    table.report th { border: 1px solid {{ $reportPalette['primary'] }}; background: {{ $reportPalette['secondary'] }}; color: {{ $reportPalette['secondary_text'] }}; padding: 5px 3px; font-size: 7px; text-transform: uppercase; }
+    table.report td { border-bottom: 1px solid {{ $reportPalette['border'] }}; padding: 4px 3px; vertical-align: top; }
+    table.report tbody tr:nth-child(even) td { background: {{ $reportPalette['accent'] }}; }
+    table.report tfoot td { border-top: 1.5px solid {{ $reportPalette['primary'] }}; border-bottom: 0; background: {{ $reportPalette['accent'] }}; font-weight: bold; }
     .num { text-align: right; white-space: nowrap; }
     .center { text-align: center; }
-    .muted { color: #68726d; }
-    .credit { color: #b42318; font-weight: bold; }
-    .debit { color: #175cd3; font-weight: bold; }
-    .balance { color: #172b1e; font-weight: bold; }
-    .empty { padding: 24px !important; color: #66706a; text-align: center; }
+    .muted { color: {{ $reportPalette['muted_text'] }}; }
+    .credit { color: {{ $reportPalette['credit'] }}; font-weight: bold; }
+    .debit { color: {{ $reportPalette['debit'] }}; font-weight: bold; }
+    table.report th .credit,
+    table.report th .debit { color: inherit; }
+    .balance { color: {{ $reportPalette['primary'] }}; font-weight: bold; }
+    .empty { padding: 24px !important; color: {{ $reportPalette['muted_text'] }}; text-align: center; }
     table.report tbody tr.day-separator td {
-      border-top: 1px solid #7eaa8c;
-      border-bottom: 1px solid #a9c8b3;
-      background: #e7f1ea;
-      color: #173c25;
+      border-top: 1px solid {{ $reportPalette['primary'] }};
+      border-bottom: 1px solid {{ $reportPalette['border'] }};
+      background: {{ $reportPalette['accent'] }};
+      color: {{ $reportPalette['primary'] }};
       padding: 5px 6px;
       font-size: 8px;
       font-weight: bold;
@@ -42,16 +47,16 @@
       text-transform: uppercase;
     }
     .day-separator { page-break-after: avoid; }
-    .section-title { margin: 12px 0 5px; border-left: 4px solid #2f7d4b; padding-left: 6px; color: #173c25; font-size: 11px; }
-    .footer-note { margin-top: 9px; color: #707a74; font-size: 7px; }
+    .section-title { margin: 12px 0 5px; border-left: 4px solid {{ $reportPalette['primary'] }}; padding-left: 6px; color: {{ $reportPalette['primary'] }}; font-size: 11px; }
+    .footer-note { margin-top: 9px; color: {{ $reportPalette['muted_text'] }}; font-size: 7px; }
     table.debt-totals { width: 100%; margin: 1px 0 4px; border-collapse: collapse; table-layout: fixed; }
     table.debt-totals .spacer { width: 35%; border: 0; background: transparent; }
-    table.debt-totals th { border: 1px solid #273037; background: #273037; color: #fff; padding: 2px 3px; font-size: 8px; letter-spacing: .35px; text-align: center; }
-    table.debt-totals td:not(.spacer) { width: 13%; border: 1px solid #596168; padding: 3px; font-size: 8px; font-weight: bold; text-align: right; white-space: nowrap; }
-    table.report.debt-report th { background: #d4d9dc; color: #20272c; padding: 4px 2px; font-size: 6.6px; line-height: 1.2; }
-    table.report.debt-report td { border: 1px solid #687178; padding: 2px 3px; font-size: 7.2px; line-height: 1.15; }
-    table.report.debt-report tbody tr:nth-child(even) td { background: #f3f4f4; }
-    table.report.debt-report td:last-child { background: #eef1f2; font-weight: bold; }
+    table.debt-totals th { border: 1px solid {{ $reportPalette['primary'] }}; background: {{ $reportPalette['primary'] }}; color: {{ $reportPalette['primary_text'] }}; padding: 2px 3px; font-size: 8px; letter-spacing: .35px; text-align: center; }
+    table.debt-totals td:not(.spacer) { width: 13%; border: 1px solid {{ $reportPalette['border'] }}; padding: 3px; font-size: 8px; font-weight: bold; text-align: right; white-space: nowrap; }
+    table.report.debt-report th { background: {{ $reportPalette['secondary'] }}; color: {{ $reportPalette['secondary_text'] }}; padding: 4px 2px; font-size: 6.6px; line-height: 1.2; }
+    table.report.debt-report td { border: 1px solid {{ $reportPalette['border'] }}; padding: 2px 3px; font-size: 7.2px; line-height: 1.15; }
+    table.report.debt-report tbody tr:nth-child(even) td { background: {{ $reportPalette['accent'] }}; }
+    table.report.debt-report td:last-child { background: {{ $reportPalette['accent'] }}; font-weight: bold; }
     .debt-date { display: block; margin-top: 2px; font-size: 6px; font-weight: normal; }
   </style>
 </head>

@@ -12,8 +12,9 @@ class ReportImageRenderer
 
     private string $boldFont;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly ReportPaletteService $palettes,
+    ) {
         $fontDirectory = base_path('vendor/dompdf/dompdf/lib/fonts');
         $this->regularFont = $fontDirectory.'/DejaVuSans.ttf';
         $this->boldFont = $fontDirectory.'/DejaVuSans-Bold.ttf';
@@ -94,16 +95,20 @@ class ReportImageRenderer
             ? [1980, 1400]
             : ($payload['type'] === 'deuda-clientes' ? [1400, 1812] : [1400, 1980]);
         $image = imagecreatetruecolor($width, $height);
-        $white = imagecolorallocate($image, 255, 255, 255);
-        $ink = imagecolorallocate($image, 23, 32, 42);
-        $muted = imagecolorallocate($image, 96, 108, 101);
-        $green = imagecolorallocate($image, 184, 216, 195);
-        $pale = imagecolorallocate($image, 245, 248, 246);
-        $dayBackground = imagecolorallocate($image, 231, 241, 234);
-        $line = imagecolorallocate($image, 205, 215, 208);
-        $blue = imagecolorallocate($image, 23, 92, 211);
-        $red = imagecolorallocate($image, 180, 35, 24);
-        imagefill($image, 0, 0, $white);
+        $palette = $this->palettes->normalize(
+            is_array($payload['reportPalette'] ?? null) ? $payload['reportPalette'] : null,
+        );
+        $pageBackground = $this->allocateColor($image, $palette['page_background']);
+        $primary = $this->allocateColor($image, $palette['primary']);
+        $secondary = $this->allocateColor($image, $palette['secondary']);
+        $secondaryText = $this->allocateColor($image, $palette['secondary_text']);
+        $accent = $this->allocateColor($image, $palette['accent']);
+        $ink = $this->allocateColor($image, $palette['body_text']);
+        $muted = $this->allocateColor($image, $palette['muted_text']);
+        $line = $this->allocateColor($image, $palette['border']);
+        $blue = $this->allocateColor($image, $palette['debit']);
+        $red = $this->allocateColor($image, $palette['credit']);
+        imagefill($image, 0, 0, $pageBackground);
 
         $margin = 48;
         $cursorY = 50;
@@ -111,7 +116,7 @@ class ReportImageRenderer
             $company = $payload['company']->nombre_comercial ?: $payload['company']->razon_social;
             $this->centerText($image, $company, 15, $cursorY, $muted, false, $width);
             $cursorY += 48;
-            $this->centerText($image, mb_strtoupper($payload['title']), 28, $cursorY, $ink, true, $width);
+            $this->centerText($image, mb_strtoupper($payload['title']), 28, $cursorY, $primary, true, $width);
             $cursorY += 57;
             $period = 'Periodo: '.CarbonImmutable::parse($payload['from'])->format('d/m/Y')
                 .' al '.CarbonImmutable::parse($payload['to'])->format('d/m/Y');
@@ -130,7 +135,7 @@ class ReportImageRenderer
                     $label.$payload['data']['counterparty']->nombre_razon_social,
                     17,
                     $cursorY,
-                    $ink,
+                    $primary,
                     true,
                     $width,
                 );
@@ -139,21 +144,21 @@ class ReportImageRenderer
             if ($payload['type'] === 'estado-cliente') {
                 $cursorY += 10;
             } else {
-                $cursorY = $this->drawSummary($image, $payload, $cursorY, $margin, $width, $ink, $muted, $pale, $line);
+                $cursorY = $this->drawSummary($image, $payload, $cursorY, $margin, $width, $primary, $muted, $accent, $line);
             }
         } else {
-            $this->centerText($image, mb_strtoupper($payload['title']).' - CONTINUACION', 20, $cursorY, $ink, true, $width);
+            $this->centerText($image, mb_strtoupper($payload['title']).' - CONTINUACION', 20, $cursorY, $primary, true, $width);
             $cursorY += 55;
         }
 
         $tableWidth = $width - ($margin * 2);
         $headerHeight = 48;
-        imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $headerHeight, $green);
+        imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $headerHeight, $secondary);
         $x = $margin;
         foreach ($columns as $column) {
             $columnWidth = (int) round($tableWidth * $column['width']);
-            imagerectangle($image, $x, $cursorY, $x + $columnWidth, $cursorY + $headerHeight, $ink);
-            $this->drawCellText($image, $column['label'], $x, $cursorY, $columnWidth, $headerHeight, 11, $ink, true, 'center');
+            imagerectangle($image, $x, $cursorY, $x + $columnWidth, $cursorY + $headerHeight, $primary);
+            $this->drawCellText($image, $column['label'], $x, $cursorY, $columnWidth, $headerHeight, 11, $secondaryText, true, 'center');
             $x += $columnWidth;
         }
         $cursorY += $headerHeight;
@@ -169,7 +174,7 @@ class ReportImageRenderer
 
                 if ($kind === 'day') {
                     $rowHeight = 42;
-                    imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $dayBackground);
+                    imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $accent);
                     imagerectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $line);
                     $this->drawCellText(
                         $image,
@@ -179,7 +184,7 @@ class ReportImageRenderer
                         $tableWidth,
                         $rowHeight,
                         11,
-                        $ink,
+                        $primary,
                         true,
                         'left',
                     );
@@ -213,7 +218,7 @@ class ReportImageRenderer
                         $balanceWidth,
                         $rowHeight,
                         11,
-                        $ink,
+                        $primary,
                         true,
                         'right',
                     );
@@ -243,7 +248,7 @@ class ReportImageRenderer
 
                 $rowHeight = 42;
                 if ($dataRowIndex % 2 === 1) {
-                    imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $pale);
+                    imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $accent);
                 }
                 $x = $margin;
                 foreach ($columns as $index => $column) {
@@ -295,7 +300,7 @@ class ReportImageRenderer
         int $y,
         int $margin,
         int $width,
-        int $ink,
+        int $primary,
         int $muted,
         int $background,
         int $line,
@@ -308,7 +313,7 @@ class ReportImageRenderer
             imagefilledrectangle($image, $x, $y, $x + $boxWidth, $y + 82, $background);
             imagerectangle($image, $x, $y, $x + $boxWidth, $y + 82, $line);
             $this->drawCellText($image, mb_strtoupper($label), $x, $y + 7, $boxWidth, 28, 10, $muted, false, 'center');
-            $this->drawCellText($image, $value, $x, $y + 32, $boxWidth, 42, 18, $ink, true, 'center');
+            $this->drawCellText($image, $value, $x, $y + 32, $boxWidth, 42, 18, $primary, true, 'center');
         }
 
         return $y + 106;
@@ -549,5 +554,17 @@ class ReportImageRenderer
         $box = imagettfbbox($size, 0, $font, $text);
 
         return abs($box[4] - $box[0]);
+    }
+
+    private function allocateColor(GdImage $image, string $hex): int
+    {
+        [$red, $green, $blue] = $this->palettes->rgb($hex);
+        $color = imagecolorallocate($image, $red, $green, $blue);
+
+        if ($color === false) {
+            throw new RuntimeException('No se pudo preparar la paleta de la imagen.');
+        }
+
+        return $color;
     }
 }
