@@ -6,8 +6,10 @@ use App\Models\Comprobante;
 use App\Models\CuentaFinanciera;
 use App\Models\EntidadFinanciera;
 use App\Models\Pago;
+use App\Models\Pesada;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
+use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
 use App\Services\CashRegisterMovementService;
@@ -1216,6 +1218,154 @@ class ReportPdfTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
+    public function test_sales_report_stacks_customer_rows_and_only_subtotals_repeated_customers(): void
+    {
+        $alpha = $this->thirdParty('CLIENTE ALFA', TerceroRole::CLIENT);
+        $beta = $this->thirdParty('CLIENTE BETA', TerceroRole::CLIENT);
+        $branchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'SUC-REPORTE-VENTAS',
+            'nombre' => 'Sucursal para reporte de ventas',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $journeyId = DB::table('jornadas_operativas')->insertGetId([
+            'sucursal_id' => $branchId,
+            'fecha_operativa' => '2026-07-15',
+            'estado' => 'CERRADA',
+            'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-07-15 06:00:00',
+            'cierre_programado_at' => '2026-07-15 21:00:00',
+            'cerrada_por' => $this->user->id,
+            'cerrada_at' => '2026-07-15 21:00:00',
+        ]);
+        $liveChicken = TipoPollo::query()->create([
+            'codigo' => 'REPORTE_VENTAS_VIVO',
+            'nombre' => 'Pollo vivo',
+            'permite_despacho' => true,
+            'estado' => TipoPollo::STATUS_ACTIVE,
+        ]);
+        $dressedChicken = TipoPollo::query()->create([
+            'codigo' => 'REPORTE_VENTAS_PELADO',
+            'nombre' => 'Pollo pelado',
+            'permite_despacho' => true,
+            'estado' => TipoPollo::STATUS_ACTIVE,
+        ]);
+
+        $this->salesReportTicket(
+            $journeyId,
+            (int) $alpha->id,
+            (int) $liveChicken->id,
+            'T-REPORTE-ALFA-VENTA',
+            '2026-07-15 08:00:00',
+            TicketDespacho::OPERATION_DISPATCH,
+            5,
+            2,
+            20,
+            100,
+            10,
+            90,
+        );
+        $this->salesReportTicket(
+            $journeyId,
+            (int) $beta->id,
+            (int) $liveChicken->id,
+            'T-REPORTE-BETA-VENTA',
+            '2026-07-15 09:00:00',
+            TicketDespacho::OPERATION_DISPATCH,
+            7,
+            1,
+            10,
+            50,
+            5,
+            45,
+        );
+        $this->salesReportTicket(
+            $journeyId,
+            (int) $alpha->id,
+            (int) $dressedChicken->id,
+            'T-REPORTE-ALFA-DEVOLUCION',
+            '2026-07-15 10:00:00',
+            TicketDespacho::OPERATION_RETURN,
+            6,
+            1,
+            2,
+            10,
+            0,
+            10,
+        );
+
+        $report = app(ReportDataService::class)->salesByCustomer(
+            (int) $this->user->empresa_id,
+            '2026-07-01',
+            '2026-07-31',
+        );
+
+        $this->assertSame(
+            ['CLIENTE ALFA', 'CLIENTE ALFA', 'CLIENTE BETA'],
+            $report['rows']->pluck('customer')->all(),
+        );
+        $this->assertSame(['Pollo vivo', 'Pollo pelado'], $report['customer_groups'][0]['rows']->pluck('product')->all());
+        $this->assertCount(2, $report['customer_groups']);
+        $this->assertCount(2, $report['customer_groups'][0]['rows']);
+        $this->assertCount(1, $report['customer_groups'][1]['rows']);
+        $this->assertSame(2, (int) $report['customer_groups'][0]['subtotal']['containers']);
+        $this->assertSame(20, (int) $report['customer_groups'][0]['subtotal']['birds']);
+        $this->assertSame(10.0, (float) $report['customer_groups'][0]['subtotal']['returns']);
+        $this->assertSame(80.0, (float) $report['customer_groups'][0]['subtotal']['net_weight']);
+        $this->assertSame(390.0, (float) $report['customer_groups'][0]['subtotal']['amount']);
+        $this->assertEqualsWithDelta(4.875, (float) $report['customer_groups'][0]['subtotal']['weighted_price'], 0.0001);
+        $this->assertSame(3, (int) $report['totals']['containers']);
+        $this->assertSame(30, (int) $report['totals']['birds']);
+        $this->assertSame(10.0, (float) $report['totals']['returns']);
+        $this->assertSame(125.0, (float) $report['totals']['net_weight']);
+        $this->assertSame(705.0, (float) $report['totals']['amount']);
+
+        $html = view('reports.pdf', [
+            'company' => $this->user->empresa,
+            'type' => 'ventas-clientes',
+            'title' => 'Reporte de ventas por cliente',
+            'from' => '2026-07-01',
+            'to' => '2026-07-31',
+            'data' => $report,
+            'selectedAccount' => null,
+            'selectedUser' => null,
+            'generatedAt' => CarbonImmutable::parse('2026-07-31 12:00:00'),
+        ])->render();
+        $document = new \DOMDocument('1.0', 'UTF-8');
+        $this->assertTrue(@$document->loadHTML('<?xml encoding="UTF-8">'.$html));
+        $xpath = new \DOMXPath($document);
+        $details = $xpath->query('//tr[contains(concat(" ", normalize-space(@class), " "), " sales-detail ")]');
+        $groupStarts = $xpath->query('//tr[contains(concat(" ", normalize-space(@class), " "), " customer-group-start ")]');
+        $subtotals = $xpath->query('//tr[contains(concat(" ", normalize-space(@class), " "), " customer-subtotal ")]');
+        $this->assertNotFalse($details);
+        $this->assertNotFalse($groupStarts);
+        $this->assertNotFalse($subtotals);
+        $this->assertSame(3, $details->length);
+        $this->assertSame(2, $groupStarts->length);
+        $this->assertSame(1, $subtotals->length);
+        $subtotalText = preg_replace('/\s+/', ' ', $subtotals->item(0)?->textContent ?? '');
+        $this->assertIsString($subtotalText);
+        $this->assertStringContainsString('Total CLIENTE ALFA', $subtotalText);
+        $this->assertStringContainsString('4.88', $subtotalText);
+        $this->assertStringContainsString('390.00', $subtotalText);
+        $this->assertStringNotContainsString('Total CLIENTE BETA', preg_replace('/\s+/', ' ', strip_tags($html)) ?? '');
+
+        $query = [
+            'type' => 'ventas-clientes',
+            'desde' => '2026-07-01',
+            'hasta' => '2026-07-31',
+        ];
+        $pdf = $this->get(route('finanzas.reportes.pdf', $query));
+        $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $image = $this->get(route('finanzas.reportes.imagen', $query));
+        $image->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->assertStringStartsWith("\x89PNG\r\n\x1a\n", $image->getContent());
+    }
+
     public function test_customer_debt_report_can_be_generated_as_pdf_and_image(): void
     {
         $query = [
@@ -2065,5 +2215,64 @@ class ReportPdfTest extends TestCase
         TerceroRole::query()->create(['tercero_id' => $thirdParty->id, 'rol' => $role]);
 
         return $thirdParty;
+    }
+
+    private function salesReportTicket(
+        int $journeyId,
+        int $customerId,
+        int $chickenTypeId,
+        string $code,
+        string $closedAt,
+        string $operation,
+        float $price,
+        int $containers,
+        int $birds,
+        float $grossWeight,
+        float $tare,
+        float $netWeight,
+    ): void {
+        $ticketId = DB::table('tickets_despacho')->insertGetId([
+            'jornada_id' => $journeyId,
+            'codigo' => $code,
+            'canal' => TicketDespacho::CHANNEL_WHOLESALE,
+            'tipo_operacion' => $operation,
+            'cliente_destino_id' => $customerId,
+            'estado' => TicketDespacho::STATUS_CLOSED,
+            'cerrado_por' => $this->user->id,
+            'cerrado_at' => $closedAt,
+            'created_by' => $this->user->id,
+            'created_at' => $closedAt,
+            'updated_at' => $closedAt,
+        ]);
+        DB::table('ticket_precios')->insert([
+            'ticket_id' => $ticketId,
+            'tipo_pollo_id' => $chickenTypeId,
+            'precio_historial_id' => null,
+            'precio_kg' => $price,
+            'origen_precio' => 'MANUAL',
+            'congelado_por' => $this->user->id,
+            'created_at' => $closedAt,
+        ]);
+        DB::table('pesadas')->insert([
+            'ticket_id' => $ticketId,
+            'numero' => 1,
+            'tipo_pollo_id' => $chickenTypeId,
+            'condicion_pollo' => Pesada::CHICKEN_CONDITION_LIVE,
+            'sexo' => Pesada::SEX_MALE,
+            'origen_peso' => 'MANUAL',
+            'aves_por_java' => intdiv($birds, max(1, $containers)),
+            'cantidad_javas' => $containers,
+            'cantidad_aves' => $birds,
+            'peso_java_kg_snapshot' => $containers > 0 ? $tare / $containers : 0,
+            'peso_leido_kg' => $grossWeight,
+            'peso_bruto_kg' => $grossWeight,
+            'tara_total_kg' => $tare,
+            'peso_neto_kg' => $netWeight,
+            'pesada_at' => $closedAt,
+            'estado' => Pesada::STATUS_ACTIVE,
+            'created_by' => $this->user->id,
+            'created_at' => $closedAt,
+            'updated_at' => $closedAt,
+        ]);
     }
 }

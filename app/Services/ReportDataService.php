@@ -879,6 +879,11 @@ class ReportDataService
                     $typeId,
                 ]);
                 $existing = $rows->get($key, [
+                    'customer_key' => $ticket->cliente_destino_id !== null
+                        ? 'customer:'.$ticket->cliente_destino_id
+                        : 'retail:unassigned',
+                    'ticket_id' => (int) $ticket->id,
+                    'product_id' => (int) $typeId,
                     'date_time' => $recordedAt?->format('Y-m-d H:i:s') ?? $ticket->jornada?->fecha_operativa?->startOfDay()->format('Y-m-d H:i:s'),
                     'customer' => $ticket->clienteDestino?->nombre_razon_social ?? 'VENTA MINORISTA SIN CLIENTE',
                     'channel' => $ticket->canal,
@@ -904,10 +909,40 @@ class ReportDataService
             }
         }
 
-        $rows = $rows->sortBy(fn (array $row): string => $row['date_time'].'-'.$row['customer'].'-'.$row['product'])->values();
+        $rows = $rows->sortBy(fn (array $row): string => implode(':', [
+            mb_strtolower($row['customer']),
+            $row['customer_key'],
+            $row['date_time'],
+            str_pad((string) $row['ticket_id'], 20, '0', STR_PAD_LEFT),
+            str_pad((string) $row['product_id'], 20, '0', STR_PAD_LEFT),
+        ]))->values();
+        $customerGroups = $rows
+            ->groupBy('customer_key')
+            ->map(function (Collection $customerRows): array {
+                $netWeight = (float) $customerRows->sum('net_weight');
+                $amount = (float) $customerRows->sum('amount');
+
+                return [
+                    'customer_key' => $customerRows->first()['customer_key'],
+                    'customer' => $customerRows->first()['customer'],
+                    'rows' => $customerRows->values(),
+                    'subtotal' => [
+                        'containers' => $customerRows->sum('containers'),
+                        'birds' => $customerRows->sum('birds'),
+                        'gross_weight' => $customerRows->sum('gross_weight'),
+                        'tare' => $customerRows->sum('tare'),
+                        'returns' => $customerRows->sum('returns'),
+                        'net_weight' => $netWeight,
+                        'weighted_price' => round($netWeight, 3) !== 0.0 ? $amount / $netWeight : null,
+                        'amount' => $amount,
+                    ],
+                ];
+            })
+            ->values();
 
         return [
             'rows' => $rows,
+            'customer_groups' => $customerGroups,
             'totals' => [
                 'containers' => $rows->sum('containers'),
                 'birds' => $rows->sum('birds'),

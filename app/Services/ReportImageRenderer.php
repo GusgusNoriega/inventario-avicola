@@ -56,8 +56,8 @@ class ReportImageRenderer
     }
 
     /**
-     * @param  list<list<string>|array{kind: string, cells: list<string>, movement?: string}>  $rows
-     * @return list<list<list<string>|array{kind: string, cells: list<string>, movement?: string}>>
+     * @param  list<list<string>|array{kind: string, cells: list<string>, movement?: string, group_start?: bool}>  $rows
+     * @return list<list<list<string>|array{kind: string, cells: list<string>, movement?: string, group_start?: bool}>>
      */
     private function chunkRows(array $rows, int $firstCapacity, int $followingCapacity): array
     {
@@ -71,6 +71,10 @@ class ReportImageRenderer
             if ($remaining !== [] && is_array($last) && ($last['kind'] ?? null) === 'day') {
                 array_unshift($remaining, array_pop($chunk));
             }
+            $next = $remaining[0] ?? null;
+            if ($chunk !== [] && is_array($next) && ($next['kind'] ?? null) === 'customer_total') {
+                array_unshift($remaining, array_pop($chunk));
+            }
             $chunks[] = $chunk;
             $capacity = $followingCapacity;
         } while ($remaining !== []);
@@ -81,7 +85,7 @@ class ReportImageRenderer
     /**
      * @param  array<string, mixed>  $payload
      * @param  list<array{label: string, width: float, align?: string}>  $columns
-     * @param  list<list<string>|array{kind: string, cells: list<string>, movement?: string}>  $rows
+     * @param  list<list<string>|array{kind: string, cells: list<string>, movement?: string, group_start?: bool}>  $rows
      */
     private function renderPage(
         array $payload,
@@ -246,9 +250,54 @@ class ReportImageRenderer
                     continue;
                 }
 
+                if ($kind === 'customer_total') {
+                    $rowHeight = 42;
+                    imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $accent);
+                    imageline($image, $margin, $cursorY, $margin + $tableWidth, $cursorY, $primary);
+                    imageline($image, $margin, $cursorY + $rowHeight, $margin + $tableWidth, $cursorY + $rowHeight, $primary);
+                    $labelWidth = (int) round($tableWidth * array_sum(array_column(array_slice($columns, 0, 4), 'width')));
+                    $this->drawCellText(
+                        $image,
+                        mb_strtoupper($cells[0] ?? ''),
+                        $margin,
+                        $cursorY,
+                        $labelWidth,
+                        $rowHeight,
+                        11,
+                        $primary,
+                        true,
+                        'left',
+                    );
+                    $x = $margin + $labelWidth;
+                    imageline($image, $x, $cursorY, $x, $cursorY + $rowHeight, $line);
+                    foreach (array_slice($columns, 4, null, true) as $index => $column) {
+                        $columnWidth = (int) round($tableWidth * $column['width']);
+                        $this->drawCellText(
+                            $image,
+                            $cells[$index] ?? '-',
+                            $x,
+                            $cursorY,
+                            $columnWidth,
+                            $rowHeight,
+                            11,
+                            $primary,
+                            true,
+                            $column['align'] ?? 'left',
+                        );
+                        $x += $columnWidth;
+                        imageline($image, $x, $cursorY, $x, $cursorY + $rowHeight, $line);
+                    }
+                    $cursorY += $rowHeight;
+
+                    continue;
+                }
+
                 $rowHeight = 42;
                 if ($dataRowIndex % 2 === 1) {
                     imagefilledrectangle($image, $margin, $cursorY, $margin + $tableWidth, $cursorY + $rowHeight, $accent);
+                }
+                if (($row['group_start'] ?? false) === true) {
+                    imageline($image, $margin, $cursorY, $margin + $tableWidth, $cursorY, $primary);
                 }
                 $x = $margin;
                 foreach ($columns as $index => $column) {
@@ -258,6 +307,8 @@ class ReportImageRenderer
                     $cellColor = match (true) {
                         $payload['type'] === 'estado-cliente' && $index === 6 && $movement === 'debit' => $blue,
                         $payload['type'] === 'estado-cliente' && $index === 6 && $movement === 'credit' => $red,
+                        $payload['type'] === 'ventas-clientes' && $index === 8 => $red,
+                        $payload['type'] === 'ventas-clientes' && $index === 11 => $primary,
                         default => $ink,
                     };
                     $this->drawCellText(
@@ -269,9 +320,10 @@ class ReportImageRenderer
                         $rowHeight,
                         11,
                         $cellColor,
-                        $payload['type'] === 'estado-cliente'
+                        ($payload['type'] === 'estado-cliente'
                             && $index === 6
-                            && in_array($movement, ['debit', 'credit'], true),
+                            && in_array($movement, ['debit', 'credit'], true))
+                            || ($payload['type'] === 'ventas-clientes' && in_array($index, [8, 11], true)),
                         $column['align'] ?? 'left',
                     );
                     $x += $columnWidth;
@@ -472,13 +524,35 @@ class ReportImageRenderer
                 ['label' => 'Devolucion', 'width' => .07, 'align' => 'right'], ['label' => 'P. neto', 'width' => .07, 'align' => 'right'],
                 ['label' => 'Precio', 'width' => .06, 'align' => 'right'], ['label' => 'Total S/', 'width' => .09, 'align' => 'right'],
             ];
-            $rows = $data['rows']->map(fn (array $row): array => [
-                $row['customer'], CarbonImmutable::parse($row['date_time'])->format('d/m/Y H:i'), $row['channel'], $row['product'],
-                number_format($row['containers']), number_format($row['birds']),
-                number_format($row['gross_weight'], 3), number_format($row['tare'], 3), number_format($row['returns'], 3),
-                number_format($row['net_weight'], 3), $row['net_weight'] != 0 ? number_format($row['amount'] / $row['net_weight'], 2) : '-',
-                number_format($row['amount'], 2),
-            ])->all();
+            $rows = [];
+            foreach ($data['customer_groups'] as $group) {
+                foreach ($group['rows'] as $index => $row) {
+                    $rows[] = [
+                        'kind' => 'data',
+                        'group_start' => $index === 0,
+                        'cells' => [
+                            $row['customer'], CarbonImmutable::parse($row['date_time'])->format('d/m/Y H:i'), $row['channel'], $row['product'],
+                            number_format($row['containers']), number_format($row['birds']),
+                            number_format($row['gross_weight'], 3), number_format($row['tare'], 3), number_format($row['returns'], 3),
+                            number_format($row['net_weight'], 3), $row['net_weight'] != 0 ? number_format($row['amount'] / $row['net_weight'], 2) : '-',
+                            number_format($row['amount'], 2),
+                        ],
+                    ];
+                }
+                if ($group['rows']->count() > 1) {
+                    $subtotal = $group['subtotal'];
+                    $rows[] = [
+                        'kind' => 'customer_total',
+                        'cells' => [
+                            'Total '.$group['customer'], '', '', '',
+                            number_format($subtotal['containers']), number_format($subtotal['birds']),
+                            number_format($subtotal['gross_weight'], 3), number_format($subtotal['tare'], 3), number_format($subtotal['returns'], 3),
+                            number_format($subtotal['net_weight'], 3), $subtotal['weighted_price'] !== null ? number_format($subtotal['weighted_price'], 2) : '-',
+                            number_format($subtotal['amount'], 2),
+                        ],
+                    ];
+                }
+            }
 
             return [$columns, $rows];
         }

@@ -26,6 +26,16 @@
     table.report td { border-bottom: 1px solid {{ $reportPalette['border'] }}; padding: 4px 3px; vertical-align: top; }
     table.report tbody tr:nth-child(even) td { background: {{ $reportPalette['accent'] }}; }
     table.report tfoot td { border-top: 1.5px solid {{ $reportPalette['primary'] }}; border-bottom: 0; background: {{ $reportPalette['accent'] }}; font-weight: bold; }
+    table.report tr.customer-group-start td { border-top: 1px solid {{ $reportPalette['primary'] }}; }
+    table.report tr.customer-subtotal { page-break-before: avoid; page-break-inside: avoid; }
+    table.report tbody tr.customer-subtotal td {
+      border-top: 1px solid {{ $reportPalette['primary'] }};
+      border-bottom: 1.5px solid {{ $reportPalette['primary'] }};
+      background: {{ $reportPalette['accent'] }} !important;
+      color: {{ $reportPalette['primary'] }};
+      font-weight: bold;
+    }
+    table.report tr.customer-subtotal td:first-child { letter-spacing: .15px; text-transform: uppercase; }
     .num { text-align: right; white-space: nowrap; }
     .center { text-align: center; }
     .muted { color: {{ $reportPalette['muted_text'] }}; }
@@ -213,15 +223,33 @@
         <th>Peso neto</th><th>Precio prom.</th><th>Total S/</th>
       </tr></thead>
       <tbody>
-        @forelse($data['rows'] as $row)
-          <tr>
-            <td>{{ $row['customer'] }}</td><td class="center">{{ \Carbon\CarbonImmutable::parse($row['date_time'])->format('d/m/Y H:i') }}</td><td class="center">{{ $row['channel'] }}</td><td>{{ $row['product'] }}</td>
-            <td class="num">{{ number_format($row['containers']) }}</td><td class="num">{{ number_format($row['birds']) }}</td>
-            <td class="num">{{ number_format($row['gross_weight'], 3) }}</td><td class="num">{{ number_format($row['tare'], 3) }}</td>
-            <td class="num credit">{{ number_format($row['returns'], 3) }}</td><td class="num">{{ number_format($row['net_weight'], 3) }}</td>
-            <td class="num">{{ $row['net_weight'] != 0 ? number_format($row['amount'] / $row['net_weight'], 2) : '-' }}</td>
-            <td class="num balance">{{ number_format($row['amount'], 2) }}</td>
-          </tr>
+        @forelse($data['customer_groups'] as $group)
+          @foreach($group['rows'] as $row)
+            <tr @class([
+              'sales-detail',
+              'customer-group-start' => $loop->first,
+            ])>
+              <td>{{ $row['customer'] }}</td><td class="center">{{ \Carbon\CarbonImmutable::parse($row['date_time'])->format('d/m/Y H:i') }}</td><td class="center">{{ $row['channel'] }}</td><td>{{ $row['product'] }}</td>
+              <td class="num">{{ number_format($row['containers']) }}</td><td class="num">{{ number_format($row['birds']) }}</td>
+              <td class="num">{{ number_format($row['gross_weight'], 3) }}</td><td class="num">{{ number_format($row['tare'], 3) }}</td>
+              <td class="num credit">{{ number_format($row['returns'], 3) }}</td><td class="num">{{ number_format($row['net_weight'], 3) }}</td>
+              <td class="num">{{ $row['net_weight'] != 0 ? number_format($row['amount'] / $row['net_weight'], 2) : '-' }}</td>
+              <td class="num balance">{{ number_format($row['amount'], 2) }}</td>
+            </tr>
+          @endforeach
+          @if($group['rows']->count() > 1)
+            <tr class="customer-subtotal">
+              <td colspan="4">Total {{ $group['customer'] }}</td>
+              <td class="num">{{ number_format($group['subtotal']['containers']) }}</td>
+              <td class="num">{{ number_format($group['subtotal']['birds']) }}</td>
+              <td class="num">{{ number_format($group['subtotal']['gross_weight'], 3) }}</td>
+              <td class="num">{{ number_format($group['subtotal']['tare'], 3) }}</td>
+              <td class="num credit">{{ number_format($group['subtotal']['returns'], 3) }}</td>
+              <td class="num">{{ number_format($group['subtotal']['net_weight'], 3) }}</td>
+              <td class="num">{{ $group['subtotal']['weighted_price'] !== null ? number_format($group['subtotal']['weighted_price'], 2) : '-' }}</td>
+              <td class="num balance">{{ number_format($group['subtotal']['amount'], 2) }}</td>
+            </tr>
+          @endif
         @empty
           <tr><td colspan="12" class="empty">No hay ventas cerradas en el periodo seleccionado.</td></tr>
         @endforelse
