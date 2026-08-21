@@ -89,6 +89,15 @@
           @include('reports.partials.form-actions', ['reportType' => 'deuda-clientes'])
         </form>
       </article>
+
+      <article class="report-card fin-card">
+        <div class="report-card-heading"><span>07</span><div><h2>Ruta de cobranza 2</h2><p>Hoja diaria por cliente con saldo anterior, ventas, devoluciones, cobros y saldo acumulado.</p></div></div>
+        <form method="GET" action="{{ route('finanzas.reportes.pdf', 'ruta-cobranza-2') }}" target="_blank" class="report-form">
+          <label class="fin-field report-wide"><span>Fecha</span><input type="date" name="fecha" value="{{ $routeCollectionDate }}" required></label>
+          <p class="report-form-hint report-wide">El corte incluye la fecha elegida y el día anterior, igual que el reporte de referencia.</p>
+          @include('reports.partials.form-actions', ['reportType' => 'ruta-cobranza-2', 'showImage' => false])
+        </form>
+      </article>
     </section>
   </main>
 </body>

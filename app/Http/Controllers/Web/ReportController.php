@@ -8,12 +8,14 @@ use App\Models\EntidadFinanciera;
 use App\Models\Pago;
 use App\Services\ReportDataService;
 use App\Services\ReportImageRenderer;
+use Carbon\CarbonImmutable;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -53,6 +55,7 @@ class ReportController extends Controller
                 ->orderBy('nombre')
                 ->get(['id', 'nombre']),
             'paymentTypes' => Pago::TYPES,
+            'routeCollectionDate' => now($company->zona_horaria ?: config('app.timezone'))->format('Y-m-d'),
             'reportCurrencies' => $this->reportCurrencies($companyId, $company),
             'defaultReportCurrency' => $this->defaultReportCurrency($company),
             'accounts' => $this->ownAccountsQuery($companyId)
@@ -67,23 +70,42 @@ class ReportController extends Controller
     {
         $payload = $this->payload($request, $type);
         $validated = $payload['validated'];
-        $html = view('reports.pdf', $payload)->render();
+        $html = view(
+            $type === 'ruta-cobranza-2' ? 'reports.collection-route-two' : 'reports.pdf',
+            $payload,
+        )->render();
 
         $options = new Options;
         $options->set('defaultFont', 'DejaVu Sans');
         $options->set('isRemoteEnabled', false);
         $options->set('isHtml5ParserEnabled', true);
         $options->set('tempDir', storage_path('framework/cache'));
+        if ($type === 'ruta-cobranza-2' && is_dir('C:/Windows/Fonts')) {
+            $fontDirectory = storage_path('framework/cache/dompdf-route-fonts');
+            File::ensureDirectoryExists($fontDirectory);
+            $options->setFontDir($fontDirectory);
+            $options->setFontCache($fontDirectory);
+            $options->setChroot([...$options->getChroot(), 'C:/Windows/Fonts']);
+        }
         $dompdf = new Dompdf($options);
+        if ($type === 'ruta-cobranza-2') {
+            $this->registerLegacyCollectionFonts($dompdf);
+        }
         $dompdf->loadHtml($html, 'UTF-8');
         $dompdf->setPaper(
-            $type === 'deuda-clientes' ? 'letter' : 'A4',
+            in_array($type, ['deuda-clientes', 'ruta-cobranza-2'], true) ? 'letter' : 'A4',
             in_array($type, ['ventas-clientes', 'responsable'], true) ? 'landscape' : 'portrait',
         );
-        $this->addPageNumbers($dompdf);
+        $this->addPageNumbers(
+            $dompdf,
+            $type === 'ruta-cobranza-2',
+            $type === 'ruta-cobranza-2'
+                ? (string) ($payload['company']->nombre_comercial ?: $payload['company']->razon_social)
+                : null,
+        );
         $dompdf->render();
 
-        $filename = $type.'-'.$validated['desde'].'-'.$validated['hasta'].'.pdf';
+        $filename = $type.'-'.($validated['fecha'] ?? $validated['desde'].'-'.$validated['hasta']).'.pdf';
 
         return response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
@@ -93,6 +115,8 @@ class ReportController extends Controller
 
     public function image(Request $request, string $type): Response
     {
+        abort_if($type === 'ruta-cobranza-2', 404);
+
         $payload = $this->payload($request, $type);
         $validated = $payload['validated'];
         $pages = $this->images->render($payload);
@@ -181,6 +205,7 @@ class ReportController extends Controller
     {
         abort_unless(in_array($type, [
             'deuda-clientes',
+            'ruta-cobranza-2',
             'ventas-clientes',
             'estado-cliente',
             'estado-proveedor',
@@ -198,11 +223,16 @@ class ReportController extends Controller
                 'moneda' => strtoupper(trim((string) ($request->input('moneda') ?: $this->defaultReportCurrency($company)))),
             ]);
         }
-        $rules = [
-            'desde' => ['required', 'date_format:Y-m-d'],
-            'hasta' => ['required', 'date_format:Y-m-d', 'after_or_equal:desde'],
-            'descargar' => ['nullable', 'boolean'],
-        ];
+        $rules = $type === 'ruta-cobranza-2'
+            ? [
+                'fecha' => ['required', 'date_format:Y-m-d'],
+                'descargar' => ['nullable', 'boolean'],
+            ]
+            : [
+                'desde' => ['required', 'date_format:Y-m-d'],
+                'hasta' => ['required', 'date_format:Y-m-d', 'after_or_equal:desde'],
+                'descargar' => ['nullable', 'boolean'],
+            ];
         if ($type === 'estado-cliente') {
             $rules['cliente_id'] = ['required', 'integer'];
         }
@@ -223,6 +253,10 @@ class ReportController extends Controller
             $rules['cuenta_id'] = ['nullable', 'integer'];
         }
         $validated = $request->validate($rules);
+        if ($type === 'ruta-cobranza-2') {
+            $validated['desde'] = CarbonImmutable::parse($validated['fecha'])->subDay()->format('Y-m-d');
+            $validated['hasta'] = $validated['fecha'];
+        }
         $selectedAccount = null;
         if (isset($validated['cuenta_id'])) {
             $selectedAccount = $this->ownAccountsQuery($companyId)
@@ -255,6 +289,11 @@ class ReportController extends Controller
                 $validated['hasta'],
                 $validated['moneda'],
             ),
+            'ruta-cobranza-2' => $this->reports->collectionRouteTwo(
+                $companyId,
+                $validated['fecha'],
+                $this->defaultReportCurrency($company),
+            ),
             'ventas-clientes' => $this->reports->salesByCustomer($companyId, $validated['desde'], $validated['hasta']),
             'estado-cliente' => $this->reports->customerStatement($companyId, (int) $validated['cliente_id'], $validated['desde'], $validated['hasta']),
             'estado-proveedor' => $this->reports->providerStatement($companyId, (int) $validated['proveedor_id'], $validated['desde'], $validated['hasta']),
@@ -269,6 +308,7 @@ class ReportController extends Controller
         };
         $titles = [
             'deuda-clientes' => 'Reporte de cuentas de clientes',
+            'ruta-cobranza-2' => 'Ruta de cobranza 2',
             'ventas-clientes' => 'Reporte de ventas por cliente',
             'estado-cliente' => 'Estado de cuenta de cliente',
             'estado-proveedor' => 'Estado de cuenta de proveedor',
@@ -359,23 +399,82 @@ class ReportController extends Controller
         return preg_match('/^\s*[=+\-@]/u', $text) === 1 ? "'".$text : $text;
     }
 
-    private function addPageNumbers(Dompdf $dompdf): void
-    {
+    private function addPageNumbers(
+        Dompdf $dompdf,
+        bool $legacyCollectionLayout = false,
+        ?string $legacyHeader = null,
+    ): void {
         $dompdf->setCallbacks([[
             'event' => 'end_page_render',
-            'f' => function (mixed $frame, mixed $canvas, mixed $fontMetrics): void {
+            'f' => function (mixed $frame, mixed $canvas, mixed $fontMetrics) use (
+                $legacyCollectionLayout,
+                $legacyHeader,
+            ): void {
+                $wordSpacing = $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf') ? .3 : 0;
+                $characterSpacing = $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf') ? .12 : 0;
+                if ($legacyCollectionLayout && $legacyHeader !== null) {
+                    $headerFont = $fontMetrics->getFont(
+                        is_file('C:/Windows/Fonts/micross.ttf') ? 'Route MS Sans' : 'Helvetica',
+                        'normal',
+                    ) ?: $fontMetrics->getFont('Helvetica', 'normal');
+                    $headerWidth = $fontMetrics->getTextWidth(
+                        $legacyHeader,
+                        $headerFont,
+                        7.8,
+                        $wordSpacing,
+                        $characterSpacing,
+                    );
+                    $canvas->text(
+                        (($canvas->get_width() - $headerWidth) / 2) - .55,
+                        36.17,
+                        $legacyHeader,
+                        $headerFont,
+                        7.8,
+                        [0, 0, 0],
+                        $wordSpacing,
+                        $characterSpacing,
+                    );
+                }
+
                 $text = 'Pagina '.$canvas->get_page_number();
-                $font = $fontMetrics->getFont('DejaVu Sans', 'normal');
-                $width = $fontMetrics->getTextWidth($text, $font, 8);
-                $canvas->text(
-                    ($canvas->get_width() - $width) / 2,
-                    $canvas->get_height() - 22,
+                $size = $legacyCollectionLayout ? 7.8 : 8;
+                $font = $fontMetrics->getFont(
+                    $legacyCollectionLayout && is_file('C:/Windows/Fonts/micross.ttf')
+                        ? 'Route MS Sans'
+                        : ($legacyCollectionLayout ? 'Helvetica' : 'DejaVu Sans'),
+                    'normal',
+                ) ?: $fontMetrics->getFont('Helvetica', 'normal');
+                $width = $fontMetrics->getTextWidth(
                     $text,
                     $font,
-                    8,
-                    [0.32, 0.35, 0.4],
+                    $size,
+                    $wordSpacing,
+                    $characterSpacing,
+                );
+                $canvas->text(
+                    (($canvas->get_width() - $width) / 2) - ($legacyCollectionLayout ? .55 : 0),
+                    $canvas->get_height() - ($legacyCollectionLayout ? 47.83 : 22),
+                    $text,
+                    $font,
+                    $size,
+                    $legacyCollectionLayout ? [0, 0, 0] : [0.32, 0.35, 0.4],
+                    $wordSpacing,
+                    $characterSpacing,
                 );
             },
         ]]);
+    }
+
+    private function registerLegacyCollectionFonts(Dompdf $dompdf): void
+    {
+        foreach ([
+            [['family' => 'Route Tahoma', 'weight' => 'normal', 'style' => 'normal'], 'C:/Windows/Fonts/tahoma.ttf'],
+            [['family' => 'Route Tahoma', 'weight' => 'bold', 'style' => 'normal'], 'C:/Windows/Fonts/tahomabd.ttf'],
+            [['family' => 'Route MS Sans', 'weight' => 'normal', 'style' => 'normal'], 'C:/Windows/Fonts/micross.ttf'],
+        ] as [$style, $path]) {
+            if (is_file($path)) {
+                $dompdf->getFontMetrics()->registerFont($style, 'file://'.$path);
+            }
+        }
     }
 }

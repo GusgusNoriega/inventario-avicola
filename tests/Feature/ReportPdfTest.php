@@ -50,6 +50,345 @@ class ReportPdfTest extends TestCase
             ->assertDontSee('Reporte de ventas por zonas');
     }
 
+    public function test_collection_route_two_card_uses_one_required_date_selector(): void
+    {
+        $response = $this->get(route('finanzas.reportes'))
+            ->assertOk()
+            ->assertSee('Ruta de cobranza 2')
+            ->assertSee('Hoja diaria por cliente con saldo anterior, ventas, devoluciones, cobros y saldo acumulado.');
+        $document = new \DOMDocument('1.0', 'UTF-8');
+        $loaded = @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+
+        $this->assertTrue($loaded);
+        $xpath = new \DOMXPath($document);
+        $forms = $xpath->query('//form[@action="'.route('finanzas.reportes.pdf', 'ruta-cobranza-2').'"]');
+        $this->assertNotFalse($forms);
+        $this->assertSame(1, $forms->length);
+        $form = $forms->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $form);
+
+        $dateFields = $xpath->query('.//input[@type="date" and @name="fecha"]', $form);
+        $this->assertNotFalse($dateFields);
+        $this->assertSame(1, $dateFields->length);
+        $dateField = $dateFields->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $dateField);
+        $this->assertTrue($dateField->hasAttribute('required'));
+        $this->assertSame(0, $xpath->query('.//input[@name="desde" or @name="hasta"]', $form)?->length);
+    }
+
+    public function test_collection_route_two_requires_the_selected_date(): void
+    {
+        $this->from(route('finanzas.reportes'))
+            ->get(route('finanzas.reportes.pdf', ['type' => 'ruta-cobranza-2']))
+            ->assertRedirect(route('finanzas.reportes'))
+            ->assertSessionHasErrors('fecha');
+    }
+
+    public function test_collection_route_two_service_includes_every_customer_and_rebuilds_the_two_day_ledger(): void
+    {
+        $alpha = $this->thirdParty('Alfa Ruta Dos', TerceroRole::CLIENT);
+        $beta = $this->thirdParty('Beta Ruta Dos Sin Movimientos', TerceroRole::CLIENT);
+        $this->thirdParty('Proveedor fuera de la ruta', TerceroRole::PROVIDER);
+        $document = function (
+            string $code,
+            string $date,
+            string $amount,
+            string $nature = Comprobante::NATURE_CHARGE,
+            ?string $description = null,
+            ?string $weight = null,
+            ?string $price = null,
+        ) use ($alpha): Comprobante {
+            $record = Comprobante::query()->create([
+                'empresa_id' => $this->user->empresa_id,
+                'tercero_id' => $alpha->id,
+                'operacion' => Comprobante::OPERATION_SALE,
+                'naturaleza' => $nature,
+                'tipo_documento' => 'INTERNO',
+                'codigo' => $code,
+                'origen_codigo' => 'PRUEBA_RUTA_COBRANZA_2',
+                'fecha_emision' => $date,
+                'moneda' => 'PEN',
+                'subtotal' => $amount,
+                'impuesto' => '0.00',
+                'total' => $amount,
+                'saldo_pendiente' => $nature === Comprobante::NATURE_CREDIT ? '0.00' : $amount,
+                'estado' => Comprobante::STATUS_PENDING,
+                'created_by' => $this->user->id,
+            ]);
+
+            if ($description !== null) {
+                DB::table('comprobante_detalles')->insert([
+                    'comprobante_id' => $record->id,
+                    'tipo_pollo_id' => null,
+                    'descripcion' => $description,
+                    'cantidad_aves' => null,
+                    'peso_neto_kg' => $weight,
+                    'precio_kg' => $price,
+                    'subtotal' => $amount,
+                    'created_at' => now(),
+                ]);
+            }
+
+            return $record;
+        };
+
+        $document('V-RUTA-ANTERIOR', '2026-08-18', '100.00');
+        $document('V-RUTA-DIA-ANTERIOR', '2026-08-19', '50.00', description: 'Pollo vivo', weight: '10.000', price: '5.0000');
+        $document('NC-RUTA-DIA-ANTERIOR', '2026-08-19', '10.00', Comprobante::NATURE_CREDIT, 'Pollo devuelto', '2.000', '5.0000');
+        $document('V-RUTA-FUTURA', '2026-08-21', '999.00', description: 'Venta futura');
+
+        $payment = Pago::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PG-RUTA-CODIGO-TERCIARIO',
+            'tercero_id' => $alpha->id,
+            'tipo' => Pago::TYPE_CUSTOMER_COLLECTION,
+            'cliente_id' => $alpha->id,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'fecha_hora' => '2026-08-21 09:30:00',
+            'metodo' => 'EFECTIVO',
+            'referencia' => 'PAGO-REFERENCIA-TERCIARIA',
+            'moneda' => 'PEN',
+            'importe' => '30.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+        ]);
+        $collectorId = DB::table('cobradores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre' => 'Cobrador Ruta Dos',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $accountId = $this->financialAccount(EntidadFinanciera::TYPE_OWN, 'Cuenta Ruta Dos');
+        $methodId = (int) DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        $collectionId = DB::table('cobranzas')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'cobrador_id' => $collectorId,
+            'cobrador_nombre_snapshot' => 'Cobrador Ruta Dos',
+            'codigo' => 'COB-RUTA-CODIGO-SECUNDARIO',
+            'idempotency_key' => (string) Str::uuid(),
+            'payload_hash' => hash('sha256', 'reporte-ruta-cobranza-dos'),
+            'cuenta_destino_id' => $accountId,
+            'metodo_pago_id' => $methodId,
+            'fecha_hora' => '2026-08-21 09:30:00',
+            'referencia' => 'RUTA-REFERENCIA-PRIORITARIA',
+            'moneda' => 'PEN',
+            'importe_total' => '30.00',
+            'estado' => 'REGISTRADO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('cobranza_detalles')->insert([
+            'cobranza_id' => $collectionId,
+            'pago_id' => $payment->id,
+            'cliente_id' => $alpha->id,
+            'fecha_recepcion' => '2026-08-20',
+            'medio_recepcion' => 'EFECTIVO',
+            'importe' => '30.00',
+            'orden' => 1,
+            'created_at' => now(),
+        ]);
+
+        $report = app(ReportDataService::class)->collectionRouteTwo(
+            (int) $this->user->empresa_id,
+            '2026-08-20',
+            'PEN',
+        );
+
+        $this->assertSame('2026-08-19', $report['period_from']);
+        $this->assertSame('2026-08-20', $report['period_to']);
+        $this->assertSame(
+            ['Alfa Ruta Dos', 'Beta Ruta Dos Sin Movimientos'],
+            $report['customers']->pluck('name')->all(),
+        );
+
+        $alphaLedger = $report['customers']->firstWhere('id', $alpha->id);
+        $this->assertIsArray($alphaLedger);
+        $this->assertSame('100.00', $alphaLedger['opening']);
+        $this->assertSame('110.00', $alphaLedger['balance']);
+        $this->assertSame(['2026-08-19', '2026-08-20'], $alphaLedger['rows']->pluck('date')->unique()->values()->all());
+        $this->assertCount(3, $alphaLedger['rows']);
+
+        $sale = $alphaLedger['rows']->firstWhere('kind', 'sale');
+        $this->assertIsArray($sale);
+        $this->assertSame('POLLO VIVO', $sale['detail']);
+        $this->assertSame(10.0, (float) $sale['weight']);
+        $this->assertSame(5.0, (float) $sale['price']);
+        $this->assertSame('50.00', $sale['outflow']);
+        $this->assertNull($sale['inflow']);
+        $this->assertSame('150.00', $sale['balance']);
+
+        $return = $alphaLedger['rows']->firstWhere('kind', 'return');
+        $this->assertIsArray($return);
+        $this->assertSame('DEVOLUCION', $return['detail']);
+        $this->assertSame('-10.00', $return['outflow']);
+        $this->assertNull($return['inflow']);
+        $this->assertSame('140.00', $return['balance']);
+
+        $collection = $alphaLedger['rows']->firstWhere('kind', 'payment');
+        $this->assertIsArray($collection);
+        $this->assertSame('2026-08-20', $collection['date']);
+        $this->assertSame('RUTA-REFERENCIA-PRIORITARIA', $collection['detail']);
+        $this->assertSame('-', $collection['marker']);
+        $this->assertNull($collection['outflow']);
+        $this->assertSame('30.00', $collection['inflow']);
+        $this->assertSame('110.00', $collection['balance']);
+
+        $betaLedger = $report['customers']->firstWhere('id', $beta->id);
+        $this->assertIsArray($betaLedger);
+        $this->assertSame('0.00', $betaLedger['opening']);
+        $this->assertTrue($betaLedger['rows']->isEmpty());
+        $this->assertSame('0.00', $betaLedger['balance']);
+    }
+
+    public function test_collection_route_two_ignores_a_collection_link_from_another_company(): void
+    {
+        $customer = $this->thirdParty('Cliente con enlace ajeno', TerceroRole::CLIENT);
+        $payment = Pago::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PG-RUTA-LOCAL',
+            'tercero_id' => $customer->id,
+            'tipo' => Pago::TYPE_CUSTOMER_COLLECTION,
+            'cliente_id' => $customer->id,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'fecha_hora' => '2026-08-20 09:30:00',
+            'metodo' => 'EFECTIVO',
+            'referencia' => 'REFERENCIA-PAGO-LOCAL',
+            'moneda' => 'PEN',
+            'importe' => '40.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+        ]);
+        $otherTenantUser = User::factory()->create();
+        $otherTenantCollectorId = DB::table('cobradores')->insertGetId([
+            'empresa_id' => $otherTenantUser->empresa_id,
+            'nombre' => 'Cobrador de otra empresa',
+            'estado' => 'ACTIVO',
+            'created_by' => $otherTenantUser->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $otherTenantAccountId = $this->financialAccount(
+            EntidadFinanciera::TYPE_OWN,
+            'Cuenta de otra empresa para ruta',
+            owner: $otherTenantUser,
+        );
+        $methodId = (int) DB::table('metodos_pago')->where('codigo', 'EFECTIVO')->value('id');
+        $otherTenantCollectionId = DB::table('cobranzas')->insertGetId([
+            'empresa_id' => $otherTenantUser->empresa_id,
+            'cobrador_id' => $otherTenantCollectorId,
+            'cobrador_nombre_snapshot' => 'Cobrador de otra empresa',
+            'codigo' => 'COB-RUTA-OTRA-EMPRESA',
+            'idempotency_key' => (string) Str::uuid(),
+            'payload_hash' => hash('sha256', 'enlace-inconsistente-otra-empresa'),
+            'cuenta_destino_id' => $otherTenantAccountId,
+            'metodo_pago_id' => $methodId,
+            'fecha_hora' => '2026-08-20 10:00:00',
+            'referencia' => 'REFERENCIA-SECRETA-OTRA-EMPRESA',
+            'moneda' => 'PEN',
+            'importe_total' => '40.00',
+            'estado' => 'REGISTRADO',
+            'created_by' => $otherTenantUser->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('cobranza_detalles')->insert([
+            'cobranza_id' => $otherTenantCollectionId,
+            'pago_id' => $payment->id,
+            'cliente_id' => $customer->id,
+            'fecha_recepcion' => '2026-08-19',
+            'medio_recepcion' => 'EFECTIVO',
+            'importe' => '40.00',
+            'orden' => 1,
+            'created_at' => now(),
+        ]);
+
+        $report = app(ReportDataService::class)->collectionRouteTwo(
+            (int) $this->user->empresa_id,
+            '2026-08-20',
+            'PEN',
+        );
+        $ledger = $report['customers']->firstWhere('id', $customer->id);
+
+        $this->assertIsArray($ledger);
+        $this->assertSame('0.00', $ledger['opening']);
+        $this->assertSame('-40.00', $ledger['balance']);
+        $this->assertCount(1, $ledger['rows']);
+        $this->assertSame('2026-08-20', $ledger['rows']->first()['date']);
+        $this->assertSame('REFERENCIA-PAGO-LOCAL', $ledger['rows']->first()['detail']);
+        $this->assertFalse($ledger['rows']->pluck('detail')->contains('REFERENCIA-SECRETA-OTRA-EMPRESA'));
+    }
+
+    public function test_collection_route_two_uses_company_timezone_for_a_direct_payment_near_midnight(): void
+    {
+        $companyTimezone = 'Asia/Tokyo';
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update(['zona_horaria' => $companyTimezone]);
+        $customer = $this->thirdParty('Cliente con pago cerca de medianoche', TerceroRole::CLIENT);
+        $connection = DB::connection()->getName();
+        $databaseTimezone = (string) (
+            config("database.connections.{$connection}.timezone")
+            ?: config('app.timezone', 'UTC')
+        );
+        $storedAt = CarbonImmutable::parse('2026-08-19 00:30:00', $companyTimezone)
+            ->setTimezone($databaseTimezone)
+            ->format('Y-m-d H:i:s');
+        Pago::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PG-RUTA-MEDIANOCHE',
+            'tercero_id' => $customer->id,
+            'tipo' => Pago::TYPE_DIRECT_PAYMENT,
+            'cliente_id' => $customer->id,
+            'direccion' => Pago::DIRECTION_INCOME,
+            'fecha_hora' => $storedAt,
+            'metodo' => 'EFECTIVO',
+            'referencia' => 'PAGO-DIRECTO-MEDIANOCHE',
+            'moneda' => 'PEN',
+            'importe' => '20.00',
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+        ]);
+
+        $report = app(ReportDataService::class)->collectionRouteTwo(
+            (int) $this->user->empresa_id,
+            '2026-08-20',
+            'PEN',
+        );
+        $ledger = $report['customers']->firstWhere('id', $customer->id);
+
+        $this->assertIsArray($ledger);
+        $this->assertSame('0.00', $ledger['opening']);
+        $this->assertSame('-20.00', $ledger['balance']);
+        $this->assertCount(1, $ledger['rows']);
+        $this->assertSame('2026-08-19', $ledger['rows']->first()['date']);
+        $this->assertSame('PAGO-DIRECTO-MEDIANOCHE', $ledger['rows']->first()['detail']);
+    }
+
+    public function test_collection_route_two_is_generated_inline_on_letter_paper(): void
+    {
+        $response = $this->get(route('finanzas.reportes.pdf', [
+            'type' => 'ruta-cobranza-2',
+            'fecha' => '2026-08-20',
+        ]));
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename="ruta-cobranza-2-2026-08-20.pdf"');
+        $contents = $response->getContent();
+        $this->assertStringStartsWith('%PDF-', $contents);
+        $matched = preg_match(
+            '/\/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]/',
+            $contents,
+            $mediaBox,
+        );
+        $this->assertSame(1, $matched, 'El PDF debe declarar un MediaBox verificable.');
+        $this->assertEqualsWithDelta(612.0, (float) $mediaBox[3] - (float) $mediaBox[1], 0.1);
+        $this->assertEqualsWithDelta(792.0, (float) $mediaBox[4] - (float) $mediaBox[2], 0.1);
+    }
+
     public function test_customer_debt_summary_rebuilds_balances_and_totals_for_the_selected_days(): void
     {
         $alpha = $this->thirdParty('Alfa Cliente', TerceroRole::CLIENT);

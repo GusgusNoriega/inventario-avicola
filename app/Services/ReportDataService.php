@@ -8,11 +8,13 @@ use App\Models\MovimientoCajaEfectivo;
 use App\Models\Pago;
 use App\Models\Pesada;
 use App\Models\Tercero;
+use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -38,6 +40,271 @@ class ReportDataService
         return $this->statement($companyId, $provider, 'COMPRA', 'proveedor_id', $from, $to);
     }
 
+    /**
+     * Builds the daily collection sheet represented by the legacy Excel PDF.
+     * The selected cut includes that day and the immediately preceding day;
+     * older activity is folded into the opening balance.
+     *
+     * @return array<string, mixed>
+     */
+    public function collectionRouteTwo(
+        int $companyId,
+        string $date,
+        string $currency = 'PEN',
+    ): array {
+        $timezone = $this->companyTimezone($companyId);
+        $databaseTimezone = $this->databaseTimezone();
+        $cutoff = CarbonImmutable::createFromFormat('!Y-m-d', $date, $timezone)->startOfDay();
+        $from = $cutoff->subDay();
+        $fromDate = $from->format('Y-m-d');
+        $toDate = $cutoff->format('Y-m-d');
+        [$databaseFrom, $databaseToExclusive] = $this->databasePeriodRange(
+            $fromDate,
+            $toDate,
+            $timezone,
+        );
+        $summaryRows = $this->customerDebtSummary(
+            $companyId,
+            $fromDate,
+            $toDate,
+            $currency,
+        )['rows']->keyBy('customer_id');
+
+        $documents = Comprobante::query()
+            ->where('empresa_id', $companyId)
+            ->where('operacion', Comprobante::OPERATION_SALE)
+            ->where('moneda', $currency)
+            ->whereBetween('fecha_emision', [$fromDate, $toDate])
+            ->where(function (Builder $query) use ($databaseToExclusive): void {
+                $query->whereIn('estado', [
+                    Comprobante::STATUS_PENDING,
+                    Comprobante::STATUS_PARTIAL,
+                    Comprobante::STATUS_PAID,
+                ])->orWhere(function (Builder $voided) use ($databaseToExclusive): void {
+                    $voided->where('estado', Comprobante::STATUS_VOIDED)
+                        ->where('anulada_at', '>=', $databaseToExclusive);
+                });
+            })
+            ->orderBy('fecha_emision')
+            ->orderBy('id')
+            ->get();
+        $details = DB::table('comprobante_detalles')
+            ->whereIn('comprobante_id', $documents->pluck('id'))
+            ->orderBy('id')
+            ->get()
+            ->groupBy('comprobante_id');
+        $documentRows = $documents->flatMap(function (Comprobante $document) use ($details): Collection {
+            $lines = $details->get($document->id, collect())->values();
+            $documentEffect = FinancialMoney::normalize($document->total);
+            if ($document->naturaleza === Comprobante::NATURE_CREDIT) {
+                $documentEffect = FinancialMoney::subtract('0.00', $documentEffect);
+            }
+
+            if ($lines->isEmpty()) {
+                return collect([[
+                    'customer_id' => (int) $document->tercero_id,
+                    'date' => $document->fecha_emision->format('Y-m-d'),
+                    'sort' => $document->fecha_emision->format('Y-m-d').' 00:00:00-D-'
+                        .str_pad((string) $document->id, 10, '0', STR_PAD_LEFT),
+                    'detail' => $document->naturaleza === Comprobante::NATURE_CREDIT
+                        ? 'DEVOLUCION'
+                        : mb_strtoupper((string) ($document->tipo_documento ?: 'VENTA')),
+                    'weight' => null,
+                    'price' => null,
+                    'marker' => '',
+                    'outflow' => $documentEffect,
+                    'inflow' => null,
+                    'effect' => $documentEffect,
+                    'kind' => $document->naturaleza === Comprobante::NATURE_CREDIT ? 'return' : 'sale',
+                ]]);
+            }
+
+            $remaining = $documentEffect;
+
+            return $lines->map(function (object $line, int $index) use ($document, $lines, &$remaining): array {
+                $last = $index === $lines->count() - 1;
+                if ($last) {
+                    $effect = $remaining;
+                } else {
+                    $effect = FinancialMoney::normalize($line->subtotal ?? '0');
+                    if ($document->naturaleza === Comprobante::NATURE_CREDIT) {
+                        $effect = FinancialMoney::subtract('0.00', $effect);
+                    }
+                    $remaining = FinancialMoney::subtract($remaining, $effect);
+                }
+                $description = trim((string) ($line->descripcion ?: $document->tipo_documento ?: 'VENTA'));
+
+                return [
+                    'customer_id' => (int) $document->tercero_id,
+                    'date' => $document->fecha_emision->format('Y-m-d'),
+                    'sort' => $document->fecha_emision->format('Y-m-d').' 00:00:00-D-'
+                        .str_pad((string) $document->id, 10, '0', STR_PAD_LEFT).'-'
+                        .str_pad((string) $line->id, 10, '0', STR_PAD_LEFT),
+                    'detail' => $document->naturaleza === Comprobante::NATURE_CREDIT
+                        ? 'DEVOLUCION'
+                        : mb_strtoupper($description),
+                    'weight' => $line->peso_neto_kg,
+                    'price' => $line->precio_kg,
+                    'marker' => '',
+                    'outflow' => $effect,
+                    'inflow' => null,
+                    'effect' => $effect,
+                    'kind' => $document->naturaleza === Comprobante::NATURE_CREDIT ? 'return' : 'sale',
+                ];
+            });
+        });
+
+        $payments = Pago::query()
+            ->select([
+                'pagos.*',
+                'collection_route.fecha_recepcion as route_received_date',
+                'collection_route.referencia as route_collection_reference',
+                'collection_route.codigo as route_collection_code',
+            ])
+            ->leftJoinSub(
+                $this->collectionPaymentDetails($companyId),
+                'collection_route',
+                function ($join): void {
+                    $join->on('collection_route.pago_id', '=', 'pagos.id')
+                        ->on('collection_route.cliente_id', '=', 'pagos.cliente_id');
+                },
+            )
+            ->where('pagos.empresa_id', $companyId)
+            ->where('pagos.moneda', $currency)
+            ->whereNotNull('pagos.cliente_id')
+            ->whereNull('pagos.reversa_de_pago_id')
+            ->where(function (Builder $dates) use (
+                $fromDate,
+                $toDate,
+                $databaseFrom,
+                $databaseToExclusive,
+            ): void {
+                $dates->where(function (Builder $received) use ($fromDate, $toDate): void {
+                    $received->whereNotNull('collection_route.fecha_recepcion')
+                        ->whereBetween('collection_route.fecha_recepcion', [$fromDate, $toDate]);
+                })->orWhere(function (Builder $direct) use ($databaseFrom, $databaseToExclusive): void {
+                    $direct->whereNull('collection_route.fecha_recepcion')
+                        ->where('pagos.fecha_hora', '>=', $databaseFrom)
+                        ->where('pagos.fecha_hora', '<', $databaseToExclusive);
+                });
+            })
+            ->where(function (Builder $query) use ($databaseToExclusive): void {
+                $query->where('pagos.estado', Pago::STATUS_REGISTERED)
+                    ->orWhere(function (Builder $voided) use ($databaseToExclusive): void {
+                        $voided->where('pagos.estado', Pago::STATUS_VOIDED)
+                            ->where('pagos.anulada_at', '>=', $databaseToExclusive);
+                    });
+            })
+            ->orderBy('pagos.fecha_hora')
+            ->orderBy('pagos.id')
+            ->get();
+        $paymentRows = $payments->map(function (Pago $payment) use (
+            $timezone,
+            $databaseTimezone,
+        ): array {
+            $effect = $this->customerPaymentEffect($payment);
+            $isInflow = FinancialMoney::compare($effect, '0.00') < 0;
+            $recordedAt = CarbonImmutable::parse(
+                (string) $payment->getRawOriginal('fecha_hora'),
+                $databaseTimezone,
+            )->setTimezone($timezone);
+            $receivedDate = trim((string) $payment->getAttribute('route_received_date'));
+            $effectiveDate = $receivedDate !== '' ? $receivedDate : $recordedAt->format('Y-m-d');
+            $displayCode = collect([
+                $payment->getAttribute('route_collection_reference'),
+                $payment->getAttribute('route_collection_code'),
+                $payment->referencia,
+                $payment->codigo,
+                'PG-'.$payment->id,
+            ])->first(fn (mixed $value): bool => trim((string) $value) !== '');
+
+            return [
+                'customer_id' => (int) $payment->cliente_id,
+                'date' => $effectiveDate,
+                'sort' => $effectiveDate.' '.$recordedAt->format('H:i:s').'-P-'
+                    .str_pad((string) $payment->id, 10, '0', STR_PAD_LEFT),
+                'detail' => mb_strtoupper((string) $displayCode),
+                'weight' => null,
+                'price' => null,
+                'marker' => '-',
+                'outflow' => $isInflow ? null : $effect,
+                'inflow' => $isInflow ? FinancialMoney::subtract('0.00', $effect) : null,
+                'effect' => $effect,
+                'kind' => $isInflow ? 'payment' : 'refund',
+            ];
+        });
+        $transactionsByCustomer = $documentRows
+            ->concat($paymentRows)
+            ->groupBy('customer_id');
+        $financialCustomerIds = $summaryRows->keys()
+            ->merge($transactionsByCustomer->keys())
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+        $customers = DB::table('terceros as tercero')
+            ->where('tercero.empresa_id', $companyId)
+            ->where(function ($query) use ($financialCustomerIds): void {
+                $query->whereExists(function ($role): void {
+                    $role->selectRaw('1')
+                        ->from('tercero_roles as customer_role')
+                        ->whereColumn('customer_role.tercero_id', 'tercero.id')
+                        ->where('customer_role.rol', TerceroRole::CLIENT);
+                });
+                if ($financialCustomerIds->isNotEmpty()) {
+                    $query->orWhereIn('tercero.id', $financialCustomerIds);
+                }
+            })
+            ->orderBy('tercero.nombre_razon_social')
+            ->orderBy('tercero.id')
+            ->get(['tercero.id', 'tercero.nombre_razon_social'])
+            ->map(function (object $customer) use ($summaryRows, $transactionsByCustomer): array {
+                $transactions = $transactionsByCustomer
+                    ->get((int) $customer->id, collect())
+                    ->sortBy('sort')
+                    ->values();
+                $visibleEffect = $transactions->reduce(
+                    fn (string $total, array $row): string => FinancialMoney::add($total, $row['effect']),
+                    '0.00',
+                );
+                $targetBalance = FinancialMoney::normalize(
+                    $summaryRows->get((int) $customer->id)['balance'] ?? '0.00',
+                );
+                $opening = FinancialMoney::subtract($targetBalance, $visibleEffect);
+                $balance = $opening;
+                $previousDate = null;
+                $rowCount = $transactions->count();
+                $rows = $transactions->map(function (array $row, int $index) use (
+                    &$balance,
+                    &$previousDate,
+                    $rowCount,
+                ): array {
+                    $balance = FinancialMoney::add($balance, $row['effect']);
+                    $row['balance'] = $balance;
+                    $row['starts_new_day'] = $previousDate !== null && $previousDate !== $row['date'];
+                    $row['is_last'] = $index === $rowCount - 1;
+                    $previousDate = $row['date'];
+
+                    return $row;
+                });
+
+                return [
+                    'id' => (int) $customer->id,
+                    'name' => (string) $customer->nombre_razon_social,
+                    'opening' => $opening,
+                    'rows' => $rows,
+                    'balance' => $balance,
+                ];
+            });
+
+        return [
+            'date' => $toDate,
+            'period_from' => $fromDate,
+            'period_to' => $toDate,
+            'currency' => $currency,
+            'customers' => $customers,
+        ];
+    }
+
     /** @return array<string, mixed> */
     public function customerDebtSummary(
         int $companyId,
@@ -45,7 +312,10 @@ class ReportDataService
         string $to,
         string $currency = 'PEN',
     ): array {
-        $toExclusive = CarbonImmutable::parse($to)->addDay()->startOfDay();
+        $timezone = $this->companyTimezone($companyId);
+        $databaseTimezone = $this->databaseTimezone();
+        [$databaseFrom, $databaseToExclusive] = $this->databasePeriodRange($from, $to, $timezone);
+        $toExclusive = CarbonImmutable::parse($databaseToExclusive, $databaseTimezone);
         $documentEffect = 'CASE WHEN naturaleza = ? THEN -ABS(total) ELSE ABS(total) END';
         $documentBalances = DB::table('comprobantes')
             ->where('empresa_id', $companyId)
@@ -66,27 +336,27 @@ class ReportDataService
             ->select('tercero_id')
             ->selectRaw(
                 "SUM(CASE WHEN fecha_emision < ? THEN {$documentEffect} ELSE 0 END)
-                    + SUM(CASE WHEN estado = ? AND DATE(anulada_at) < ? THEN -({$documentEffect}) ELSE 0 END)
+                    + SUM(CASE WHEN estado = ? AND anulada_at < ? THEN -({$documentEffect}) ELSE 0 END)
                     AS opening_documents",
                 [
                     $from,
                     Comprobante::NATURE_CREDIT,
                     Comprobante::STATUS_VOIDED,
-                    $from,
+                    $databaseFrom,
                     Comprobante::NATURE_CREDIT,
                 ],
             )
             ->selectRaw(
                 "SUM(CASE WHEN fecha_emision BETWEEN ? AND ? THEN {$documentEffect} ELSE 0 END)
-                    + SUM(CASE WHEN estado = ? AND DATE(anulada_at) BETWEEN ? AND ? THEN -({$documentEffect}) ELSE 0 END)
+                    + SUM(CASE WHEN estado = ? AND anulada_at >= ? AND anulada_at < ? THEN -({$documentEffect}) ELSE 0 END)
                     AS period_debt",
                 [
                     $from,
                     $to,
                     Comprobante::NATURE_CREDIT,
                     Comprobante::STATUS_VOIDED,
-                    $from,
-                    $to,
+                    $databaseFrom,
+                    $databaseToExclusive,
                     Comprobante::NATURE_CREDIT,
                 ],
             )
@@ -99,6 +369,8 @@ class ReportDataService
             $to,
             $toExclusive,
             $currency,
+            $timezone,
+            $databaseTimezone,
         );
 
         $negativePaymentTypes = [
@@ -120,9 +392,15 @@ class ReportDataService
             ...$negativePaymentTypes,
             Pago::DIRECTION_INCOME,
         ];
-        $effectivePaymentDate = 'COALESCE(collection_detail.fecha_recepcion, DATE(payment.fecha_hora))';
         $paymentBalances = DB::table('pagos as payment')
-            ->leftJoin('cobranza_detalles as collection_detail', 'collection_detail.pago_id', '=', 'payment.id')
+            ->leftJoinSub(
+                $this->collectionPaymentDetails($companyId),
+                'collection_detail',
+                function ($join): void {
+                    $join->on('collection_detail.pago_id', '=', 'payment.id')
+                        ->on('collection_detail.cliente_id', '=', 'payment.cliente_id');
+                },
+            )
             ->where('payment.empresa_id', $companyId)
             ->where(function ($query): void {
                 $query->where('payment.estado', Pago::STATUS_REGISTERED)
@@ -134,40 +412,53 @@ class ReportDataService
             ->whereNull('payment.reversa_de_pago_id')
             ->whereNotNull('payment.cliente_id')
             ->where('payment.moneda', $currency)
-            ->where(function ($query) use ($to, $toExclusive): void {
+            ->where(function ($query) use ($to, $databaseToExclusive): void {
                 $query->where(function ($received) use ($to): void {
                     $received->whereNotNull('collection_detail.fecha_recepcion')
                         ->where('collection_detail.fecha_recepcion', '<=', $to);
-                })->orWhere(function ($deposited) use ($toExclusive): void {
+                })->orWhere(function ($deposited) use ($databaseToExclusive): void {
                     $deposited->whereNull('collection_detail.fecha_recepcion')
-                        ->where('payment.fecha_hora', '<', $toExclusive);
+                        ->where('payment.fecha_hora', '<', $databaseToExclusive);
                 });
             })
             ->groupBy('payment.cliente_id')
             ->select('payment.cliente_id')
             ->selectRaw(
-                "SUM(CASE WHEN {$effectivePaymentDate} < ? THEN {$paymentEffect} ELSE 0 END)
-                    + SUM(CASE WHEN payment.estado = ? AND DATE(payment.anulada_at) < ? THEN -({$paymentEffect}) ELSE 0 END)
+                "SUM(CASE WHEN (
+                        collection_detail.fecha_recepcion < ?
+                        OR (collection_detail.fecha_recepcion IS NULL AND payment.fecha_hora < ?)
+                    ) THEN {$paymentEffect} ELSE 0 END)
+                    + SUM(CASE WHEN payment.estado = ? AND payment.anulada_at < ? THEN -({$paymentEffect}) ELSE 0 END)
                     AS opening_payments",
                 [
                     $from,
+                    $databaseFrom,
                     ...$paymentEffectBindings,
                     Pago::STATUS_VOIDED,
-                    $from,
+                    $databaseFrom,
                     ...$paymentEffectBindings,
                 ],
             )
             ->selectRaw(
-                "SUM(CASE WHEN {$effectivePaymentDate} BETWEEN ? AND ? THEN {$paymentEffect} ELSE 0 END)
-                    + SUM(CASE WHEN payment.estado = ? AND DATE(payment.anulada_at) BETWEEN ? AND ? THEN -({$paymentEffect}) ELSE 0 END)
+                "SUM(CASE WHEN (
+                        collection_detail.fecha_recepcion BETWEEN ? AND ?
+                        OR (
+                            collection_detail.fecha_recepcion IS NULL
+                            AND payment.fecha_hora >= ?
+                            AND payment.fecha_hora < ?
+                        )
+                    ) THEN {$paymentEffect} ELSE 0 END)
+                    + SUM(CASE WHEN payment.estado = ? AND payment.anulada_at >= ? AND payment.anulada_at < ? THEN -({$paymentEffect}) ELSE 0 END)
                     AS period_payment_effect",
                 [
                     $from,
                     $to,
+                    $databaseFrom,
+                    $databaseToExclusive,
                     ...$paymentEffectBindings,
                     Pago::STATUS_VOIDED,
-                    $from,
-                    $to,
+                    $databaseFrom,
+                    $databaseToExclusive,
                     ...$paymentEffectBindings,
                 ],
             )
@@ -252,6 +543,8 @@ class ReportDataService
         string $to,
         CarbonImmutable $toExclusive,
         string $currency,
+        string $timezone,
+        string $databaseTimezone,
     ): void {
         $documents = DB::table('comprobantes')
             ->where('empresa_id', $companyId)
@@ -306,7 +599,7 @@ class ReportDataService
             }
 
             $transitions = $events
-                ->map(function (object $event): ?array {
+                ->map(function (object $event) use ($timezone, $databaseTimezone): ?array {
                     $before = $this->auditPayload($event->datos_antes);
                     $after = $this->auditPayload($event->datos_despues);
                     $beforeStatus = (string) ($before['estado'] ?? '');
@@ -317,7 +610,9 @@ class ReportDataService
                         return [
                             'audit_id' => (int) $event->id,
                             'kind' => 'void',
-                            'date' => substr((string) $event->created_at, 0, 10),
+                            'date' => CarbonImmutable::parse((string) $event->created_at, $databaseTimezone)
+                                ->setTimezone($timezone)
+                                ->format('Y-m-d'),
                         ];
                     }
                     if ($beforeStatus === Comprobante::STATUS_VOIDED
@@ -329,7 +624,9 @@ class ReportDataService
                         return [
                             'audit_id' => (int) $event->id,
                             'kind' => 'restore',
-                            'date' => substr((string) $event->created_at, 0, 10),
+                            'date' => CarbonImmutable::parse((string) $event->created_at, $databaseTimezone)
+                                ->setTimezone($timezone)
+                                ->format('Y-m-d'),
                         ];
                     }
 
@@ -340,7 +637,9 @@ class ReportDataService
 
             $currentVoidAuditId = null;
             if ($document->estado === Comprobante::STATUS_VOIDED && $document->anulada_at !== null) {
-                $currentVoidDate = substr((string) $document->anulada_at, 0, 10);
+                $currentVoidDate = CarbonImmutable::parse((string) $document->anulada_at, $databaseTimezone)
+                    ->setTimezone($timezone)
+                    ->format('Y-m-d');
                 $currentVoidAuditId = $transitions
                     ->filter(fn (array $transition): bool => $transition['kind'] === 'void'
                         && $transition['date'] === $currentVoidDate)
@@ -814,6 +1113,74 @@ class ReportDataService
         };
 
         return $type.': '.$account->alias;
+    }
+
+    private function collectionPaymentDetails(int $companyId): QueryBuilder
+    {
+        return DB::table('cobranza_detalles as detail')
+            ->join('cobranzas as collection', 'collection.id', '=', 'detail.cobranza_id')
+            ->where('collection.empresa_id', $companyId)
+            ->select([
+                'detail.pago_id',
+                'detail.cliente_id',
+                'detail.fecha_recepcion',
+                'collection.referencia',
+                'collection.codigo',
+            ]);
+    }
+
+    private function customerPaymentEffect(Pago $payment): string
+    {
+        $amount = FinancialMoney::normalize($payment->importe);
+        if (FinancialMoney::compare($amount, '0.00') < 0) {
+            $amount = FinancialMoney::subtract('0.00', $amount);
+        }
+
+        $reducesDebt = in_array($payment->tipo, [
+            Pago::TYPE_CUSTOMER_COLLECTION,
+            Pago::TYPE_RETAIL_COLLECTION,
+            Pago::TYPE_DIRECT_PAYMENT,
+            Pago::TYPE_CUSTOMER_DISCOUNT,
+            Pago::TYPE_OPENING_BALANCE,
+        ], true) || (
+            $payment->tipo !== Pago::TYPE_CUSTOMER_REFUND
+            && $this->flow($payment) === Pago::DIRECTION_INCOME
+        );
+
+        return $reducesDebt ? FinancialMoney::subtract('0.00', $amount) : $amount;
+    }
+
+    /** @return array{string, string} */
+    private function databasePeriodRange(string $from, string $to, string $timezone): array
+    {
+        $localFrom = CarbonImmutable::createFromFormat('!Y-m-d', $from, $timezone)->startOfDay();
+        $localToExclusive = CarbonImmutable::createFromFormat('!Y-m-d', $to, $timezone)
+            ->addDay()
+            ->startOfDay();
+        $databaseTimezone = $this->databaseTimezone();
+
+        return [
+            $localFrom->setTimezone($databaseTimezone)->format('Y-m-d H:i:s'),
+            $localToExclusive->setTimezone($databaseTimezone)->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function companyTimezone(int $companyId): string
+    {
+        return (string) (
+            DB::table('empresas')->where('id', $companyId)->value('zona_horaria')
+            ?: config('app.timezone', 'UTC')
+        );
+    }
+
+    private function databaseTimezone(): string
+    {
+        $connection = DB::connection()->getName();
+
+        return (string) (
+            config("database.connections.{$connection}.timezone")
+            ?: config('app.timezone', 'UTC')
+        );
     }
 
     private function paymentEffect(Pago $payment, string $operation): float
