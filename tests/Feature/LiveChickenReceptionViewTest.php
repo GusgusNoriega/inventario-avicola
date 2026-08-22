@@ -31,6 +31,9 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertSee('Despacho directo')
             ->assertSee('Columna seleccionada')
             ->assertSee('Zoom de la vista')
+            ->assertSee('Configurar balanza')
+            ->assertSee('Colocar peso manual')
+            ->assertSee('Configuración general')
             ->assertSee(asset('css/recepcion-pollo-vivo.css'), false)
             ->assertSee(asset('js/recepcion-pollo-vivo.js'), false)
             ->assertDontSee(asset('css/style.css'), false)
@@ -40,8 +43,17 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertOk()
             ->assertSee(route('recepcion-pollo-vivo'), false);
 
+        $view = (string) file_get_contents(resource_path('views/recepcion-pollo-vivo.blade.php'));
         $javascript = (string) file_get_contents(public_path('js/recepcion-pollo-vivo.js'));
         $stylesheet = (string) file_get_contents(public_path('css/recepcion-pollo-vivo.css'));
+
+        preg_match('/<form id="liveIntakeSettingsForm"[\s\S]*?<\/form>/', $view, $generalSettings);
+        $this->assertNotEmpty($generalSettings);
+        $this->assertStringNotContainsString('liveIntakeManualWeight', $generalSettings[0]);
+        $this->assertStringNotContainsString('liveIntakeBaudRate', $generalSettings[0]);
+        $this->assertStringContainsString('id="liveIntakeScaleSettingsModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeManualWeightModal"', $view);
+        $this->assertMatchesRegularExpression('/liveIntakeScaleWeight[\s\S]*liveIntakeOpenManualWeight/', $view);
 
         $this->assertStringContainsString('RetailScaleController', $javascript);
         $this->assertStringContainsString('BALANZA_RECEPCION_POLLO_VIVO', $javascript);
@@ -53,5 +65,7 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('grid-template-columns: 1fr 1fr', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-warehouse', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-client', $stylesheet);
+        $this->assertStringContainsString('grid-template-rows: auto minmax(0, 1fr) auto', $stylesheet);
+        $this->assertStringContainsString('.lir-selected-total { position: static;', $stylesheet);
     }
 }

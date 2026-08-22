@@ -9,11 +9,20 @@ const ZOOM_STORAGE_KEY = "sistema-pollos-recepcion-pollo-vivo-zoom-v1";
 const SCALE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-balanza-v1";
 
 const elements = {
+  main: document.getElementById("liveIntakeMain"),
   operatingDate: document.getElementById("liveIntakeOperatingDate"),
   openSettings: document.getElementById("liveIntakeOpenSettings"),
   settingsModal: document.getElementById("liveIntakeSettingsModal"),
   settingsForm: document.getElementById("liveIntakeSettingsForm"),
   settingsMessage: document.getElementById("liveIntakeSettingsMessage"),
+  openScaleSettings: document.getElementById("liveIntakeOpenScaleSettings"),
+  scaleSettingsModal: document.getElementById("liveIntakeScaleSettingsModal"),
+  scaleSettingsForm: document.getElementById("liveIntakeScaleSettingsForm"),
+  scaleSettingsMessage: document.getElementById("liveIntakeScaleSettingsMessage"),
+  openManualWeight: document.getElementById("liveIntakeOpenManualWeight"),
+  manualWeightModal: document.getElementById("liveIntakeManualWeightModal"),
+  manualWeightForm: document.getElementById("liveIntakeManualWeightForm"),
+  manualWeightMessage: document.getElementById("liveIntakeManualWeightMessage"),
   defaultExternalOwner: document.getElementById("liveIntakeDefaultExternalOwner"),
   externalOwnerButton: document.getElementById("liveIntakeExternalOwnerButton"),
   laneDestinations: [
@@ -41,7 +50,6 @@ const elements = {
   connectSerial: document.getElementById("liveIntakeConnectSerial"),
   disconnectScale: document.getElementById("liveIntakeDisconnectScale"),
   manualWeight: document.getElementById("liveIntakeManualWeight"),
-  applyManualWeight: document.getElementById("liveIntakeApplyManualWeight"),
   baudRate: document.getElementById("liveIntakeBaudRate"),
   dataBits: document.getElementById("liveIntakeDataBits"),
   stopBits: document.getElementById("liveIntakeStopBits"),
@@ -131,6 +139,60 @@ function setSettingsMessage(message, tone = "") {
   elements.settingsMessage.textContent = message;
   elements.settingsMessage.classList.toggle("is-error", tone === "error");
   elements.settingsMessage.classList.toggle("is-success", tone === "success");
+}
+
+function setScaleSettingsMessage(message, tone = "") {
+  elements.scaleSettingsMessage.textContent = message;
+  elements.scaleSettingsMessage.classList.toggle("is-error", tone === "error");
+  elements.scaleSettingsMessage.classList.toggle("is-success", tone === "success");
+}
+
+function setManualWeightMessage(message, tone = "") {
+  elements.manualWeightMessage.textContent = message;
+  elements.manualWeightMessage.classList.toggle("is-error", tone === "error");
+  elements.manualWeightMessage.classList.toggle("is-success", tone === "success");
+}
+
+function syncModalEnvironment() {
+  const modalOpen = [
+    elements.settingsModal,
+    elements.scaleSettingsModal,
+    elements.manualWeightModal,
+  ].some((modal) => !modal.hidden);
+  document.body.classList.toggle("lir-modal-open", modalOpen);
+  elements.main.inert = modalOpen;
+}
+
+function openDialog(modal, trigger, initialFocus) {
+  modal.hidden = false;
+  trigger.setAttribute("aria-expanded", "true");
+  syncModalEnvironment();
+  globalThis.setTimeout(() => initialFocus?.focus({ preventScroll: true }), 0);
+}
+
+function closeDialog(modal, trigger) {
+  if (modal.hidden) return;
+  modal.hidden = true;
+  trigger.setAttribute("aria-expanded", "false");
+  syncModalEnvironment();
+  trigger.focus({ preventScroll: true });
+}
+
+function trapDialogFocus(event, modal) {
+  if (event.key !== "Tab") return;
+  const controls = Array.from(modal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )).filter((control) => !control.hidden);
+  if (!controls.length) return;
+  const first = controls[0];
+  const last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function firstValidationMessage(error) {
@@ -344,6 +406,8 @@ function updateScaleUi(payload = state.scale?.getState()) {
   elements.connectBle.disabled = state.busy || scaleState.isConnecting || !scaleState.capabilities.bluetooth;
   elements.connectSerial.disabled = state.busy || scaleState.isConnecting || !scaleState.capabilities.serial;
   elements.disconnectScale.disabled = state.busy || (!scaleState.isConnected && !scaleState.isConnecting);
+  elements.openScaleSettings.disabled = state.busy;
+  elements.openManualWeight.disabled = state.busy;
   updateCaptureAvailability();
 }
 
@@ -468,12 +532,14 @@ function populateSerialForm() {
 async function connectScale(mode) {
   state.busy = true;
   updateScaleUi();
+  setScaleSettingsMessage(`Conectando por ${mode === "ble" ? "Bluetooth" : "puerto serial"}…`);
   try {
     state.scale.configureSerial(serialOptionsFromForm());
     if (mode === "ble") await state.scale.connectBle();
     else await state.scale.connectSerial({ serialOptions: serialOptionsFromForm() });
+    setScaleSettingsMessage("Balanza conectada correctamente.", "success");
   } catch (error) {
-    setMessage(error.message || "No se pudo conectar la balanza.", "error");
+    setScaleSettingsMessage(error.message || "No se pudo conectar la balanza.", "error");
   } finally {
     state.busy = false;
     updateScaleUi();
@@ -482,15 +548,59 @@ async function connectScale(mode) {
 
 function openSettings() {
   populateConfiguration();
-  populateSerialForm();
   setSettingsMessage("");
-  elements.settingsModal.hidden = false;
-  elements.defaultExternalOwner.focus({ preventScroll: true });
+  openDialog(elements.settingsModal, elements.openSettings, elements.defaultExternalOwner);
 }
 
 function closeSettings() {
-  elements.settingsModal.hidden = true;
-  elements.openSettings.focus({ preventScroll: true });
+  closeDialog(elements.settingsModal, elements.openSettings);
+}
+
+function openScaleSettings() {
+  populateSerialForm();
+  setScaleSettingsMessage("");
+  const initialFocus = !elements.connectBle.disabled
+    ? elements.connectBle
+    : (!elements.connectSerial.disabled ? elements.connectSerial : elements.baudRate);
+  openDialog(elements.scaleSettingsModal, elements.openScaleSettings, initialFocus);
+}
+
+function closeScaleSettings() {
+  closeDialog(elements.scaleSettingsModal, elements.openScaleSettings);
+}
+
+function saveScaleSettings(event) {
+  event.preventDefault();
+  try {
+    state.scale.configureSerial(serialOptionsFromForm());
+    setMessage("Configuración de balanza guardada en esta tablet.", "success");
+    closeScaleSettings();
+  } catch (error) {
+    setScaleSettingsMessage(error.message || "No se pudo guardar la configuración.", "error");
+  }
+}
+
+function openManualWeight() {
+  setManualWeightMessage("");
+  openDialog(elements.manualWeightModal, elements.openManualWeight, elements.manualWeight);
+}
+
+function closeManualWeight() {
+  closeDialog(elements.manualWeightModal, elements.openManualWeight);
+}
+
+function applyManualWeight(event) {
+  event.preventDefault();
+  try {
+    state.scale.setManualReading(elements.manualWeight.value);
+    const appliedWeight = Number(elements.manualWeight.value).toFixed(3);
+    elements.manualWeight.value = "";
+    updateScaleUi();
+    closeManualWeight();
+    setMessage(`Peso manual de ${appliedWeight} kg listo para registrar.`, "success");
+  } catch (error) {
+    setManualWeightMessage(error.message || "Ingresa un peso manual válido.", "error");
+  }
 }
 
 async function saveSettings(event) {
@@ -507,7 +617,6 @@ async function saveSettings(event) {
   state.busy = true;
   setSettingsMessage("Guardando configuración…");
   try {
-    state.scale.configureSerial(serialOptionsFromForm());
     const response = await apiRequest("/recepcion-pollo-vivo/configuracion", {
       method: "PUT",
       body: JSON.stringify(payload),
@@ -559,24 +668,25 @@ elements.cageType.addEventListener("change", updateCaptureAvailability);
 elements.openSettings.addEventListener("click", openSettings);
 elements.settingsForm.addEventListener("submit", saveSettings);
 document.querySelectorAll("[data-live-close-settings]").forEach((button) => button.addEventListener("click", closeSettings));
+elements.openScaleSettings.addEventListener("click", openScaleSettings);
+elements.scaleSettingsForm.addEventListener("submit", saveScaleSettings);
+document.querySelectorAll("[data-live-close-scale-settings]").forEach((button) => button.addEventListener("click", closeScaleSettings));
+elements.openManualWeight.addEventListener("click", openManualWeight);
+elements.manualWeightForm.addEventListener("submit", applyManualWeight);
+document.querySelectorAll("[data-live-close-manual-weight]").forEach((button) => button.addEventListener("click", closeManualWeight));
 elements.connectBle.addEventListener("click", () => connectScale("ble"));
 elements.connectSerial.addEventListener("click", () => connectScale("serial"));
 elements.disconnectScale.addEventListener("click", async () => {
   state.busy = true;
+  setScaleSettingsMessage("Desconectando balanza…");
   try {
     await state.scale.disconnect();
+    setScaleSettingsMessage("Balanza desconectada.", "success");
+  } catch (error) {
+    setScaleSettingsMessage(error.message || "No se pudo desconectar la balanza.", "error");
   } finally {
     state.busy = false;
     updateScaleUi();
-  }
-});
-elements.applyManualWeight.addEventListener("click", () => {
-  try {
-    state.scale.setManualReading(elements.manualWeight.value);
-    elements.manualWeight.value = "";
-    setSettingsMessage("Lectura manual aplicada; ya puedes cerrar y capturar.", "success");
-  } catch (error) {
-    setSettingsMessage(error.message, "error");
   }
 });
 elements.zoomOut.addEventListener("click", () => stepZoom(-1));
@@ -587,7 +697,27 @@ document.addEventListener("click", (event) => {
   if (deleteButton) void deleteWeighing(deleteButton.dataset.liveDeleteWeighing);
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !elements.settingsModal.hidden) closeSettings();
+  const openModal = [
+    elements.manualWeightModal,
+    elements.scaleSettingsModal,
+    elements.settingsModal,
+  ].find((modal) => !modal.hidden);
+  if (!openModal) return;
+  if (event.key === "Escape") {
+    if (openModal === elements.manualWeightModal) closeManualWeight();
+    else if (openModal === elements.scaleSettingsModal) closeScaleSettings();
+    else closeSettings();
+    return;
+  }
+  trapDialogFocus(event, openModal);
+});
+[elements.settingsModal, elements.scaleSettingsModal, elements.manualWeightModal].forEach((modal) => {
+  modal.addEventListener("click", (event) => {
+    if (event.target !== modal) return;
+    if (modal === elements.manualWeightModal) closeManualWeight();
+    else if (modal === elements.scaleSettingsModal) closeScaleSettings();
+    else closeSettings();
+  });
 });
 window.addEventListener("storage", (event) => {
   if (event.key === ZOOM_STORAGE_KEY) applyZoom(Number(event.newValue), false);

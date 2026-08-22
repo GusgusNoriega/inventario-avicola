@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ asset('css/recepcion-pollo-vivo.css') }}?v={{ filemtime(public_path('css/recepcion-pollo-vivo.css')) }}">
 </head>
 <body class="live-intake-page">
-  <main class="lir-shell">
+  <main id="liveIntakeMain" class="lir-shell">
     <header class="lir-topbar">
       <div>
         <p>Camión del día</p>
@@ -16,7 +16,7 @@
       </div>
       <div class="lir-topbar-actions">
         <span id="liveIntakeOperatingDate" class="lir-date-chip">Jornada de hoy</span>
-        <button id="liveIntakeOpenSettings" class="lir-icon-button" type="button" aria-haspopup="dialog" aria-controls="liveIntakeSettingsModal" aria-label="Abrir configuración">⚙</button>
+        <button id="liveIntakeOpenSettings" class="lir-icon-button" type="button" aria-haspopup="dialog" aria-controls="liveIntakeSettingsModal" aria-expanded="false" aria-label="Abrir configuración general">⚙</button>
         <a class="lir-menu-link" href="{{ route('menu') }}">Menú</a>
       </div>
     </header>
@@ -27,11 +27,12 @@
         <h2 id="liveIntakeScaleTitle">Balanza de recepción</h2>
         <small id="liveIntakeScaleRaw">Trama: --</small>
       </div>
-      <output id="liveIntakeScaleWeight" class="lir-scale-weight">--- <small>kg</small></output>
-      <div class="lir-scale-actions">
-        <button id="liveIntakeConnectBle" type="button">Conectar BLE</button>
-        <button id="liveIntakeConnectSerial" type="button">Conectar serial</button>
-        <button id="liveIntakeDisconnectScale" class="is-danger" type="button" disabled>Desconectar</button>
+      <div class="lir-scale-readout">
+        <output id="liveIntakeScaleWeight" class="lir-scale-weight">--- <small>kg</small></output>
+        <button id="liveIntakeOpenManualWeight" class="lir-scale-inline-button" type="button" aria-haspopup="dialog" aria-controls="liveIntakeManualWeightModal" aria-expanded="false">Colocar peso manual</button>
+      </div>
+      <div class="lir-scale-panel-actions">
+        <button id="liveIntakeOpenScaleSettings" type="button" aria-haspopup="dialog" aria-controls="liveIntakeScaleSettingsModal" aria-expanded="false"><span aria-hidden="true">⚙</span> Configurar balanza</button>
       </div>
     </section>
 
@@ -111,7 +112,7 @@
   <div id="liveIntakeSettingsModal" class="lir-modal" hidden>
     <form id="liveIntakeSettingsForm" class="lir-modal-card" role="dialog" aria-modal="true" aria-labelledby="liveIntakeSettingsTitle">
       <header>
-        <div><p>Recepción diaria</p><h2 id="liveIntakeSettingsTitle">Configuración</h2></div>
+        <div><p>Recepción diaria</p><h2 id="liveIntakeSettingsTitle">Configuración general</h2></div>
         <button type="button" data-live-close-settings aria-label="Cerrar configuración">×</button>
       </header>
 
@@ -140,11 +141,31 @@
         </div>
       </section>
 
+      <p id="liveIntakeSettingsMessage" class="lir-message" role="status" aria-live="polite"></p>
+      <footer><button type="button" data-live-close-settings>Cancelar</button><button class="is-primary" type="submit">Guardar configuración</button></footer>
+    </form>
+  </div>
+
+  <div id="liveIntakeScaleSettingsModal" class="lir-modal" hidden>
+    <form id="liveIntakeScaleSettingsForm" class="lir-modal-card is-scale-modal" role="dialog" aria-modal="true" aria-labelledby="liveIntakeScaleSettingsTitle">
+      <header>
+        <div><p>Balanza de recepción</p><h2 id="liveIntakeScaleSettingsTitle">Configuración de balanza</h2></div>
+        <button type="button" data-live-close-scale-settings aria-label="Cerrar configuración de balanza">×</button>
+      </header>
+
       <section>
-        <h3>Balanza y lectura manual</h3>
+        <h3>Conexión</h3>
+        <p class="lir-modal-help">Conecta la única balanza de esta estación. La autorización y los parámetros quedan guardados en esta tablet.</p>
+        <div class="lir-scale-actions">
+          <button id="liveIntakeConnectBle" type="button">Conectar BLE</button>
+          <button id="liveIntakeConnectSerial" type="button">Conectar serial</button>
+          <button id="liveIntakeDisconnectScale" class="is-danger" type="button" disabled>Desconectar</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Parámetros de conexión serial</h3>
         <div class="lir-settings-grid is-scale">
-          <label><span>Lectura manual (kg)</span><input id="liveIntakeManualWeight" type="number" min="0.001" step="0.001" inputmode="decimal"></label>
-          <button id="liveIntakeApplyManualWeight" type="button">Aplicar lectura</button>
           <label><span>Baudios</span><input id="liveIntakeBaudRate" type="number" min="300" step="1" value="9600"></label>
           <label><span>Bits</span><select id="liveIntakeDataBits"><option value="8">8</option><option value="7">7</option></select></label>
           <label><span>Parada</span><select id="liveIntakeStopBits"><option value="1">1</option><option value="2">2</option></select></label>
@@ -153,8 +174,28 @@
         </div>
       </section>
 
-      <p id="liveIntakeSettingsMessage" class="lir-message" role="status" aria-live="polite"></p>
-      <footer><button type="button" data-live-close-settings>Cancelar</button><button class="is-primary" type="submit">Guardar configuración</button></footer>
+      <p id="liveIntakeScaleSettingsMessage" class="lir-message" role="status" aria-live="polite"></p>
+      <footer><button type="button" data-live-close-scale-settings>Cancelar</button><button class="is-primary" type="submit">Guardar y cerrar</button></footer>
+    </form>
+  </div>
+
+  <div id="liveIntakeManualWeightModal" class="lir-modal" hidden>
+    <form id="liveIntakeManualWeightForm" class="lir-modal-card is-compact" role="dialog" aria-modal="true" aria-labelledby="liveIntakeManualWeightTitle">
+      <header>
+        <div><p>Captura alternativa</p><h2 id="liveIntakeManualWeightTitle">Colocar peso manual</h2></div>
+        <button type="button" data-live-close-manual-weight aria-label="Cerrar peso manual">×</button>
+      </header>
+
+      <section>
+        <label class="lir-manual-weight-field">
+          <span>Peso leído en kilogramos</span>
+          <input id="liveIntakeManualWeight" type="number" min="0.001" step="0.001" inputmode="decimal" placeholder="0.000" autocomplete="off">
+        </label>
+        <p class="lir-modal-help">Este valor reemplaza temporalmente la lectura física para la siguiente pesada.</p>
+      </section>
+
+      <p id="liveIntakeManualWeightMessage" class="lir-message" role="status" aria-live="polite"></p>
+      <footer><button type="button" data-live-close-manual-weight>Cancelar</button><button id="liveIntakeApplyManualWeight" class="is-primary" type="submit">Aplicar peso</button></footer>
     </form>
   </div>
 
