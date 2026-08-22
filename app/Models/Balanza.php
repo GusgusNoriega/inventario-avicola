@@ -26,6 +26,8 @@ class Balanza extends Model
 
     public const CODE_RETAIL_2 = 'BALANZA_MINORISTA_2';
 
+    public const CODE_LIVE_CHICKEN_RECEPTION = 'BALANZA_RECEPCION_POLLO_VIVO';
+
     public const STATUS_ACTIVE = 'ACTIVO';
 
     protected $table = 'balanzas';
@@ -37,6 +39,7 @@ class Balanza extends Model
             self::CODE_WHOLESALE_2 => 'Balanza 2',
             self::CODE_RETAIL_1 => 'Balanza despacho minorista',
             self::CODE_RETAIL_2 => 'Balanza despacho minorista 2',
+            self::CODE_LIVE_CHICKEN_RECEPTION => 'Balanza recepción de pollo vivo',
             default => null,
         };
     }

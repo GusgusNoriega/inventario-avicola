@@ -527,6 +527,14 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'inicio_at' => $now,
             'cierre_programado_at' => $now->copy()->addDay(),
         ]);
+        $liveReceptionId = DB::table('recepciones_pollo_vivo')->insertGetId([
+            'jornada_id' => $journeyId,
+            'origen' => 'Camión del día',
+            'estado' => 'ABIERTA',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         $ticketId = DB::table('tickets_despacho')->insertGetId([
             'jornada_id' => $journeyId,
             'codigo' => 'TCK-PRUEBA',
@@ -560,6 +568,14 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'capturada_at' => $now,
             'capturada_por' => $user->id,
         ]);
+        $liveScaleReadingId = DB::table('lecturas_balanza')->insertGetId([
+            'balanza_id' => $scaleId,
+            'peso_kg' => 35,
+            'trama_cruda' => '35.000',
+            'modo_conexion' => 'SERIAL',
+            'capturada_at' => $now,
+            'capturada_por' => $user->id,
+        ]);
         $weighingId = DB::table('pesadas')->insertGetId([
             'ticket_id' => $ticketId,
             'numero' => 1,
@@ -581,6 +597,34 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'peso_bruto_kg' => 32,
             'tara_total_kg' => 7,
             'peso_neto_kg' => 25,
+            'pesada_at' => $now,
+            'estado' => 'ACTIVA',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('pesadas_recepcion_pollo_vivo')->insert([
+            'recepcion_id' => $liveReceptionId,
+            'idempotency_key' => (string) Str::uuid(),
+            'numero' => 1,
+            'columna' => 1,
+            'propietario_tipo' => 'EXTERNA',
+            'propietario_externo_id' => $provider->id,
+            'destino_tipo' => 'ALMACEN',
+            'almacen_destino_id' => $warehouseId,
+            'sexo' => 'MACHO',
+            'tipo_pollo_id' => $chickenTypeId,
+            'tipo_java_id' => $cageTypeId,
+            'lectura_balanza_id' => $liveScaleReadingId,
+            'origen_peso' => 'BALANZA_RECEPCION_POLLO_VIVO',
+            'aves_por_java' => 10,
+            'cantidad_javas' => 1,
+            'cantidad_aves' => 10,
+            'peso_java_kg_snapshot' => 7,
+            'peso_leido_kg' => 35,
+            'peso_bruto_kg' => 35,
+            'tara_total_kg' => 7,
+            'peso_neto_kg' => 28,
             'pesada_at' => $now,
             'estado' => 'ACTIVA',
             'created_by' => $user->id,

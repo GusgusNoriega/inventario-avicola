@@ -149,6 +149,18 @@ class DatabaseSeeder extends Seeder
                     'flowControl' => 'none',
                 ], JSON_THROW_ON_ERROR),
             ],
+            [
+                'codigo' => 'BALANZA_RECEPCION_POLLO_VIVO',
+                'nombre' => 'Balanza recepción de pollo vivo',
+                'modo_conexion' => 'SERIAL',
+                'configuracion' => json_encode([
+                    'baudRate' => 9600,
+                    'dataBits' => 8,
+                    'stopBits' => 1,
+                    'parity' => 'none',
+                    'flowControl' => 'none',
+                ], JSON_THROW_ON_ERROR),
+            ],
         ])->each(fn (array $balanza) => DB::table('balanzas')->updateOrInsert(
             ['sucursal_id' => $sucursalId, 'codigo' => $balanza['codigo']],
             [
@@ -223,6 +235,7 @@ class DatabaseSeeder extends Seeder
         );
         $operatorModules = [
             'MODULO_DESPACHO_MAYORISTA',
+            'MODULO_RECEPCION_POLLO_VIVO',
             'MODULO_DESPACHO_MINORISTA_1',
             'MODULO_DESPACHO_MINORISTA_2',
             'MODULO_RESUMEN_JORNADA',

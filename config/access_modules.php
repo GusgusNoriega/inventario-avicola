@@ -23,6 +23,16 @@ return [
             ],
             'legacy_permissions' => ['DESPACHOS_VER', 'DESPACHOS_CREAR'],
         ],
+        'MODULO_RECEPCION_POLLO_VIVO' => [
+            'name' => 'Recepción de pollo vivo',
+            'description' => 'Entrada diaria de pollo vivo propio o de terceros, con almacenes y despachos directos.',
+            'path' => '/recepcion-pollo-vivo',
+            'technical_permissions' => [
+                'RECEPCIONES_VER',
+                'RECEPCIONES_CREAR',
+            ],
+            'legacy_permissions' => [],
+        ],
         'MODULO_DESPACHO_MAYORISTA_2' => [
             'name' => 'Despacho mayorista 2',
             'description' => 'Segundo puesto independiente de despacho mayorista.',

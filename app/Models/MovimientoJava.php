@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'cantidad',
     'cantidad_bandejas',
     'ticket_despacho_id',
+    'pesada_recepcion_pollo_vivo_id',
     'vehiculo_id',
     'conductor_id',
     'fecha_movimiento',

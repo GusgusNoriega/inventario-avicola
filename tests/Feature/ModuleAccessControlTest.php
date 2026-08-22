@@ -18,6 +18,7 @@ class ModuleAccessControlTest extends TestCase
         foreach ([
             '/',
             '/operacion',
+            '/recepcion-pollo-vivo',
             '/despacho-mayorista-2',
             '/precios-jornada',
             '/reporte-proveedores',
@@ -43,6 +44,7 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/recepcion-pollo-vivo',
             '/despacho-mayorista-2',
             '/precios-jornada',
             '/reporte-proveedores',
@@ -124,6 +126,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertSee(route('directorio'), false)
             ->assertSee(route('finanzas'), false)
             ->assertDontSee(route('control-javas'), false)
+            ->assertDontSee(route('recepcion-pollo-vivo'), false)
             ->assertDontSee(route('operacion'), false);
     }
 
@@ -137,6 +140,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertOk()
             ->assertSee(route('finanzas'), false)
             ->assertDontSee(route('operacion'), false)
+            ->assertDontSee(route('recepcion-pollo-vivo'), false)
             ->assertDontSee(route('despacho-mayorista-2'), false)
             ->assertDontSee(route('despacho-minorista'), false)
             ->assertDontSee(route('precios-jornada'), false)
@@ -173,6 +177,7 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/recepcion-pollo-vivo',
             '/despacho-mayorista-2',
             '/despacho-minorista',
             '/despacho-minorista-2',
@@ -236,6 +241,16 @@ class ModuleAccessControlTest extends TestCase
 
         $this->getJson('/api/v1/finanzas/catalogo')->assertOk();
         $this->postJson('/api/v1/finanzas/movimientos', [])->assertUnprocessable();
+    }
+
+    public function test_live_chicken_reception_api_requires_its_own_module(): void
+    {
+        $unauthorized = User::factory()->create();
+        $this->grantModules($unauthorized, ['MODULO_DIRECTORIO']);
+        Sanctum::actingAs($unauthorized, ['api']);
+
+        $this->getJson('/api/v1/recepcion-pollo-vivo')->assertForbidden();
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', [])->assertForbidden();
     }
 
     public function test_directory_access_does_not_expose_financial_controls_in_party_details(): void

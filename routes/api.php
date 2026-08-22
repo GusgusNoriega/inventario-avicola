@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\FinancialTicketController;
 use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JourneyPriceController;
+use App\Http\Controllers\Api\V1\LiveChickenReceptionController;
 use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
@@ -265,6 +266,12 @@ Route::prefix('v1')->group(function (): void {
         'password.changed',
         'module:MODULO_CONTROL_JAVAS',
     ];
+    $liveChickenReceptionMiddleware = [
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_RECEPCION_POLLO_VIVO',
+    ];
     $priceMiddleware = config('directory.public_access')
         ? []
         : ['permission:PRECIOS_GESTIONAR'];
@@ -372,6 +379,16 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($javaControlWriteMiddleware);
     Route::post('/control-javas/conteo-diario', [JavaControlController::class, 'storeDailyCount'])
         ->middleware($javaControlWriteMiddleware);
+
+    Route::prefix('recepcion-pollo-vivo')
+        ->middleware($liveChickenReceptionMiddleware)
+        ->group(function (): void {
+            Route::get('/', [LiveChickenReceptionController::class, 'index']);
+            Route::put('/configuracion', [LiveChickenReceptionController::class, 'updateConfiguration']);
+            Route::post('/pesadas', [LiveChickenReceptionController::class, 'store']);
+            Route::delete('/pesadas/{weighing}', [LiveChickenReceptionController::class, 'destroy'])
+                ->whereNumber('weighing');
+        });
 
     Route::middleware($fleetMiddleware)->group(function (): void {
         Route::apiResource('camiones', TruckController::class)

@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(106, $migrationFiles);
+        $this->assertCount(107, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -42,6 +42,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_08_01_000003_create_cobranzas_tables.php' => 3,
                 '2026_08_04_000001_create_cobranza_asignaciones_table.php' => 2,
                 '2026_08_14_000003_create_wholesale_two_weight_adjustments.php' => 2,
+                '2026_08_22_000001_create_live_chicken_reception_module.php' => 5,
                 default => 1,
             };
 
@@ -93,6 +94,9 @@ class DatabaseSchemaTest extends TestCase
             'ticket_precios',
             'lecturas_balanza',
             'pesadas',
+            'configuraciones_recepcion_pollo_vivo',
+            'recepciones_pollo_vivo',
+            'pesadas_recepcion_pollo_vivo',
             'movimientos_inventario',
             'movimiento_detalles',
             'existencias_almacen',
@@ -142,7 +146,7 @@ class DatabaseSchemaTest extends TestCase
             'vehiculos' => ['empresa_id', 'placa', 'marca', 'modelo', 'color', 'descripcion', 'es_propio', 'estado'],
             'programacion_recepcion_detalles' => ['programacion_id', 'proveedor_vehiculo_id', 'estado', 'hora_estimada'],
             'tickets_despacho' => ['jornada_id', 'codigo', 'referencia_externa', 'canal', 'modulo_origen', 'tipo_operacion', 'cliente_destino_id', 'almacen_destino_id', 'vehiculo_entrega_id', 'conductor_entrega_id', 'asignacion_transporte_posterior', 'estado', 'anulado_por', 'anulado_at', 'motivo_anulacion'],
-            'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'cantidad_bandejas', 'vehiculo_id', 'fecha_movimiento'],
+            'movimientos_javas' => ['jornada_id', 'cliente_id', 'tipo', 'cantidad', 'cantidad_bandejas', 'ticket_despacho_id', 'pesada_recepcion_pollo_vivo_id', 'vehiculo_id', 'fecha_movimiento'],
             'ajustes_saldos_javas' => ['empresa_id', 'sucursal_id', 'jornada_id', 'cliente_id', 'saldo_anterior_javas', 'saldo_nuevo_javas', 'diferencia_javas', 'saldo_anterior_bandejas', 'saldo_nuevo_bandejas', 'diferencia_bandejas', 'motivo', 'created_by'],
             'inventarios_javas' => ['empresa_id', 'cantidad_total', 'cantidad_total_bandejas', 'updated_by'],
             'conteos_diarios_javas' => ['empresa_id', 'jornada_id', 'cantidad_en_empresa', 'cantidad_en_local', 'cantidad_esperada', 'diferencia', 'cantidad_en_empresa_bandejas', 'cantidad_en_local_bandejas', 'cantidad_esperada_bandejas', 'cantidad_clientes_externos', 'cantidad_clientes_externos_bandejas', 'cantidad_clientes_internos', 'cantidad_clientes_internos_bandejas', 'cantidad_total_inventario', 'cantidad_total_inventario_bandejas', 'diferencia_bandejas', 'contado_at', 'contado_por'],
@@ -153,7 +157,11 @@ class DatabaseSchemaTest extends TestCase
             'configuraciones_despacho_minorista' => ['empresa_id', 'sucursal_id', 'estacion', 'metodo_pago_id', 'cuenta_destino_id'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'ajuste_peso_mayorista_2_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'ajuste_peso_mayorista_2_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
+            'configuraciones_recepcion_pollo_vivo' => ['sucursal_id', 'propietario_externo_predeterminado_id', 'almacen_columna_1_id', 'almacen_columna_2_id', 'cliente_columna_3_id', 'cliente_columna_4_id', 'updated_by'],
+            'recepciones_pollo_vivo' => ['jornada_id', 'origen', 'estado', 'created_by'],
+            'pesadas_recepcion_pollo_vivo' => ['recepcion_id', 'idempotency_key', 'numero', 'columna', 'propietario_tipo', 'propietario_externo_id', 'destino_tipo', 'almacen_destino_id', 'cliente_destino_id', 'sexo', 'tipo_pollo_id', 'tipo_java_id', 'lectura_balanza_id', 'origen_peso', 'aves_por_java', 'cantidad_javas', 'cantidad_aves', 'peso_java_kg_snapshot', 'peso_leido_kg', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg', 'pesada_at', 'estado', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_by'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
+            'movimiento_detalles' => ['movimiento_id', 'pesada_id', 'pesada_recepcion_pollo_vivo_id', 'tipo_pollo_id', 'cantidad_aves', 'peso_neto_kg'],
             'entidades_financieras' => ['empresa_id', 'tipo', 'proveedor_id', 'tipo_documento', 'numero_documento', 'razon_social', 'nombre_comercial', 'direccion', 'telefono', 'email', 'estado', 'created_by'],
             'cuentas_financieras' => ['entidad_financiera_id', 'tipo', 'alias', 'banco', 'numero_cuenta', 'cci', 'moneda', 'estado', 'created_by'],
             'metodos_pago' => ['codigo', 'nombre', 'requiere_referencia', 'estado'],

@@ -18,7 +18,7 @@ class AccessModuleMigrationTest extends TestCase
     {
         $moduleCodes = array_keys(config('access_modules.modules'));
 
-        $this->assertCount(13, $moduleCodes);
+        $this->assertCount(14, $moduleCodes);
         $this->assertEqualsCanonicalizing(
             $moduleCodes,
             Permission::query()
@@ -164,6 +164,41 @@ class AccessModuleMigrationTest extends TestCase
         ]);
     }
 
+    public function test_live_chicken_reception_migration_creates_its_domain_and_rolls_back_cleanly(): void
+    {
+        $user = User::factory()->create();
+        $operator = Role::query()->create([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'OPERADOR',
+            'nombre' => 'Operador',
+        ]);
+        $migration = $this->liveChickenReceptionMigration();
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasTable('pesadas_recepcion_pollo_vivo'));
+        $this->assertFalse(Schema::hasColumn('movimiento_detalles', 'pesada_recepcion_pollo_vivo_id'));
+        $this->assertDatabaseMissing('permisos', ['codigo' => 'MODULO_RECEPCION_POLLO_VIVO']);
+
+        $migration->up();
+
+        $permission = Permission::query()
+            ->where('codigo', 'MODULO_RECEPCION_POLLO_VIVO')
+            ->firstOrFail();
+        $this->assertTrue(Schema::hasTable('configuraciones_recepcion_pollo_vivo'));
+        $this->assertTrue(Schema::hasTable('recepciones_pollo_vivo'));
+        $this->assertTrue(Schema::hasTable('pesadas_recepcion_pollo_vivo'));
+        $this->assertTrue(Schema::hasColumn('movimientos_javas', 'pesada_recepcion_pollo_vivo_id'));
+        $this->assertTrue($operator->fresh()->permissions()->whereKey($permission->id)->exists());
+
+        $migration->down();
+
+        $this->assertDatabaseMissing('permisos', [
+            'id' => $permission->id,
+            'codigo' => 'MODULO_RECEPCION_POLLO_VIVO',
+        ]);
+    }
+
     private function moduleMigration(): Migration
     {
         return require database_path(
@@ -182,6 +217,13 @@ class AccessModuleMigrationTest extends TestCase
     {
         return require database_path(
             'migrations/2026_08_14_000001_add_second_wholesale_dispatch_module.php',
+        );
+    }
+
+    private function liveChickenReceptionMigration(): Migration
+    {
+        return require database_path(
+            'migrations/2026_08_22_000001_create_live_chicken_reception_module.php',
         );
     }
 }

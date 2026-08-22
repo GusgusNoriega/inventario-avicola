@@ -76,6 +76,25 @@
         </a>
         @endif
 
+        @if ($user->hasModule('MODULO_RECEPCION_POLLO_VIVO'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('recepcion-pollo-vivo') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M3 7h12v10H3z"></path>
+              <path d="M15 10h3l3 3v4h-6z"></path>
+              <path d="M7 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+              <path d="M17 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+              <path d="M6 10h6M6 13h6"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Recepción de pollo vivo</strong>
+            <small>Entrada diaria propia y de empresas externas</small>
+          </span>
+          <span class="menu-status">Nuevo</span>
+        </a>
+        @endif
+
         @if ($user->hasModule('MODULO_DESPACHO_MAYORISTA_2'))
         <a class="menu-tile menu-tile-primary" href="{{ route('despacho-mayorista-2') }}">
           <span class="menu-tile-icon" aria-hidden="true">
