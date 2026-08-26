@@ -210,6 +210,7 @@ class LiveChickenReceptionService
                 (int) $branch->id,
                 $lane,
                 $configuration,
+                isset($data['dispatch_client_id']) ? (int) $data['dispatch_client_id'] : null,
             );
             $cageType = DB::table('tipos_java')
                 ->where('id', (int) $data['cage_type_id'])
@@ -502,22 +503,25 @@ class LiveChickenReceptionService
     }
 
     /** @param array<string, mixed> $configuration */
-    private function destinationForLane(int $companyId, int $branchId, int $lane, array $configuration): array
-    {
+    private function destinationForLane(
+        int $companyId,
+        int $branchId,
+        int $lane,
+        array $configuration,
+        ?int $dispatchClientId,
+    ): array {
         $laneConfiguration = $configuration['lanes'][(string) $lane] ?? null;
         $destinationId = (int) ($laneConfiguration['destination_id'] ?? 0);
 
         $destinationType = (string) ($laneConfiguration['type'] ?? '');
 
-        if (! $destinationId) {
-            throw ValidationException::withMessages([
-                'lane' => $destinationType === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE
-                    ? "Configura el almacén de la columna {$lane} antes de registrar."
-                    : "Configura el cliente de la columna {$lane} antes de registrar.",
-            ]);
-        }
-
         if ($destinationType === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE) {
+            if (! $destinationId) {
+                throw ValidationException::withMessages([
+                    'lane' => "Configura el almacén de la columna {$lane} antes de registrar.",
+                ]);
+            }
+
             $this->assertWarehouse($branchId, $destinationId, 'lane');
 
             return [
@@ -533,12 +537,18 @@ class LiveChickenReceptionService
             ]);
         }
 
-        $this->assertExternalClient($companyId, $destinationId, 'lane');
+        if (! $dispatchClientId) {
+            throw ValidationException::withMessages([
+                'dispatch_client_id' => 'Selecciona el cliente que recibirá este despacho directo.',
+            ]);
+        }
+
+        $this->assertExternalClient($companyId, $dispatchClientId, 'dispatch_client_id');
 
         return [
             'type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
             'warehouse_id' => null,
-            'client_id' => $destinationId,
+            'client_id' => $dispatchClientId,
         ];
     }
 
@@ -877,7 +887,7 @@ class LiveChickenReceptionService
 
         if (! $valid) {
             throw ValidationException::withMessages([
-                $field => 'El cliente de despacho debe ser un cliente externo activo de tu empresa.',
+                $field => 'El cliente de despacho debe estar activo y habilitado en tu empresa.',
             ]);
         }
     }

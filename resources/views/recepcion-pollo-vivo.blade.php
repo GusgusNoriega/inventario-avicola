@@ -115,17 +115,29 @@
       <div class="lir-lane-group is-client-group">
         <header class="lir-lane-group-head">
           <div><span>Recepción y despacho automático</span><strong>Siempre para mi empresa</strong></div>
-          <small>Elige el sexo al registrar; el propietario no cambia.</small>
+          <small>Elige el cliente y el sexo; la recepción y el despacho se guardan juntos.</small>
         </header>
         <div class="lir-lanes is-client-lanes">
         @for ($lane = 5; $lane <= 6; $lane++)
           <article class="lir-lane is-client is-own-lane" data-live-lane="{{ $lane }}">
-            <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}">
-              <span>Columna {{ $lane }}</span>
-              <strong>Recepción + despacho</strong>
-              <em id="liveIntakeLaneProfile{{ $lane }}">Mi empresa · Sexo al registrar</em>
-              <small id="liveIntakeLaneDestination{{ $lane }}">Sin configurar</small>
-            </button>
+            <header class="lir-direct-lane-head">
+              <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="false">
+                <span>Columna {{ $lane }}</span>
+                <strong>Recepción + despacho simultáneo</strong>
+                <em id="liveIntakeLaneProfile{{ $lane }}">Mi empresa · Sexo al registrar</em>
+                <small>Próximo despacho: <b id="liveIntakeLaneDestination{{ $lane }}">Sin cliente</b></small>
+              </button>
+              <button
+                id="liveIntakeChooseClient{{ $lane }}"
+                class="lir-client-picker-trigger"
+                type="button"
+                data-live-choose-client="{{ $lane }}"
+                aria-haspopup="dialog"
+                aria-controls="liveIntakeClientModal"
+                aria-expanded="false"
+                aria-label="Elegir cliente de despacho para la columna {{ $lane }}"
+              >Elegir cliente</button>
+            </header>
             <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows">
               <p class="lir-empty-lane">Aún no hay pesadas</p>
             </div>
@@ -169,8 +181,8 @@
           <label><span>Columna 2 · Propia · Hembra</span><select id="liveIntakeLane2Destination"></select></label>
           <label><span>Columna 3 · Externa · Macho</span><select id="liveIntakeLane3Destination"></select></label>
           <label><span>Columna 4 · Externa · Hembra</span><select id="liveIntakeLane4Destination"></select></label>
-          <label><span>Columna 5 · Cliente de despacho</span><select id="liveIntakeLane5Destination"></select></label>
-          <label><span>Columna 6 · Cliente de despacho</span><select id="liveIntakeLane6Destination"></select></label>
+          <label><span>Columna 5 · Cliente predeterminado</span><select id="liveIntakeLane5Destination"></select></label>
+          <label><span>Columna 6 · Cliente predeterminado</span><select id="liveIntakeLane6Destination"></select></label>
         </div>
       </section>
 
@@ -187,6 +199,24 @@
       <p id="liveIntakeSettingsMessage" class="lir-message" role="status" aria-live="polite"></p>
       <footer><button type="button" data-live-close-settings>Cancelar</button><button class="is-primary" type="submit">Guardar configuración</button></footer>
     </form>
+  </div>
+
+  <div id="liveIntakeClientModal" class="lir-modal" hidden>
+    <section class="lir-modal-card is-client-picker" role="dialog" aria-modal="true" aria-labelledby="liveIntakeClientModalTitle" aria-describedby="liveIntakeClientModalHelp">
+      <header>
+        <div><p>Despacho directo</p><h2 id="liveIntakeClientModalTitle">Elegir cliente</h2></div>
+        <button type="button" data-live-close-client-picker aria-label="Cerrar selección de cliente">×</button>
+      </header>
+      <section class="lir-client-picker-body">
+        <p id="liveIntakeClientModalHelp" class="lir-modal-help">La recepción será para mi empresa y el despacho se registrará al mismo tiempo para el cliente elegido.</p>
+        <label class="lir-client-search-field">
+          <span>Buscar por nombre o documento</span>
+          <input id="liveIntakeClientSearch" type="search" placeholder="Escribe para buscar…" autocomplete="off">
+        </label>
+        <div id="liveIntakeClientOptions" class="lir-client-options" role="region" aria-label="Clientes disponibles"></div>
+      </section>
+      <p id="liveIntakeClientMessage" class="lir-message" role="status" aria-live="polite"></p>
+    </section>
   </div>
 
   <div id="liveIntakeScaleSettingsModal" class="lir-modal" hidden>

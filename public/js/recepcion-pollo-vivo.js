@@ -3,12 +3,19 @@ import {
   RetailScaleController,
   RETAIL_SCALE_SERIAL_DEFAULTS,
 } from "./despacho-minorista-balanza.js";
+import { normalizeRetailClientSearch } from "./retail-client-search.js";
+import {
+  assignDispatchClientToPendingCapture,
+  freezeDispatchClientCorrection,
+} from "./live-chicken-reception-pending.js";
 
 const ZOOM_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
 const ZOOM_STORAGE_KEY = "sistema-pollos-recepcion-pollo-vivo-zoom-v1";
 const SCALE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-balanza-v1";
-const PENDING_CAPTURE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-pendiente-v2";
-const LAYOUT_VERSION = 2;
+const LEGACY_PENDING_CAPTURE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-pendiente-v2";
+const PENDING_CAPTURE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-pendiente-v3";
+const LAYOUT_VERSION = 3;
+const LEGACY_PENDING_BLOCKED_MESSAGE = "Hay una pesada pendiente de la versión anterior y no hay un cliente activo para recuperarla. Registra o activa un cliente y vuelve a esta vista; la pesada se recuperará automáticamente. Las nuevas pesadas están bloqueadas para evitar duplicados.";
 const LANE_NUMBERS = [1, 2, 3, 4, 5, 6];
 const FALLBACK_LANE_PROFILES = {
   1: { type: "ALMACEN", ownerType: "PROPIA", sex: "MACHO" },
@@ -34,6 +41,13 @@ const elements = {
   manualWeightModal: document.getElementById("liveIntakeManualWeightModal"),
   manualWeightForm: document.getElementById("liveIntakeManualWeightForm"),
   manualWeightMessage: document.getElementById("liveIntakeManualWeightMessage"),
+  clientModal: document.getElementById("liveIntakeClientModal"),
+  clientModalTitle: document.getElementById("liveIntakeClientModalTitle"),
+  clientModalHelp: document.getElementById("liveIntakeClientModalHelp"),
+  clientSearch: document.getElementById("liveIntakeClientSearch"),
+  clientOptions: document.getElementById("liveIntakeClientOptions"),
+  clientMessage: document.getElementById("liveIntakeClientMessage"),
+  clientPickerButtons: Array.from(document.querySelectorAll("[data-live-choose-client]")),
   defaultExternalOwner: document.getElementById("liveIntakeDefaultExternalOwner"),
   laneDestinations: [
     document.getElementById("liveIntakeLane1Destination"),
@@ -101,6 +115,14 @@ const state = {
   busy: false,
   pendingCapture: null,
   pendingCaptureStorageKey: null,
+  legacyPendingCaptureStorageKey: null,
+  pendingUpgradeBlocked: false,
+  pendingUpgradeLane: null,
+  directClientIds: { 5: null, 6: null },
+  directClientReselectionRequired: { 5: false, 6: false },
+  pendingDispatchClientCorrection: false,
+  clientPickerLane: null,
+  clientPickerTrigger: null,
   zoom: readZoom(),
   scale: null,
 };
@@ -124,38 +146,94 @@ function readZoom() {
 }
 
 function persistPendingCapture(payload) {
-  if (!state.pendingCaptureStorageKey) return;
+  if (!state.pendingCaptureStorageKey) return false;
   try {
     localStorage.setItem(state.pendingCaptureStorageKey, JSON.stringify(payload));
+    return true;
   } catch {
     // El aviso de salida sigue protegiendo la captura si no hay almacenamiento.
+    return false;
   }
 }
 
 function clearPendingCapture() {
   state.pendingCapture = null;
+  state.pendingUpgradeBlocked = false;
+  state.pendingUpgradeLane = null;
+  state.pendingDispatchClientCorrection = false;
   if (!state.pendingCaptureStorageKey) return;
   try {
     localStorage.removeItem(state.pendingCaptureStorageKey);
+    if (state.legacyPendingCaptureStorageKey) {
+      localStorage.removeItem(state.legacyPendingCaptureStorageKey);
+    }
   } catch {
     // La memoria de la pestaña se limpia aunque el almacenamiento esté bloqueado.
   }
 }
 
+function pendingCaptureStorageKey(prefix, companyId, branchId, userId) {
+  return `${prefix}-company-${companyId}-branch-${branchId}-user-${userId}`;
+}
+
+function migrateLegacyPendingCapture(payload) {
+  if (Number(payload?.layout_version) !== 2) return payload;
+  const lane = Number(payload?.lane);
+  const migrated = { ...payload, layout_version: LAYOUT_VERSION };
+
+  if ([5, 6].includes(lane)) {
+    const defaultClientId = Number(laneConfiguration(lane)?.destination_id);
+    const defaultClient = catalogItem("clients", defaultClientId);
+    if (!defaultClient) {
+      const error = new Error("No se pudo recuperar el cliente de la captura anterior.");
+      error.code = "LEGACY_CLIENT_UNAVAILABLE";
+      error.lane = lane;
+      throw error;
+    }
+    migrated.dispatch_client_id = Number(defaultClient.id);
+    migrated.dispatch_client_name = String(defaultClient.name);
+  }
+
+  return migrated;
+}
+
 function restorePendingCapture(companyId, branchId) {
   const userId = Number(elements.main?.dataset.liveUserId);
   if (!Number.isInteger(userId) || userId < 1) return false;
-  state.pendingCaptureStorageKey = `${PENDING_CAPTURE_STORAGE_PREFIX}-company-${companyId}-branch-${branchId}-user-${userId}`;
+  state.pendingCaptureStorageKey = pendingCaptureStorageKey(
+    PENDING_CAPTURE_STORAGE_PREFIX,
+    companyId,
+    branchId,
+    userId,
+  );
+  state.legacyPendingCaptureStorageKey = pendingCaptureStorageKey(
+    LEGACY_PENDING_CAPTURE_STORAGE_PREFIX,
+    companyId,
+    branchId,
+    userId,
+  );
+  let restoringLegacy = false;
   try {
-    const stored = localStorage.getItem(state.pendingCaptureStorageKey);
-    if (!stored) return false;
-    const payload = JSON.parse(stored);
+    let stored = localStorage.getItem(state.pendingCaptureStorageKey);
+    if (!stored) {
+      stored = localStorage.getItem(state.legacyPendingCaptureStorageKey);
+      restoringLegacy = Boolean(stored);
+    }
+    if (!stored) {
+      state.pendingUpgradeBlocked = false;
+      state.pendingUpgradeLane = null;
+      return false;
+    }
+    const payload = migrateLegacyPendingCapture(JSON.parse(stored));
     const lane = Number(payload?.lane);
     const birdsPerCage = Number(payload?.birds_per_cage);
     const cageCount = Number(payload?.cage_count);
     const cageTypeId = Number(payload?.cage_type_id);
     const readWeight = Number(payload?.read_weight_kg);
     const requiresSex = [5, 6].includes(lane);
+    const requiresClient = [5, 6].includes(lane);
+    const needsDispatchClientReselection = payload?.requires_dispatch_client_reselection === true;
+    const dispatchClientId = Number(payload?.dispatch_client_id);
     if (Number(payload?.layout_version) !== LAYOUT_VERSION
       || typeof payload?.idempotency_key !== "string"
       || !Number.isInteger(lane)
@@ -172,12 +250,30 @@ function restorePendingCapture(companyId, branchId) {
       || !Number.isFinite(readWeight)
       || readWeight <= 0
       || (requiresSex && !["MACHO", "HEMBRA"].includes(payload.sex))
-      || (!requiresSex && payload.sex !== undefined)) {
+      || (!requiresSex && payload.sex !== undefined)
+      || (requiresClient && !needsDispatchClientReselection
+        && (!Number.isInteger(dispatchClientId) || dispatchClientId < 1))
+      || (!requiresClient && payload.dispatch_client_id !== undefined)
+      || (!requiresClient && payload.dispatch_client_name !== undefined)
+      || (needsDispatchClientReselection && (!requiresClient
+        || payload.dispatch_client_id !== undefined
+        || payload.dispatch_client_name !== undefined))
+      || (payload.requires_dispatch_client_reselection !== undefined
+        && payload.requires_dispatch_client_reselection !== true)
+      || (payload.dispatch_client_name !== undefined
+        && (typeof payload.dispatch_client_name !== "string" || payload.dispatch_client_name.length > 250))) {
       throw new Error("Captura pendiente incompatible");
     }
 
     state.pendingCapture = payload;
+    state.pendingUpgradeBlocked = false;
+    state.pendingUpgradeLane = null;
+    state.pendingDispatchClientCorrection = needsDispatchClientReselection;
     state.activeLane = lane;
+    if (requiresClient) {
+      state.directClientIds[lane] = needsDispatchClientReselection ? null : dispatchClientId;
+      state.directClientReselectionRequired[lane] = needsDispatchClientReselection;
+    }
     if (["MACHO", "HEMBRA"].includes(payload.sex)) state.sex = payload.sex;
     elements.birdsPerCage.value = String(birdsPerCage);
     elements.cageCount.value = String(cageCount);
@@ -188,11 +284,22 @@ function restorePendingCapture(companyId, branchId) {
       elements.cageType.append(pendingOption);
     }
     elements.cageType.value = String(cageTypeId);
+    if (state.data) renderLaneAssignments();
     selectLane(lane);
     if (payload.sex) selectSex(payload.sex);
 
+    if (restoringLegacy && persistPendingCapture(payload)) {
+      localStorage.removeItem(state.legacyPendingCaptureStorageKey);
+    }
+
     return true;
-  } catch {
+  } catch (error) {
+    state.pendingCapture = null;
+    if (restoringLegacy && error?.code === "LEGACY_CLIENT_UNAVAILABLE") {
+      state.pendingUpgradeBlocked = true;
+      state.pendingUpgradeLane = Number(error.lane) || null;
+      return false;
+    }
     clearPendingCapture();
     return false;
   }
@@ -245,11 +352,18 @@ function setManualWeightMessage(message, tone = "") {
   elements.manualWeightMessage.classList.toggle("is-success", tone === "success");
 }
 
+function setClientMessage(message, tone = "") {
+  elements.clientMessage.textContent = message;
+  elements.clientMessage.classList.toggle("is-error", tone === "error");
+  elements.clientMessage.classList.toggle("is-success", tone === "success");
+}
+
 function syncModalEnvironment() {
   const modalOpen = [
     elements.settingsModal,
     elements.scaleSettingsModal,
     elements.manualWeightModal,
+    elements.clientModal,
   ].some((modal) => !modal.hidden);
   document.body.classList.toggle("lir-modal-open", modalOpen);
   elements.main.inert = modalOpen;
@@ -267,7 +381,8 @@ function closeDialog(modal, trigger) {
   modal.hidden = true;
   trigger.setAttribute("aria-expanded", "false");
   syncModalEnvironment();
-  trigger.focus({ preventScroll: true });
+  const focusTarget = trigger.disabled ? elements.capture : trigger;
+  focusTarget?.focus({ preventScroll: true });
 }
 
 function trapDialogFocus(event, modal) {
@@ -294,6 +409,11 @@ function firstValidationMessage(error) {
     if (first) return String(first);
   }
   return error?.message || "No se pudo completar la solicitud.";
+}
+
+function hasValidationError(error, field) {
+  const errors = error?.data?.errors;
+  return Boolean(errors && Object.prototype.hasOwnProperty.call(errors, field));
 }
 
 function formatKg(value) {
@@ -360,8 +480,85 @@ function laneProfile(lane) {
 
 function laneDestination(lane) {
   const configuration = laneConfiguration(lane);
-  const kind = laneProfile(lane).type === "ALMACEN" ? "warehouses" : "clients";
-  return catalogItem(kind, configuration?.destination_id);
+  if (laneProfile(lane).type === "ALMACEN") {
+    return catalogItem("warehouses", configuration?.destination_id);
+  }
+
+  const pendingForLane = Number(state.pendingCapture?.lane) === Number(lane)
+    ? state.pendingCapture
+    : null;
+  const selectedId = pendingForLane?.dispatch_client_id
+    ?? state.directClientIds[Number(lane)];
+  const client = catalogItem("clients", selectedId);
+  if (client) return client;
+  if (!pendingForLane?.dispatch_client_id) return null;
+
+  return {
+    id: Number(pendingForLane.dispatch_client_id),
+    name: pendingForLane.dispatch_client_name || `Cliente #${pendingForLane.dispatch_client_id}`,
+    document_number: null,
+    pending: true,
+  };
+}
+
+function reconcileDirectClientSelections(reset = false) {
+  [5, 6].forEach((lane) => {
+    if (Number(state.pendingCapture?.lane) === lane) {
+      const correctingClient = state.pendingDispatchClientCorrection;
+      state.directClientIds[lane] = correctingClient
+        ? null
+        : Number(state.pendingCapture.dispatch_client_id);
+      state.directClientReselectionRequired[lane] = correctingClient;
+      return;
+    }
+
+    if (state.directClientReselectionRequired[lane] && !reset) {
+      state.directClientIds[lane] = null;
+      return;
+    }
+
+    if (reset) state.directClientReselectionRequired[lane] = false;
+
+    const currentId = state.directClientIds[lane];
+    if (!reset && catalogItem("clients", currentId)) return;
+    const defaultId = laneConfiguration(lane)?.destination_id;
+    state.directClientIds[lane] = catalogItem("clients", defaultId)
+      ? Number(defaultId)
+      : null;
+  });
+}
+
+function renderLaneAssignments() {
+  if (!state.data) return;
+  const externalOwner = catalogItem(
+    "external_owners",
+    state.data.configuration.default_external_owner_id,
+  );
+
+  LANE_NUMBERS.forEach((lane) => {
+    const destination = laneDestination(lane);
+    elements.laneLabels[lane - 1].textContent = destination?.name || (
+      laneProfile(lane).type === "CLIENTE" ? "Sin cliente" : "Sin configurar"
+    );
+    const profile = laneProfile(lane);
+    const ownerLabel = profile.ownerType === "EXTERNA"
+      ? (externalOwner?.name || "Empresa externa sin configurar")
+      : "Mi empresa";
+    const sexLabel = profile.sex === "HEMBRA" ? "Hembra" : (profile.sex === "MACHO" ? "Macho" : "Sexo al registrar");
+    elements.laneProfileLabels[lane - 1].textContent = `${ownerLabel} · ${sexLabel}`;
+  });
+
+  elements.clientPickerButtons.forEach((button) => {
+    const lane = Number(button.dataset.liveChooseClient);
+    const client = laneDestination(lane);
+    button.textContent = client ? "Cambiar cliente" : "Elegir cliente";
+    button.setAttribute(
+      "aria-label",
+      client
+        ? `Cambiar cliente de la columna ${lane}. Cliente actual: ${client.name}`
+        : `Elegir cliente de despacho para la columna ${lane}`,
+    );
+  });
 }
 
 function populateConfiguration() {
@@ -377,8 +574,8 @@ function populateConfiguration() {
   setSelectOptions(elements.laneDestinations[1], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(2)?.destination_id);
   setSelectOptions(elements.laneDestinations[2], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(3)?.destination_id);
   setSelectOptions(elements.laneDestinations[3], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(4)?.destination_id);
-  setSelectOptions(elements.laneDestinations[4], catalog.clients || [], "Seleccionar cliente externo", laneConfiguration(5)?.destination_id);
-  setSelectOptions(elements.laneDestinations[5], catalog.clients || [], "Seleccionar cliente externo", laneConfiguration(6)?.destination_id);
+  setSelectOptions(elements.laneDestinations[4], catalog.clients || [], "Seleccionar cliente", laneConfiguration(5)?.destination_id);
+  setSelectOptions(elements.laneDestinations[5], catalog.clients || [], "Seleccionar cliente", laneConfiguration(6)?.destination_id);
 
   const cageTypeId = elements.cageType.value;
   elements.cageType.innerHTML = optionMarkup(catalog.cage_types || [], "Seleccionar tipo de java");
@@ -387,21 +584,111 @@ function populateConfiguration() {
     : String(catalog.cage_types?.[0]?.id || "");
   elements.cageType.value = preferredCage;
 
-  const externalOwner = catalogItem("external_owners", configuration.default_external_owner_id);
   elements.externalSummaryLabel.textContent = "Empresa externa";
 
-  LANE_NUMBERS.forEach((lane) => {
-    const destination = laneDestination(lane);
-    elements.laneLabels[lane - 1].textContent = destination?.name || "Sin configurar";
-    const profile = laneProfile(lane);
-    const ownerLabel = profile.ownerType === "EXTERNA"
-      ? (externalOwner?.name || "Empresa externa sin configurar")
-      : "Mi empresa";
-    const sexLabel = profile.sex === "HEMBRA" ? "Hembra" : (profile.sex === "MACHO" ? "Macho" : "Sexo al registrar");
-    elements.laneProfileLabels[lane - 1].textContent = `${ownerLabel} · ${sexLabel}`;
-  });
+  renderLaneAssignments();
 
   selectLane(state.activeLane);
+}
+
+function matchingDispatchClients(search = "") {
+  const query = normalizeRetailClientSearch(search);
+  const clients = state.data?.catalog?.clients || [];
+  if (!query) return clients.slice(0, 100);
+
+  return clients
+    .map((client, index) => {
+      const name = normalizeRetailClientSearch(client.name);
+      const documentNumber = normalizeRetailClientSearch(client.document_number);
+      const nameStarts = name.split(" ").some((word) => word.startsWith(query));
+      const rank = nameStarts || documentNumber.startsWith(query)
+        ? 0
+        : (name.includes(query) || documentNumber.includes(query) ? 1 : Number.POSITIVE_INFINITY);
+      return { client, index, rank };
+    })
+    .filter((entry) => Number.isFinite(entry.rank))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .slice(0, 100)
+    .map((entry) => entry.client);
+}
+
+function renderClientOptions(search = "") {
+  const lane = Number(state.clientPickerLane);
+  const selectedId = laneDestination(lane)?.id;
+  const clients = matchingDispatchClients(search);
+  elements.clientOptions.innerHTML = clients.length
+    ? clients.map((client) => {
+      const selected = Number(client.id) === Number(selectedId);
+      return `
+        <button class="lir-client-option ${selected ? "is-selected" : ""}" type="button" data-live-client-option="${client.id}" aria-pressed="${selected}">
+          <span><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(client.document_number || "Sin documento")}</small></span>
+          <b>${selected ? "Elegido" : "Elegir"}</b>
+        </button>`;
+    }).join("")
+    : '<p class="lir-client-empty">No hay clientes que coincidan con la búsqueda.</p>';
+
+  if (!(state.data?.catalog?.clients || []).length) {
+    setClientMessage("No hay clientes activos disponibles. Registra o activa un cliente antes de continuar.", "error");
+  } else if ((state.data.catalog.clients || []).length > 100 && !String(search).trim()) {
+    setClientMessage("Se muestran los primeros 100 clientes. Escribe un nombre o documento para encontrar otro.");
+  } else {
+    setClientMessage("");
+  }
+}
+
+function openClientPicker(laneNumber, trigger) {
+  const lane = Number(laneNumber);
+  if (![5, 6].includes(lane)) return;
+  const correctingPendingClient = state.pendingDispatchClientCorrection
+    && Number(state.pendingCapture?.lane) === lane;
+  if (state.busy || (state.pendingCapture && !correctingPendingClient)) {
+    setMessage("Termina primero la pesada pendiente antes de cambiar el cliente.", "error");
+    return;
+  }
+
+  selectLane(lane);
+  state.clientPickerLane = lane;
+  state.clientPickerTrigger = trigger;
+  elements.clientModalTitle.textContent = `Elegir cliente para columna ${lane}`;
+  elements.clientModalHelp.textContent = "La pesada se recibirá para mi empresa y, en el mismo registro, se despachará al cliente que elijas.";
+  elements.clientSearch.value = "";
+  renderClientOptions();
+  openDialog(elements.clientModal, trigger, elements.clientSearch);
+}
+
+function closeClientPicker() {
+  if (elements.clientModal.hidden) return;
+  const trigger = state.clientPickerTrigger
+    || elements.clientPickerButtons.find((button) => Number(button.dataset.liveChooseClient) === Number(state.clientPickerLane));
+  closeDialog(elements.clientModal, trigger);
+  state.clientPickerLane = null;
+  state.clientPickerTrigger = null;
+}
+
+function assignDispatchClient(clientId) {
+  const lane = Number(state.clientPickerLane);
+  const correctingPendingClient = state.pendingDispatchClientCorrection
+    && Number(state.pendingCapture?.lane) === lane;
+  if (state.busy || (state.pendingCapture && !correctingPendingClient)) return;
+  const client = catalogItem("clients", clientId);
+  if (![5, 6].includes(lane) || !client) return;
+
+  state.directClientIds[lane] = Number(client.id);
+  state.directClientReselectionRequired[lane] = false;
+  if (correctingPendingClient) {
+    state.pendingCapture = assignDispatchClientToPendingCapture(state.pendingCapture, client);
+    state.pendingDispatchClientCorrection = false;
+    persistPendingCapture(state.pendingCapture);
+  }
+  renderLaneAssignments();
+  closeClientPicker();
+  selectLane(lane);
+  setMessage(
+    correctingPendingClient
+      ? `${client.name} reemplazó al cliente anterior. La lectura sigue congelada; pulsa Reintentar para completar la recepción y el despacho.`
+      : `${client.name} quedó elegido en la columna ${lane}. La próxima pesada recibirá para mi empresa y se despachará a este cliente al mismo tiempo.`,
+    "success",
+  );
 }
 
 function renderRecord(record) {
@@ -457,9 +744,13 @@ function renderTotals() {
 
 function renderSelectedTotals() {
   const totals = state.data?.totals?.lanes?.[String(state.activeLane)] || {};
+  const profile = laneProfile(state.activeLane);
   const destination = laneDestination(state.activeLane);
-  const action = laneProfile(state.activeLane).type === "ALMACEN" ? "Entrada" : "Recepción + despacho";
-  elements.selectedLaneLabel.textContent = `${state.activeLane} · ${action} · ${destination?.name || "Sin configurar"}`;
+  const action = profile.type === "ALMACEN" ? "Entrada" : "Recepción + despacho";
+  const scope = profile.type === "ALMACEN"
+    ? (destination?.name || "Sin configurar")
+    : "Totales de toda la columna";
+  elements.selectedLaneLabel.textContent = `${state.activeLane} · ${action} · ${scope}`;
   elements.selectedWeighings.textContent = String(totals.weighings || 0);
   elements.selectedCages.textContent = String(totals.cages || 0);
   elements.selectedBirds.textContent = String(totals.birds || 0);
@@ -467,8 +758,10 @@ function renderSelectedTotals() {
   elements.selectedNet.textContent = formatKg(totals.net_weight_kg);
 }
 
-function renderData(data) {
+function renderData(data, { resetDirectClients = false } = {}) {
+  const firstLoad = state.data === null;
   state.data = data;
+  reconcileDirectClientSelections(firstLoad || resetDirectClients);
   elements.operatingDate.textContent = formatOperatingDate(data.operating_date);
   populateConfiguration();
   renderRecords();
@@ -490,6 +783,7 @@ function selectLane(laneNumber) {
     : "Mi empresa";
   const resolvedSex = profile.sex || state.sex;
   const sexLabel = resolvedSex === "HEMBRA" ? "Hembra" : "Macho";
+  const destination = laneDestination(state.activeLane);
 
   elements.lanes.forEach((lane) => lane.classList.toggle("is-active", Number(lane.dataset.liveLane) === state.activeLane));
   elements.laneButtons.forEach((button) => {
@@ -500,15 +794,20 @@ function selectLane(laneNumber) {
   elements.capturePanel.classList.toggle("is-direct-lane", !profile.sex);
   elements.sexChoice.hidden = Boolean(profile.sex);
   elements.assignmentTitle.textContent = `${ownerLabel} · ${sexLabel}`;
-  elements.assignmentHelp.textContent = sexLabel
-    ? (profile.sex
-        ? `La columna ${state.activeLane} define automáticamente el propietario y el sexo.`
-        : `La columna ${state.activeLane} siempre pertenece a mi empresa; el sexo se toma del selector.`)
-    : "";
+  elements.assignmentHelp.textContent = profile.sex
+    ? `La columna ${state.activeLane} define automáticamente el propietario y el sexo.`
+    : (destination
+        ? `Recibe para mi empresa y despacha a ${destination.name} dentro de la misma pesada.`
+        : `Elige el cliente que recibirá el despacho de la columna ${state.activeLane}.`);
   if (state.data && profile.ownerType === "EXTERNA" && !externalOwner) {
     setMessage("Configura la empresa externa antes de registrar en las columnas 3 y 4.", "error");
-  } else if (state.data && !laneDestination(state.activeLane)) {
-    setMessage(`Configura el destino de la columna ${state.activeLane} antes de registrar.`, "error");
+  } else if (state.data && !destination) {
+    setMessage(
+      profile.type === "CLIENTE"
+        ? `Elige el cliente de despacho de la columna ${state.activeLane} antes de registrar.`
+        : `Configura el destino de la columna ${state.activeLane} antes de registrar.`,
+      "error",
+    );
   } else if (state.data) {
     setMessage(`Columna ${state.activeLane} lista para la siguiente pesada.`);
   }
@@ -570,6 +869,11 @@ function updateCaptureAvailability() {
   const configuredLane = Boolean(laneDestination(state.activeLane));
   const ownerOk = profile.ownerType !== "EXTERNA" || Boolean(state.data?.configuration?.default_external_owner_id);
   elements.laneButtons.forEach((button) => { button.disabled = controlsLocked; });
+  elements.clientPickerButtons.forEach((button) => {
+    const correctingThisLane = state.pendingDispatchClientCorrection
+      && Number(state.pendingCapture?.lane) === Number(button.dataset.liveChooseClient);
+    button.disabled = state.busy || !state.data || (Boolean(pendingCapture) && !correctingThisLane);
+  });
   elements.sexButtons.forEach((button) => { button.disabled = controlsLocked; });
   elements.birdsPerCage.disabled = controlsLocked;
   elements.cageCount.disabled = controlsLocked;
@@ -579,14 +883,15 @@ function updateCaptureAvailability() {
     : (pendingCapture ? "Reintentar en columna" : "Guardar en columna");
   elements.activeLaneNumber.textContent = String(pendingCapture?.lane || state.activeLane);
   elements.capture.disabled = pendingCapture
-    ? state.busy || !state.data
+    ? state.busy || !state.data || state.pendingDispatchClientCorrection
     : state.busy
       || !state.data
       || !scaleState?.isCaptureReady
       || !elements.cageType.value
       || !quantityOk
       || !configuredLane
-      || !ownerOk;
+      || !ownerOk
+      || state.pendingUpgradeBlocked;
 }
 
 function scalePayload(scaleState) {
@@ -610,11 +915,16 @@ function capturePayload() {
 
   const scaleState = state.scale.getState();
   const profile = laneProfile(state.activeLane);
+  const dispatchClient = profile.type === "CLIENTE" ? laneDestination(state.activeLane) : null;
   return {
     layout_version: LAYOUT_VERSION,
     idempotency_key: createUuid(),
     lane: state.activeLane,
     ...(profile.sex ? {} : { sex: state.sex }),
+    ...(dispatchClient ? {
+      dispatch_client_id: Number(dispatchClient.id),
+      dispatch_client_name: String(dispatchClient.name),
+    } : {}),
     cage_type_id: Number(elements.cageType.value),
     birds_per_cage: Number(elements.birdsPerCage.value),
     cage_count: Number(elements.cageCount.value),
@@ -623,30 +933,88 @@ function capturePayload() {
   };
 }
 
+function captureRequestPayload(payload) {
+  const requestPayload = { ...payload };
+  delete requestPayload.dispatch_client_name;
+  delete requestPayload.requires_dispatch_client_reselection;
+  return requestPayload;
+}
+
+function freezePendingCaptureForClientCorrection(payload) {
+  state.pendingCapture = freezeDispatchClientCorrection(payload);
+  state.pendingDispatchClientCorrection = true;
+  persistPendingCapture(state.pendingCapture);
+}
+
+async function refreshAfterInvalidDispatchClient(lane, clientId, validationMessage) {
+  state.directClientReselectionRequired[lane] = true;
+  state.directClientIds[lane] = null;
+  if (state.data?.catalog?.clients) {
+    state.data.catalog.clients = state.data.catalog.clients.filter(
+      (client) => Number(client.id) !== Number(clientId),
+    );
+  }
+  renderLaneAssignments();
+  selectLane(lane);
+
+  try {
+    const response = await apiRequest("/recepcion-pollo-vivo");
+    renderData(response.data);
+    selectLane(lane);
+    setMessage(`${validationMessage} Elige otro cliente para volver a registrar esta misma lectura.`, "error");
+  } catch {
+    setMessage(
+      `${validationMessage} Se quitó ese cliente de la columna, pero no se pudo actualizar la lista. Recarga la vista antes de elegir otro.`,
+      "error",
+    );
+  }
+}
+
 async function performCaptureWeighing() {
   const payload = capturePayload();
   state.pendingCapture = payload;
   persistPendingCapture(payload);
   state.busy = true;
   updateScaleUi();
-  setMessage(`Guardando la pesada en la columna ${state.activeLane}…`);
+  setMessage(payload.dispatch_client_name
+    ? `Recibiendo y despachando a ${payload.dispatch_client_name} en la columna ${payload.lane}…`
+    : `Guardando la pesada en la columna ${payload.lane}…`);
 
   try {
     const response = await apiRequest("/recepcion-pollo-vivo/pesadas", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(captureRequestPayload(payload)),
     });
+    const confirmedRecord = response.data?.records?.find(
+      (record) => Number(record.id) === Number(response.weighing_id),
+    );
+    const confirmedClientName = payload.dispatch_client_id
+      ? (confirmedRecord?.destination?.name || payload.dispatch_client_name)
+      : null;
     renderData(response.data);
     clearPendingCapture();
     state.scale.clearReading();
     elements.cageCount.value = "1";
-    setMessage(response.message || "Pesada registrada correctamente.", "success");
+    setMessage(confirmedClientName
+      ? `Recepción para mi empresa y despacho a ${confirmedClientName} registrados al mismo tiempo.`
+      : (response.message || "Pesada registrada correctamente."), "success");
   } catch (error) {
     const status = Number(error?.status);
     const deterministicClientError = status >= 400 && status < 500 && status !== 408;
     if (deterministicClientError) {
-      clearPendingCapture();
-      setMessage(firstValidationMessage(error), "error");
+      const invalidDispatchClient = [5, 6].includes(Number(payload.lane))
+        && hasValidationError(error, "dispatch_client_id");
+      if (invalidDispatchClient) {
+        freezePendingCaptureForClientCorrection(payload);
+        await refreshAfterInvalidDispatchClient(
+          Number(payload.lane),
+          Number(payload.dispatch_client_id),
+          firstValidationMessage(error),
+        );
+      } else {
+        clearPendingCapture();
+        setMessage(firstValidationMessage(error), "error");
+      }
     } else {
       setMessage(
         `${firstValidationMessage(error)} La pesada quedó pendiente: reintenta sin cambiar sus datos.`,
@@ -662,32 +1030,52 @@ async function performCaptureWeighing() {
 async function captureWeighing() {
   if (elements.capture.disabled) return;
 
-  if (!state.pendingCapture && state.data && restorePendingCapture(
-    state.data.company.id,
-    state.data.branch.id,
-  )) {
-    updateScaleUi();
-    setMessage(
-      `Otra pestaña dejó una pesada pendiente en la columna ${state.pendingCapture.lane}. Revisa los datos congelados y pulsa Reintentar.`,
-      "error",
+  if (!state.pendingCapture && state.data) {
+    const restoredPendingCapture = restorePendingCapture(
+      state.data.company.id,
+      state.data.branch.id,
     );
-    return;
+    if (restoredPendingCapture) {
+      updateScaleUi();
+      setMessage(
+        `Otra pestaña dejó una pesada pendiente en la columna ${state.pendingCapture.lane}. Revisa los datos congelados y pulsa Reintentar.`,
+        "error",
+      );
+      return;
+    }
+    if (state.pendingUpgradeBlocked) {
+      updateScaleUi();
+      setMessage(LEGACY_PENDING_BLOCKED_MESSAGE, "error");
+      return;
+    }
   }
 
-  if (!navigator.locks?.request || !state.pendingCaptureStorageKey) {
+  if (!navigator.locks?.request
+    || !state.pendingCaptureStorageKey
+    || !state.legacyPendingCaptureStorageKey) {
     await performCaptureWeighing();
     return;
   }
 
   await navigator.locks.request(
-    `${state.pendingCaptureStorageKey}-request-lock`,
+    `${state.legacyPendingCaptureStorageKey}-request-lock`,
     { mode: "exclusive", ifAvailable: true },
-    async (lock) => {
-      if (!lock) {
+    async (legacyLock) => {
+      if (!legacyLock) {
         setMessage("Otra pestaña está guardando una pesada. Espera su confirmación antes de continuar.", "error");
         return;
       }
-      await performCaptureWeighing();
+      await navigator.locks.request(
+        `${state.pendingCaptureStorageKey}-request-lock`,
+        { mode: "exclusive", ifAvailable: true },
+        async (currentLock) => {
+          if (!currentLock) {
+            setMessage("Otra pestaña está guardando una pesada. Espera su confirmación antes de continuar.", "error");
+            return;
+          }
+          await performCaptureWeighing();
+        },
+      );
     },
   );
 }
@@ -751,10 +1139,39 @@ async function connectScale(mode) {
   }
 }
 
+async function refreshLegacyPendingFromSettings() {
+  setSettingsMessage("Actualizando la lista de clientes…");
+  try {
+    const response = await apiRequest("/recepcion-pollo-vivo");
+    renderData(response.data, { resetDirectClients: true });
+    const restoredPendingCapture = restorePendingCapture(
+      response.data.company.id,
+      response.data.branch.id,
+    );
+    updateScaleUi();
+
+    if (restoredPendingCapture) {
+      setSettingsMessage("Cliente activo encontrado y pesada pendiente recuperada.", "success");
+      setMessage(
+        `La pesada anterior de la columna ${state.pendingCapture.lane} quedó lista. Revisa sus datos congelados y pulsa Reintentar.`,
+        "error",
+      );
+      globalThis.setTimeout(closeSettings, 700);
+      return;
+    }
+
+    setSettingsMessage(LEGACY_PENDING_BLOCKED_MESSAGE, "error");
+    setMessage(LEGACY_PENDING_BLOCKED_MESSAGE, "error");
+  } catch (error) {
+    setSettingsMessage(firstValidationMessage(error), "error");
+  }
+}
+
 function openSettings() {
   populateConfiguration();
-  setSettingsMessage("");
+  setSettingsMessage(state.pendingUpgradeBlocked ? "Actualizando la lista de clientes…" : "");
   openDialog(elements.settingsModal, elements.openSettings, elements.defaultExternalOwner);
+  if (state.pendingUpgradeBlocked) void refreshLegacyPendingFromSettings();
 }
 
 function closeSettings() {
@@ -828,9 +1245,27 @@ async function saveSettings(event) {
       method: "PUT",
       body: JSON.stringify(payload),
     });
-    renderData(response.data);
-    setSettingsMessage(response.message || "Configuración guardada.", "success");
-    globalThis.setTimeout(closeSettings, 500);
+    const recoverLegacyPending = state.pendingUpgradeBlocked;
+    renderData(response.data, { resetDirectClients: true });
+    const restoredPendingCapture = recoverLegacyPending
+      ? restorePendingCapture(response.data.company.id, response.data.branch.id)
+      : false;
+
+    if (restoredPendingCapture) {
+      updateScaleUi();
+      setSettingsMessage("Configuración guardada y pesada pendiente recuperada.", "success");
+      setMessage(
+        `La pesada anterior de la columna ${state.pendingCapture.lane} quedó lista. Revisa sus datos congelados y pulsa Reintentar.`,
+        "error",
+      );
+      globalThis.setTimeout(closeSettings, 700);
+    } else if (state.pendingUpgradeBlocked) {
+      setSettingsMessage(LEGACY_PENDING_BLOCKED_MESSAGE, "error");
+      setMessage(LEGACY_PENDING_BLOCKED_MESSAGE, "error");
+    } else {
+      setSettingsMessage(response.message || "Configuración guardada.", "success");
+      globalThis.setTimeout(closeSettings, 500);
+    }
   } catch (error) {
     setSettingsMessage(firstValidationMessage(error), "error");
   } finally {
@@ -850,10 +1285,14 @@ async function loadReception() {
     const restoredPendingCapture = restorePendingCapture(response.data.company.id, response.data.branch.id);
     populateSerialForm();
     updateScaleUi();
-    setMessage(restoredPendingCapture
-      ? `Hay una pesada pendiente en la columna ${state.pendingCapture.lane}. Reintenta para confirmar si ya fue registrada.`
-      : "Selecciona una columna y registra la siguiente pesada.",
-    restoredPendingCapture ? "error" : "");
+    const loadMessage = restoredPendingCapture
+      ? (state.pendingDispatchClientCorrection
+          ? `La pesada de la columna ${state.pendingCapture.lane} conserva su lectura, pero necesita otro cliente antes de reintentar.`
+          : `Hay una pesada pendiente en la columna ${state.pendingCapture.lane}. Reintenta para confirmar si ya fue registrada.`)
+      : (state.pendingUpgradeBlocked
+          ? LEGACY_PENDING_BLOCKED_MESSAGE
+          : "Selecciona una columna y registra la siguiente pesada.");
+    setMessage(loadMessage, restoredPendingCapture || state.pendingUpgradeBlocked ? "error" : "");
     void state.scale.restoreAuthorizedConnection();
   } catch (error) {
     setMessage(firstValidationMessage(error), "error");
@@ -871,6 +1310,15 @@ state.scale = new RetailScaleController({
 });
 
 elements.laneButtons.forEach((button) => button.addEventListener("click", () => selectLane(button.dataset.liveSelectLane)));
+elements.clientPickerButtons.forEach((button) => button.addEventListener("click", () => {
+  openClientPicker(button.dataset.liveChooseClient, button);
+}));
+elements.clientSearch.addEventListener("input", () => renderClientOptions(elements.clientSearch.value));
+elements.clientOptions.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-live-client-option]");
+  if (option) assignDispatchClient(option.dataset.liveClientOption);
+});
+document.querySelectorAll("[data-live-close-client-picker]").forEach((button) => button.addEventListener("click", closeClientPicker));
 elements.sexButtons.forEach((button) => button.addEventListener("click", () => selectSex(button.dataset.liveSex)));
 elements.capture.addEventListener("click", captureWeighing);
 elements.birdsPerCage.addEventListener("input", updateCaptureAvailability);
@@ -909,23 +1357,26 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   const openModal = [
+    elements.clientModal,
     elements.manualWeightModal,
     elements.scaleSettingsModal,
     elements.settingsModal,
   ].find((modal) => !modal.hidden);
   if (!openModal) return;
   if (event.key === "Escape") {
-    if (openModal === elements.manualWeightModal) closeManualWeight();
+    if (openModal === elements.clientModal) closeClientPicker();
+    else if (openModal === elements.manualWeightModal) closeManualWeight();
     else if (openModal === elements.scaleSettingsModal) closeScaleSettings();
     else closeSettings();
     return;
   }
   trapDialogFocus(event, openModal);
 });
-[elements.settingsModal, elements.scaleSettingsModal, elements.manualWeightModal].forEach((modal) => {
+[elements.settingsModal, elements.scaleSettingsModal, elements.manualWeightModal, elements.clientModal].forEach((modal) => {
   modal.addEventListener("click", (event) => {
     if (event.target !== modal) return;
-    if (modal === elements.manualWeightModal) closeManualWeight();
+    if (modal === elements.clientModal) closeClientPicker();
+    else if (modal === elements.manualWeightModal) closeManualWeight();
     else if (modal === elements.scaleSettingsModal) closeScaleSettings();
     else closeSettings();
   });
@@ -935,28 +1386,52 @@ window.addEventListener("storage", (event) => {
     applyZoom(Number(event.newValue), false);
     return;
   }
-  if (!state.pendingCaptureStorageKey || event.key !== state.pendingCaptureStorageKey) return;
+  const currentPendingEvent = Boolean(state.pendingCaptureStorageKey)
+    && event.key === state.pendingCaptureStorageKey;
+  const legacyPendingEvent = Boolean(state.legacyPendingCaptureStorageKey)
+    && event.key === state.legacyPendingCaptureStorageKey;
+  if (!currentPendingEvent && !legacyPendingEvent) return;
 
-  if (event.newValue && state.data && restorePendingCapture(
-    state.data.company.id,
-    state.data.branch.id,
-  )) {
-    updateScaleUi();
-    setMessage(
-      `Otra pestaña dejó una pesada pendiente en la columna ${state.pendingCapture.lane}. Solo se reintentará con los mismos datos.`,
-      "error",
+  if (event.newValue && state.data) {
+    if (!elements.clientModal.hidden) closeClientPicker();
+    const restoredPendingCapture = restorePendingCapture(
+      state.data.company.id,
+      state.data.branch.id,
     );
+    renderLaneAssignments();
+    updateScaleUi();
+    if (restoredPendingCapture) {
+      const pendingMessage = state.pendingDispatchClientCorrection
+        ? `Otra pestaña dejó la pesada de la columna ${state.pendingCapture.lane} esperando otro cliente. La lectura y los demás datos siguen congelados.`
+        : `Otra pestaña dejó una pesada pendiente en la columna ${state.pendingCapture.lane}. Solo se reintentará con los mismos datos.`;
+      setMessage(pendingMessage, "error");
+    } else if (state.pendingUpgradeBlocked) {
+      setMessage(LEGACY_PENDING_BLOCKED_MESSAGE, "error");
+    }
     return;
   }
 
-  if (!event.newValue && state.pendingCapture) {
+  if (!event.newValue && currentPendingEvent && state.pendingCapture) {
+    const pendingLane = Number(state.pendingCapture.lane);
     state.pendingCapture = null;
+    state.pendingDispatchClientCorrection = false;
+    if ([5, 6].includes(pendingLane)) {
+      state.directClientReselectionRequired[pendingLane] = false;
+    }
+    updateScaleUi();
+    void loadReception();
+    return;
+  }
+
+  if (!event.newValue && legacyPendingEvent && state.pendingUpgradeBlocked) {
+    state.pendingUpgradeBlocked = false;
+    state.pendingUpgradeLane = null;
     updateScaleUi();
     void loadReception();
   }
 });
 window.addEventListener("beforeunload", (event) => {
-  if (!state.pendingCapture) return;
+  if (!state.pendingCapture && !state.pendingUpgradeBlocked) return;
   event.preventDefault();
   event.returnValue = "";
 });

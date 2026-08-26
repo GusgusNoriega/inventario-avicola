@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  assignDispatchClientToPendingCapture,
+  freezeDispatchClientCorrection,
+} from "../../public/js/live-chicken-reception-pending.js";
 
 const source = readFileSync(
   new URL("../../public/js/recepcion-pollo-vivo.js", import.meta.url),
@@ -26,8 +30,35 @@ test("cada columna define el propietario y las entradas definen también el sexo
   assert.match(source, /elements\.sexChoice\.hidden = Boolean\(profile\.sex\)/);
   assert.match(source, /\.\.\.\(profile\.sex \? \{\} : \{ sex: state\.sex \}\)/);
   assert.match(source, /layout_version: LAYOUT_VERSION/);
+  assert.match(source, /const LAYOUT_VERSION = 3/);
   assert.match(source, /totals\?\.external/);
   assert.match(view, /id="liveIntakeExternalBirds"/);
+});
+
+test("cada despacho permite elegir y congelar un cliente distinto", () => {
+  assert.match(view, /data-live-choose-client="\{\{ \$lane \}\}"/);
+  assert.match(view, /id="liveIntakeClientModal"[\s\S]*?role="dialog" aria-modal="true"/);
+  assert.match(view, /id="liveIntakeClientSearch" type="search"/);
+  assert.match(view, /id="liveIntakeClientOptions"[\s\S]*?role="region"/);
+  assert.match(source, /data-live-client-option="\$\{client\.id\}" aria-pressed="\$\{selected\}"/);
+  assert.match(view, /Columna 5 · Cliente predeterminado/);
+  assert.match(view, /Columna 6 · Cliente predeterminado/);
+  assert.match(source, /directClientIds: \{ 5: null, 6: null \}/);
+  assert.match(source, /function openClientPicker\(laneNumber, trigger\)/);
+  assert.match(source, /normalizeRetailClientSearch\(client\.document_number\)/);
+  assert.match(source, /state\.directClientIds\[lane\] = Number\(client\.id\)/);
+  assert.match(source, /dispatch_client_id: Number\(dispatchClient\.id\)/);
+  assert.match(source, /dispatch_client_name: String\(dispatchClient\.name\)/);
+  assert.match(source, /delete requestPayload\.dispatch_client_name/);
+  assert.match(source, /state\.directClientIds\[lane\] = needsDispatchClientReselection \? null : dispatchClientId/);
+  assert.match(source, /const correctingThisLane = state\.pendingDispatchClientCorrection/);
+  assert.match(stylesheet, /\.lir-client-picker-trigger \{[^}]*min-height: 48px;/);
+  assert.match(stylesheet, /\.lir-client-options \{[^}]*overflow-y: auto;/);
+  assert.match(stylesheet, /\.lir-modal-card\.is-client-picker \{[^}]*display: grid;[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;[^}]*overflow: hidden;/);
+  assert.doesNotMatch(stylesheet, /\.lir-modal-card\.is-client-picker \{[^}]*max-height: calc\(100dvh - 16px\)/);
+  assert.match(stylesheet, /\.lir-client-picker-body \{[^}]*min-height: 0;[^}]*grid-template-rows: auto auto minmax\(0, 1fr\);[^}]*overflow: hidden;/);
+  assert.match(stylesheet, /\.lir-modal-card > header button \{[^}]*width: 44px;[^}]*min-height: 44px;/);
+  assert.match(source, /"Totales de toda la columna"/);
 });
 
 test("las cuatro entradas se deslizan horizontalmente y los dos despachos permanecen aparte", () => {
@@ -109,7 +140,7 @@ test("un reintento conserva y bloquea la columna y los datos de la pesada pendie
   assert.match(source, /PENDING_CAPTURE_STORAGE_PREFIX/);
   assert.match(source, /persistPendingCapture\(payload\)/);
   assert.match(view, /data-live-user-id="\{\{ auth\(\)->id\(\) \}\}"/);
-  assert.match(source, /PENDING_CAPTURE_STORAGE_PREFIX}-company-\$\{companyId\}-branch-\$\{branchId\}-user-\$\{userId\}/);
+  assert.match(source, /return `\$\{prefix\}-company-\$\{companyId\}-branch-\$\{branchId\}-user-\$\{userId\}`/);
   assert.match(source, /restorePendingCapture\(response\.data\.company\.id, response\.data\.branch\.id\)/);
   assert.match(source, /elements\.birdsPerCage\.value = String\(birdsPerCage\)/);
   assert.match(source, /elements\.cageCount\.value = String\(cageCount\)/);
@@ -120,7 +151,81 @@ test("un reintento conserva y bloquea la columna y los datos de la pesada pendie
   assert.match(source, /Peso congelado para reintento/);
   assert.match(source, /navigator\.locks\?\.request/);
   assert.match(source, /\{ mode: "exclusive", ifAvailable: true \}/);
-  assert.match(source, /event\.key !== state\.pendingCaptureStorageKey/);
+  assert.match(source, /event\.key === state\.pendingCaptureStorageKey/);
   assert.match(source, /Otra pestaña dejó una pesada pendiente/);
   assert.match(source, /window\.addEventListener\("beforeunload"/);
+});
+
+test("una captura pendiente de la versión anterior conserva su identidad al actualizar", () => {
+  assert.match(source, /LEGACY_PENDING_CAPTURE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-pendiente-v2"/);
+  assert.match(source, /function migrateLegacyPendingCapture\(payload\)/);
+  assert.match(source, /Number\(payload\?\.layout_version\) !== 2/);
+  assert.match(source, /const migrated = \{ \.\.\.payload, layout_version: LAYOUT_VERSION \}/);
+  assert.match(source, /migrated\.dispatch_client_id = Number\(defaultClient\.id\)/);
+  assert.match(source, /restoringLegacy && persistPendingCapture\(payload\)/);
+  assert.match(source, /localStorage\.removeItem\(state\.legacyPendingCaptureStorageKey\)/);
+  assert.match(source, /state\.pendingUpgradeBlocked/);
+  assert.match(source, /\|\| state\.pendingUpgradeBlocked/);
+  assert.match(source, /currentPendingEvent[\s\S]*legacyPendingEvent/);
+  assert.match(source, /`\$\{state\.legacyPendingCaptureStorageKey\}-request-lock`/);
+  assert.match(source, /`\$\{state\.pendingCaptureStorageKey\}-request-lock`/);
+  assert.match(source, /recoverLegacyPending[\s\S]*restorePendingCapture\(response\.data\.company\.id, response\.data\.branch\.id\)/);
+  assert.match(source, /!event\.newValue && legacyPendingEvent && state\.pendingUpgradeBlocked/);
+  assert.match(source, /Registra o activa un cliente y vuelve a esta vista/);
+  assert.match(source, /async function refreshLegacyPendingFromSettings\(\)/);
+  assert.match(source, /if \(state\.pendingUpgradeBlocked\) void refreshLegacyPendingFromSettings\(\)/);
+});
+
+test("un cliente invalidado durante la pesada obliga a elegir otro sin perder la lectura", () => {
+  const recovery = source.match(
+    /async function refreshAfterInvalidDispatchClient[\s\S]*?(?=\nasync function performCaptureWeighing)/,
+  )?.[0] || "";
+
+  assert.match(source, /hasValidationError\(error, "dispatch_client_id"\)/);
+  assert.match(source, /freezePendingCaptureForClientCorrection\(payload\)/);
+  assert.match(source, /delete requestPayload\.requires_dispatch_client_reselection/);
+  assert.match(source, /state\.pendingCapture\?\.read_weight_kg \?\? scaleState\.currentWeightKg/);
+  assert.match(recovery, /async function refreshAfterInvalidDispatchClient\(lane, clientId, validationMessage\)/);
+  assert.match(recovery, /state\.directClientReselectionRequired\[lane\] = true/);
+  assert.match(recovery, /state\.directClientIds\[lane\] = null/);
+  assert.match(recovery, /apiRequest\("\/recepcion-pollo-vivo"\)/);
+  assert.match(recovery, /Elige otro cliente para volver a registrar esta misma lectura/);
+  assert.doesNotMatch(recovery, /state\.scale\.clearReading\(\)/);
+  assert.match(source, /La lectura sigue congelada; pulsa Reintentar/);
+});
+
+test("corregir el cliente conserva exactamente la identidad y la lectura congelada", () => {
+  const original = {
+    layout_version: 3,
+    idempotency_key: "9d431e59-f96d-4d66-acce-08f57800579f",
+    lane: 5,
+    sex: "HEMBRA",
+    dispatch_client_id: 10,
+    dispatch_client_name: "Cliente anterior",
+    cage_type_id: 2,
+    birds_per_cage: 7,
+    cage_count: 3,
+    weighed_at: "2026-08-26T18:00:00.000Z",
+    weight_source: "BALANZA_RECEPCION_POLLO_VIVO",
+    read_weight_kg: 51.375,
+    scale_reading: { raw_frame: "ST,GS,+0051.375kg" },
+  };
+
+  const frozen = freezeDispatchClientCorrection(original);
+  assert.equal(frozen.requires_dispatch_client_reselection, true);
+  assert.equal(frozen.dispatch_client_id, undefined);
+  assert.equal(frozen.dispatch_client_name, undefined);
+  assert.equal(frozen.idempotency_key, original.idempotency_key);
+  assert.equal(frozen.read_weight_kg, original.read_weight_kg);
+  assert.deepEqual(frozen.scale_reading, original.scale_reading);
+
+  const corrected = assignDispatchClientToPendingCapture(frozen, { id: 22, name: "Cliente nuevo" });
+  assert.equal(corrected.dispatch_client_id, 22);
+  assert.equal(corrected.dispatch_client_name, "Cliente nuevo");
+  assert.equal(corrected.requires_dispatch_client_reselection, undefined);
+  assert.equal(corrected.idempotency_key, original.idempotency_key);
+  assert.equal(corrected.weighed_at, original.weighed_at);
+  assert.equal(corrected.read_weight_kg, original.read_weight_kg);
+  assert.deepEqual(corrected.scale_reading, original.scale_reading);
+  assert.equal(original.dispatch_client_id, 10);
 });

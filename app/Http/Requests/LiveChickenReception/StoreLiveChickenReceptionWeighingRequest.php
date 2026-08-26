@@ -18,7 +18,7 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'layout_version' => ['required', 'integer', Rule::in([2])],
+            'layout_version' => ['required', 'integer', Rule::in([3])],
             'idempotency_key' => ['required', 'uuid'],
             'lane' => ['required', 'integer', 'between:1,6'],
             'owner_type' => ['prohibited'],
@@ -28,6 +28,13 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
                 Rule::requiredIf(fn (): bool => in_array((int) $this->input('lane'), [5, 6], true)),
                 'nullable',
                 Rule::in([Pesada::SEX_MALE, Pesada::SEX_FEMALE]),
+            ],
+            'dispatch_client_id' => [
+                Rule::prohibitedIf(fn (): bool => in_array((int) $this->input('lane'), [1, 2, 3, 4], true)),
+                Rule::requiredIf(fn (): bool => in_array((int) $this->input('lane'), [5, 6], true)),
+                'nullable',
+                'integer',
+                'min:1',
             ],
             'cage_type_id' => ['required', 'integer', 'min:1'],
             'birds_per_cage' => ['required', 'integer', 'between:1,1000'],
@@ -59,6 +66,10 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
             'sex.prohibited' => 'El sexo se define automáticamente en las columnas 1 a 4.',
             'sex.required' => 'Selecciona si los pollos del despacho directo son machos o hembras.',
             'sex.in' => 'Selecciona si los pollos son machos o hembras.',
+            'dispatch_client_id.prohibited' => 'El cliente de despacho solo aplica a las columnas 5 y 6.',
+            'dispatch_client_id.required' => 'Selecciona el cliente que recibirá este despacho directo.',
+            'dispatch_client_id.integer' => 'Selecciona un cliente de despacho válido.',
+            'dispatch_client_id.min' => 'Selecciona un cliente de despacho válido.',
             'cage_type_id.required' => 'Selecciona el tipo de java.',
             'birds_per_cage.between' => 'La cantidad de aves por java debe estar entre 1 y 1000.',
             'cage_count.between' => 'La cantidad de javas debe estar entre 1 y 10000.',

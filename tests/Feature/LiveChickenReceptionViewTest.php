@@ -17,8 +17,10 @@ class LiveChickenReceptionViewTest extends TestCase
         $user = User::factory()->create();
         $this->grantModules($user, ['MODULO_RECEPCION_POLLO_VIVO']);
 
-        $this->actingAs($user)
-            ->get('/recepcion-pollo-vivo')
+        $response = $this->actingAs($user)
+            ->get('/recepcion-pollo-vivo');
+
+        $response
             ->assertOk()
             ->assertSee('Recepción de pollo vivo')
             ->assertSee('Camión del día')
@@ -30,6 +32,9 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertSee('Cuatro columnas por propietario y sexo')
             ->assertSee('Entrada a almacén')
             ->assertSee('Recepción y despacho automático')
+            ->assertSee('Recepción + despacho simultáneo')
+            ->assertSee('Elegir cliente')
+            ->assertSee('Próximo despacho')
             ->assertSee('Columna 6')
             ->assertSee('Columna seleccionada')
             ->assertSee('Zoom de la vista')
@@ -40,6 +45,8 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertSee(asset('js/recepcion-pollo-vivo.js'), false)
             ->assertDontSee(asset('css/style.css'), false)
             ->assertDontSee(asset('js/app.js'), false);
+
+        $this->assertSame(2, substr_count($response->getContent(), 'data-live-choose-client='));
 
         $this->get('/')
             ->assertOk()
@@ -55,6 +62,13 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringNotContainsString('liveIntakeBaudRate', $generalSettings[0]);
         $this->assertStringContainsString('id="liveIntakeScaleSettingsModal"', $view);
         $this->assertStringContainsString('id="liveIntakeManualWeightModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeClientModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeClientSearch"', $view);
+        $this->assertStringContainsString('role="region" aria-label="Clientes disponibles"', $view);
+        $this->assertMatchesRegularExpression(
+            '/<header class="lir-direct-lane-head">[\s\S]*?<button class="lir-lane-select"[\s\S]*?<\/button>\s*<button[\s\S]*?data-live-choose-client=/u',
+            $view,
+        );
         $this->assertMatchesRegularExpression('/liveIntakeScaleWeight[\s\S]*liveIntakeOpenManualWeight/', $view);
 
         $this->assertStringContainsString('RetailScaleController', $javascript);
@@ -65,6 +79,10 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('data-live-select-lane', $javascript);
         $this->assertStringContainsString('const LANE_NUMBERS = [1, 2, 3, 4, 5, 6]', $javascript);
         $this->assertStringContainsString('layout_version: LAYOUT_VERSION', $javascript);
+        $this->assertStringContainsString('const LAYOUT_VERSION = 3', $javascript);
+        $this->assertStringContainsString('dispatch_client_id', $javascript);
+        $this->assertStringContainsString('function openClientPicker', $javascript);
+        $this->assertStringContainsString('function captureRequestPayload', $javascript);
         $this->assertStringNotContainsString('data-live-owner=', $view);
         $this->assertStringContainsString('@media (max-width: 820px)', $stylesheet);
         $this->assertStringContainsString('scroll-snap-type: x mandatory', $stylesheet);
@@ -73,6 +91,8 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('body { min-width: 0; overflow-x: hidden; }', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-warehouse', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-client', $stylesheet);
+        $this->assertStringContainsString('.lir-client-picker-trigger', $stylesheet);
+        $this->assertStringContainsString('.lir-client-options', $stylesheet);
         $this->assertStringContainsString('grid-template-rows: auto minmax(0, 1fr) auto', $stylesheet);
         $this->assertStringContainsString('.lir-selected-total { position: static;', $stylesheet);
     }

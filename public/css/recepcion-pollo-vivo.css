@@ -115,11 +115,17 @@ button, select { touch-action: manipulation; }
 .lir-lane.is-client { height: 33vh; min-height: 300px; }
 .lir-lane.is-active { border-color: var(--lir-green); box-shadow: 0 0 0 2px rgba(84, 216, 139, .16), 0 12px 30px rgba(0,0,0,.22); transform: translateY(-2px); }
 .lir-lane-select { width: 100%; min-height: 84px; padding: 10px; border: 0; border-bottom: 1px solid var(--lir-border); background: var(--lir-panel-strong); color: var(--lir-text); text-align: left; }
-.lir-lane-select span, .lir-lane-select small { display: block; color: var(--lir-muted); font-size: .68rem; font-weight: 750; }
+.lir-lane-select span, .lir-lane-select small { display: block; overflow: hidden; color: var(--lir-muted); font-size: .68rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.lir-lane-select small b { color: var(--lir-text); font-weight: 850; }
 .lir-lane-select strong { display: block; margin: 2px 0 4px; font-size: .9rem; }
 .lir-lane-select em { display: block; margin-bottom: 3px; overflow: hidden; color: var(--lir-green); font-size: .68rem; font-style: normal; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
 .lir-lane.is-external-lane .lir-lane-select em { color: var(--lir-amber); }
 .lir-lane.is-client .lir-lane-select strong { color: var(--lir-amber); }
+.lir-direct-lane-head { border-bottom: 1px solid var(--lir-border); background: var(--lir-panel-strong); }
+.lir-direct-lane-head .lir-lane-select { min-height: 92px; border-bottom: 0; }
+.lir-client-picker-trigger { width: calc(100% - 16px); min-height: 48px; margin: 0 8px 8px; padding: 7px 10px; border: 1px solid var(--lir-amber); border-radius: 10px; background: #332814; color: var(--lir-amber); font-size: .74rem; font-weight: 900; touch-action: manipulation; }
+.lir-client-picker-trigger:disabled { filter: grayscale(1); opacity: .45; }
+.lir-client-picker-trigger:focus-visible, .lir-client-option:focus-visible { outline: 3px solid rgba(108, 184, 255, .55); outline-offset: 2px; }
 .lir-lane-rows, .lir-lane.is-warehouse .lir-lane-rows { height: auto; min-height: 0; padding: 7px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .lir-empty-lane { margin: auto; color: #6f8194; font-size: .72rem; text-align: center; }
 .lir-weighing-row { padding: 7px; border: 1px solid #30465b; border-left: 3px solid var(--lir-green); border-radius: 9px; background: #0a1623; }
@@ -148,9 +154,10 @@ button, select { touch-action: manipulation; }
 .lir-modal-card { width: min(760px, 100%); max-height: calc(100vh - 32px); overflow: auto; border-radius: 18px; }
 .lir-modal-card.is-scale-modal { width: min(680px, 100%); }
 .lir-modal-card.is-compact { width: min(430px, 100%); }
+.lir-modal-card.is-client-picker { width: min(560px, 100%); max-height: calc(100dvh - 32px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
 .lir-modal-card > header, .lir-modal-card > footer { position: sticky; z-index: 2; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--lir-panel); }
 .lir-modal-card > header { top: 0; border-bottom: 1px solid var(--lir-border); }
-.lir-modal-card > header button { width: 42px; font-size: 1.5rem; }
+.lir-modal-card > header button { width: 44px; min-height: 44px; font-size: 1.5rem; }
 .lir-modal-card > section { padding: 13px 16px; border-bottom: 1px solid var(--lir-border); }
 .lir-modal-card h3 { margin: 0 0 10px; font-size: .95rem; }
 .lir-modal-card label span { display: block; margin-bottom: 5px; color: var(--lir-muted); font-size: .72rem; font-weight: 800; }
@@ -158,6 +165,19 @@ button, select { touch-action: manipulation; }
 .lir-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lir-settings-grid.is-scale { grid-template-columns: repeat(3, 1fr); align-items: end; }
 .lir-modal-help { margin: 0 0 12px; color: var(--lir-muted); font-size: .75rem; line-height: 1.45; }
+.lir-client-picker-body { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; overflow: hidden; }
+.lir-client-search-field span { display: block; margin-bottom: 6px; color: var(--lir-muted); font-size: .72rem; font-weight: 800; }
+.lir-client-search-field input { min-height: 50px; }
+.lir-client-options { min-height: 0; padding-right: 2px; display: grid; align-content: start; gap: 7px; overflow-y: auto; overscroll-behavior: contain; }
+.lir-client-option { width: 100%; min-height: 58px; padding: 9px 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+.lir-client-option > span { min-width: 0; }
+.lir-client-option strong, .lir-client-option small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lir-client-option strong { color: var(--lir-text); }
+.lir-client-option small { margin-top: 3px; color: var(--lir-muted); font-size: .68rem; }
+.lir-client-option b { flex: 0 0 auto; color: var(--lir-muted); font-size: .7rem; }
+.lir-client-option.is-selected { border-color: var(--lir-green); background: var(--lir-green-dark); }
+.lir-client-option.is-selected b { color: var(--lir-green); }
+.lir-client-empty { margin: 16px 0; color: var(--lir-muted); font-size: .8rem; line-height: 1.45; text-align: center; }
 .lir-manual-weight-field { display: block; max-width: 320px; margin: 0 auto; }
 .lir-manual-weight-field input { min-height: 64px; text-align: center; color: var(--lir-green); font-size: 1.8rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 .lir-manual-weight-field + .lir-modal-help { margin: 10px auto 0; max-width: 320px; text-align: center; }
@@ -206,8 +226,12 @@ button, select { touch-action: manipulation; }
   .lir-lane-group-head { align-items: flex-start; }
   .lir-lane-group-head small { max-width: 145px; }
   .lir-lane.is-warehouse { min-height: 320px; }
-  .lir-lane.is-client { min-height: 270px; }
+  .lir-lane.is-client { min-height: 320px; }
   .lir-lane-select { min-height: 94px; padding: 8px; }
+  .lir-direct-lane-head .lir-lane-select { min-height: 102px; }
+  .lir-client-picker-trigger { min-height: 48px; margin-inline: 6px; width: calc(100% - 12px); }
+  .lir-modal-card.is-client-picker { max-height: calc(100dvh - 32px); }
+  .lir-client-options { padding-bottom: env(safe-area-inset-bottom); }
   .lir-selected-total { grid-template-columns: repeat(3, 1fr); }
   .lir-selected-total > div:nth-child(3) { border-right: 0; }
   .lir-settings-grid, .lir-settings-grid.is-scale { grid-template-columns: 1fr; }
