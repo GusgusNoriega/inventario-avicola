@@ -1,0 +1,1080 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/fvuufy",
+    "id": "fvuufy",
+    "slide": 2,
+    "layoutId": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#F7F5EF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z2lo32l4",
+      "id": "1",
+      "name": "text-12",
+      "bbox": [
+        64,
+        38,
+        520,
+        26
+      ],
+      "geometry": "rect",
+      "text": "LA OPORTUNIDAD",
+      "textPreview": "LA OPORTUNIDAD",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LA OPORTUNIDAD"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LA OPORTUNIDAD",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "LA OPORTUNIDAD",
+              "fontSize": 16,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/03u5c72p",
+      "id": "2",
+      "name": "text-13",
+      "bbox": [
+        64,
+        66,
+        1152,
+        72
+      ],
+      "geometry": "rect",
+      "text": "Una operación. Una fuente de verdad.",
+      "textPreview": "Una operación. Una fuente de verdad.",
+      "resolvedFontSize": 50,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 50,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Una operación. Una fuente de verdad."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Una operación. Una fuente de verdad.",
+          "resolvedTextStyle": {
+            "fontSize": 50,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Una operación. Una fuente de verdad.",
+              "fontSize": 50,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l4365c3a",
+      "id": "3",
+      "name": "shape-14",
+      "bbox": [
+        102,
+        310,
+        1076,
+        3
+      ],
+      "geometry": "rect",
+      "fillColor": "#BBC7C3",
+      "lineColor": "#BBC7C3",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/m5wnexkv",
+      "id": "4",
+      "name": "shape-15",
+      "bbox": [
+        182,
+        296,
+        28,
+        28
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#F6C344",
+      "lineColor": "#0A1E22",
+      "lineWidth": 3
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/n65o72lg",
+      "id": "5",
+      "name": "text-16",
+      "bbox": [
+        64,
+        206,
+        270,
+        56
+      ],
+      "geometry": "rect",
+      "text": "PESAR",
+      "textPreview": "PESAR",
+      "resolvedFontSize": 44,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 44,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "PESAR"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "PESAR",
+          "resolvedTextStyle": {
+            "fontSize": 44,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "PESAR",
+              "fontSize": 44,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8re5g721",
+      "id": "6",
+      "name": "text-17",
+      "bbox": [
+        64,
+        352,
+        270,
+        58
+      ],
+      "geometry": "rect",
+      "text": "Bruto, tara y neto",
+      "textPreview": "Bruto, tara y neto",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Bruto, tara y neto"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Bruto, tara y neto",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Bruto, tara y neto",
+              "fontSize": 22,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9sn69c3m",
+      "id": "7",
+      "name": "shape-18",
+      "bbox": [
+        470,
+        296,
+        28,
+        28
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#18B9D4",
+      "lineColor": "#0A1E22",
+      "lineWidth": 3
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/atwnihk7",
+      "id": "8",
+      "name": "text-19",
+      "bbox": [
+        352,
+        206,
+        270,
+        56
+      ],
+      "geometry": "rect",
+      "text": "VENDER",
+      "textPreview": "VENDER",
+      "resolvedFontSize": 44,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 44,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "VENDER"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "VENDER",
+          "resolvedTextStyle": {
+            "fontSize": 44,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "VENDER",
+              "fontSize": 44,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vu5obmlc",
+      "id": "9",
+      "name": "text-20",
+      "bbox": [
+        352,
+        352,
+        270,
+        58
+      ],
+      "geometry": "rect",
+      "text": "Cliente, precio y ticket",
+      "textPreview": "Cliente, precio y ticket",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Cliente, precio y ticket"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Cliente, precio y ticket",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Cliente, precio y ticket",
+              "fontSize": 22,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vq5cn294",
+      "id": "10",
+      "name": "shape-21",
+      "bbox": [
+        758,
+        296,
+        28,
+        28
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#F6C344",
+      "lineColor": "#0A1E22",
+      "lineWidth": 3
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/upwvehsj",
+      "id": "11",
+      "name": "text-22",
+      "bbox": [
+        640,
+        206,
+        270,
+        56
+      ],
+      "geometry": "rect",
+      "text": "DESPACHAR",
+      "textPreview": "DESPACHAR",
+      "resolvedFontSize": 37,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 37,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "DESPACHAR"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "DESPACHAR",
+          "resolvedTextStyle": {
+            "fontSize": 37,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "DESPACHAR",
+              "fontSize": 37,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hcnepcru",
+      "id": "12",
+      "name": "text-23",
+      "bbox": [
+        640,
+        352,
+        270,
+        58
+      ],
+      "geometry": "rect",
+      "text": "Producto, destino y entrega",
+      "textPreview": "Producto, destino y entrega",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Producto, destino y entrega"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Producto, destino y entrega",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Producto, destino y entrega",
+              "fontSize": 22,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wredg7ap",
+      "id": "13",
+      "name": "shape-24",
+      "bbox": [
+        1046,
+        296,
+        28,
+        28
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#18B9D4",
+      "lineColor": "#0A1E22",
+      "lineWidth": 3
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7mlcj29s",
+      "id": "14",
+      "name": "text-25",
+      "bbox": [
+        928,
+        206,
+        270,
+        56
+      ],
+      "geometry": "rect",
+      "text": "COBRAR",
+      "textPreview": "COBRAR",
+      "resolvedFontSize": 44,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 44,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "COBRAR"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "COBRAR",
+          "resolvedTextStyle": {
+            "fontSize": 44,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "COBRAR",
+              "fontSize": 44,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/mlcvaxs7",
+      "id": "15",
+      "name": "text-26",
+      "bbox": [
+        928,
+        352,
+        270,
+        58
+      ],
+      "geometry": "rect",
+      "text": "Caja, cartera y pagos",
+      "textPreview": "Caja, cartera y pagos",
+      "resolvedFontSize": 22,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Caja, cartera y pagos"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Caja, cartera y pagos",
+          "resolvedTextStyle": {
+            "fontSize": 22,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Caja, cartera y pagos",
+              "fontSize": 22,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9onulcry",
+      "id": "16",
+      "name": "text-27",
+      "bbox": [
+        150,
+        492,
+        980,
+        100
+      ],
+      "geometry": "rect",
+      "text": "Una sola fuente de información reduce pasos manuales y permite seguir la operación desde el peso hasta el saldo.",
+      "textPreview": "Una sola fuente de información reduce pasos manuales y permite seguir la operación desde el peso hasta el saldo.",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Una sola fuente de información reduce pasos manuales y permite"
+          },
+          {
+            "index": 2,
+            "text": "seguir la operación desde el peso hasta el saldo."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Una sola fuente de información reduce pasos manuales y permite seguir la operación desde el peso hasta el saldo.",
+          "resolvedTextStyle": {
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Una sola fuente de información reduce pasos manuales y permite seguir la operación desde el peso hasta el saldo.",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8nudc7ad",
+      "id": "17",
+      "name": "shape-28",
+      "bbox": [
+        64,
+        674,
+        1152,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#BBC7C3",
+      "lineColor": "#BBC7C3",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ripwvm9c",
+      "id": "18",
+      "name": "text-29",
+      "bbox": [
+        64,
+        682,
+        520,
+        20
+      ],
+      "geometry": "rect",
+      "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "textPreview": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qhgvm18r",
+      "id": "19",
+      "name": "text-30",
+      "bbox": [
+        1150,
+        682,
+        66,
+        20
+      ],
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "02",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

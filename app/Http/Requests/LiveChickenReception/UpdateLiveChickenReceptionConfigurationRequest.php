@@ -18,8 +18,10 @@ class UpdateLiveChickenReceptionConfigurationRequest extends FormRequest
             'default_external_owner_id' => ['nullable', 'integer', 'min:1'],
             'lane_1_warehouse_id' => ['required', 'integer', 'min:1'],
             'lane_2_warehouse_id' => ['required', 'integer', 'min:1'],
-            'lane_3_client_id' => ['required', 'integer', 'min:1'],
-            'lane_4_client_id' => ['required', 'integer', 'min:1'],
+            'lane_3_warehouse_id' => ['required', 'integer', 'min:1'],
+            'lane_4_warehouse_id' => ['required', 'integer', 'min:1'],
+            'lane_5_client_id' => ['required', 'integer', 'min:1'],
+            'lane_6_client_id' => ['required', 'integer', 'min:1'],
         ];
     }
 
@@ -29,8 +31,10 @@ class UpdateLiveChickenReceptionConfigurationRequest extends FormRequest
         return [
             'lane_1_warehouse_id.required' => 'Selecciona el almacén de la columna 1.',
             'lane_2_warehouse_id.required' => 'Selecciona el almacén de la columna 2.',
-            'lane_3_client_id.required' => 'Selecciona el cliente de despacho de la columna 3.',
-            'lane_4_client_id.required' => 'Selecciona el cliente de despacho de la columna 4.',
+            'lane_3_warehouse_id.required' => 'Selecciona el almacén de la columna 3.',
+            'lane_4_warehouse_id.required' => 'Selecciona el almacén de la columna 4.',
+            'lane_5_client_id.required' => 'Selecciona el cliente de despacho de la columna 5.',
+            'lane_6_client_id.required' => 'Selecciona el cliente de despacho de la columna 6.',
         ];
     }
 }

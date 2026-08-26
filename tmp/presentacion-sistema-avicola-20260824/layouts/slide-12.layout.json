@@ -1,0 +1,1111 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/i8r80i",
+    "id": "i8r80i",
+    "slide": 12,
+    "layoutId": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#F7F5EF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/i1c3y5k7",
+      "id": "1",
+      "name": "text-302",
+      "bbox": [
+        64,
+        38,
+        520,
+        26
+      ],
+      "geometry": "rect",
+      "text": "ESCENARIO VALIDADO",
+      "textPreview": "ESCENARIO VALIDADO",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ESCENARIO VALIDADO"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ESCENARIO VALIDADO",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ESCENARIO VALIDADO",
+              "fontSize": 16,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/54nmtkji",
+      "id": "2",
+      "name": "text-303",
+      "bbox": [
+        64,
+        66,
+        1152,
+        72
+      ],
+      "geometry": "rect",
+      "text": "Reporte de prueba: peso, venta y devolución",
+      "textPreview": "Reporte de prueba: peso, venta y devolución",
+      "resolvedFontSize": 50,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 50,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Reporte de prueba: peso, venta y devolución"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Reporte de prueba: peso, venta y devolución",
+          "resolvedTextStyle": {
+            "fontSize": 50,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Reporte de prueba: peso, venta y devolución",
+              "fontSize": 50,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/43el0f2x",
+      "id": "3",
+      "name": "text-304",
+      "bbox": [
+        64,
+        142,
+        500,
+        28
+      ],
+      "geometry": "rect",
+      "text": "PESO NETO POR CLIENTE (KG)",
+      "textPreview": "PESO NETO POR CLIENTE (KG)",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "PESO NETO POR CLIENTE (KG)"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "PESO NETO POR CLIENTE (KG)",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "PESO NETO POR CLIENTE (KG)",
+              "fontSize": 17,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "chart",
+      "scope": "slide",
+      "aid": "ch/nidcjuts",
+      "id": "4",
+      "bbox": [
+        56,
+        170,
+        620,
+        400
+      ],
+      "chartType": "bar"
+    },
+    {
+      "order": 5,
+      "kind": "table",
+      "scope": "slide",
+      "aid": "tb/zm1k76d4",
+      "id": "5",
+      "bbox": [
+        724,
+        190,
+        492,
+        252
+      ],
+      "text": "Cliente | Peso neto | Venta | Aves\nCliente Alfa | 80 kg | S/ 390 | 20\nCliente Beta | 45 kg | S/ 315 | 10\nTotal | 125 kg | S/ 705 | 30",
+      "textPreview": "Cliente | Peso neto | Venta | Aves | Cliente Alfa | 80 kg | S/ 390 | 20 | Cliente Beta | 45 kg | S/ 315 | 10 | Total | 125 kg | S/ 705 | 30",
+      "rows": 4,
+      "cols": 4,
+      "cells": [
+        {
+          "index": 1,
+          "row": 1,
+          "column": 1,
+          "bbox": [
+            724,
+            190,
+            160,
+            63
+          ],
+          "text": "Cliente",
+          "textPreview": "Cliente",
+          "fillColor": "#0A1E22",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Cliente",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Cliente"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "row": 1,
+          "column": 2,
+          "bbox": [
+            884,
+            190,
+            120,
+            63
+          ],
+          "text": "Peso neto",
+          "textPreview": "Peso neto",
+          "fillColor": "#0A1E22",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Peso neto",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Peso neto"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "row": 1,
+          "column": 3,
+          "bbox": [
+            1004,
+            190,
+            120,
+            63
+          ],
+          "text": "Venta",
+          "textPreview": "Venta",
+          "fillColor": "#0A1E22",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Venta",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Venta"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "row": 1,
+          "column": 4,
+          "bbox": [
+            1124,
+            190,
+            92,
+            63
+          ],
+          "text": "Aves",
+          "textPreview": "Aves",
+          "fillColor": "#0A1E22",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Aves",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Aves"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "row": 2,
+          "column": 1,
+          "bbox": [
+            724,
+            253,
+            160,
+            63
+          ],
+          "text": "Cliente Alfa",
+          "textPreview": "Cliente Alfa",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Cliente Alfa",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Cliente Alfa"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 6,
+          "row": 2,
+          "column": 2,
+          "bbox": [
+            884,
+            253,
+            120,
+            63
+          ],
+          "text": "80 kg",
+          "textPreview": "80 kg",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "80 kg",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "80 kg"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 7,
+          "row": 2,
+          "column": 3,
+          "bbox": [
+            1004,
+            253,
+            120,
+            63
+          ],
+          "text": "S/ 390",
+          "textPreview": "S/ 390",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "S/ 390",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "S/ 390"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 8,
+          "row": 2,
+          "column": 4,
+          "bbox": [
+            1124,
+            253,
+            92,
+            63
+          ],
+          "text": "20",
+          "textPreview": "20",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "20",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "20"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 9,
+          "row": 3,
+          "column": 1,
+          "bbox": [
+            724,
+            316,
+            160,
+            63
+          ],
+          "text": "Cliente Beta",
+          "textPreview": "Cliente Beta",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Cliente Beta",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Cliente Beta"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 10,
+          "row": 3,
+          "column": 2,
+          "bbox": [
+            884,
+            316,
+            120,
+            63
+          ],
+          "text": "45 kg",
+          "textPreview": "45 kg",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "45 kg",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "45 kg"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 11,
+          "row": 3,
+          "column": 3,
+          "bbox": [
+            1004,
+            316,
+            120,
+            63
+          ],
+          "text": "S/ 315",
+          "textPreview": "S/ 315",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "S/ 315",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "S/ 315"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 12,
+          "row": 3,
+          "column": 4,
+          "bbox": [
+            1124,
+            316,
+            92,
+            63
+          ],
+          "text": "10",
+          "textPreview": "10",
+          "fillColor": "#FFFFFF",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "10",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "10"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 13,
+          "row": 4,
+          "column": 1,
+          "bbox": [
+            724,
+            379,
+            160,
+            63
+          ],
+          "text": "Total",
+          "textPreview": "Total",
+          "fillColor": "#FFD761",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Total",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Total"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 14,
+          "row": 4,
+          "column": 2,
+          "bbox": [
+            884,
+            379,
+            120,
+            63
+          ],
+          "text": "125 kg",
+          "textPreview": "125 kg",
+          "fillColor": "#FFD761",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "125 kg",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "125 kg"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 15,
+          "row": 4,
+          "column": 3,
+          "bbox": [
+            1004,
+            379,
+            120,
+            63
+          ],
+          "text": "S/ 705",
+          "textPreview": "S/ 705",
+          "fillColor": "#FFD761",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "S/ 705",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "S/ 705"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "index": 16,
+          "row": 4,
+          "column": 4,
+          "bbox": [
+            1124,
+            379,
+            92,
+            63
+          ],
+          "text": "30",
+          "textPreview": "30",
+          "fillColor": "#FFD761",
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "30",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "30"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tsnmxkju",
+      "id": "6",
+      "name": "shape-305",
+      "bbox": [
+        724,
+        474,
+        492,
+        88
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#E7ECE9",
+      "lineColor": "#E7ECE9",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/s7el4f29",
+      "id": "7",
+      "name": "text-306",
+      "bbox": [
+        746,
+        492,
+        448,
+        36
+      ],
+      "geometry": "rect",
+      "text": "3 javas  •  30 aves  •  10 kg devueltos",
+      "textPreview": "3 javas  •  30 aves  •  10 kg devueltos",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "3 javas  •  30 aves  •  10 kg devueltos"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "3 javas  •  30 aves  •  10 kg devueltos",
+          "resolvedTextStyle": {
+            "fontSize": 24,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "3 javas  •  30 aves  •  10 kg devueltos",
+              "fontSize": 24,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fup4zu10",
+      "id": "8",
+      "name": "text-307",
+      "bbox": [
+        748,
+        532,
+        444,
+        24
+      ],
+      "geometry": "rect",
+      "text": "La devolución queda registrada dentro del mismo escenario.",
+      "textPreview": "La devolución queda registrada dentro del mismo escenario.",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "La devolución queda registrada dentro del mismo"
+          },
+          {
+            "index": 2,
+            "text": "escenario."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "La devolución queda registrada dentro del mismo escenario.",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "La devolución queda registrada dentro del mismo escenario.",
+              "fontSize": 17,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/etw36pkf",
+      "id": "9",
+      "name": "text-308",
+      "bbox": [
+        64,
+        610,
+        1152,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real.",
+      "textPreview": "Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real.",
+      "resolvedFontSize": 17,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 17,
+        "typeface": "Arial",
+        "color": "#D94B43",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real.",
+          "resolvedTextStyle": {
+            "fontSize": 17,
+            "typeface": "Arial",
+            "color": "#D94B43",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real.",
+              "fontSize": 17,
+              "typeface": "Arial",
+              "color": "#D94B43",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ob694jy1",
+      "id": "10",
+      "name": "shape-309",
+      "bbox": [
+        64,
+        674,
+        1152,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#BBC7C3",
+      "lineColor": "#BBC7C3",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pcfqdofm",
+      "id": "11",
+      "name": "text-310",
+      "bbox": [
+        64,
+        682,
+        520,
+        20
+      ],
+      "geometry": "rect",
+      "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "textPreview": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/29or29gv",
+      "id": "12",
+      "name": "text-311",
+      "bbox": [
+        1150,
+        682,
+        66,
+        20
+      ],
+      "geometry": "rect",
+      "text": "12",
+      "textPreview": "12",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "12"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "12",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "12",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

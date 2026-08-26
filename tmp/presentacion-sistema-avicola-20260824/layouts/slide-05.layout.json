@@ -1,0 +1,1129 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/zevmk5",
+    "id": "zevmk5",
+    "slide": 5,
+    "layoutId": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#F7F5EF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/m54j2pwn",
+      "id": "1",
+      "name": "text-83",
+      "bbox": [
+        64,
+        38,
+        520,
+        26
+      ],
+      "geometry": "rect",
+      "text": "OPERACIÓN REAL",
+      "textPreview": "OPERACIÓN REAL",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "OPERACIÓN REAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "OPERACIÓN REAL",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "OPERACIÓN REAL",
+              "fontSize": 16,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/98v2d4vy",
+      "id": "2",
+      "name": "text-84",
+      "bbox": [
+        64,
+        66,
+        1152,
+        72
+      ],
+      "geometry": "rect",
+      "text": "Recepción: peso, origen y destino",
+      "textPreview": "Recepción: peso, origen y destino",
+      "resolvedFontSize": 50,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 50,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Recepción: peso, origen y destino"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Recepción: peso, origen y destino",
+          "resolvedTextStyle": {
+            "fontSize": 50,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Recepción: peso, origen y destino",
+              "fontSize": 50,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/o7m14zet",
+      "id": "3",
+      "name": "text-85",
+      "bbox": [
+        64,
+        154,
+        620,
+        84
+      ],
+      "geometry": "rect",
+      "text": "Cada pesada entra al sistema desde la balanza o mediante captura manual.",
+      "textPreview": "Cada pesada entra al sistema desde la balanza o mediante captura manual.",
+      "resolvedFontSize": 32,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 32,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Cada pesada entra al sistema desde la"
+          },
+          {
+            "index": 2,
+            "text": "balanza o mediante captura manual."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Cada pesada entra al sistema desde la balanza o mediante captura manual.",
+          "resolvedTextStyle": {
+            "fontSize": 32,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Cada pesada entra al sistema desde la balanza o mediante captura manual.",
+              "fontSize": 32,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z2tk7adw",
+      "id": "4",
+      "name": "shape-86",
+      "bbox": [
+        64,
+        275,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#18B9D4",
+      "lineColor": "#18B9D4",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e1kjypwb",
+      "id": "5",
+      "name": "text-87",
+      "bbox": [
+        92,
+        268,
+        592,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Conexión Serial o BLE, sujeta al equipo compatible.",
+      "textPreview": "Conexión Serial o BLE, sujeta al equipo compatible.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Conexión Serial o BLE, sujeta al equipo compatible."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Conexión Serial o BLE, sujeta al equipo compatible.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Conexión Serial o BLE, sujeta al equipo compatible.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/14v29kv2",
+      "id": "6",
+      "name": "shape-88",
+      "bbox": [
+        64,
+        332,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#18B9D4",
+      "lineColor": "#18B9D4",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/03m10feh",
+      "id": "7",
+      "name": "text-89",
+      "bbox": [
+        92,
+        325,
+        592,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Origen propio o empresa externa.",
+      "textPreview": "Origen propio o empresa externa.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Origen propio o empresa externa."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Origen propio o empresa externa.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Origen propio o empresa externa.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jyxkjedg",
+      "id": "8",
+      "name": "shape-90",
+      "bbox": [
+        64,
+        389,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#18B9D4",
+      "lineColor": "#18B9D4",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yxo3a9wv",
+      "id": "9",
+      "name": "text-91",
+      "bbox": [
+        92,
+        382,
+        592,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Aves, javas, tara, peso bruto y peso neto.",
+      "textPreview": "Aves, javas, tara, peso bruto y peso neto.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Aves, javas, tara, peso bruto y peso neto."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Aves, javas, tara, peso bruto y peso neto.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Aves, javas, tara, peso bruto y peso neto.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/03mpoj2l",
+      "id": "10",
+      "name": "shape-92",
+      "bbox": [
+        64,
+        446,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#18B9D4",
+      "lineColor": "#18B9D4",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/14vqho36",
+      "id": "11",
+      "name": "text-93",
+      "bbox": [
+        92,
+        439,
+        592,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Cuatro destinos configurables: almacén o despacho.",
+      "textPreview": "Cuatro destinos configurables: almacén o despacho.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Cuatro destinos configurables: almacén o despacho."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Cuatro destinos configurables: almacén o despacho.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Cuatro destinos configurables: almacén o despacho.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e1k7m9kv",
+      "id": "12",
+      "name": "text-94",
+      "bbox": [
+        64,
+        548,
+        150,
+        34
+      ],
+      "geometry": "rect",
+      "text": "SERIAL",
+      "textPreview": "SERIAL",
+      "resolvedFontSize": 26,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 26,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SERIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SERIAL",
+          "resolvedTextStyle": {
+            "fontSize": 26,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SERIAL",
+              "fontSize": 26,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z2d8felg",
+      "id": "13",
+      "name": "text-95",
+      "bbox": [
+        245,
+        548,
+        120,
+        34
+      ],
+      "geometry": "rect",
+      "text": "BLE",
+      "textPreview": "BLE",
+      "resolvedFontSize": 26,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 26,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "BLE"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "BLE",
+          "resolvedTextStyle": {
+            "fontSize": 26,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "BLE",
+              "fontSize": 26,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/cz2pkj2p",
+      "id": "14",
+      "name": "text-96",
+      "bbox": [
+        395,
+        548,
+        180,
+        34
+      ],
+      "geometry": "rect",
+      "text": "MANUAL",
+      "textPreview": "MANUAL",
+      "resolvedFontSize": 26,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 26,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "MANUAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "MANUAL",
+          "resolvedTextStyle": {
+            "fontSize": 26,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "MANUAL",
+              "fontSize": 26,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d0bqdo3a",
+      "id": "15",
+      "name": "shape-97",
+      "bbox": [
+        64,
+        590,
+        500,
+        5
+      ],
+      "geometry": "rect",
+      "fillColor": "#F6C344",
+      "lineColor": "#F6C344",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qxk7i9kj",
+      "id": "16",
+      "name": "shape-98",
+      "bbox": [
+        790,
+        126,
+        370,
+        520
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#FFFFFF",
+      "lineColor": "#BBC7C3",
+      "lineWidth": 1
+    },
+    {
+      "order": 17,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/kzelsnad",
+      "id": "17",
+      "bbox": [
+        808,
+        144,
+        334,
+        484
+      ],
+      "geometry": "roundRect",
+      "alt": "Captura real de recepción de pollo vivo",
+      "contentType": "image/jpeg",
+      "imageFit": "contain",
+      "imageMask": {
+        "geometry": "roundRect",
+        "adjustmentList": [
+          {
+            "name": "adj",
+            "formula": "val 4192"
+          }
+        ]
+      },
+      "asset": {
+        "assetId": "36c0b507-6f29-4247-91cb-8a80c3130db0",
+        "contentType": "image/jpeg",
+        "byteLength": 54523
+      }
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4b2pgz2t",
+      "id": "18",
+      "name": "text-100",
+      "bbox": [
+        820,
+        154,
+        270,
+        22
+      ],
+      "geometry": "rect",
+      "text": "CAPTURA REAL • 22 AGO 2026",
+      "textPreview": "CAPTURA REAL • 22 AGO 2026",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#32AA6B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CAPTURA REAL • 22 AGO 2026"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CAPTURA REAL • 22 AGO 2026",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#32AA6B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CAPTURA REAL • 22 AGO 2026",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#32AA6B",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5cbq943y",
+      "id": "19",
+      "name": "shape-101",
+      "bbox": [
+        64,
+        674,
+        1152,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#BBC7C3",
+      "lineColor": "#BBC7C3",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lgjexwrq",
+      "id": "20",
+      "name": "text-102",
+      "bbox": [
+        64,
+        682,
+        520,
+        20
+      ],
+      "geometry": "rect",
+      "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "textPreview": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/kfaxorq5",
+      "id": "21",
+      "name": "text-103",
+      "bbox": [
+        1150,
+        682,
+        66,
+        20
+      ],
+      "geometry": "rect",
+      "text": "05",
+      "textPreview": "05",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "05"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "05",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "05",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

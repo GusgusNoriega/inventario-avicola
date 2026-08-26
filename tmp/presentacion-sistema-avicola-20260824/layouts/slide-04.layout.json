@@ -1,0 +1,1095 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/encb5z",
+    "id": "encb5z",
+    "slide": 4,
+    "layoutId": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#F7F5EF",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5cfq1cne",
+      "id": "1",
+      "name": "text-63",
+      "bbox": [
+        64,
+        38,
+        520,
+        26
+      ],
+      "geometry": "rect",
+      "text": "CONTROL DE USUARIOS",
+      "textPreview": "CONTROL DE USUARIOS",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CONTROL DE USUARIOS"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CONTROL DE USUARIOS",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CONTROL DE USUARIOS",
+              "fontSize": 16,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yp4r6x4n",
+      "id": "2",
+      "name": "text-64",
+      "bbox": [
+        64,
+        66,
+        1152,
+        72
+      ],
+      "geometry": "rect",
+      "text": "Acceso seguro y módulos por función",
+      "textPreview": "Acceso seguro y módulos por función",
+      "resolvedFontSize": 50,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 50,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Acceso seguro y módulos por función"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Acceso seguro y módulos por función",
+          "resolvedTextStyle": {
+            "fontSize": 50,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Acceso seguro y módulos por función",
+              "fontSize": 50,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jad8z258",
+      "id": "3",
+      "name": "text-65",
+      "bbox": [
+        64,
+        160,
+        520,
+        76
+      ],
+      "geometry": "rect",
+      "text": "Cada usuario ve las áreas asignadas a su trabajo.",
+      "textPreview": "Cada usuario ve las áreas asignadas a su trabajo.",
+      "resolvedFontSize": 31.67,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 32,
+        "typeface": "Arial",
+        "color": "#12363A",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 0.99,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Cada usuario ve las áreas"
+          },
+          {
+            "index": 2,
+            "text": "asignadas a su trabajo."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Cada usuario ve las áreas asignadas a su trabajo.",
+          "resolvedTextStyle": {
+            "fontSize": 32,
+            "typeface": "Arial",
+            "color": "#12363A",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Cada usuario ve las áreas asignadas a su trabajo.",
+              "fontSize": 32,
+              "typeface": "Arial",
+              "color": "#12363A",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wnm94nmx",
+      "id": "4",
+      "name": "shape-66",
+      "bbox": [
+        64,
+        277,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#32AA6B",
+      "lineColor": "#32AA6B",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xovqxsn2",
+      "id": "5",
+      "name": "text-67",
+      "bbox": [
+        92,
+        270,
+        487,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Roles y accesos personalizados por módulo.",
+      "textPreview": "Roles y accesos personalizados por módulo.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Roles y accesos personalizados por módulo."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Roles y accesos personalizados por módulo.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Roles y accesos personalizados por módulo.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/al472x4r",
+      "id": "6",
+      "name": "shape-68",
+      "bbox": [
+        64,
+        335,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#32AA6B",
+      "lineColor": "#32AA6B",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bmd8vi5c",
+      "id": "7",
+      "name": "text-69",
+      "bbox": [
+        92,
+        328,
+        487,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Sesión protegida y administración de usuarios.",
+      "textPreview": "Sesión protegida y administración de usuarios.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Sesión protegida y administración de usuarios."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Sesión protegida y administración de usuarios.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Sesión protegida y administración de usuarios.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gj69grm1",
+      "id": "8",
+      "name": "shape-70",
+      "bbox": [
+        64,
+        393,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#32AA6B",
+      "lineColor": "#32AA6B",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hkzq9wnm",
+      "id": "9",
+      "name": "text-71",
+      "bbox": [
+        92,
+        386,
+        487,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Aplicación instalable en Windows como PWA.",
+      "textPreview": "Aplicación instalable en Windows como PWA.",
+      "resolvedFontSize": 22.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Aplicación instalable en Windows como PWA."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Aplicación instalable en Windows como PWA.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Aplicación instalable en Windows como PWA.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pon6twna",
+      "id": "10",
+      "name": "shape-72",
+      "bbox": [
+        64,
+        451,
+        13,
+        13
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#32AA6B",
+      "lineColor": "#32AA6B",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/one5kbmp",
+      "id": "11",
+      "name": "text-73",
+      "bbox": [
+        92,
+        444,
+        487,
+        44
+      ],
+      "geometry": "rect",
+      "text": "Modo kiosco e impresión térmica para operación.",
+      "textPreview": "Modo kiosco e impresión térmica para operación.",
+      "resolvedFontSize": 22.32,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 22.51,
+        "typeface": "Arial",
+        "color": "#0A1E22",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 0.99,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Modo kiosco e impresión térmica para"
+          },
+          {
+            "index": 2,
+            "text": "operación."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Modo kiosco e impresión térmica para operación.",
+          "resolvedTextStyle": {
+            "fontSize": 22.51,
+            "typeface": "Arial",
+            "color": "#0A1E22",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Modo kiosco e impresión térmica para operación.",
+              "fontSize": 22.51,
+              "typeface": "Arial",
+              "color": "#0A1E22",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nm5or654",
+      "id": "12",
+      "name": "shape-74",
+      "bbox": [
+        624,
+        142,
+        592,
+        480
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#0A1E22",
+      "lineColor": "#12363A",
+      "lineWidth": 1
+    },
+    {
+      "order": 13,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/xw7ulsbe",
+      "id": "13",
+      "bbox": [
+        640,
+        158,
+        560,
+        448
+      ],
+      "geometry": "roundRect",
+      "alt": "Pantalla real de inicio de sesión del sistema",
+      "contentType": "image/jpeg",
+      "imageCrop": {
+        "left": 0.47,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "imageFit": "cover",
+      "imageMask": {
+        "geometry": "roundRect",
+        "adjustmentList": [
+          {
+            "name": "adj",
+            "formula": "val 3571"
+          }
+        ]
+      },
+      "asset": {
+        "assetId": "d5dcd9e9-8710-41b5-9913-85d61f740f18",
+        "contentType": "image/jpeg",
+        "byteLength": 62307
+      }
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1k36pwne",
+      "id": "14",
+      "name": "shape-76",
+      "bbox": [
+        640,
+        158,
+        286,
+        448
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#0A1E22",
+      "lineColor": "#0A1E22",
+      "lineWidth": 0
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0ju5gr6t",
+      "id": "15",
+      "name": "text-77",
+      "bbox": [
+        670,
+        252,
+        226,
+        92
+      ],
+      "geometry": "rect",
+      "text": "ACCESO POR\nFUNCIÓN",
+      "textPreview": "ACCESO POR | FUNCIÓN",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ACCESO POR"
+          },
+          {
+            "index": 2,
+            "text": "FUNCIÓN"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ACCESO POR",
+          "resolvedTextStyle": {
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ACCESO POR",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "FUNCIÓN",
+          "resolvedTextStyle": {
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "FUNCIÓN",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "bold": true,
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/filonm58",
+      "id": "16",
+      "name": "text-78",
+      "bbox": [
+        670,
+        370,
+        226,
+        64
+      ],
+      "geometry": "rect",
+      "text": "Roles y sesión protegida",
+      "textPreview": "Roles y sesión protegida",
+      "resolvedFontSize": 20,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 20,
+        "typeface": "Arial",
+        "color": "#A9B7B8",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Roles y sesión protegida"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Roles y sesión protegida",
+          "resolvedTextStyle": {
+            "fontSize": 20,
+            "typeface": "Arial",
+            "color": "#A9B7B8",
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Roles y sesión protegida",
+              "fontSize": 20,
+              "typeface": "Arial",
+              "color": "#A9B7B8",
+              "alignment": "center"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ehcnehon",
+      "id": "17",
+      "name": "text-79",
+      "bbox": [
+        648,
+        166,
+        150,
+        24
+      ],
+      "geometry": "rect",
+      "text": "CAPTURA REAL",
+      "textPreview": "CAPTURA REAL",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#F6C344",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "CAPTURA REAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "CAPTURA REAL",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#F6C344",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "CAPTURA REAL",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#F6C344",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lg7610ni",
+      "id": "18",
+      "name": "shape-80",
+      "bbox": [
+        64,
+        674,
+        1152,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#BBC7C3",
+      "lineColor": "#BBC7C3",
+      "lineWidth": 0
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/kfypsvmx",
+      "id": "19",
+      "name": "text-81",
+      "bbox": [
+        64,
+        682,
+        520,
+        20
+      ],
+      "geometry": "rect",
+      "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "textPreview": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4vqhkjyl",
+      "id": "20",
+      "name": "text-82",
+      "bbox": [
+        1150,
+        682,
+        66,
+        20
+      ],
+      "geometry": "rect",
+      "text": "04",
+      "textPreview": "04",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Arial",
+        "color": "#5B6A6C",
+        "bold": true,
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "04"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "04",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Arial",
+            "color": "#5B6A6C",
+            "bold": true,
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "04",
+              "fontSize": 14,
+              "typeface": "Arial",
+              "color": "#5B6A6C",
+              "bold": true,
+              "alignment": "right"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

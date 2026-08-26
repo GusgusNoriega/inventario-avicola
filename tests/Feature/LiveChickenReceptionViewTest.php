@@ -12,7 +12,7 @@ class LiveChickenReceptionViewTest extends TestCase
     use InteractsWithAccessControl;
     use RefreshDatabase;
 
-    public function test_view_is_independent_and_contains_the_portrait_four_lane_workflow(): void
+    public function test_view_is_independent_and_contains_the_six_lane_touch_workflow(): void
     {
         $user = User::factory()->create();
         $this->grantModules($user, ['MODULO_RECEPCION_POLLO_VIVO']);
@@ -25,10 +25,12 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertSee('Balanza de recepción')
             ->assertSee('Mi empresa')
             ->assertSee('Empresa externa')
-            ->assertSee('data-live-owner="PROPIA"', false)
-            ->assertSee('data-live-owner="EXTERNA"', false)
+            ->assertDontSee('data-live-owner=', false)
+            ->assertSee('Asignación automática')
+            ->assertSee('Cuatro columnas por propietario y sexo')
             ->assertSee('Entrada a almacén')
-            ->assertSee('Despacho directo')
+            ->assertSee('Recepción y despacho automático')
+            ->assertSee('Columna 6')
             ->assertSee('Columna seleccionada')
             ->assertSee('Zoom de la vista')
             ->assertSee('Configurar balanza')
@@ -61,8 +63,14 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('document.documentElement.style.zoom', $javascript);
         $this->assertStringContainsString('/recepcion-pollo-vivo/pesadas', $javascript);
         $this->assertStringContainsString('data-live-select-lane', $javascript);
-        $this->assertStringContainsString('@media (max-width: 820px) and (orientation: portrait)', $stylesheet);
-        $this->assertStringContainsString('grid-template-columns: 1fr 1fr', $stylesheet);
+        $this->assertStringContainsString('const LANE_NUMBERS = [1, 2, 3, 4, 5, 6]', $javascript);
+        $this->assertStringContainsString('layout_version: LAYOUT_VERSION', $javascript);
+        $this->assertStringNotContainsString('data-live-owner=', $view);
+        $this->assertStringContainsString('@media (max-width: 820px)', $stylesheet);
+        $this->assertStringContainsString('scroll-snap-type: x mandatory', $stylesheet);
+        $this->assertStringContainsString('.lir-lanes.is-warehouse-lanes', $stylesheet);
+        $this->assertStringContainsString('width: calc(200% + 8px)', $stylesheet);
+        $this->assertStringContainsString('body { min-width: 0; overflow-x: hidden; }', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-warehouse', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-client', $stylesheet);
         $this->assertStringContainsString('grid-template-rows: auto minmax(0, 1fr) auto', $stylesheet);

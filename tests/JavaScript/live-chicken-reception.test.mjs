@@ -15,20 +15,29 @@ const stylesheet = readFileSync(
   "utf8",
 );
 
-test("los dos botones de propietario usan exactamente los valores aceptados por la API", () => {
-  assert.match(view, /data-live-owner="PROPIA"/);
-  assert.match(view, /data-live-owner="EXTERNA"/);
-  assert.match(source, /ownerType:\s*"PROPIA"/);
-  assert.match(source, /state\.ownerType === "EXTERNA"\s*\? defaultExternalOwnerId : null/);
+test("cada columna define el propietario y las entradas definen también el sexo", () => {
+  assert.doesNotMatch(view, /data-live-owner=/);
+  assert.match(source, /const LANE_NUMBERS = \[1, 2, 3, 4, 5, 6\]/);
+  assert.match(source, /1: \{ type: "ALMACEN", ownerType: "PROPIA", sex: "MACHO" \}/);
+  assert.match(source, /2: \{ type: "ALMACEN", ownerType: "PROPIA", sex: "HEMBRA" \}/);
+  assert.match(source, /3: \{ type: "ALMACEN", ownerType: "EXTERNA", sex: "MACHO" \}/);
+  assert.match(source, /4: \{ type: "ALMACEN", ownerType: "EXTERNA", sex: "HEMBRA" \}/);
+  assert.match(source, /5: \{ type: "CLIENTE", ownerType: "PROPIA", sex: null \}/);
+  assert.match(source, /elements\.sexChoice\.hidden = Boolean\(profile\.sex\)/);
+  assert.match(source, /\.\.\.\(profile\.sex \? \{\} : \{ sex: state\.sex \}\)/);
+  assert.match(source, /layout_version: LAYOUT_VERSION/);
   assert.match(source, /totals\?\.external/);
   assert.match(view, /id="liveIntakeExternalBirds"/);
-  assert.doesNotMatch(view, /data-live-owner="(?:OWN|EXTERNAL)"/);
 });
 
-test("las cuatro columnas mantienen dos entradas y dos despachos en retrato", () => {
+test("las cuatro entradas se deslizan horizontalmente y los dos despachos permanecen aparte", () => {
   assert.match(view, /@for \(\$lane = 1; \$lane <= 4; \$lane\+\+\)/);
-  assert.match(view, /\$warehouseLane = \$lane <= 2/);
-  assert.match(stylesheet, /@media \(max-width: 820px\) and \(orientation: portrait\)[\s\S]*?\.lir-lanes \{[^}]*grid-template-columns: 1fr 1fr/);
+  assert.match(view, /@for \(\$lane = 5; \$lane <= 6; \$lane\+\+\)/);
+  assert.match(view, /class="lir-lane-track"/);
+  assert.match(stylesheet, /body \{ min-width: 0; overflow-x: hidden; \}/);
+  assert.match(stylesheet, /\.lir-lane-track \{[^}]*overflow-x: auto;[^}]*scroll-snap-type: x mandatory;[^}]*touch-action: pan-x pan-y pinch-zoom;/);
+  assert.match(stylesheet, /\.lir-lanes\.is-warehouse-lanes \{[^}]*width: calc\(200% \+ 8px\);[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(stylesheet, /\.lir-lanes\.is-client-lanes \{[^}]*grid-template-columns: repeat\(2,/);
   assert.match(stylesheet, /\.lir-lane\.is-warehouse \{ height: 38vh; \}/);
   assert.match(stylesheet, /\.lir-lane\.is-client \{ height: 28vh; \}/);
 });
@@ -86,4 +95,32 @@ test("la captura usa una sola balanza y guarda cada pesada inmediatamente", () =
   assert.match(source, /apiRequest\("\/recepcion-pollo-vivo\/pesadas", \{[\s\S]*?method: "POST"/);
   assert.match(source, /BALANZA_RECEPCION_POLLO_VIVO/);
   assert.match(source, /state\.pendingCapture/);
+});
+
+test("un reintento conserva y bloquea la columna y los datos de la pesada pendiente", () => {
+  assert.match(source, /if \(state\.pendingCapture && requestedLane !== Number\(state\.pendingCapture\.lane\)\)/);
+  assert.match(source, /const controlsLocked = state\.busy \|\| Boolean\(pendingCapture\)/);
+  assert.match(source, /elements\.laneButtons\.forEach\(\(button\) => \{ button\.disabled = controlsLocked; \}\)/);
+  assert.match(source, /elements\.birdsPerCage\.disabled = controlsLocked/);
+  assert.match(source, /elements\.cageCount\.disabled = controlsLocked/);
+  assert.match(source, /elements\.cageType\.disabled = controlsLocked/);
+  assert.match(source, /state\.busy && pendingCapture[\s\S]*?"Guardando en columna"[\s\S]*?"Reintentar en columna"/);
+  assert.match(source, /La pesada quedó pendiente: reintenta sin cambiar sus datos/);
+  assert.match(source, /PENDING_CAPTURE_STORAGE_PREFIX/);
+  assert.match(source, /persistPendingCapture\(payload\)/);
+  assert.match(view, /data-live-user-id="\{\{ auth\(\)->id\(\) \}\}"/);
+  assert.match(source, /PENDING_CAPTURE_STORAGE_PREFIX}-company-\$\{companyId\}-branch-\$\{branchId\}-user-\$\{userId\}/);
+  assert.match(source, /restorePendingCapture\(response\.data\.company\.id, response\.data\.branch\.id\)/);
+  assert.match(source, /elements\.birdsPerCage\.value = String\(birdsPerCage\)/);
+  assert.match(source, /elements\.cageCount\.value = String\(cageCount\)/);
+  assert.match(source, /elements\.cageType\.value = String\(cageTypeId\)/);
+  assert.match(source, /const deterministicClientError = status >= 400 && status < 500 && status !== 408/);
+  assert.match(source, /if \(deterministicClientError\)[\s\S]*?clearPendingCapture\(\)/);
+  assert.match(source, /state\.pendingCapture\?\.read_weight_kg \?\? scaleState\.currentWeightKg/);
+  assert.match(source, /Peso congelado para reintento/);
+  assert.match(source, /navigator\.locks\?\.request/);
+  assert.match(source, /\{ mode: "exclusive", ifAvailable: true \}/);
+  assert.match(source, /event\.key !== state\.pendingCaptureStorageKey/);
+  assert.match(source, /Otra pestaña dejó una pesada pendiente/);
+  assert.match(source, /window\.addEventListener\("beforeunload"/);
 });

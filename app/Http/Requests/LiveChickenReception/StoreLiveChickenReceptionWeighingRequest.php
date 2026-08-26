@@ -4,7 +4,6 @@ namespace App\Http\Requests\LiveChickenReception;
 
 use App\Models\Balanza;
 use App\Models\Pesada;
-use App\Models\PesadaRecepcionPolloVivo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -19,23 +18,17 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'layout_version' => ['required', 'integer', Rule::in([2])],
             'idempotency_key' => ['required', 'uuid'],
-            'lane' => ['required', 'integer', 'between:1,4'],
-            'owner_type' => [
-                'required',
-                Rule::in([
-                    PesadaRecepcionPolloVivo::OWNER_OWN,
-                    PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
-                ]),
-            ],
-            'external_owner_id' => [
-                Rule::requiredIf(fn (): bool => $this->input('owner_type') === PesadaRecepcionPolloVivo::OWNER_EXTERNAL),
+            'lane' => ['required', 'integer', 'between:1,6'],
+            'owner_type' => ['prohibited'],
+            'external_owner_id' => ['prohibited'],
+            'sex' => [
+                Rule::prohibitedIf(fn (): bool => in_array((int) $this->input('lane'), [1, 2, 3, 4], true)),
+                Rule::requiredIf(fn (): bool => in_array((int) $this->input('lane'), [5, 6], true)),
                 'nullable',
-                'integer',
-                'min:1',
-                Rule::prohibitedIf(fn (): bool => $this->input('owner_type') === PesadaRecepcionPolloVivo::OWNER_OWN),
+                Rule::in([Pesada::SEX_MALE, Pesada::SEX_FEMALE]),
             ],
-            'sex' => ['required', Rule::in([Pesada::SEX_MALE, Pesada::SEX_FEMALE])],
             'cage_type_id' => ['required', 'integer', 'min:1'],
             'birds_per_cage' => ['required', 'integer', 'between:1,1000'],
             'cage_count' => ['required', 'integer', 'between:1,10000'],
@@ -57,9 +50,14 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'layout_version.required' => 'Actualiza la vista de recepción antes de registrar otra pesada.',
+            'layout_version.in' => 'La distribución de columnas cambió. Recarga la vista antes de continuar.',
             'idempotency_key.required' => 'No se recibió el identificador único de la pesada.',
-            'lane.between' => 'Selecciona una de las cuatro columnas de recepción.',
-            'external_owner_id.required' => 'Selecciona la empresa externa propietaria de los pollos.',
+            'lane.between' => 'Selecciona una de las seis columnas de recepción.',
+            'owner_type.prohibited' => 'El propietario se define automáticamente según la columna.',
+            'external_owner_id.prohibited' => 'La empresa externa se toma de la configuración de esta vista.',
+            'sex.prohibited' => 'El sexo se define automáticamente en las columnas 1 a 4.',
+            'sex.required' => 'Selecciona si los pollos del despacho directo son machos o hembras.',
             'sex.in' => 'Selecciona si los pollos son machos o hembras.',
             'cage_type_id.required' => 'Selecciona el tipo de java.',
             'birds_per_cage.between' => 'La cantidad de aves por java debe estar entre 1 y 1000.',
@@ -82,11 +80,15 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
             );
         }
 
-        $this->merge([
-            'owner_type' => mb_strtoupper(trim((string) $this->input('owner_type')), 'UTF-8'),
-            'sex' => mb_strtoupper(trim((string) $this->input('sex')), 'UTF-8'),
+        $normalized = [
             'weight_source' => mb_strtoupper(trim((string) $this->input('weight_source')), 'UTF-8'),
             'scale_reading' => $scaleReading,
-        ]);
+        ];
+
+        if (filled($this->input('sex'))) {
+            $normalized['sex'] = mb_strtoupper(trim((string) $this->input('sex')), 'UTF-8');
+        }
+
+        $this->merge($normalized);
     }
 }

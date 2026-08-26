@@ -1,0 +1,24 @@
+Local code evidence:
+- C:\laragon\www\sistema-pollos\routes\web.php
+- C:\laragon\www\sistema-pollos\config\access_modules.php
+- C:\laragon\www\sistema-pollos\app\Http\Controllers\Web\ReportController.php
+- C:\laragon\www\sistema-pollos\app\Services\ReportDataService.php
+- C:\laragon\www\sistema-pollos\tests\Feature\ReportPdfTest.php
+- C:\laragon\www\sistema-pollos\database\seeders\DatabaseSeeder.php
+
+Visual assets:
+- C:\laragon\www\sistema-pollos\public\images\youtube\miniatura-despacho-mayorista-base.png
+- C:\laragon\www\sistema-pollos\public\images\youtube\miniatura-despacho-minorista-base.png
+- C:\laragon\www\sistema-pollos\public\images\youtube\miniatura-sistema-avicola-mayorista.png
+- C:\laragon\www\sistema-pollos\public\images\youtube\miniatura-sistema-avicola-minorista.png
+- C:\laragon\www\sistema-pollos\public\images\youtube\miniatura-despacho-mayorista-peso-balanza.png
+- C:\laragon\www\sistema-pollos\public\images\youtube\miniatura-despacho-minorista-peso-balanza.png
+- C:\laragon\www\sistema-pollos\public\icons\icon-512.png
+- C:\laragon\www\sistema-pollos\tmp\presentacion_sistema_avicola_capturas\00_login.png
+- C:\Users\Gustavo\Downloads\WhatsApp Image 2026-08-22 at 17.00.16.jpeg
+- C:\laragon\www\sistema-pollos\tmp\pdfs\auditoria-imagenes\reporte-2026-08-21-pagina-1.png
+
+Report source:
+- C:\Users\Gustavo\Downloads\ventas-clientes-2026-08-21-2026-08-21.pdf
+
+All claims and visual assets are local/user-provided. No external web sources used.

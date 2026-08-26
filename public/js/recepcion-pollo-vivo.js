@@ -7,6 +7,17 @@ import {
 const ZOOM_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
 const ZOOM_STORAGE_KEY = "sistema-pollos-recepcion-pollo-vivo-zoom-v1";
 const SCALE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-balanza-v1";
+const PENDING_CAPTURE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-pendiente-v2";
+const LAYOUT_VERSION = 2;
+const LANE_NUMBERS = [1, 2, 3, 4, 5, 6];
+const FALLBACK_LANE_PROFILES = {
+  1: { type: "ALMACEN", ownerType: "PROPIA", sex: "MACHO" },
+  2: { type: "ALMACEN", ownerType: "PROPIA", sex: "HEMBRA" },
+  3: { type: "ALMACEN", ownerType: "EXTERNA", sex: "MACHO" },
+  4: { type: "ALMACEN", ownerType: "EXTERNA", sex: "HEMBRA" },
+  5: { type: "CLIENTE", ownerType: "PROPIA", sex: null },
+  6: { type: "CLIENTE", ownerType: "PROPIA", sex: null },
+};
 
 const elements = {
   main: document.getElementById("liveIntakeMain"),
@@ -24,23 +35,29 @@ const elements = {
   manualWeightForm: document.getElementById("liveIntakeManualWeightForm"),
   manualWeightMessage: document.getElementById("liveIntakeManualWeightMessage"),
   defaultExternalOwner: document.getElementById("liveIntakeDefaultExternalOwner"),
-  externalOwnerButton: document.getElementById("liveIntakeExternalOwnerButton"),
   laneDestinations: [
     document.getElementById("liveIntakeLane1Destination"),
     document.getElementById("liveIntakeLane2Destination"),
     document.getElementById("liveIntakeLane3Destination"),
     document.getElementById("liveIntakeLane4Destination"),
+    document.getElementById("liveIntakeLane5Destination"),
+    document.getElementById("liveIntakeLane6Destination"),
   ],
-  laneLabels: [1, 2, 3, 4].map((lane) => document.getElementById(`liveIntakeLaneDestination${lane}`)),
-  laneRows: [1, 2, 3, 4].map((lane) => document.getElementById(`liveIntakeLaneRows${lane}`)),
+  laneLabels: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneDestination${lane}`)),
+  laneProfileLabels: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneProfile${lane}`)),
+  laneRows: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneRows${lane}`)),
   lanes: Array.from(document.querySelectorAll("[data-live-lane]")),
   laneButtons: Array.from(document.querySelectorAll("[data-live-select-lane]")),
-  ownerButtons: Array.from(document.querySelectorAll("[data-live-owner]")),
+  capturePanel: document.querySelector(".lir-capture-panel"),
+  assignmentTitle: document.getElementById("liveIntakeAssignmentTitle"),
+  assignmentHelp: document.getElementById("liveIntakeAssignmentHelp"),
+  sexChoice: document.getElementById("liveIntakeSexChoice"),
   sexButtons: Array.from(document.querySelectorAll("[data-live-sex]")),
   birdsPerCage: document.getElementById("liveIntakeBirdsPerCage"),
   cageCount: document.getElementById("liveIntakeCageCount"),
   cageType: document.getElementById("liveIntakeCageType"),
   capture: document.getElementById("liveIntakeCapture"),
+  captureLabel: document.getElementById("liveIntakeCaptureLabel"),
   activeLaneNumber: document.getElementById("liveIntakeActiveLaneNumber"),
   message: document.getElementById("liveIntakeMessage"),
   scaleStatus: document.getElementById("liveIntakeScaleStatus"),
@@ -66,9 +83,9 @@ const elements = {
   ownBirds: document.getElementById("liveIntakeOwnBirds"),
   externalSummaryLabel: document.getElementById("liveIntakeExternalSummaryLabel"),
   externalBirds: document.getElementById("liveIntakeExternalBirds"),
-  laneCages: [1, 2, 3, 4].map((lane) => document.getElementById(`liveIntakeLaneCages${lane}`)),
-  laneBirds: [1, 2, 3, 4].map((lane) => document.getElementById(`liveIntakeLaneBirds${lane}`)),
-  laneNet: [1, 2, 3, 4].map((lane) => document.getElementById(`liveIntakeLaneNet${lane}`)),
+  laneCages: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneCages${lane}`)),
+  laneBirds: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneBirds${lane}`)),
+  laneNet: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneNet${lane}`)),
   selectedLaneLabel: document.getElementById("liveIntakeSelectedLaneLabel"),
   selectedWeighings: document.getElementById("liveIntakeSelectedWeighings"),
   selectedCages: document.getElementById("liveIntakeSelectedCages"),
@@ -80,10 +97,10 @@ const elements = {
 const state = {
   data: null,
   activeLane: 1,
-  ownerType: "PROPIA",
   sex: "MACHO",
   busy: false,
   pendingCapture: null,
+  pendingCaptureStorageKey: null,
   zoom: readZoom(),
   scale: null,
 };
@@ -103,6 +120,81 @@ function readZoom() {
     return ZOOM_LEVELS.includes(saved) ? saved : 100;
   } catch {
     return 100;
+  }
+}
+
+function persistPendingCapture(payload) {
+  if (!state.pendingCaptureStorageKey) return;
+  try {
+    localStorage.setItem(state.pendingCaptureStorageKey, JSON.stringify(payload));
+  } catch {
+    // El aviso de salida sigue protegiendo la captura si no hay almacenamiento.
+  }
+}
+
+function clearPendingCapture() {
+  state.pendingCapture = null;
+  if (!state.pendingCaptureStorageKey) return;
+  try {
+    localStorage.removeItem(state.pendingCaptureStorageKey);
+  } catch {
+    // La memoria de la pestaña se limpia aunque el almacenamiento esté bloqueado.
+  }
+}
+
+function restorePendingCapture(companyId, branchId) {
+  const userId = Number(elements.main?.dataset.liveUserId);
+  if (!Number.isInteger(userId) || userId < 1) return false;
+  state.pendingCaptureStorageKey = `${PENDING_CAPTURE_STORAGE_PREFIX}-company-${companyId}-branch-${branchId}-user-${userId}`;
+  try {
+    const stored = localStorage.getItem(state.pendingCaptureStorageKey);
+    if (!stored) return false;
+    const payload = JSON.parse(stored);
+    const lane = Number(payload?.lane);
+    const birdsPerCage = Number(payload?.birds_per_cage);
+    const cageCount = Number(payload?.cage_count);
+    const cageTypeId = Number(payload?.cage_type_id);
+    const readWeight = Number(payload?.read_weight_kg);
+    const requiresSex = [5, 6].includes(lane);
+    if (Number(payload?.layout_version) !== LAYOUT_VERSION
+      || typeof payload?.idempotency_key !== "string"
+      || !Number.isInteger(lane)
+      || lane < 1
+      || lane > 6
+      || !Number.isInteger(birdsPerCage)
+      || birdsPerCage < 1
+      || birdsPerCage > 1000
+      || !Number.isInteger(cageCount)
+      || cageCount < 1
+      || cageCount > 10000
+      || !Number.isInteger(cageTypeId)
+      || cageTypeId < 1
+      || !Number.isFinite(readWeight)
+      || readWeight <= 0
+      || (requiresSex && !["MACHO", "HEMBRA"].includes(payload.sex))
+      || (!requiresSex && payload.sex !== undefined)) {
+      throw new Error("Captura pendiente incompatible");
+    }
+
+    state.pendingCapture = payload;
+    state.activeLane = lane;
+    if (["MACHO", "HEMBRA"].includes(payload.sex)) state.sex = payload.sex;
+    elements.birdsPerCage.value = String(birdsPerCage);
+    elements.cageCount.value = String(cageCount);
+    if (!Array.from(elements.cageType.options).some((option) => Number(option.value) === cageTypeId)) {
+      const pendingOption = document.createElement("option");
+      pendingOption.value = String(cageTypeId);
+      pendingOption.textContent = `Tipo de java #${cageTypeId} · captura pendiente`;
+      elements.cageType.append(pendingOption);
+    }
+    elements.cageType.value = String(cageTypeId);
+    selectLane(lane);
+    if (payload.sex) selectSex(payload.sex);
+
+    return true;
+  } catch {
+    clearPendingCapture();
+    return false;
   }
 }
 
@@ -251,9 +343,24 @@ function laneConfiguration(lane) {
   return state.data?.configuration?.lanes?.[String(lane)] || null;
 }
 
+function laneProfile(lane) {
+  const laneNumber = Number(lane);
+  const fallback = FALLBACK_LANE_PROFILES[laneNumber] || FALLBACK_LANE_PROFILES[1];
+  const configuration = laneConfiguration(laneNumber);
+  const hasConfiguredSex = Object.prototype.hasOwnProperty.call(configuration || {}, "sex");
+
+  return {
+    type: String(configuration?.type || fallback.type).toUpperCase(),
+    ownerType: String(configuration?.owner_type || fallback.ownerType).toUpperCase(),
+    sex: hasConfiguredSex
+      ? (configuration.sex ? String(configuration.sex).toUpperCase() : null)
+      : fallback.sex,
+  };
+}
+
 function laneDestination(lane) {
   const configuration = laneConfiguration(lane);
-  const kind = lane <= 2 ? "warehouses" : "clients";
+  const kind = laneProfile(lane).type === "ALMACEN" ? "warehouses" : "clients";
   return catalogItem(kind, configuration?.destination_id);
 }
 
@@ -268,8 +375,10 @@ function populateConfiguration() {
   );
   setSelectOptions(elements.laneDestinations[0], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(1)?.destination_id);
   setSelectOptions(elements.laneDestinations[1], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(2)?.destination_id);
-  setSelectOptions(elements.laneDestinations[2], catalog.clients || [], "Seleccionar cliente externo", laneConfiguration(3)?.destination_id);
-  setSelectOptions(elements.laneDestinations[3], catalog.clients || [], "Seleccionar cliente externo", laneConfiguration(4)?.destination_id);
+  setSelectOptions(elements.laneDestinations[2], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(3)?.destination_id);
+  setSelectOptions(elements.laneDestinations[3], catalog.warehouses || [], "Seleccionar almacén", laneConfiguration(4)?.destination_id);
+  setSelectOptions(elements.laneDestinations[4], catalog.clients || [], "Seleccionar cliente externo", laneConfiguration(5)?.destination_id);
+  setSelectOptions(elements.laneDestinations[5], catalog.clients || [], "Seleccionar cliente externo", laneConfiguration(6)?.destination_id);
 
   const cageTypeId = elements.cageType.value;
   elements.cageType.innerHTML = optionMarkup(catalog.cage_types || [], "Seleccionar tipo de java");
@@ -279,22 +388,29 @@ function populateConfiguration() {
   elements.cageType.value = preferredCage;
 
   const externalOwner = catalogItem("external_owners", configuration.default_external_owner_id);
-  elements.externalOwnerButton.disabled = !externalOwner;
-  elements.externalOwnerButton.textContent = externalOwner?.name || "Empresa externa";
-  elements.externalSummaryLabel.textContent = externalOwner?.name || "Empresa externa";
+  elements.externalSummaryLabel.textContent = "Empresa externa";
 
-  if (!externalOwner && state.ownerType === "EXTERNA") selectOwner("PROPIA");
-
-  [1, 2, 3, 4].forEach((lane) => {
+  LANE_NUMBERS.forEach((lane) => {
     const destination = laneDestination(lane);
     elements.laneLabels[lane - 1].textContent = destination?.name || "Sin configurar";
+    const profile = laneProfile(lane);
+    const ownerLabel = profile.ownerType === "EXTERNA"
+      ? (externalOwner?.name || "Empresa externa sin configurar")
+      : "Mi empresa";
+    const sexLabel = profile.sex === "HEMBRA" ? "Hembra" : (profile.sex === "MACHO" ? "Macho" : "Sexo al registrar");
+    elements.laneProfileLabels[lane - 1].textContent = `${ownerLabel} · ${sexLabel}`;
   });
+
+  selectLane(state.activeLane);
 }
 
 function renderRecord(record) {
   const ownerExternal = record.owner?.type === "EXTERNA";
   const sexLabel = record.sex === "HEMBRA" ? "H" : "M";
   const ownerLabel = ownerExternal ? record.owner?.name : "Mi empresa";
+  const previousLayout = record.uses_previous_layout
+    ? '<small class="lir-record-legacy">Registro anterior a esta distribución</small>'
+    : "";
   return `
     <article class="lir-weighing-row ${ownerExternal ? "is-external" : "is-own"}">
       <header>
@@ -302,6 +418,8 @@ function renderRecord(record) {
         <button type="button" data-live-delete-weighing="${record.id}" aria-label="Anular pesada ${record.number}">×</button>
       </header>
       <strong title="${escapeHtml(ownerLabel)}">${escapeHtml(ownerLabel)}</strong>
+      ${previousLayout}
+      <small class="lir-record-destination" title="${escapeHtml(record.destination?.name || "Sin destino")}">Destino: ${escapeHtml(record.destination?.name || "Sin destino")}</small>
       <div><span>${sexLabel}</span><span>${record.cages} J × ${record.birds_per_cage}</span><span>${record.birds} aves</span></div>
       <footer><small>Tara ${formatKg(record.tare_weight_kg)}</small><b>${formatKg(record.net_weight_kg)}</b></footer>
     </article>`;
@@ -309,7 +427,7 @@ function renderRecord(record) {
 
 function renderRecords() {
   const records = state.data?.records || [];
-  [1, 2, 3, 4].forEach((lane) => {
+  LANE_NUMBERS.forEach((lane) => {
     const laneRecords = records.filter((record) => Number(record.lane) === lane);
     elements.laneRows[lane - 1].innerHTML = laneRecords.length
       ? laneRecords.map(renderRecord).join("")
@@ -328,7 +446,7 @@ function renderTotals() {
   elements.ownBirds.textContent = `${own.birds || 0} pollos · ${formatKg(own.net_weight_kg)}`;
   elements.externalBirds.textContent = `${external.birds || 0} pollos · ${formatKg(external.net_weight_kg)}`;
 
-  [1, 2, 3, 4].forEach((lane) => {
+  LANE_NUMBERS.forEach((lane) => {
     const totals = state.data?.totals?.lanes?.[String(lane)] || {};
     elements.laneCages[lane - 1].textContent = String(totals.cages || 0);
     elements.laneBirds[lane - 1].textContent = String(totals.birds || 0);
@@ -340,7 +458,7 @@ function renderTotals() {
 function renderSelectedTotals() {
   const totals = state.data?.totals?.lanes?.[String(state.activeLane)] || {};
   const destination = laneDestination(state.activeLane);
-  const action = state.activeLane <= 2 ? "Entrada" : "Despacho";
+  const action = laneProfile(state.activeLane).type === "ALMACEN" ? "Entrada" : "Recepción + despacho";
   elements.selectedLaneLabel.textContent = `${state.activeLane} · ${action} · ${destination?.name || "Sin configurar"}`;
   elements.selectedWeighings.textContent = String(totals.weighings || 0);
   elements.selectedCages.textContent = String(totals.cages || 0);
@@ -359,70 +477,116 @@ function renderData(data) {
 }
 
 function selectLane(laneNumber) {
-  state.activeLane = Math.min(4, Math.max(1, Number(laneNumber) || 1));
+  const requestedLane = Math.min(6, Math.max(1, Number(laneNumber) || 1));
+  if (state.pendingCapture && requestedLane !== Number(state.pendingCapture.lane)) {
+    setMessage(`Reintenta primero la pesada pendiente de la columna ${state.pendingCapture.lane}.`, "error");
+    return;
+  }
+  state.activeLane = requestedLane;
+  const profile = laneProfile(state.activeLane);
+  const externalOwner = catalogItem("external_owners", state.data?.configuration?.default_external_owner_id);
+  const ownerLabel = profile.ownerType === "EXTERNA"
+    ? (externalOwner?.name || "Empresa externa sin configurar")
+    : "Mi empresa";
+  const resolvedSex = profile.sex || state.sex;
+  const sexLabel = resolvedSex === "HEMBRA" ? "Hembra" : "Macho";
+
   elements.lanes.forEach((lane) => lane.classList.toggle("is-active", Number(lane.dataset.liveLane) === state.activeLane));
   elements.laneButtons.forEach((button) => {
     const selected = Number(button.dataset.liveSelectLane) === state.activeLane;
     button.setAttribute("aria-pressed", String(selected));
   });
   elements.activeLaneNumber.textContent = String(state.activeLane);
+  elements.capturePanel.classList.toggle("is-direct-lane", !profile.sex);
+  elements.sexChoice.hidden = Boolean(profile.sex);
+  elements.assignmentTitle.textContent = `${ownerLabel} · ${sexLabel}`;
+  elements.assignmentHelp.textContent = sexLabel
+    ? (profile.sex
+        ? `La columna ${state.activeLane} define automáticamente el propietario y el sexo.`
+        : `La columna ${state.activeLane} siempre pertenece a mi empresa; el sexo se toma del selector.`)
+    : "";
+  if (state.data && profile.ownerType === "EXTERNA" && !externalOwner) {
+    setMessage("Configura la empresa externa antes de registrar en las columnas 3 y 4.", "error");
+  } else if (state.data && !laneDestination(state.activeLane)) {
+    setMessage(`Configura el destino de la columna ${state.activeLane} antes de registrar.`, "error");
+  } else if (state.data) {
+    setMessage(`Columna ${state.activeLane} lista para la siguiente pesada.`);
+  }
   renderSelectedTotals();
   updateCaptureAvailability();
 }
 
-function selectOwner(ownerType) {
-  if (ownerType === "EXTERNA" && elements.externalOwnerButton.disabled) {
-    openSettings();
-    setSettingsMessage("Selecciona primero la empresa externa predeterminada.", "error");
+function selectSex(sex) {
+  if (state.pendingCapture && sex !== state.pendingCapture.sex) {
+    setMessage(`Reintenta primero la pesada pendiente de la columna ${state.pendingCapture.lane}.`, "error");
     return;
   }
-  state.ownerType = ownerType;
-  elements.ownerButtons.forEach((button) => {
-    const selected = button.dataset.liveOwner === ownerType;
-    button.classList.toggle("is-active", selected);
-    button.setAttribute("aria-pressed", String(selected));
-  });
-}
-
-function selectSex(sex) {
   state.sex = sex;
   elements.sexButtons.forEach((button) => {
     const selected = button.dataset.liveSex === sex;
     button.classList.toggle("is-active", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  if (!laneProfile(state.activeLane).sex) {
+    elements.assignmentTitle.textContent = `Mi empresa · ${sex === "HEMBRA" ? "Hembra" : "Macho"}`;
+  }
 }
 
 function updateScaleUi(payload = state.scale?.getState()) {
   const scaleState = payload?.state || payload;
   if (!scaleState) return;
-  const hasWeight = Number.isFinite(scaleState.currentWeightKg);
-  const weight = hasWeight ? Number(scaleState.currentWeightKg) : null;
+  const captureLocked = state.busy || Boolean(state.pendingCapture);
+  const displayedWeight = state.pendingCapture?.read_weight_kg ?? scaleState.currentWeightKg;
+  const hasWeight = displayedWeight !== null
+    && displayedWeight !== undefined
+    && displayedWeight !== ""
+    && Number.isFinite(Number(displayedWeight));
+  const weight = hasWeight ? Number(displayedWeight) : null;
   elements.scaleWeight.innerHTML = hasWeight
     ? `${weight.toFixed(3)} <small>kg</small>`
     : '--- <small>kg</small>';
+  if (state.pendingCapture) {
+    elements.scaleRaw.textContent = `Peso congelado para reintento · ${state.pendingCapture.weight_source === "MANUAL" ? "Manual" : "Balanza"}`;
+  } else {
+    elements.scaleRaw.textContent = `Trama: ${scaleState.readingRaw || scaleState.lastRaw || "--"}`;
+  }
   elements.scaleStatus.className = `lir-status-chip ${scaleState.isConnected ? "is-connected" : "is-offline"}`;
   elements.scaleStatus.innerHTML = `<i></i> ${escapeHtml(scaleState.statusMessage || "Sin conexión")}`;
-  elements.connectBle.disabled = state.busy || scaleState.isConnecting || !scaleState.capabilities.bluetooth;
-  elements.connectSerial.disabled = state.busy || scaleState.isConnecting || !scaleState.capabilities.serial;
-  elements.disconnectScale.disabled = state.busy || (!scaleState.isConnected && !scaleState.isConnecting);
-  elements.openScaleSettings.disabled = state.busy;
-  elements.openManualWeight.disabled = state.busy;
+  elements.connectBle.disabled = captureLocked || scaleState.isConnecting || !scaleState.capabilities.bluetooth;
+  elements.connectSerial.disabled = captureLocked || scaleState.isConnecting || !scaleState.capabilities.serial;
+  elements.disconnectScale.disabled = captureLocked || (!scaleState.isConnected && !scaleState.isConnecting);
+  elements.openScaleSettings.disabled = captureLocked;
+  elements.openManualWeight.disabled = captureLocked;
+  elements.openSettings.disabled = captureLocked;
   updateCaptureAvailability();
 }
 
 function updateCaptureAvailability() {
   const scaleState = state.scale?.getState();
+  const pendingCapture = state.pendingCapture;
+  const controlsLocked = state.busy || Boolean(pendingCapture);
+  const profile = laneProfile(state.activeLane);
   const quantityOk = Number(elements.birdsPerCage.value) > 0 && Number(elements.cageCount.value) > 0;
   const configuredLane = Boolean(laneDestination(state.activeLane));
-  const ownerOk = state.ownerType === "PROPIA" || Boolean(state.data?.configuration?.default_external_owner_id);
-  elements.capture.disabled = state.busy
-    || !state.data
-    || !scaleState?.isCaptureReady
-    || !elements.cageType.value
-    || !quantityOk
-    || !configuredLane
-    || !ownerOk;
+  const ownerOk = profile.ownerType !== "EXTERNA" || Boolean(state.data?.configuration?.default_external_owner_id);
+  elements.laneButtons.forEach((button) => { button.disabled = controlsLocked; });
+  elements.sexButtons.forEach((button) => { button.disabled = controlsLocked; });
+  elements.birdsPerCage.disabled = controlsLocked;
+  elements.cageCount.disabled = controlsLocked;
+  elements.cageType.disabled = controlsLocked;
+  elements.captureLabel.textContent = state.busy && pendingCapture
+    ? "Guardando en columna"
+    : (pendingCapture ? "Reintentar en columna" : "Guardar en columna");
+  elements.activeLaneNumber.textContent = String(pendingCapture?.lane || state.activeLane);
+  elements.capture.disabled = pendingCapture
+    ? state.busy || !state.data
+    : state.busy
+      || !state.data
+      || !scaleState?.isCaptureReady
+      || !elements.cageType.value
+      || !quantityOk
+      || !configuredLane
+      || !ownerOk;
 }
 
 function scalePayload(scaleState) {
@@ -445,13 +609,12 @@ function capturePayload() {
   if (state.pendingCapture) return state.pendingCapture;
 
   const scaleState = state.scale.getState();
-  const defaultExternalOwnerId = state.data?.configuration?.default_external_owner_id;
+  const profile = laneProfile(state.activeLane);
   return {
+    layout_version: LAYOUT_VERSION,
     idempotency_key: createUuid(),
     lane: state.activeLane,
-    owner_type: state.ownerType,
-    external_owner_id: state.ownerType === "EXTERNA" ? defaultExternalOwnerId : null,
-    sex: state.sex,
+    ...(profile.sex ? {} : { sex: state.sex }),
     cage_type_id: Number(elements.cageType.value),
     birds_per_cage: Number(elements.birdsPerCage.value),
     cage_count: Number(elements.cageCount.value),
@@ -460,10 +623,10 @@ function capturePayload() {
   };
 }
 
-async function captureWeighing() {
-  if (elements.capture.disabled) return;
+async function performCaptureWeighing() {
   const payload = capturePayload();
   state.pendingCapture = payload;
+  persistPendingCapture(payload);
   state.busy = true;
   updateScaleUi();
   setMessage(`Guardando la pesada en la columna ${state.activeLane}…`);
@@ -474,17 +637,59 @@ async function captureWeighing() {
       body: JSON.stringify(payload),
     });
     renderData(response.data);
-    state.pendingCapture = null;
+    clearPendingCapture();
     state.scale.clearReading();
     elements.cageCount.value = "1";
     setMessage(response.message || "Pesada registrada correctamente.", "success");
   } catch (error) {
-    if (error?.status) state.pendingCapture = null;
-    setMessage(firstValidationMessage(error), "error");
+    const status = Number(error?.status);
+    const deterministicClientError = status >= 400 && status < 500 && status !== 408;
+    if (deterministicClientError) {
+      clearPendingCapture();
+      setMessage(firstValidationMessage(error), "error");
+    } else {
+      setMessage(
+        `${firstValidationMessage(error)} La pesada quedó pendiente: reintenta sin cambiar sus datos.`,
+        "error",
+      );
+    }
   } finally {
     state.busy = false;
     updateScaleUi();
   }
+}
+
+async function captureWeighing() {
+  if (elements.capture.disabled) return;
+
+  if (!state.pendingCapture && state.data && restorePendingCapture(
+    state.data.company.id,
+    state.data.branch.id,
+  )) {
+    updateScaleUi();
+    setMessage(
+      `Otra pestaña dejó una pesada pendiente en la columna ${state.pendingCapture.lane}. Revisa los datos congelados y pulsa Reintentar.`,
+      "error",
+    );
+    return;
+  }
+
+  if (!navigator.locks?.request || !state.pendingCaptureStorageKey) {
+    await performCaptureWeighing();
+    return;
+  }
+
+  await navigator.locks.request(
+    `${state.pendingCaptureStorageKey}-request-lock`,
+    { mode: "exclusive", ifAvailable: true },
+    async (lock) => {
+      if (!lock) {
+        setMessage("Otra pestaña está guardando una pesada. Espera su confirmación antes de continuar.", "error");
+        return;
+      }
+      await performCaptureWeighing();
+    },
+  );
 }
 
 async function deleteWeighing(id) {
@@ -611,8 +816,10 @@ async function saveSettings(event) {
       : null,
     lane_1_warehouse_id: Number(elements.laneDestinations[0].value),
     lane_2_warehouse_id: Number(elements.laneDestinations[1].value),
-    lane_3_client_id: Number(elements.laneDestinations[2].value),
-    lane_4_client_id: Number(elements.laneDestinations[3].value),
+    lane_3_warehouse_id: Number(elements.laneDestinations[2].value),
+    lane_4_warehouse_id: Number(elements.laneDestinations[3].value),
+    lane_5_client_id: Number(elements.laneDestinations[4].value),
+    lane_6_client_id: Number(elements.laneDestinations[5].value),
   };
   state.busy = true;
   setSettingsMessage("Guardando configuración…");
@@ -640,9 +847,13 @@ async function loadReception() {
     state.scale.setStorageKey(`${SCALE_STORAGE_PREFIX}-branch-${response.data.branch.id}`, {
       persistCurrent: false,
     });
+    const restoredPendingCapture = restorePendingCapture(response.data.company.id, response.data.branch.id);
     populateSerialForm();
     updateScaleUi();
-    setMessage("Selecciona una columna y registra la siguiente pesada.");
+    setMessage(restoredPendingCapture
+      ? `Hay una pesada pendiente en la columna ${state.pendingCapture.lane}. Reintenta para confirmar si ya fue registrada.`
+      : "Selecciona una columna y registra la siguiente pesada.",
+    restoredPendingCapture ? "error" : "");
     void state.scale.restoreAuthorizedConnection();
   } catch (error) {
     setMessage(firstValidationMessage(error), "error");
@@ -654,12 +865,12 @@ state.scale = new RetailScaleController({
   onReading: updateScaleUi,
   onStatus: updateScaleUi,
   onRaw(payload) {
+    if (state.pendingCapture) return;
     elements.scaleRaw.textContent = `Trama: ${payload?.raw || payload?.rawText || state.scale.getState().lastRaw || "--"}`;
   },
 });
 
 elements.laneButtons.forEach((button) => button.addEventListener("click", () => selectLane(button.dataset.liveSelectLane)));
-elements.ownerButtons.forEach((button) => button.addEventListener("click", () => selectOwner(button.dataset.liveOwner)));
 elements.sexButtons.forEach((button) => button.addEventListener("click", () => selectSex(button.dataset.liveSex)));
 elements.capture.addEventListener("click", captureWeighing);
 elements.birdsPerCage.addEventListener("input", updateCaptureAvailability);
@@ -720,7 +931,34 @@ document.addEventListener("keydown", (event) => {
   });
 });
 window.addEventListener("storage", (event) => {
-  if (event.key === ZOOM_STORAGE_KEY) applyZoom(Number(event.newValue), false);
+  if (event.key === ZOOM_STORAGE_KEY) {
+    applyZoom(Number(event.newValue), false);
+    return;
+  }
+  if (!state.pendingCaptureStorageKey || event.key !== state.pendingCaptureStorageKey) return;
+
+  if (event.newValue && state.data && restorePendingCapture(
+    state.data.company.id,
+    state.data.branch.id,
+  )) {
+    updateScaleUi();
+    setMessage(
+      `Otra pestaña dejó una pesada pendiente en la columna ${state.pendingCapture.lane}. Solo se reintentará con los mismos datos.`,
+      "error",
+    );
+    return;
+  }
+
+  if (!event.newValue && state.pendingCapture) {
+    state.pendingCapture = null;
+    updateScaleUi();
+    void loadReception();
+  }
+});
+window.addEventListener("beforeunload", (event) => {
+  if (!state.pendingCapture) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 window.addEventListener("pagehide", () => {
   void state.scale.destroy();
@@ -731,7 +969,6 @@ window.addEventListener("auth:expired", () => {
 
 applyZoom(state.zoom, false);
 selectLane(1);
-selectOwner("PROPIA");
 selectSex("MACHO");
 updateScaleUi();
 void loadReception();

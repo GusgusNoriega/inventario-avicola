@@ -1,0 +1,21 @@
+Communication job: Al terminar, un dueño o administrador de un negocio avícola debe querer solicitar una demostración porque entiende que Sistema Avícola conecta recepción, venta, despacho, finanzas y control, y que los flujos de venta y despacho pueden adaptarse a su operación mediante configuración y personalización de implementación.
+
+Narrative: problema operativo -> plataforma conectada -> evidencia visual -> flujo completo -> configuración y personalización -> reporte verificable -> próximo paso.
+
+01 Portada: Sistema Avícola. Control integral desde la recepción hasta el reporte.
+02 Una sola verdad operativa: pesar, vender, despachar y cobrar sin áreas aisladas.
+03 Mapa mental: Operación, Ventas, Logística, Finanzas y Control.
+04 Acceso seguro: roles, módulos por función, PWA y modo kiosco.
+05 Recepción: balanza Serial/BLE/manual, origen, destino, aves, javas y peso neto.
+06 Mayorista y minorista: dos puestos de cada modalidad y pantallas para cliente.
+07 Flujo completo: configurar, programar, recibir/pesar, vender/despachar, cobrar/pagar, reportar/controlar.
+08 Venta y despacho personalizables: configuración incluida y desarrollo de implementación.
+09 Finanzas: compras, caja, cobranzas, pagos, gastos, descuentos y saldos.
+10 Javas y bandejas: inventario, entrega/préstamo, devolución, saldo y trazabilidad.
+11 Reportes: siete PDFs; imagen para seis; CSV para pagos; reporte real como evidencia.
+12 Reporte de prueba: Cliente Alfa/Beta, 125 kg netos, 30 aves, 3 javas, S/ 705.
+13 Cierre: diagnóstico, configuración y personalización. Gustavo Noriega, WhatsApp 949 421 023.
+
+Visual system: 16:9, Codex Grid as composition reference, warm white and dark avícola green, amber highlight and cyan secondary accent. Large photographic fields, flat typography, thin rules, sparse callouts, varied silhouettes.
+
+Accuracy constraints: brand only as Sistema Avícola. Do not promise SUNAT, GPS, WhatsApp integration, fully offline use or one-click arbitrary customization. Extra workflow changes are a service of implementation. Demo numbers must be explicitly labeled as test data.

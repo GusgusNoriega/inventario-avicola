@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ asset('css/recepcion-pollo-vivo.css') }}?v={{ filemtime(public_path('css/recepcion-pollo-vivo.css')) }}">
 </head>
 <body class="live-intake-page">
-  <main id="liveIntakeMain" class="lir-shell">
+  <main id="liveIntakeMain" class="lir-shell" data-live-user-id="{{ auth()->id() }}">
     <header class="lir-topbar">
       <div>
         <p>Camión del día</p>
@@ -46,13 +46,13 @@
     </section>
 
     <section class="lir-capture-panel" aria-label="Datos de la siguiente pesada">
-      <fieldset class="lir-choice-group lir-owner-choice">
-        <legend>Propietario</legend>
-        <button class="is-active" type="button" data-live-owner="PROPIA" aria-pressed="true">Mi empresa</button>
-        <button id="liveIntakeExternalOwnerButton" type="button" data-live-owner="EXTERNA" aria-pressed="false" disabled>Empresa externa</button>
-      </fieldset>
+      <div class="lir-assignment-summary" aria-live="polite">
+        <span>Asignación automática</span>
+        <strong id="liveIntakeAssignmentTitle">Mi empresa · Macho</strong>
+        <small id="liveIntakeAssignmentHelp">La columna 1 define propietario y sexo.</small>
+      </div>
 
-      <fieldset class="lir-choice-group lir-sex-choice">
+      <fieldset id="liveIntakeSexChoice" class="lir-choice-group lir-sex-choice" hidden>
         <legend>Sexo</legend>
         <button class="is-active" type="button" data-live-sex="MACHO" aria-pressed="true">Macho</button>
         <button type="button" data-live-sex="HEMBRA" aria-pressed="false">Hembra</button>
@@ -71,19 +71,59 @@
         <select id="liveIntakeCageType"><option value="">Cargando…</option></select>
       </label>
       <button id="liveIntakeCapture" class="lir-capture-button" type="button" disabled>
-        Guardar en columna <strong id="liveIntakeActiveLaneNumber">1</strong>
+        <span id="liveIntakeCaptureLabel">Guardar en columna</span> <strong id="liveIntakeActiveLaneNumber">1</strong>
       </button>
       <p id="liveIntakeMessage" class="lir-message" role="status" aria-live="polite">Preparando la recepción…</p>
     </section>
 
-    <section class="lir-lanes-stage" aria-label="Columnas de recepción y despacho">
-      <div id="liveIntakeLanes" class="lir-lanes">
-        @for ($lane = 1; $lane <= 4; $lane++)
-          @php($warehouseLane = $lane <= 2)
-          <article class="lir-lane {{ $warehouseLane ? 'is-warehouse' : 'is-client' }} {{ $lane === 1 ? 'is-active' : '' }}" data-live-lane="{{ $lane }}">
+    <section id="liveIntakeLanes" class="lir-lanes-stage" aria-label="Columnas de recepción y despacho">
+      <div class="lir-lane-group is-warehouse-group">
+        <header class="lir-lane-group-head">
+          <div><span>Entradas a almacén</span><strong>Cuatro columnas por propietario y sexo</strong></div>
+          <small>Desliza con el dedo para ver las demás columnas.</small>
+        </header>
+        <div class="lir-lane-track" tabindex="0" aria-label="Desplazamiento horizontal de entradas a almacén">
+          <div class="lir-lanes is-warehouse-lanes">
+          @for ($lane = 1; $lane <= 4; $lane++)
+            @php
+              $ownLane = $lane <= 2;
+              $maleLane = in_array($lane, [1, 3], true);
+              $ownerLabel = $ownLane ? 'Mi empresa' : 'Empresa externa';
+              $sexLabel = $maleLane ? 'Macho' : 'Hembra';
+            @endphp
+            <article class="lir-lane is-warehouse {{ $ownLane ? 'is-own-lane' : 'is-external-lane' }} {{ $lane === 1 ? 'is-active' : '' }}" data-live-lane="{{ $lane }}">
+              <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}">
+                <span>Columna {{ $lane }}</span>
+                <strong>Entrada a almacén</strong>
+                <em id="liveIntakeLaneProfile{{ $lane }}">{{ $ownerLabel }} · {{ $sexLabel }}</em>
+                <small id="liveIntakeLaneDestination{{ $lane }}">Sin configurar</small>
+              </button>
+              <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows">
+                <p class="lir-empty-lane">Aún no hay pesadas</p>
+              </div>
+              <footer>
+                <span><b id="liveIntakeLaneCages{{ $lane }}">0</b> javas</span>
+                <span><b id="liveIntakeLaneBirds{{ $lane }}">0</b> pollos</span>
+                <strong id="liveIntakeLaneNet{{ $lane }}">0.000 kg</strong>
+              </footer>
+            </article>
+          @endfor
+          </div>
+        </div>
+      </div>
+
+      <div class="lir-lane-group is-client-group">
+        <header class="lir-lane-group-head">
+          <div><span>Recepción y despacho automático</span><strong>Siempre para mi empresa</strong></div>
+          <small>Elige el sexo al registrar; el propietario no cambia.</small>
+        </header>
+        <div class="lir-lanes is-client-lanes">
+        @for ($lane = 5; $lane <= 6; $lane++)
+          <article class="lir-lane is-client is-own-lane" data-live-lane="{{ $lane }}">
             <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}">
               <span>Columna {{ $lane }}</span>
-              <strong>{{ $warehouseLane ? 'Entrada a almacén' : 'Despacho directo' }}</strong>
+              <strong>Recepción + despacho</strong>
+              <em id="liveIntakeLaneProfile{{ $lane }}">Mi empresa · Sexo al registrar</em>
               <small id="liveIntakeLaneDestination{{ $lane }}">Sin configurar</small>
             </button>
             <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows">
@@ -96,6 +136,7 @@
             </footer>
           </article>
         @endfor
+        </div>
       </div>
     </section>
 
@@ -117,17 +158,19 @@
       </header>
 
       <section>
-        <h3>Botón de empresa externa</h3>
-        <label><span>Empresa externa predeterminada</span><select id="liveIntakeDefaultExternalOwner"><option value="">Seleccionar empresa…</option></select></label>
+        <h3>Empresa externa</h3>
+        <label><span>Propietaria de las columnas 3 y 4</span><select id="liveIntakeDefaultExternalOwner"><option value="">Seleccionar empresa…</option></select></label>
       </section>
 
       <section>
-        <h3>Destinos de las cuatro columnas</h3>
+        <h3>Destinos de las seis columnas</h3>
         <div class="lir-settings-grid">
-          <label><span>Columna 1 · Almacén</span><select id="liveIntakeLane1Destination"></select></label>
-          <label><span>Columna 2 · Almacén</span><select id="liveIntakeLane2Destination"></select></label>
-          <label><span>Columna 3 · Cliente</span><select id="liveIntakeLane3Destination"></select></label>
-          <label><span>Columna 4 · Cliente</span><select id="liveIntakeLane4Destination"></select></label>
+          <label><span>Columna 1 · Propia · Macho</span><select id="liveIntakeLane1Destination"></select></label>
+          <label><span>Columna 2 · Propia · Hembra</span><select id="liveIntakeLane2Destination"></select></label>
+          <label><span>Columna 3 · Externa · Macho</span><select id="liveIntakeLane3Destination"></select></label>
+          <label><span>Columna 4 · Externa · Hembra</span><select id="liveIntakeLane4Destination"></select></label>
+          <label><span>Columna 5 · Cliente de despacho</span><select id="liveIntakeLane5Destination"></select></label>
+          <label><span>Columna 6 · Cliente de despacho</span><select id="liveIntakeLane6Destination"></select></label>
         </div>
       </section>
 

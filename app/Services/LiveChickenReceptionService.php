@@ -7,6 +7,7 @@ use App\Models\ConfiguracionRecepcionPolloVivo;
 use App\Models\InventarioJava;
 use App\Models\JornadaOperativa;
 use App\Models\MovimientoJava;
+use App\Models\Pesada;
 use App\Models\PesadaRecepcionPolloVivo;
 use App\Models\RecepcionPolloVivo;
 use App\Models\TerceroRole;
@@ -19,6 +20,15 @@ use Illuminate\Validation\ValidationException;
 
 class LiveChickenReceptionService
 {
+    private const LANE_PROFILES = [
+        1 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN, 'sex' => Pesada::SEX_MALE],
+        2 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN, 'sex' => Pesada::SEX_FEMALE],
+        3 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL, 'sex' => Pesada::SEX_MALE],
+        4 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL, 'sex' => Pesada::SEX_FEMALE],
+        5 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN, 'sex' => null],
+        6 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN, 'sex' => null],
+    ];
+
     public function __construct(private readonly ScaleReadingService $scaleReadings) {}
 
     /** @return array<string, mixed> */
@@ -99,8 +109,10 @@ class LiveChickenReceptionService
 
         $this->assertWarehouse($branchId, (int) $data['lane_1_warehouse_id'], 'lane_1_warehouse_id');
         $this->assertWarehouse($branchId, (int) $data['lane_2_warehouse_id'], 'lane_2_warehouse_id');
-        $this->assertExternalClient($companyId, (int) $data['lane_3_client_id'], 'lane_3_client_id');
-        $this->assertExternalClient($companyId, (int) $data['lane_4_client_id'], 'lane_4_client_id');
+        $this->assertWarehouse($branchId, (int) $data['lane_3_warehouse_id'], 'lane_3_warehouse_id');
+        $this->assertWarehouse($branchId, (int) $data['lane_4_warehouse_id'], 'lane_4_warehouse_id');
+        $this->assertExternalClient($companyId, (int) $data['lane_5_client_id'], 'lane_5_client_id');
+        $this->assertExternalClient($companyId, (int) $data['lane_6_client_id'], 'lane_6_client_id');
 
         ConfiguracionRecepcionPolloVivo::query()->updateOrCreate(
             ['sucursal_id' => $branchId],
@@ -108,8 +120,10 @@ class LiveChickenReceptionService
                 'propietario_externo_predeterminado_id' => $externalOwnerId,
                 'almacen_columna_1_id' => (int) $data['lane_1_warehouse_id'],
                 'almacen_columna_2_id' => (int) $data['lane_2_warehouse_id'],
-                'cliente_columna_3_id' => (int) $data['lane_3_client_id'],
-                'cliente_columna_4_id' => (int) $data['lane_4_client_id'],
+                'almacen_columna_3_id' => (int) $data['lane_3_warehouse_id'],
+                'almacen_columna_4_id' => (int) $data['lane_4_warehouse_id'],
+                'cliente_columna_3_id' => (int) $data['lane_5_client_id'],
+                'cliente_columna_4_id' => (int) $data['lane_6_client_id'],
                 'updated_by' => $actor->id,
             ],
         );
@@ -166,15 +180,6 @@ class LiveChickenReceptionService
                 ],
             );
 
-            $ownerType = (string) $data['owner_type'];
-            $externalOwnerId = $ownerType === PesadaRecepcionPolloVivo::OWNER_EXTERNAL
-                ? (int) $data['external_owner_id']
-                : null;
-
-            if ($externalOwnerId) {
-                $this->assertExternalOwner($companyId, $externalOwnerId, 'external_owner_id');
-            }
-
             $catalog = $this->catalog($companyId, (int) $branch->id);
             $configuration = $this->effectiveConfiguration(
                 (int) $branch->id,
@@ -182,10 +187,28 @@ class LiveChickenReceptionService
                 $catalog['clients'],
                 $catalog['external_owners'],
             );
+            $lane = (int) $data['lane'];
+            $profile = $this->laneProfile($lane);
+            $ownerType = $profile['owner_type'];
+            $externalOwnerId = $ownerType === PesadaRecepcionPolloVivo::OWNER_EXTERNAL
+                ? (int) ($configuration['default_external_owner_id'] ?? 0)
+                : null;
+
+            if ($ownerType === PesadaRecepcionPolloVivo::OWNER_EXTERNAL && ! $externalOwnerId) {
+                throw ValidationException::withMessages([
+                    'lane' => 'Configura la empresa externa antes de usar las columnas 3 y 4.',
+                ]);
+            }
+
+            if ($externalOwnerId) {
+                $this->assertExternalOwner($companyId, $externalOwnerId, 'lane');
+            }
+
+            $sex = $profile['sex'] ?: (string) ($data['sex'] ?? '');
             $destination = $this->destinationForLane(
                 $companyId,
                 (int) $branch->id,
-                (int) $data['lane'],
+                $lane,
                 $configuration,
             );
             $cageType = DB::table('tipos_java')
@@ -239,13 +262,13 @@ class LiveChickenReceptionService
                 'recepcion_id' => $reception->id,
                 'idempotency_key' => $data['idempotency_key'],
                 'numero' => $nextNumber,
-                'columna' => (int) $data['lane'],
+                'columna' => $lane,
                 'propietario_tipo' => $ownerType,
                 'propietario_externo_id' => $externalOwnerId,
                 'destino_tipo' => $destination['type'],
                 'almacen_destino_id' => $destination['warehouse_id'],
                 'cliente_destino_id' => $destination['client_id'],
-                'sexo' => (string) $data['sex'],
+                'sexo' => $sex,
                 'tipo_pollo_id' => $liveChickenTypeId,
                 'tipo_java_id' => (int) $cageType->id,
                 'lectura_balanza_id' => $scaleReading?->id,
@@ -399,41 +422,82 @@ class LiveChickenReceptionService
         $ownerIds = $externalOwners->pluck('id');
         $warehouseOne = $warehouseIds->first();
         $warehouseTwo = $warehouseIds->get(1, $warehouseOne);
-        $clientThree = $clientIds->first();
-        $clientFour = $clientIds->get(1, $clientThree);
+        $clientFive = $clientIds->first();
+        $clientSix = $clientIds->get(1, $clientFive);
+        $externalOwnerId = $saved
+            && $ownerIds->contains((int) $saved->propietario_externo_predeterminado_id)
+                ? (int) $saved->propietario_externo_predeterminado_id
+                : null;
 
         return [
             'saved' => $saved !== null,
-            'default_external_owner_id' => $saved
-                && $ownerIds->contains((int) $saved->propietario_externo_predeterminado_id)
-                    ? (int) $saved->propietario_externo_predeterminado_id
-                    : null,
+            'default_external_owner_id' => $externalOwnerId,
             'lanes' => [
-                '1' => [
-                    'type' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE,
-                    'destination_id' => $saved && $warehouseIds->contains((int) $saved->almacen_columna_1_id)
+                '1' => $this->configuredLane(
+                    1,
+                    $saved && $warehouseIds->contains((int) $saved->almacen_columna_1_id)
                         ? (int) $saved->almacen_columna_1_id
                         : $warehouseOne,
-                ],
-                '2' => [
-                    'type' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE,
-                    'destination_id' => $saved && $warehouseIds->contains((int) $saved->almacen_columna_2_id)
+                ),
+                '2' => $this->configuredLane(
+                    2,
+                    $saved && $warehouseIds->contains((int) $saved->almacen_columna_2_id)
                         ? (int) $saved->almacen_columna_2_id
                         : $warehouseTwo,
-                ],
-                '3' => [
-                    'type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
-                    'destination_id' => $saved && $clientIds->contains((int) $saved->cliente_columna_3_id)
+                ),
+                '3' => $this->configuredLane(
+                    3,
+                    $saved && $warehouseIds->contains((int) $saved->almacen_columna_3_id)
+                        ? (int) $saved->almacen_columna_3_id
+                        : $warehouseOne,
+                ),
+                '4' => $this->configuredLane(
+                    4,
+                    $saved && $warehouseIds->contains((int) $saved->almacen_columna_4_id)
+                        ? (int) $saved->almacen_columna_4_id
+                        : $warehouseTwo,
+                ),
+                '5' => $this->configuredLane(
+                    5,
+                    $saved && $clientIds->contains((int) $saved->cliente_columna_3_id)
                         ? (int) $saved->cliente_columna_3_id
-                        : $clientThree,
-                ],
-                '4' => [
-                    'type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
-                    'destination_id' => $saved && $clientIds->contains((int) $saved->cliente_columna_4_id)
+                        : $clientFive,
+                ),
+                '6' => $this->configuredLane(
+                    6,
+                    $saved && $clientIds->contains((int) $saved->cliente_columna_4_id)
                         ? (int) $saved->cliente_columna_4_id
-                        : $clientFour,
-                ],
+                        : $clientSix,
+                ),
             ],
+        ];
+    }
+
+    /** @return array{destination_type: string, owner_type: string, sex: ?string} */
+    private function laneProfile(int $lane): array
+    {
+        $profile = self::LANE_PROFILES[$lane] ?? null;
+
+        if (! $profile) {
+            throw ValidationException::withMessages([
+                'lane' => 'Selecciona una de las seis columnas de recepción.',
+            ]);
+        }
+
+        return $profile;
+    }
+
+    /** @return array{type: string, owner_type: string, sex: ?string, requires_sex: bool, destination_id: ?int} */
+    private function configuredLane(int $lane, ?int $destinationId): array
+    {
+        $profile = $this->laneProfile($lane);
+
+        return [
+            'type' => $profile['destination_type'],
+            'owner_type' => $profile['owner_type'],
+            'sex' => $profile['sex'],
+            'requires_sex' => $profile['sex'] === null,
+            'destination_id' => $destinationId,
         ];
     }
 
@@ -443,15 +507,17 @@ class LiveChickenReceptionService
         $laneConfiguration = $configuration['lanes'][(string) $lane] ?? null;
         $destinationId = (int) ($laneConfiguration['destination_id'] ?? 0);
 
+        $destinationType = (string) ($laneConfiguration['type'] ?? '');
+
         if (! $destinationId) {
             throw ValidationException::withMessages([
-                'lane' => $lane <= 2
+                'lane' => $destinationType === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE
                     ? "Configura el almacén de la columna {$lane} antes de registrar."
                     : "Configura el cliente de la columna {$lane} antes de registrar.",
             ]);
         }
 
-        if ($lane <= 2) {
+        if ($destinationType === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE) {
             $this->assertWarehouse($branchId, $destinationId, 'lane');
 
             return [
@@ -459,6 +525,12 @@ class LiveChickenReceptionService
                 'warehouse_id' => $destinationId,
                 'client_id' => null,
             ];
+        }
+
+        if ($destinationType !== PesadaRecepcionPolloVivo::DESTINATION_CLIENT) {
+            throw ValidationException::withMessages([
+                'lane' => 'La columna seleccionada no tiene un destino válido.',
+            ]);
         }
 
         $this->assertExternalClient($companyId, $destinationId, 'lane');
@@ -837,11 +909,18 @@ class LiveChickenReceptionService
         $destination = $record->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE
             ? $record->almacenDestino?->nombre
             : $record->clienteDestino?->nombre_razon_social;
+        $displayLane = $this->displayLane($record);
+        $displayProfile = $this->laneProfile($displayLane);
+        $usesPreviousLayout = $displayLane !== (int) $record->columna
+            || $displayProfile['destination_type'] !== $record->destino_tipo
+            || $displayProfile['owner_type'] !== $record->propietario_tipo
+            || ($displayProfile['sex'] !== null && $displayProfile['sex'] !== $record->sexo);
 
         return [
             'id' => (int) $record->id,
             'number' => (int) $record->numero,
-            'lane' => (int) $record->columna,
+            'lane' => $displayLane,
+            'uses_previous_layout' => $usesPreviousLayout,
             'owner' => [
                 'type' => $record->propietario_tipo,
                 'id' => $record->propietario_externo_id ? (int) $record->propietario_externo_id : null,
@@ -875,6 +954,20 @@ class LiveChickenReceptionService
         ];
     }
 
+    private function displayLane(PesadaRecepcionPolloVivo $record): int
+    {
+        $storedLane = (int) $record->columna;
+
+        // En la distribución anterior 3 y 4 eran despachos directos. Su tipo
+        // de destino permite presentarlos en 5 y 6 sin alterar el historial.
+        if ($record->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_CLIENT
+            && in_array($storedLane, [3, 4], true)) {
+            return $storedLane + 2;
+        }
+
+        return $storedLane;
+    }
+
     /** @return array<string, mixed> */
     private function totals($records): array
     {
@@ -893,8 +986,12 @@ class LiveChickenReceptionService
             'daily' => $summary($records),
             'own' => $summary($records->where('propietario_tipo', PesadaRecepcionPolloVivo::OWNER_OWN)),
             'external' => $summary($records->where('propietario_tipo', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)),
-            'lanes' => collect(range(1, 4))->mapWithKeys(
-                fn (int $lane): array => [(string) $lane => $summary($records->where('columna', $lane))],
+            'lanes' => collect(range(1, 6))->mapWithKeys(
+                fn (int $lane): array => [
+                    (string) $lane => $summary(
+                        $records->filter(fn (PesadaRecepcionPolloVivo $record): bool => $this->displayLane($record) === $lane),
+                    ),
+                ],
             )->all(),
         ];
     }

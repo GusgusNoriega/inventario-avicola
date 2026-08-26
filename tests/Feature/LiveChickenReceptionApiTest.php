@@ -13,6 +13,7 @@ use App\Models\TipoPollo;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\InteractsWithAccessControl;
@@ -31,9 +32,9 @@ class LiveChickenReceptionApiTest extends TestCase
 
     private int $warehouseTwoId;
 
-    private int $clientThreeId;
+    private int $clientFiveId;
 
-    private int $clientFourId;
+    private int $clientSixId;
 
     private int $externalOwnerId;
 
@@ -75,21 +76,35 @@ class LiveChickenReceptionApiTest extends TestCase
         ]);
         $this->warehouseOneId = $this->createWarehouse('ALMACEN_1', 'Almacén 1');
         $this->warehouseTwoId = $this->createWarehouse('ALMACEN_2', 'Almacén 2');
-        $this->clientThreeId = $this->createParty('20100000001', 'Cliente externo 1', TerceroRole::CLIENT);
-        $this->clientFourId = $this->createParty('20100000002', 'Cliente externo 2', TerceroRole::CLIENT);
+        $this->clientFiveId = $this->createParty('20100000001', 'Cliente externo 1', TerceroRole::CLIENT);
+        $this->clientSixId = $this->createParty('20100000002', 'Cliente externo 2', TerceroRole::CLIENT);
         $this->externalOwnerId = $this->createParty('20900000001', 'Empresa del hermano', TerceroRole::PROVIDER);
     }
 
-    public function test_catalog_exposes_four_effective_destinations_and_external_owner_options(): void
+    public function test_catalog_exposes_six_effective_lanes_and_external_owner_options(): void
     {
         $this->getJson('/api/v1/recepcion-pollo-vivo')
             ->assertOk()
             ->assertJsonPath('data.catalog.scale.code', Balanza::CODE_LIVE_CHICKEN_RECEPTION)
             ->assertJsonPath('data.configuration.saved', false)
             ->assertJsonPath('data.configuration.lanes.1.destination_id', $this->warehouseOneId)
+            ->assertJsonPath('data.configuration.lanes.1.owner_type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.configuration.lanes.1.sex', Pesada::SEX_MALE)
             ->assertJsonPath('data.configuration.lanes.2.destination_id', $this->warehouseTwoId)
-            ->assertJsonPath('data.configuration.lanes.3.destination_id', $this->clientThreeId)
-            ->assertJsonPath('data.configuration.lanes.4.destination_id', $this->clientFourId)
+            ->assertJsonPath('data.configuration.lanes.2.owner_type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.configuration.lanes.2.sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.configuration.lanes.3.destination_id', $this->warehouseOneId)
+            ->assertJsonPath('data.configuration.lanes.3.owner_type', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)
+            ->assertJsonPath('data.configuration.lanes.3.sex', Pesada::SEX_MALE)
+            ->assertJsonPath('data.configuration.lanes.4.destination_id', $this->warehouseTwoId)
+            ->assertJsonPath('data.configuration.lanes.4.owner_type', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)
+            ->assertJsonPath('data.configuration.lanes.4.sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.configuration.lanes.5.destination_id', $this->clientFiveId)
+            ->assertJsonPath('data.configuration.lanes.5.owner_type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.configuration.lanes.5.sex', null)
+            ->assertJsonPath('data.configuration.lanes.6.destination_id', $this->clientSixId)
+            ->assertJsonPath('data.configuration.lanes.6.owner_type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.configuration.lanes.6.sex', null)
             ->assertJsonCount(2, 'data.catalog.warehouses')
             ->assertJsonCount(2, 'data.catalog.clients')
             ->assertJsonCount(1, 'data.catalog.external_owners')
@@ -105,6 +120,7 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonPath('already_registered', false)
             ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
             ->assertJsonPath('data.records.0.destination.type', PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE)
+            ->assertJsonPath('data.records.0.sex', Pesada::SEX_MALE)
             ->assertJsonPath('data.records.0.birds', 14)
             ->assertJsonPath('data.records.0.net_weight_kg', 86)
             ->assertJsonPath('data.totals.own.cages', 2)
@@ -138,9 +154,7 @@ class LiveChickenReceptionApiTest extends TestCase
     {
         $this->saveConfiguration();
         $payload = $this->payload([
-            'lane' => 2,
-            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
-            'external_owner_id' => $this->externalOwnerId,
+            'lane' => 3,
         ]);
 
         $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $payload)
@@ -157,17 +171,83 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('movimientos_inventario', 0);
         $this->assertDatabaseCount('movimiento_detalles', 0);
         $this->assertDatabaseCount('movimientos_javas', 0);
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('comprobantes', 0);
+    }
+
+    public function test_warehouse_lane_profiles_define_owner_and_sex_without_client_overrides(): void
+    {
+        $this->saveConfiguration();
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+            'lane' => 2,
+            'sex' => Pesada::SEX_MALE,
+        ]))->assertUnprocessable()
+            ->assertJsonValidationErrors('sex');
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload(['lane' => 2]))
+            ->assertCreated()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.records.0.sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.records.0.destination.id', $this->warehouseTwoId);
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload(['lane' => 4]))
+            ->assertCreated()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)
+            ->assertJsonPath('data.records.0.sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.records.0.destination.id', $this->warehouseTwoId)
+            ->assertJsonPath('data.totals.own.birds', 14)
+            ->assertJsonPath('data.totals.external.birds', 14);
+
+        $this->assertDatabaseCount('movimientos_inventario', 1);
+        $this->assertDatabaseCount('movimiento_detalles', 1);
+        $this->assertDatabaseCount('movimientos_javas', 0);
+    }
+
+    public function test_external_lanes_are_blocked_until_the_external_company_is_configured(): void
+    {
+        $this->putJson(
+            '/api/v1/recepcion-pollo-vivo/configuracion',
+            $this->configurationPayload(['default_external_owner_id' => null]),
+        )->assertOk();
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload(['lane' => 3]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('lane');
+
+        $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 0);
+        $this->assertDatabaseCount('movimientos_inventario', 0);
+    }
+
+    public function test_direct_lanes_require_sex_and_the_current_layout_version(): void
+    {
+        $this->saveConfiguration();
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload(['lane' => 5]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('sex');
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+            'layout_version' => 1,
+        ]))->assertUnprocessable()
+            ->assertJsonValidationErrors('layout_version');
+
+        $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 0);
     }
 
     public function test_own_direct_lane_dispatches_to_client_without_entering_warehouse(): void
     {
         $this->saveConfiguration();
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload(['lane' => 3]))
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+            'lane' => 5,
+            'sex' => Pesada::SEX_MALE,
+        ]))
             ->assertCreated()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
             ->assertJsonPath('data.records.0.destination.type', PesadaRecepcionPolloVivo::DESTINATION_CLIENT)
-            ->assertJsonPath('data.records.0.destination.id', $this->clientThreeId)
-            ->assertJsonPath('data.totals.lanes.3.birds', 14);
+            ->assertJsonPath('data.records.0.destination.id', $this->clientFiveId)
+            ->assertJsonPath('data.totals.lanes.5.birds', 14);
 
         $this->assertDatabaseCount('existencias_almacen', 0);
         $this->assertDatabaseHas('inventarios_javas', [
@@ -176,32 +256,45 @@ class LiveChickenReceptionApiTest extends TestCase
         ]);
         $this->assertDatabaseHas('movimientos_inventario', [
             'tipo' => 'DESPACHO_DIRECTO',
-            'tercero_destino_id' => $this->clientThreeId,
+            'tercero_destino_id' => $this->clientFiveId,
             'estado' => 'CONFIRMADO',
         ]);
         $this->assertDatabaseHas('movimientos_javas', [
-            'cliente_id' => $this->clientThreeId,
+            'cliente_id' => $this->clientFiveId,
             'tipo' => 'DESPACHO',
             'cantidad' => 2,
             'ticket_despacho_id' => null,
         ]);
     }
 
-    public function test_external_direct_lane_does_not_create_a_company_dispatch(): void
+    public function test_direct_lane_is_always_own_and_rejects_an_external_owner_override(): void
     {
         $this->saveConfiguration();
 
         $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
-            'lane' => 4,
+            'lane' => 6,
             'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
             'external_owner_id' => $this->externalOwnerId,
-        ]))->assertCreated()
-            ->assertJsonPath('data.records.0.destination.id', $this->clientFourId)
-            ->assertJsonPath('data.totals.external.birds', 14);
+            'sex' => Pesada::SEX_FEMALE,
+        ]))->assertUnprocessable()
+            ->assertJsonValidationErrors(['owner_type', 'external_owner_id']);
 
         $this->assertDatabaseCount('movimientos_inventario', 0);
         $this->assertDatabaseCount('movimientos_javas', 0);
         $this->assertDatabaseCount('inventarios_javas', 0);
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+            'lane' => 6,
+            'sex' => Pesada::SEX_FEMALE,
+        ]))->assertCreated()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.records.0.destination.id', $this->clientSixId)
+            ->assertJsonPath('data.records.0.sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.totals.external.birds', 0);
+
+        $this->assertDatabaseCount('movimientos_inventario', 1);
+        $this->assertDatabaseCount('movimientos_javas', 1);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
     }
 
     public function test_repeating_the_same_capture_is_idempotent(): void
@@ -281,7 +374,7 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->saveConfiguration();
         $weighingId = (int) $this->postJson(
             '/api/v1/recepcion-pollo-vivo/pesadas',
-            $this->payload(['lane' => 3]),
+            $this->payload(['lane' => 5, 'sex' => Pesada::SEX_MALE]),
         )->assertCreated()->json('weighing_id');
         $weighing = PesadaRecepcionPolloVivo::query()
             ->with('recepcion:id,jornada_id')
@@ -291,7 +384,7 @@ class LiveChickenReceptionApiTest extends TestCase
             'empresa_id' => $this->user->empresa_id,
             'sucursal_id' => $this->branchId,
             'jornada_id' => $weighing->recepcion->jornada_id,
-            'cliente_id' => $this->clientThreeId,
+            'cliente_id' => $this->clientFiveId,
             'tipo' => MovimientoJava::TYPE_RECEIPT,
             'cantidad' => 2,
             'cantidad_bandejas' => 0,
@@ -327,7 +420,7 @@ class LiveChickenReceptionApiTest extends TestCase
             'empresa_id' => $this->user->empresa_id,
             'sucursal_id' => $this->branchId,
             'jornada_id' => $weighing->recepcion->jornada_id,
-            'cliente_id' => $this->clientThreeId,
+            'cliente_id' => $this->clientFiveId,
             'tipo' => MovimientoJava::TYPE_DISPATCH,
             'cantidad' => 2,
             'cantidad_bandejas' => 0,
@@ -387,11 +480,119 @@ class LiveChickenReceptionApiTest extends TestCase
         $otherClient->roles()->create(['rol' => TerceroRole::CLIENT]);
 
         $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload([
-            'lane_3_client_id' => $otherClient->id,
+            'lane_5_client_id' => $otherClient->id,
         ]))->assertUnprocessable()
-            ->assertJsonValidationErrors('lane_3_client_id');
+            ->assertJsonValidationErrors('lane_5_client_id');
 
         $this->assertDatabaseCount('configuraciones_recepcion_pollo_vivo', 0);
+    }
+
+    public function test_lane_expansion_migration_maps_new_rows_on_rollback_and_preserves_legacy_rows_on_up(): void
+    {
+        $this->saveConfiguration();
+        $legacyOwnDirectId = (int) $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 5, 'sex' => Pesada::SEX_MALE]),
+        )->assertCreated()->json('weighing_id');
+        $legacyOwnMaleInLaneTwoId = (int) $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 2]),
+        )->assertCreated()->json('weighing_id');
+        $legacyExternalFemaleInLaneOneId = (int) $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 3]),
+        )->assertCreated()->json('weighing_id');
+        $legacyExternalDirectId = (int) $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 4]),
+        )->assertCreated()->json('weighing_id');
+        $migration = require database_path(
+            'migrations/2026_08_26_000001_expand_live_chicken_reception_lanes.php',
+        );
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn('configuraciones_recepcion_pollo_vivo', 'almacen_columna_3_id'));
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyOwnDirectId, 'columna' => 3]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyExternalFemaleInLaneOneId, 'columna' => 1]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyExternalDirectId, 'columna' => 2]);
+
+        // Estados válidos en el diseño anterior: las columnas 1/2 elegían
+        // almacén sin fijar sexo/propietario y 3/4 admitían despacho externo.
+        DB::table('pesadas_recepcion_pollo_vivo')->where('id', $legacyOwnMaleInLaneTwoId)->update([
+            'sexo' => Pesada::SEX_MALE,
+        ]);
+        DB::table('pesadas_recepcion_pollo_vivo')->where('id', $legacyExternalFemaleInLaneOneId)->update([
+            'sexo' => Pesada::SEX_FEMALE,
+        ]);
+        DB::table('pesadas_recepcion_pollo_vivo')->where('id', $legacyExternalDirectId)->update([
+            'columna' => 4,
+            'destino_tipo' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+            'almacen_destino_id' => null,
+            'cliente_destino_id' => $this->clientSixId,
+        ]);
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn('configuraciones_recepcion_pollo_vivo', 'almacen_columna_3_id'));
+        $this->assertDatabaseHas('configuraciones_recepcion_pollo_vivo', [
+            'sucursal_id' => $this->branchId,
+            'almacen_columna_3_id' => $this->warehouseOneId,
+            'almacen_columna_4_id' => $this->warehouseTwoId,
+        ]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyOwnDirectId, 'columna' => 3]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $legacyOwnMaleInLaneTwoId,
+            'columna' => 2,
+            'sexo' => Pesada::SEX_MALE,
+        ]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $legacyExternalFemaleInLaneOneId,
+            'columna' => 1,
+            'sexo' => Pesada::SEX_FEMALE,
+        ]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $legacyExternalDirectId,
+            'columna' => 4,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'destino_tipo' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+        ]);
+
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $legacyOwnDirectId,
+                'lane' => 5,
+                'uses_previous_layout' => true,
+            ])
+            ->assertJsonFragment([
+                'id' => $legacyOwnMaleInLaneTwoId,
+                'lane' => 2,
+                'uses_previous_layout' => true,
+            ])
+            ->assertJsonFragment([
+                'id' => $legacyExternalFemaleInLaneOneId,
+                'lane' => 1,
+                'uses_previous_layout' => true,
+            ])
+            ->assertJsonFragment([
+                'id' => $legacyExternalDirectId,
+                'lane' => 6,
+                'uses_previous_layout' => true,
+            ])
+            ->assertJsonPath('data.totals.lanes.1.birds', 14)
+            ->assertJsonPath('data.totals.lanes.2.birds', 14)
+            ->assertJsonPath('data.totals.lanes.5.birds', 14)
+            ->assertJsonPath('data.totals.lanes.6.birds', 14);
+
+        $migration->down();
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyOwnDirectId, 'columna' => 3]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyOwnMaleInLaneTwoId, 'columna' => 2]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyExternalFemaleInLaneOneId, 'columna' => 1]);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', ['id' => $legacyExternalDirectId, 'columna' => 4]);
+
+        // Restablece el esquema para que RefreshDatabase pueda cerrar la prueba.
+        $migration->up();
     }
 
     public function test_weighing_from_another_company_cannot_be_voided_or_discovered(): void
@@ -448,11 +649,9 @@ class LiveChickenReceptionApiTest extends TestCase
     private function payload(array $overrides = []): array
     {
         return [
+            'layout_version' => 2,
             'idempotency_key' => (string) Str::uuid(),
             'lane' => 1,
-            'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN,
-            'external_owner_id' => null,
-            'sex' => Pesada::SEX_MALE,
             'cage_type_id' => $this->cageTypeId,
             'birds_per_cage' => 7,
             'cage_count' => 2,
@@ -470,8 +669,10 @@ class LiveChickenReceptionApiTest extends TestCase
             'default_external_owner_id' => $this->externalOwnerId,
             'lane_1_warehouse_id' => $this->warehouseOneId,
             'lane_2_warehouse_id' => $this->warehouseTwoId,
-            'lane_3_client_id' => $this->clientThreeId,
-            'lane_4_client_id' => $this->clientFourId,
+            'lane_3_warehouse_id' => $this->warehouseOneId,
+            'lane_4_warehouse_id' => $this->warehouseTwoId,
+            'lane_5_client_id' => $this->clientFiveId,
+            'lane_6_client_id' => $this->clientSixId,
             ...$overrides,
         ];
     }

@@ -1,0 +1,356 @@
+{"kind":"slide","id":"sl/9eq9dn","slide":1,"title":"PRESENTACIÓN COMERCIAL","textShapes":7}
+{"kind":"shape","id":"sh/bipkz2pg","slide":1,"name":"shape-2","bbox":[548,0,12,720]}
+{"kind":"textbox","id":"sh/l8r25c7i","slide":1,"name":"text-4","text":"PRESENTACIÓN COMERCIAL","textPreview":"PRESENTACIÓN COMERCIAL","textChars":22,"textLines":1,"bbox":[160,60,330,28]}
+{"kind":"textbox","id":"sh/07ilwrqd","slide":1,"name":"text-5","text":"SISTEMA","textPreview":"SISTEMA","textChars":7,"textLines":1,"bbox":[64,176,430,90]}
+{"kind":"textbox","id":"sh/z69k3mps","slide":1,"name":"text-6","text":"AVÍCOLA","textPreview":"AVÍCOLA","textChars":7,"textLines":1,"bbox":[64,254,430,94]}
+{"kind":"textbox","id":"sh/y5g3uh87","slide":1,"name":"text-7","text":"Control integral desde la recepción hasta el reporte.","textPreview":"Control integral desde la recepción hasta el reporte.","textChars":53,"textLines":1,"bbox":[68,374,420,98]}
+{"kind":"shape","id":"sh/1cn2ts7e","slide":1,"name":"shape-8","bbox":[68,510,130,5]}
+{"kind":"textbox","id":"sh/gbelknqt","slide":1,"name":"text-9","text":"Creado y desarrollado por","textPreview":"Creado y desarrollado por","textChars":25,"textLines":1,"bbox":[68,546,300,26]}
+{"kind":"textbox","id":"sh/e5knmtkv","slide":1,"name":"text-10","text":"Gustavo Noriega","textPreview":"Gustavo Noriega","textChars":15,"textLines":1,"bbox":[68,578,360,42]}
+{"kind":"textbox","id":"sh/f6t4fylg","slide":1,"name":"text-11","text":"WhatsApp  949 421 023","textPreview":"WhatsApp  949 421 023","textChars":21,"textLines":1,"bbox":[68,628,390,38]}
+{"kind":"image","id":"im/tsja9wry","slide":1,"name":"","geometry":"rect","alt":"Operación mayorista con balanza y javas","bbox":[560,0,720,720]}
+{"kind":"image","id":"im/7q1s7m9s","slide":1,"name":"","geometry":"roundRect","alt":"Ícono del Sistema Avícola","bbox":[64,50,72,72]}
+{"kind":"notes","id":"nt/9eq9dn","slide":1,"text":"[Sources]\n- Visual asset: C:\\laragon\\www\\sistema-pollos\\public\\images\\youtube\\miniatura-despacho-mayorista-base.png\n- Brand icon: C:\\laragon\\www\\sistema-pollos\\public\\icons\\icon-512.png\n- Authorship and contact supplied directly by Gustavo Noriega.\n[/Sources]"}
+{"kind":"slide","id":"sl/fvuufy","slide":2,"title":"LA OPORTUNIDAD","textShapes":13}
+{"kind":"textbox","id":"sh/z2lo32l4","slide":2,"name":"text-12","text":"LA OPORTUNIDAD","textPreview":"LA OPORTUNIDAD","textChars":14,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/03u5c72p","slide":2,"name":"text-13","text":"Una operación. Una fuente de verdad.","textPreview":"Una operación. Una fuente de verdad.","textChars":36,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"shape","id":"sh/l4365c3a","slide":2,"name":"shape-14","bbox":[102,310,1076,3]}
+{"kind":"shape","id":"sh/m5wnexkv","slide":2,"name":"shape-15","bbox":[182,296,28,28]}
+{"kind":"textbox","id":"sh/n65o72lg","slide":2,"name":"text-16","text":"PESAR","textPreview":"PESAR","textChars":5,"textLines":1,"bbox":[64,206,270,56]}
+{"kind":"textbox","id":"sh/8re5g721","slide":2,"name":"text-17","text":"Bruto, tara y neto","textPreview":"Bruto, tara y neto","textChars":18,"textLines":1,"bbox":[64,352,270,58]}
+{"kind":"shape","id":"sh/9sn69c3m","slide":2,"name":"shape-18","bbox":[470,296,28,28]}
+{"kind":"textbox","id":"sh/atwnihk7","slide":2,"name":"text-19","text":"VENDER","textPreview":"VENDER","textChars":6,"textLines":1,"bbox":[352,206,270,56]}
+{"kind":"textbox","id":"sh/vu5obmlc","slide":2,"name":"text-20","text":"Cliente, precio y ticket","textPreview":"Cliente, precio y ticket","textChars":24,"textLines":1,"bbox":[352,352,270,58]}
+{"kind":"shape","id":"sh/vq5cn294","slide":2,"name":"shape-21","bbox":[758,296,28,28]}
+{"kind":"textbox","id":"sh/upwvehsj","slide":2,"name":"text-22","text":"DESPACHAR","textPreview":"DESPACHAR","textChars":9,"textLines":1,"bbox":[640,206,270,56]}
+{"kind":"textbox","id":"sh/hcnepcru","slide":2,"name":"text-23","text":"Producto, destino y entrega","textPreview":"Producto, destino y entrega","textChars":27,"textLines":1,"bbox":[640,352,270,58]}
+{"kind":"shape","id":"sh/wredg7ap","slide":2,"name":"shape-24","bbox":[1046,296,28,28]}
+{"kind":"textbox","id":"sh/7mlcj29s","slide":2,"name":"text-25","text":"COBRAR","textPreview":"COBRAR","textChars":6,"textLines":1,"bbox":[928,206,270,56]}
+{"kind":"textbox","id":"sh/mlcvaxs7","slide":2,"name":"text-26","text":"Caja, cartera y pagos","textPreview":"Caja, cartera y pagos","textChars":21,"textLines":1,"bbox":[928,352,270,58]}
+{"kind":"textbox","id":"sh/9onulcry","slide":2,"name":"text-27","text":"Una sola fuente de información reduce pasos manuales y permite seguir la operación desde el peso hasta el saldo.","textPreview":"Una sola fuente de información reduce pasos manuales y permite seguir la operación desde el peso hasta el saldo.","textChars":112,"textLines":1,"bbox":[150,492,980,100]}
+{"kind":"shape","id":"sh/8nudc7ad","slide":2,"name":"shape-28","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/ripwvm9c","slide":2,"name":"text-29","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/qhgvm18r","slide":2,"name":"text-30","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"notes","id":"nt/fvuufy","slide":2,"text":"[Sources]\n- C:/laragon/www/sistema-pollos/routes/web.php\n- C:/laragon/www/sistema-pollos/config/access_modules.php\n- Narrative synthesis based on verified operational, dispatch, finance, and reporting modules.\n[/Sources]"}
+{"kind":"slide","id":"sl/6c60ru","slide":3,"title":"MAPA DEL SISTEMA","textShapes":15}
+{"kind":"textbox","id":"sh/m9wrapsz","slide":3,"name":"text-31","text":"MAPA DEL SISTEMA","textPreview":"MAPA DEL SISTEMA","textChars":16,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/9c7ql4ra","slide":3,"name":"text-32","text":"Cinco áreas trabajan sobre la misma operación","textPreview":"Cinco áreas trabajan sobre la misma operación","textChars":45,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"shape","id":"sh/8by9cza5","slide":3,"name":"shape-33","bbox":[213.67,288.5,437.66,4]}
+{"kind":"shape","id":"sh/vep8ne9g","slide":3,"name":"shape-34","bbox":[628.67,288.5,437.66,4]}
+{"kind":"shape","id":"sh/adgre9sv","slide":3,"name":"shape-35","bbox":[207.11,446,450.78,4]}
+{"kind":"shape","id":"sh/xg7ap4rm","slide":3,"name":"shape-36","bbox":[622.11,446,450.78,4]}
+{"kind":"shape","id":"sh/wfy9gza1","slide":3,"name":"shape-37","bbox":[532,466,216,4]}
+{"kind":"shape","id":"sh/bil8batc","slide":3,"name":"shape-38","bbox":[520,265,240,190]}
+{"kind":"textbox","id":"sh/qhc725sr","slide":3,"name":"text-39","text":"SISTEMA\nAVÍCOLA","textPreview":"SISTEMA | AVÍCOLA","textChars":15,"textLines":2,"bbox":[540,305,200,110]}
+{"kind":"shape","id":"sh/47yl47ql","slide":3,"name":"shape-40","bbox":[70,155,310,132]}
+{"kind":"shape","id":"sh/p87mxc76","slide":3,"name":"shape-41","bbox":[70,155,10,132]}
+{"kind":"textbox","id":"sh/25w32x8f","slide":3,"name":"text-42","text":"Operación","textPreview":"Operación","textChars":9,"textLines":1,"bbox":[96,177,268,36]}
+{"kind":"textbox","id":"sh/36p4v2p0","slide":3,"name":"text-43","text":"Recepción, pesaje\ny jornada","textPreview":"Recepción, pesaje | y jornada","textChars":27,"textLines":2,"bbox":[96,220,268,54]}
+{"kind":"shape","id":"sh/cvy58r6h","slide":3,"name":"shape-44","bbox":[900,155,310,132]}
+{"kind":"shape","id":"sh/dw7m1c72","slide":3,"name":"shape-45","bbox":[900,155,10,132]}
+{"kind":"textbox","id":"sh/q9g36h8r","slide":3,"name":"text-46","text":"Ventas","textPreview":"Ventas","textChars":6,"textLines":1,"bbox":[926,177,268,36]}
+{"kind":"textbox","id":"sh/rap4zmpc","slide":3,"name":"text-47","text":"Mayorista, minorista\ny precios","textPreview":"Mayorista, minorista | y precios","textChars":30,"textLines":2,"bbox":[926,220,268,54]}
+{"kind":"shape","id":"sh/szelwnqd","slide":3,"name":"shape-48","bbox":[70,470,310,132]}
+{"kind":"shape","id":"sh/t0nmps7y","slide":3,"name":"shape-49","bbox":[70,470,10,132]}
+{"kind":"textbox","id":"sh/9kvadkvq","slide":3,"name":"text-50","text":"Finanzas","textPreview":"Finanzas","textChars":8,"textLines":1,"bbox":[96,492,268,36]}
+{"kind":"textbox","id":"sh/ojmtkfe5","slide":3,"name":"text-51","text":"Compras, caja, cartera\ny pagos","textPreview":"Compras, caja, cartera | y pagos","textChars":30,"textLines":2,"bbox":[96,535,268,54]}
+{"kind":"shape","id":"sh/nidsbadk","slide":3,"name":"shape-52","bbox":[900,470,310,132]}
+{"kind":"shape","id":"sh/mh4bi5wz","slide":3,"name":"shape-53","bbox":[900,470,10,132]}
+{"kind":"textbox","id":"sh/xofah4vm","slide":3,"name":"text-54","text":"Logística","textPreview":"Logística","textChars":9,"textLines":1,"bbox":[926,492,268,36]}
+{"kind":"textbox","id":"sh/wnmtoze1","slide":3,"name":"text-55","text":"Despacho, flota\ny destinos","textPreview":"Despacho, flota | y destinos","textChars":26,"textLines":2,"bbox":[926,535,268,54]}
+{"kind":"shape","id":"sh/vmdsfudg","slide":3,"name":"shape-56","bbox":[485,520,310,112]}
+{"kind":"shape","id":"sh/al4bmpwv","slide":3,"name":"shape-57","bbox":[485,520,10,112]}
+{"kind":"textbox","id":"sh/5cful4vi","slide":3,"name":"text-58","text":"Control","textPreview":"Control","textChars":7,"textLines":1,"bbox":[511,542,268,36]}
+{"kind":"textbox","id":"sh/kr6tczed","slide":3,"name":"text-59","text":"Javas, roles y reportes","textPreview":"Javas, roles y reportes","textChars":23,"textLines":1,"bbox":[511,585,268,34]}
+{"kind":"shape","id":"sh/2xg761cv","slide":3,"name":"shape-60","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/3y98f6t0","slide":3,"name":"text-61","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/4zip8bul","slide":3,"name":"text-62","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"notes","id":"nt/6c60ru","slide":3,"text":"[Sources]\n- C:/laragon/www/sistema-pollos/routes/web.php\n- C:/laragon/www/sistema-pollos/config/access_modules.php\n- C:/laragon/www/sistema-pollos/database/seeders/DatabaseSeeder.php\n[/Sources]"}
+{"kind":"slide","id":"sl/encb5z","slide":4,"title":"CONTROL DE USUARIOS","textShapes":12}
+{"kind":"textbox","id":"sh/5cfq1cne","slide":4,"name":"text-63","text":"CONTROL DE USUARIOS","textPreview":"CONTROL DE USUARIOS","textChars":19,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/yp4r6x4n","slide":4,"name":"text-64","text":"Acceso seguro y módulos por función","textPreview":"Acceso seguro y módulos por función","textChars":35,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/jad8z258","slide":4,"name":"text-65","text":"Cada usuario ve las áreas asignadas a su trabajo.","textPreview":"Cada usuario ve las áreas asignadas a su trabajo.","textChars":49,"textLines":1,"bbox":[64,160,520,76]}
+{"kind":"shape","id":"sh/wnm94nmx","slide":4,"name":"shape-66","bbox":[64,277,13,13]}
+{"kind":"textbox","id":"sh/xovqxsn2","slide":4,"name":"text-67","text":"Roles y accesos personalizados por módulo.","textPreview":"Roles y accesos personalizados por módulo.","textChars":42,"textLines":1,"bbox":[92,270,487,44]}
+{"kind":"shape","id":"sh/al472x4r","slide":4,"name":"shape-68","bbox":[64,335,13,13]}
+{"kind":"textbox","id":"sh/bmd8vi5c","slide":4,"name":"text-69","text":"Sesión protegida y administración de usuarios.","textPreview":"Sesión protegida y administración de usuarios.","textChars":46,"textLines":1,"bbox":[92,328,487,44]}
+{"kind":"shape","id":"sh/gj69grm1","slide":4,"name":"shape-70","bbox":[64,393,13,13]}
+{"kind":"textbox","id":"sh/hkzq9wnm","slide":4,"name":"text-71","text":"Aplicación instalable en Windows como PWA.","textPreview":"Aplicación instalable en Windows como PWA.","textChars":42,"textLines":1,"bbox":[92,386,487,44]}
+{"kind":"shape","id":"sh/pon6twna","slide":4,"name":"shape-72","bbox":[64,451,13,13]}
+{"kind":"textbox","id":"sh/one5kbmp","slide":4,"name":"text-73","text":"Modo kiosco e impresión térmica para operación.","textPreview":"Modo kiosco e impresión térmica para operación.","textChars":47,"textLines":1,"bbox":[92,444,487,44]}
+{"kind":"shape","id":"sh/nm5or654","slide":4,"name":"shape-74","bbox":[624,142,592,480]}
+{"kind":"shape","id":"sh/1k36pwne","slide":4,"name":"shape-76","bbox":[640,158,286,448]}
+{"kind":"textbox","id":"sh/0ju5gr6t","slide":4,"name":"text-77","text":"ACCESO POR\nFUNCIÓN","textPreview":"ACCESO POR | FUNCIÓN","textChars":18,"textLines":2,"bbox":[670,252,226,92]}
+{"kind":"textbox","id":"sh/filonm58","slide":4,"name":"text-78","text":"Roles y sesión protegida","textPreview":"Roles y sesión protegida","textChars":24,"textLines":1,"bbox":[670,370,226,64]}
+{"kind":"textbox","id":"sh/ehcnehon","slide":4,"name":"text-79","text":"CAPTURA REAL","textPreview":"CAPTURA REAL","textChars":12,"textLines":1,"bbox":[648,166,150,24]}
+{"kind":"shape","id":"sh/lg7610ni","slide":4,"name":"shape-80","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/kfypsvmx","slide":4,"name":"text-81","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/4vqhkjyl","slide":4,"name":"text-82","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"image","id":"im/xw7ulsbe","slide":4,"name":"","geometry":"roundRect","alt":"Pantalla real de inicio de sesión del sistema","bbox":[640,158,560,448]}
+{"kind":"notes","id":"nt/encb5z","slide":4,"text":"[Sources]\n- Real UI capture: C:\\laragon\\www\\sistema-pollos\\tmp\\presentacion_sistema_avicola_capturas\\00_login.png\n- C:/laragon/www/sistema-pollos/config/access_modules.php\n- C:/laragon/www/sistema-pollos/docs/pwa-y-modo-kiosco.md\n[/Sources]"}
+{"kind":"slide","id":"sl/zevmk5","slide":5,"title":"OPERACIÓN REAL","textShapes":13}
+{"kind":"textbox","id":"sh/m54j2pwn","slide":5,"name":"text-83","text":"OPERACIÓN REAL","textPreview":"OPERACIÓN REAL","textChars":14,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/98v2d4vy","slide":5,"name":"text-84","text":"Recepción: peso, origen y destino","textPreview":"Recepción: peso, origen y destino","textChars":33,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/o7m14zet","slide":5,"name":"text-85","text":"Cada pesada entra al sistema desde la balanza o mediante captura manual.","textPreview":"Cada pesada entra al sistema desde la balanza o mediante captura manual.","textChars":72,"textLines":1,"bbox":[64,154,620,84]}
+{"kind":"shape","id":"sh/z2tk7adw","slide":5,"name":"shape-86","bbox":[64,275,13,13]}
+{"kind":"textbox","id":"sh/e1kjypwb","slide":5,"name":"text-87","text":"Conexión Serial o BLE, sujeta al equipo compatible.","textPreview":"Conexión Serial o BLE, sujeta al equipo compatible.","textChars":51,"textLines":1,"bbox":[92,268,592,44]}
+{"kind":"shape","id":"sh/14v29kv2","slide":5,"name":"shape-88","bbox":[64,332,13,13]}
+{"kind":"textbox","id":"sh/03m10feh","slide":5,"name":"text-89","text":"Origen propio o empresa externa.","textPreview":"Origen propio o empresa externa.","textChars":32,"textLines":1,"bbox":[92,325,592,44]}
+{"kind":"shape","id":"sh/jyxkjedg","slide":5,"name":"shape-90","bbox":[64,389,13,13]}
+{"kind":"textbox","id":"sh/yxo3a9wv","slide":5,"name":"text-91","text":"Aves, javas, tara, peso bruto y peso neto.","textPreview":"Aves, javas, tara, peso bruto y peso neto.","textChars":42,"textLines":1,"bbox":[92,382,592,44]}
+{"kind":"shape","id":"sh/03mpoj2l","slide":5,"name":"shape-92","bbox":[64,446,13,13]}
+{"kind":"textbox","id":"sh/14vqho36","slide":5,"name":"text-93","text":"Cuatro destinos configurables: almacén o despacho.","textPreview":"Cuatro destinos configurables: almacén o despacho.","textChars":50,"textLines":1,"bbox":[92,439,592,44]}
+{"kind":"textbox","id":"sh/e1k7m9kv","slide":5,"name":"text-94","text":"SERIAL","textPreview":"SERIAL","textChars":6,"textLines":1,"bbox":[64,548,150,34]}
+{"kind":"textbox","id":"sh/z2d8felg","slide":5,"name":"text-95","text":"BLE","textPreview":"BLE","textChars":3,"textLines":1,"bbox":[245,548,120,34]}
+{"kind":"textbox","id":"sh/cz2pkj2p","slide":5,"name":"text-96","text":"MANUAL","textPreview":"MANUAL","textChars":6,"textLines":1,"bbox":[395,548,180,34]}
+{"kind":"shape","id":"sh/d0bqdo3a","slide":5,"name":"shape-97","bbox":[64,590,500,5]}
+{"kind":"shape","id":"sh/qxk7i9kj","slide":5,"name":"shape-98","bbox":[790,126,370,520]}
+{"kind":"textbox","id":"sh/4b2pgz2t","slide":5,"name":"text-100","text":"CAPTURA REAL • 22 AGO 2026","textPreview":"CAPTURA REAL • 22 AGO 2026","textChars":26,"textLines":1,"bbox":[820,154,270,22]}
+{"kind":"shape","id":"sh/5cbq943y","slide":5,"name":"shape-101","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/lgjexwrq","slide":5,"name":"text-102","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/kfaxorq5","slide":5,"name":"text-103","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"image","id":"im/kzelsnad","slide":5,"name":"","geometry":"roundRect","alt":"Captura real de recepción de pollo vivo","bbox":[808,144,334,484]}
+{"kind":"notes","id":"nt/zevmk5","slide":5,"text":"[Sources]\n- Real UI capture: C:/Users/Gustavo/Downloads/WhatsApp Image 2026-08-22 at 17.00.16.jpeg\n- C:/laragon/www/sistema-pollos/app/Http/Requests/LiveChickenReception/UpdateLiveChickenReceptionConfigurationRequest.php\n- C:/laragon/www/sistema-pollos/routes/web.php\n[/Sources]"}
+{"kind":"slide","id":"sl/742jud","slide":6,"title":"DOS MODALIDADES • CUATRO PUESTOS","textShapes":9}
+{"kind":"textbox","id":"sh/kze5wjix","slide":6,"name":"text-104","text":"DOS MODALIDADES • CUATRO PUESTOS","textPreview":"DOS MODALIDADES • CUATRO PUESTOS","textChars":32,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/jy5o3ehc","slide":6,"name":"text-105","text":"Mayorista y minorista trabajan en paralelo","textPreview":"Mayorista y minorista trabajan en paralelo","textChars":42,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"shape","id":"sh/yxwnut0r","slide":6,"name":"shape-106","bbox":[64,158,552,310]}
+{"kind":"shape","id":"sh/xwn61oj6","slide":6,"name":"shape-107","bbox":[664,158,552,310]}
+{"kind":"textbox","id":"sh/atcnq90v","slide":6,"name":"text-110","text":"MAYORISTA","textPreview":"MAYORISTA","textChars":9,"textLines":1,"bbox":[72,494,250,38]}
+{"kind":"textbox","id":"sh/hs76d8zq","slide":6,"name":"text-111","text":"Javas • tara • aves • peso neto","textPreview":"Javas • tara • aves • peso neto","textChars":31,"textLines":1,"bbox":[72,538,500,34]}
+{"kind":"textbox","id":"sh/gryp43i5","slide":6,"name":"text-112","text":"MINORISTA","textPreview":"MINORISTA","textChars":9,"textLines":1,"bbox":[672,494,250,38]}
+{"kind":"textbox","id":"sh/2t8f6d0n","slide":6,"name":"text-113","text":"Peso • ajustes • presentación • total","textPreview":"Peso • ajustes • presentación • total","textChars":37,"textLines":1,"bbox":[672,538,500,34]}
+{"kind":"textbox","id":"sh/nuhgzih8","slide":6,"name":"text-114","text":"Pantalla secundaria para mostrar al cliente peso, cantidad y total.","textPreview":"Pantalla secundaria para mostrar al cliente peso, cantidad y total.","textChars":67,"textLines":1,"bbox":[64,610,1100,44]}
+{"kind":"shape","id":"sh/ovqx8nit","slide":6,"name":"shape-115","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/pwzy18ze","slide":6,"name":"text-116","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/epof2t0r","slide":6,"name":"text-117","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"image","id":"im/lgrupwry","slide":6,"name":"","geometry":"roundRect","alt":"Miniatura oficial del Sistema Avícola mayorista","bbox":[72,166,536,294]}
+{"kind":"image","id":"im/yd0veh8n","slide":6,"name":"","geometry":"roundRect","alt":"Miniatura oficial del Sistema Avícola minorista","bbox":[672,166,536,294]}
+{"kind":"notes","id":"nt/742jud","slide":6,"text":"[Sources]\n- Latest YouTube thumbnail: C:\\laragon\\www\\sistema-pollos\\public\\images\\youtube\\miniatura-sistema-avicola-mayorista.png\n- Latest YouTube thumbnail: C:\\laragon\\www\\sistema-pollos\\public\\images\\youtube\\miniatura-sistema-avicola-minorista.png\n- C:/laragon/www/sistema-pollos/routes/web.php\n[/Sources]"}
+{"kind":"slide","id":"sl/9fc31h","slide":7,"title":"DE PUNTA A PUNTA","textShapes":24}
+{"kind":"textbox","id":"sh/i5cna5ov","slide":7,"name":"text-118","text":"DE PUNTA A PUNTA","textPreview":"DE PUNTA A PUNTA","textChars":16,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/58365kn6","slide":7,"name":"text-119","text":"Un flujo conecta toda la jornada","textPreview":"Un flujo conecta toda la jornada","textChars":32,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/k7u5cf61","slide":7,"name":"text-120","text":"Cada etapa alimenta la siguiente y termina en control operativo y financiero.","textPreview":"Cada etapa alimenta la siguiente y termina en control operativo y financiero.","textChars":77,"textLines":1,"bbox":[64,132,1020,42]}
+{"kind":"shape","id":"sh/vil4zq54","slide":7,"name":"shape-121","bbox":[110,320,1050,4]}
+{"kind":"shape","id":"sh/ahsn6loj","slide":7,"name":"shape-122","bbox":[80,290,60,60]}
+{"kind":"textbox","id":"sh/xk3610na","slide":7,"name":"text-123","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[86,302,48,32]}
+{"kind":"textbox","id":"sh/wju58v6p","slide":7,"name":"text-124","text":"Configurar","textPreview":"Configurar","textChars":10,"textLines":1,"bbox":[22,210,176,34]}
+{"kind":"textbox","id":"sh/ne14vq58","slide":7,"name":"text-125","text":"Usuarios, precios\ny balanzas","textPreview":"Usuarios, precios | y balanzas","textChars":28,"textLines":2,"bbox":[18,246,184,68]}
+{"kind":"shape","id":"sh/mdsn2lon","slide":7,"name":"shape-126","bbox":[290,290,60,60]}
+{"kind":"textbox","id":"sh/kz2dkzix","slide":7,"name":"text-127","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[296,302,48,32]}
+{"kind":"textbox","id":"sh/l0but4zi","slide":7,"name":"text-128","text":"Programar","textPreview":"Programar","textChars":9,"textLines":1,"bbox":[232,386,176,34]}
+{"kind":"textbox","id":"sh/yxkbi90r","slide":7,"name":"text-129","text":"Jornada, proveedor\ny camión","textPreview":"Jornada, proveedor | y camión","textChars":27,"textLines":2,"bbox":[228,426,184,68]}
+{"kind":"shape","id":"sh/zytcruhc","slide":7,"name":"shape-130","bbox":[500,290,60,60]}
+{"kind":"textbox","id":"sh/cvitgzil","slide":7,"name":"text-131","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[506,302,48,32]}
+{"kind":"textbox","id":"sh/xwbup4z6","slide":7,"name":"text-132","text":"Recibir","textPreview":"Recibir","textChars":7,"textLines":1,"bbox":[442,210,176,34]}
+{"kind":"textbox","id":"sh/at0bep0v","slide":7,"name":"text-133","text":"Origen, javas\ny peso","textPreview":"Origen, javas | y peso","textChars":20,"textLines":2,"bbox":[438,246,184,68]}
+{"kind":"shape","id":"sh/bu9cnuh0","slide":7,"name":"shape-134","bbox":[710,290,60,60]}
+{"kind":"textbox","id":"sh/wrmdsji5","slide":7,"name":"text-135","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[716,302,48,32]}
+{"kind":"textbox","id":"sh/hsvu1oza","slide":7,"name":"text-136","text":"Despachar","textPreview":"Despachar","textChars":9,"textLines":1,"bbox":[652,386,176,34]}
+{"kind":"textbox","id":"sh/58ru5oru","slide":7,"name":"text-137","text":"Cliente, producto\ny ticket","textPreview":"Cliente, producto | y ticket","textChars":26,"textLines":2,"bbox":[648,426,184,68]}
+{"kind":"shape","id":"sh/47itcja9","slide":7,"name":"shape-138","bbox":[920,290,60,60]}
+{"kind":"textbox","id":"sh/369c3e9o","slide":7,"name":"text-139","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[926,302,48,32]}
+{"kind":"textbox","id":"sh/i50ba9s3","slide":7,"name":"text-140","text":"Finanzas","textPreview":"Finanzas","textChars":8,"textLines":1,"bbox":[862,210,176,34]}
+{"kind":"textbox","id":"sh/hkru1ori","slide":7,"name":"text-141","text":"Cobrar, pagar\ny conciliar","textPreview":"Cobrar, pagar | y conciliar","textChars":25,"textLines":2,"bbox":[858,246,184,68]}
+{"kind":"shape","id":"sh/gjit8jax","slide":7,"name":"shape-142","bbox":[1130,290,60,60]}
+{"kind":"textbox","id":"sh/vipcze9c","slide":7,"name":"text-143","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1136,302,48,32]}
+{"kind":"textbox","id":"sh/uhgb69s7","slide":7,"name":"text-144","text":"Controlar","textPreview":"Controlar","textChars":9,"textLines":1,"bbox":[1072,386,176,34]}
+{"kind":"textbox","id":"sh/tg7ux4rm","slide":7,"name":"text-145","text":"Resumen, saldos\ny reportes","textPreview":"Resumen, saldos | y reportes","textChars":26,"textLines":2,"bbox":[1068,426,184,68]}
+{"kind":"shape","id":"sh/8fyt4za1","slide":7,"name":"shape-146","bbox":[260,560,760,58]}
+{"kind":"textbox","id":"sh/ylwre58z","slide":7,"name":"text-147","text":"Los precios usados y el movimiento quedan vinculados al ticket y al control posterior.","textPreview":"Los precios usados y el movimiento quedan vinculados al ticket y al control posterior.","textChars":86,"textLines":1,"bbox":[288,575,704,30]}
+{"kind":"shape","id":"sh/jm5s7ap4","slide":7,"name":"shape-148","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/kne9gfqp","slide":7,"name":"text-149","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/lona9k7a","slide":7,"name":"text-150","text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"notes","id":"nt/9fc31h","slide":7,"text":"[Sources]\n- C:/laragon/www/sistema-pollos/routes/web.php\n- C:/laragon/www/sistema-pollos/app/Services/ReportDataService.php\n- C:/laragon/www/sistema-pollos/app/Http/Controllers/Api/V1/DailyDispatchTicketController.php\n[/Sources]"}
+{"kind":"slide","id":"sl/z7xb2y","slide":8,"title":"CONFIGURACIÓN + SERVICIO A MEDIDA","textShapes":12}
+{"kind":"textbox","id":"sh/elkrapsn","slide":8,"name":"text-151","text":"CONFIGURACIÓN + SERVICIO A MEDIDA","textPreview":"CONFIGURACIÓN + SERVICIO A MEDIDA","textChars":33,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/1oba54be","slide":8,"name":"text-152","text":"Venta y despacho se adaptan a tu operación","textPreview":"Venta y despacho se adaptan a tu operación","textChars":42,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"shape","id":"sh/0n29czat","slide":8,"name":"shape-153","bbox":[64,154,560,316]}
+{"kind":"textbox","id":"sh/29kre9sz","slide":8,"name":"text-155","text":"CONFIGURACIÓN INCLUIDA","textPreview":"CONFIGURACIÓN INCLUIDA","textChars":22,"textLines":1,"bbox":[668,150,450,34]}
+{"kind":"shape","id":"sh/pcva94bq","slide":8,"name":"shape-156","bbox":[668,209,13,13]}
+{"kind":"textbox","id":"sh/obm9gza5","slide":8,"name":"text-157","text":"Precios generales y por cliente.","textPreview":"Precios generales y por cliente.","textChars":32,"textLines":1,"bbox":[696,202,472,35]}
+{"kind":"shape","id":"sh/bedsbetg","slide":8,"name":"shape-158","bbox":[668,254,13,13]}
+{"kind":"textbox","id":"sh/ad4bi9sv","slide":8,"name":"text-159","text":"Balanzas, ajustes de peso y estaciones.","textPreview":"Balanzas, ajustes de peso y estaciones.","textChars":39,"textLines":1,"bbox":[696,247,472,35]}
+{"kind":"shape","id":"sh/onmporql","slide":8,"name":"shape-160","bbox":[668,299,13,13]}
+{"kind":"textbox","id":"sh/9ovqxwr6","slide":8,"name":"text-161","text":"Métodos de pago, entregas y tickets.","textPreview":"Métodos de pago, entregas y tickets.","textChars":36,"textLines":1,"bbox":[696,292,472,35]}
+{"kind":"shape","id":"sh/21k7m1sv","slide":8,"name":"shape-162","bbox":[668,344,13,13]}
+{"kind":"textbox","id":"sh/n2d8vm90","slide":8,"name":"text-163","text":"Roles, accesos y colores de reportes.","textPreview":"Roles, accesos y colores de reportes.","textChars":37,"textLines":1,"bbox":[696,337,472,35]}
+{"kind":"shape","id":"sh/wrmpsbqx","slide":8,"name":"shape-164","bbox":[668,420,500,2]}
+{"kind":"textbox","id":"sh/xsvq1gri","slide":8,"name":"text-165","text":"ADAPTACIÓN A MEDIDA","textPreview":"ADAPTACIÓN A MEDIDA","textChars":19,"textLines":1,"bbox":[668,448,515,34]}
+{"kind":"textbox","id":"sh/ap47q18r","slide":8,"name":"text-166","text":"Si tu negocio necesita pasos, campos, validaciones o formatos particulares, pueden desarrollarse como una adaptación a medida.","textPreview":"Si tu negocio necesita pasos, campos, validaciones o formatos particulares, pueden desarrollarse como una adaptación a medida.","textChars":126,"textLines":1,"bbox":[668,496,500,112]}
+{"kind":"shape","id":"sh/bqd8z69c","slide":8,"name":"shape-167","bbox":[64,514,560,102]}
+{"kind":"textbox","id":"sh/kv69wbqt","slide":8,"name":"text-168","text":"Tu forma de trabajar guía la configuración; los cambios adicionales se definen antes de implementar.","textPreview":"Tu forma de trabajar guía la configuración; los cambios adicionales se definen antes de implementar.","textChars":100,"textLines":1,"bbox":[92,536,504,60]}
+{"kind":"shape","id":"sh/lwfq5gre","slide":8,"name":"shape-169","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/tcbqpgji","slide":8,"name":"text-170","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/sb2pgbix","slide":8,"name":"text-171","text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"image","id":"im/6l0zax8v","slide":8,"name":"","geometry":"roundRect","alt":"Venta minorista con lectura de balanza","bbox":[72,162,544,300]}
+{"kind":"notes","id":"nt/z7xb2y","slide":8,"text":"[Sources]\n- Visual asset: C:\\laragon\\www\\sistema-pollos\\public\\images\\youtube\\miniatura-despacho-minorista-peso-balanza.png\n- C:/laragon/www/sistema-pollos/app/Http/Requests/Operation/UpdateRetailConfigurationRequest.php\n- C:/laragon/www/sistema-pollos/app/Models/AjustePesoMayoristaDos.php\n- C:/laragon/www/sistema-pollos/resources/views/precios-jornada.blade.php\n- C:/laragon/www/sistema-pollos/app/Services/ReportPaletteService.php\n[/Sources]"}
+{"kind":"slide","id":"sl/02d2qo","slide":9,"title":"LA OPERACIÓN TAMBIÉN DEJA CUENTAS CLARAS","textShapes":26}
+{"kind":"textbox","id":"sh/690julcz","slide":9,"name":"text-172","text":"LA OPERACIÓN TAMBIÉN DEJA CUENTAS CLARAS","textPreview":"LA OPERACIÓN TAMBIÉN DEJA CUENTAS CLARAS","textChars":40,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/twb250vq","slide":9,"name":"text-173","text":"Finanzas y control cierran el ciclo","textPreview":"Finanzas y control cierran el ciclo","textChars":35,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/sb21wvu5","slide":9,"name":"text-174","text":"Ventas, compras y movimientos de dinero dejan de vivir en registros aislados.","textPreview":"Ventas, compras y movimientos de dinero dejan de vivir en registros aislados.","textChars":77,"textLines":1,"bbox":[64,168,520,170]}
+{"kind":"shape","id":"sh/fytk7qdw","slide":9,"name":"shape-175","bbox":[64,380,180,6]}
+{"kind":"textbox","id":"sh/uxkjylcb","slide":9,"name":"text-176","text":"Una misma lectura para operación, administración y cierre de jornada.","textPreview":"Una misma lectura para operación, administración y cierre de jornada.","textChars":69,"textLines":1,"bbox":[64,414,510,96]}
+{"kind":"textbox","id":"sh/h0b290vm","slide":9,"name":"text-177","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[650,154,54,32]}
+{"kind":"textbox","id":"sh/gz210vu1","slide":9,"name":"text-178","text":"Compras","textPreview":"Compras","textChars":7,"textLines":1,"bbox":[720,150,260,36]}
+{"kind":"textbox","id":"sh/32tkbads","slide":9,"name":"text-179","text":"Contado o crédito","textPreview":"Contado o crédito","textChars":17,"textLines":1,"bbox":[980,154,236,42]}
+{"kind":"shape","id":"sh/21kj25c7","slide":9,"name":"shape-180","bbox":[650,212,566,1]}
+{"kind":"textbox","id":"sh/wre1w32l","slide":9,"name":"text-181","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[650,246,54,32]}
+{"kind":"textbox","id":"sh/xs7ip83q","slide":9,"name":"text-182","text":"Caja y cobranzas","textPreview":"Caja y cobranzas","textChars":16,"textLines":1,"bbox":[720,242,260,36]}
+{"kind":"textbox","id":"sh/apwjutkf","slide":9,"name":"text-183","text":"Efectivo y cuentas","textPreview":"Efectivo y cuentas","textChars":18,"textLines":1,"bbox":[980,246,236,42]}
+{"kind":"shape","id":"sh/bq50nyl0","slide":9,"name":"shape-184","bbox":[650,304,566,1]}
+{"kind":"textbox","id":"sh/kvy1032h","slide":9,"name":"text-185","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[650,338,54,32]}
+{"kind":"textbox","id":"sh/lw72t832","slide":9,"name":"text-186","text":"Pagos y gastos","textPreview":"Pagos y gastos","textChars":14,"textLines":1,"bbox":[720,334,260,36]}
+{"kind":"textbox","id":"sh/ytgjydkb","slide":9,"name":"text-187","text":"Método, responsable y detalle","textPreview":"Método, responsable y detalle","textChars":29,"textLines":1,"bbox":[980,338,236,42]}
+{"kind":"shape","id":"sh/jupkrylw","slide":9,"name":"shape-188","bbox":[650,396,566,1]}
+{"kind":"textbox","id":"sh/8zi14n2d","slide":9,"name":"text-189","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[650,430,54,32]}
+{"kind":"textbox","id":"sh/tkr2xsjy","slide":9,"name":"text-190","text":"Saldos","textPreview":"Saldos","textChars":6,"textLines":1,"bbox":[720,426,260,36]}
+{"kind":"textbox","id":"sh/h43a1o76","slide":9,"name":"text-191","text":"Clientes y proveedores","textPreview":"Clientes y proveedores","textChars":22,"textLines":1,"bbox":[980,430,236,42]}
+{"kind":"shape","id":"sh/g3u9sjql","slide":9,"name":"shape-192","bbox":[650,488,566,1]}
+{"kind":"textbox","id":"sh/v2lszep0","slide":9,"name":"text-193","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[650,522,54,32]}
+{"kind":"textbox","id":"sh/u1crq98f","slide":9,"name":"text-194","text":"Reportes","textPreview":"Reportes","textChars":8,"textLines":1,"bbox":[720,518,260,36]}
+{"kind":"textbox","id":"sh/58na5872","slide":9,"name":"text-195","text":"PDF, imagen y CSV según el caso","textPreview":"PDF, imagen y CSV según el caso","textChars":31,"textLines":1,"bbox":[980,522,236,42]}
+{"kind":"textbox","id":"sh/47utw3qh","slide":9,"name":"text-196","text":"VENTA / COMPRA","textPreview":"VENTA / COMPRA","textChars":14,"textLines":1,"bbox":[64,588,230,36]}
+{"kind":"textbox","id":"sh/36ls3ypw","slide":9,"name":"text-197","text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[300,580,70,42]}
+{"kind":"textbox","id":"sh/i5crut8b","slide":9,"name":"text-198","text":"CAJA Y CARTERA","textPreview":"CAJA Y CARTERA","textChars":14,"textLines":1,"bbox":[370,588,260,36]}
+{"kind":"textbox","id":"sh/lcjat4ry","slide":9,"name":"text-199","text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[636,580,70,42]}
+{"kind":"textbox","id":"sh/kba9kzqd","slide":9,"name":"text-200","text":"REPORTE","textPreview":"REPORTE","textChars":7,"textLines":1,"bbox":[710,588,220,36]}
+{"kind":"shape","id":"sh/aho7u5ob","slide":9,"name":"shape-201","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/biho3a5g","slide":9,"name":"text-202","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/c3qpwf61","slide":9,"name":"text-203","text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"notes","id":"nt/02d2qo","slide":9,"text":"[Sources]\n- C:/laragon/www/sistema-pollos/routes/web.php\n- C:/laragon/www/sistema-pollos/docs/finanzas.md\n- C:/laragon/www/sistema-pollos/docs/compras.md\n- C:/laragon/www/sistema-pollos/app/Http/Controllers/Web/ReportController.php\n[/Sources]"}
+{"kind":"slide","id":"sl/wofi3j","slide":10,"title":"CONTROL DE ACTIVOS OPERATIVOS","textShapes":18}
+{"kind":"textbox","id":"sh/8fedk3ud","slide":10,"name":"text-204","text":"CONTROL DE ACTIVOS OPERATIVOS","textPreview":"CONTROL DE ACTIVOS OPERATIVOS","textChars":29,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/ne5wryts","slide":10,"name":"text-205","text":"Javas y bandejas permanecen trazables","textPreview":"Javas y bandejas permanecen trazables","textChars":37,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/mtwvitc7","slide":10,"name":"text-206","text":"El sistema vincula inventario, préstamos, devoluciones y saldos con los movimientos del negocio.","textPreview":"El sistema vincula inventario, préstamos, devoluciones y saldos con los movimientos del negocio.","textChars":96,"textLines":1,"bbox":[64,132,1080,46]}
+{"kind":"shape","id":"sh/xk7ex8bu","slide":10,"name":"shape-207","bbox":[316,330,66,54]}
+{"kind":"shape","id":"sh/wjedonu9","slide":10,"name":"shape-208","bbox":[616,330,66,54]}
+{"kind":"shape","id":"sh/vi5wvito","slide":10,"name":"shape-209","bbox":[916,330,66,54]}
+{"kind":"shape","id":"sh/ahwvmdc3","slide":10,"name":"shape-210","bbox":[62,242,256,238]}
+{"kind":"textbox","id":"sh/do3ulobq","slide":10,"name":"text-211","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[84,264,58,28]}
+{"kind":"textbox","id":"sh/cnudcju5","slide":10,"name":"text-212","text":"Inventario","textPreview":"Inventario","textChars":10,"textLines":1,"bbox":[84,310,212,66]}
+{"kind":"textbox","id":"sh/2pwnm5on","slide":10,"name":"text-213","text":"Existencia por tipo y ubicación.","textPreview":"Existencia por tipo y ubicación.","textChars":32,"textLines":1,"bbox":[84,390,212,72]}
+{"kind":"shape","id":"sh/3q54vqp8","slide":10,"name":"shape-214","bbox":[362,242,256,238]}
+{"kind":"textbox","id":"sh/4re5ov6t","slide":10,"name":"text-215","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[384,264,58,28]}
+{"kind":"textbox","id":"sh/psnmx07e","slide":10,"name":"text-216","text":"Entrega o préstamo","textPreview":"Entrega o préstamo","textChars":18,"textLines":1,"bbox":[384,310,212,66]}
+{"kind":"textbox","id":"sh/qtwnq5oz","slide":10,"name":"text-217","text":"Movimiento asociado al cliente.","textPreview":"Movimiento asociado al cliente.","textChars":31,"textLines":1,"bbox":[384,390,212,72]}
+{"kind":"shape","id":"sh/ru54zapk","slide":10,"name":"shape-218","bbox":[662,242,256,238]}
+{"kind":"textbox","id":"sh/cvy5sf6p","slide":10,"name":"text-219","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[684,264,58,28]}
+{"kind":"textbox","id":"sh/dg7m1k7a","slide":10,"name":"text-220","text":"Devolución","textPreview":"Devolución","textChars":10,"textLines":1,"bbox":[684,310,212,66]}
+{"kind":"textbox","id":"sh/ehgnupov","slide":10,"name":"text-221","text":"Retorno asociado al cliente.","textPreview":"Retorno asociado al cliente.","textChars":28,"textLines":1,"bbox":[684,390,212,72]}
+{"kind":"shape","id":"sh/zip43apg","slide":10,"name":"shape-222","bbox":[962,242,256,238]}
+{"kind":"textbox","id":"sh/bm94rulo","slide":10,"name":"text-223","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[984,264,58,28]}
+{"kind":"textbox","id":"sh/alg3ip43","slide":10,"name":"text-224","text":"Saldo trazable","textPreview":"Saldo trazable","textChars":14,"textLines":1,"bbox":[984,310,212,66]}
+{"kind":"textbox","id":"sh/xormtk3u","slide":10,"name":"text-225","text":"Historial y pendiente por devolver.","textPreview":"Historial y pendiente por devolver.","textChars":35,"textLines":1,"bbox":[984,390,212,72]}
+{"kind":"shape","id":"sh/wnilkfm9","slide":10,"name":"shape-226","bbox":[245,544,790,66]}
+{"kind":"textbox","id":"sh/nip4nalc","slide":10,"name":"text-227","text":"Cada movimiento registra el cliente, el tipo y la cantidad; el sistema calcula el saldo pendiente.","textPreview":"Cada movimiento registra el cliente, el tipo y la cantidad; el sistema calcula el saldo pendiente.","textChars":98,"textLines":1,"bbox":[276,554,728,48]}
+{"kind":"shape","id":"sh/mhg3e547","slide":10,"name":"shape-228","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/9k7mpk3i","slide":10,"name":"text-229","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/ojylgfmx","slide":10,"name":"text-230","text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"notes","id":"nt/wofi3j","slide":10,"text":"[Sources]\n- C:/laragon/www/sistema-pollos/routes/web.php\n- C:/laragon/www/sistema-pollos/database/seeders/DatabaseSeeder.php\n- C:/laragon/www/sistema-pollos/resources/views/control-javas-inventario.blade.php\n- C:/laragon/www/sistema-pollos/resources/views/control-javas-trazabilidad.blade.php\n[/Sources]"}
+{"kind":"slide","id":"sl/f8dcz8","slide":11,"title":"EVIDENCIA Y SALIDA","textShapes":46}
+{"kind":"textbox","id":"sh/9gn65kna","slide":11,"name":"text-231","text":"EVIDENCIA Y SALIDA","textPreview":"EVIDENCIA Y SALIDA","textChars":18,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/mdw7a5oj","slide":11,"name":"text-232","text":"Reportes listos para decidir y compartir","textPreview":"Reportes listos para decidir y compartir","textChars":40,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/ne5o3a54","slide":11,"name":"text-233","text":"REPORTE REAL DEL SISTEMA • DATOS DE DEMOSTRACIÓN","textPreview":"REPORTE REAL DEL SISTEMA • DATOS DE DEMOSTRACIÓN","textChars":48,"textLines":1,"bbox":[64,136,630,28]}
+{"kind":"shape","id":"sh/wjypgz61","slide":11,"name":"shape-234","bbox":[64,174,680,410]}
+{"kind":"textbox","id":"sh/xk769kn6","slide":11,"name":"text-235","text":"REPORTE DE VENTAS POR CLIENTE","textPreview":"REPORTE DE VENTAS POR CLIENTE","textChars":29,"textLines":1,"bbox":[92,194,624,24]}
+{"kind":"textbox","id":"sh/ahg7epov","slide":11,"name":"text-236","text":"Periodo de demostración","textPreview":"Periodo de demostración","textChars":23,"textLines":1,"bbox":[92,220,624,18]}
+{"kind":"shape","id":"sh/bipo7u5g","slide":11,"name":"shape-237","bbox":[82,246,154,58]}
+{"kind":"textbox","id":"sh/cnu54v6h","slide":11,"name":"text-238","text":"REGISTROS","textPreview":"REGISTROS","textChars":9,"textLines":1,"bbox":[90,256,138,14]}
+{"kind":"textbox","id":"sh/do36x0n2","slide":11,"name":"text-239","text":"88","textPreview":"88","textChars":2,"textLines":1,"bbox":[90,274,138,22]}
+{"kind":"shape","id":"sh/ds3axo3m","slide":11,"name":"shape-240","bbox":[244,246,144,58]}
+{"kind":"textbox","id":"sh/s7u9ojm1","slide":11,"name":"text-241","text":"AVES NETAS","textPreview":"AVES NETAS","textChars":10,"textLines":1,"bbox":[252,256,128,14]}
+{"kind":"textbox","id":"sh/r6lsvelg","slide":11,"name":"text-242","text":"3,014","textPreview":"3,014","textChars":5,"textLines":1,"bbox":[252,274,128,22]}
+{"kind":"shape","id":"sh/q5crm94b","slide":11,"name":"shape-243","bbox":[396,246,166,58]}
+{"kind":"textbox","id":"sh/1wna1o3y","slide":11,"name":"text-244","text":"PESO NETO","textPreview":"PESO NETO","textChars":9,"textLines":1,"bbox":[404,256,150,14]}
+{"kind":"textbox","id":"sh/0vutsjmd","slide":11,"name":"text-245","text":"11,164.900 kg","textPreview":"11,164.900 kg","textChars":13,"textLines":1,"bbox":[404,274,150,22]}
+{"kind":"shape","id":"sh/fulszyls","slide":11,"name":"shape-246","bbox":[570,246,156,58]}
+{"kind":"textbox","id":"sh/etcrqt47","slide":11,"name":"text-247","text":"VENTA TOTAL","textPreview":"VENTA TOTAL","textChars":11,"textLines":1,"bbox":[578,256,140,14]}
+{"kind":"textbox","id":"sh/p0na583u","slide":11,"name":"text-248","text":"S/ 43,531.63","textPreview":"S/ 43,531.63","textChars":12,"textLines":1,"bbox":[578,274,140,22]}
+{"kind":"shape","id":"sh/ozetw3m9","slide":11,"name":"shape-249","bbox":[82,320,220,30]}
+{"kind":"textbox","id":"sh/83mds7al","slide":11,"name":"text-250","text":"CLIENTE","textPreview":"CLIENTE","textChars":7,"textLines":1,"bbox":[90,329,204,14]}
+{"kind":"shape","id":"sh/94vu1cb6","slide":11,"name":"shape-251","bbox":[302,320,112,30]}
+{"kind":"textbox","id":"sh/m14vqxsf","slide":11,"name":"text-252","text":"CANAL","textPreview":"CANAL","textChars":5,"textLines":1,"bbox":[310,329,96,14]}
+{"kind":"shape","id":"sh/n2dcz2t0","slide":11,"name":"shape-253","bbox":[414,320,148,30]}
+{"kind":"textbox","id":"sh/w76dwrah","slide":11,"name":"text-254","text":"PESO NETO","textPreview":"PESO NETO","textChars":9,"textLines":1,"bbox":[422,329,132,14]}
+{"kind":"shape","id":"sh/x8fu5wb2","slide":11,"name":"shape-255","bbox":[562,320,164,30]}
+{"kind":"textbox","id":"sh/a54vuhsr","slide":11,"name":"text-256","text":"TOTAL S/","textPreview":"TOTAL S/","textChars":8,"textLines":1,"bbox":[570,329,148,14]}
+{"kind":"shape","id":"sh/v6dc3mtw","slide":11,"name":"shape-257","bbox":[82,350,220,34]}
+{"kind":"textbox","id":"sh/cb2tknad","slide":11,"name":"text-258","text":"Cliente demo A","textPreview":"Cliente demo A","textChars":14,"textLines":1,"bbox":[90,359,204,16]}
+{"kind":"shape","id":"sh/dcbutsby","slide":11,"name":"shape-259","bbox":[302,350,112,34]}
+{"kind":"textbox","id":"sh/f21ofuhs","slide":11,"name":"text-260","text":"Mayorista","textPreview":"Mayorista","textChars":9,"textLines":1,"bbox":[310,359,96,16]}
+{"kind":"shape","id":"sh/e1s7mpg7","slide":11,"name":"shape-261","bbox":[414,350,148,34]}
+{"kind":"textbox","id":"sh/1436h4zi","slide":11,"name":"text-262","text":"1,008.200 kg","textPreview":"1,008.200 kg","textChars":12,"textLines":1,"bbox":[422,359,132,16]}
+{"kind":"shape","id":"sh/03apozyx","slide":11,"name":"shape-263","bbox":[562,350,164,34]}
+{"kind":"textbox","id":"sh/re1obahg","slide":11,"name":"text-264","text":"S/ 3,931.98","textPreview":"S/ 3,931.98","textChars":11,"textLines":1,"bbox":[570,359,148,16]}
+{"kind":"shape","id":"sh/qdsni5gv","slide":11,"name":"shape-265","bbox":[82,384,220,34]}
+{"kind":"textbox","id":"sh/d0j6dkzm","slide":11,"name":"text-266","text":"Cliente demo B","textPreview":"Cliente demo B","textChars":14,"textLines":1,"bbox":[90,393,204,16]}
+{"kind":"shape","id":"sh/sza5kfy1","slide":11,"name":"shape-267","bbox":[302,384,112,34]}
+{"kind":"textbox","id":"sh/3aho7ahk","slide":11,"name":"text-268","text":"Minorista","textPreview":"Minorista","textChars":9,"textLines":1,"bbox":[310,393,96,16]}
+{"kind":"shape","id":"sh/i98ne5gz","slide":11,"name":"shape-269","bbox":[414,384,148,34]}
+{"kind":"textbox","id":"sh/yhsridcj","slide":11,"name":"text-270","text":"515.900 kg","textPreview":"515.900 kg","textChars":10,"textLines":1,"bbox":[422,393,132,16]}
+{"kind":"shape","id":"sh/jilsbyd4","slide":11,"name":"shape-271","bbox":[562,384,164,34]}
+{"kind":"textbox","id":"sh/kju9k3up","slide":11,"name":"text-272","text":"S/ 2,192.58","textPreview":"S/ 2,192.58","textChars":11,"textLines":1,"bbox":[570,393,148,16]}
+{"kind":"shape","id":"sh/lk3ad8va","slide":11,"name":"shape-273","bbox":[82,438,644,116]}
+{"kind":"textbox","id":"sh/adsretcn","slide":11,"name":"text-274","text":"VISTA DEL REPORTE · DATOS ANONIMIZADOS","textPreview":"VISTA DEL REPORTE · DATOS ANONIMIZADOS","textChars":38,"textLines":1,"bbox":[106,458,596,24]}
+{"kind":"textbox","id":"sh/be1s7yds","slide":11,"name":"text-275","text":"Muestra de datos: no representa resultados garantizados.","textPreview":"Muestra de datos: no representa resultados garantizados.","textChars":56,"textLines":1,"bbox":[108,500,592,28]}
+{"kind":"textbox","id":"sh/wfa9g3ud","slide":11,"name":"text-276","text":"SALIDAS","textPreview":"SALIDAS","textChars":7,"textLines":1,"bbox":[80,602,120,28]}
+{"kind":"textbox","id":"sh/xgja98vy","slide":11,"name":"text-277","text":"PDF  •  IMAGEN  •  CSV SEGÚN REPORTE","textPreview":"PDF  •  IMAGEN  •  CSV SEGÚN REPORTE","textChars":36,"textLines":1,"bbox":[200,598,530,34]}
+{"kind":"textbox","id":"sh/mp8ra9wb","slide":11,"name":"text-278","text":"7 reportes PDF disponibles","textPreview":"7 reportes PDF disponibles","textChars":26,"textLines":1,"bbox":[790,142,380,36]}
+{"kind":"textbox","id":"sh/nqhs3edw","slide":11,"name":"text-279","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[790,205,42,28]}
+{"kind":"textbox","id":"sh/547u9wfe","slide":11,"name":"text-280","text":"Ventas por cliente","textPreview":"Ventas por cliente","textChars":18,"textLines":1,"bbox":[844,203,360,34]}
+{"kind":"shape","id":"sh/43ydgret","slide":11,"name":"shape-281","bbox":[790,245,414,1]}
+{"kind":"textbox","id":"sh/32pc7mx8","slide":11,"name":"text-282","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[790,263,42,28]}
+{"kind":"textbox","id":"sh/ihgvehwn","slide":11,"name":"text-283","text":"Estado de cuenta de cliente","textPreview":"Estado de cuenta de cliente","textChars":27,"textLines":1,"bbox":[844,261,360,34]}
+{"kind":"shape","id":"sh/hgnulcfi","slide":11,"name":"shape-284","bbox":[790,303,414,1]}
+{"kind":"textbox","id":"sh/gfedc7ex","slide":11,"name":"text-285","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[790,321,42,28]}
+{"kind":"textbox","id":"sh/ve5cj2xc","slide":11,"name":"text-286","text":"Estado de cuenta de proveedor","textPreview":"Estado de cuenta de proveedor","textChars":29,"textLines":1,"bbox":[844,319,360,34]}
+{"kind":"shape","id":"sh/udwvaxwr","slide":11,"name":"shape-287","bbox":[790,361,414,1]}
+{"kind":"textbox","id":"sh/tcnuhcf6","slide":11,"name":"text-288","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[790,379,42,28]}
+{"kind":"textbox","id":"sh/8bed87yl","slide":11,"name":"text-289","text":"Pagos y cobros","textPreview":"Pagos y cobros","textChars":14,"textLines":1,"bbox":[844,377,360,34]}
+{"kind":"shape","id":"sh/kvido76h","slide":11,"name":"shape-290","bbox":[790,419,414,1]}
+{"kind":"textbox","id":"sh/lwruxcn2","slide":11,"name":"text-291","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[790,437,42,28]}
+{"kind":"textbox","id":"sh/ytgvmxob","slide":11,"name":"text-292","text":"Movimientos por responsable","textPreview":"Movimientos por responsable","textChars":27,"textLines":1,"bbox":[844,435,360,34]}
+{"kind":"shape","id":"sh/zupcv25w","slide":11,"name":"shape-293","bbox":[790,477,414,1]}
+{"kind":"textbox","id":"sh/crydkn6l","slide":11,"name":"text-294","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[790,495,42,28]}
+{"kind":"textbox","id":"sh/xs7utsn6","slide":11,"name":"text-295","text":"Cuentas de clientes","textPreview":"Cuentas de clientes","textChars":19,"textLines":1,"bbox":[844,493,360,34]}
+{"kind":"shape","id":"sh/apgvixof","slide":11,"name":"shape-296","bbox":[790,535,414,1]}
+{"kind":"textbox","id":"sh/bqpcri50","slide":11,"name":"text-297","text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[790,553,42,28]}
+{"kind":"textbox","id":"sh/wn2dwrmp","slide":11,"name":"text-298","text":"Ruta de cobranza 2","textPreview":"Ruta de cobranza 2","textChars":18,"textLines":1,"bbox":[844,551,360,34]}
+{"kind":"shape","id":"sh/hobe5wna","slide":11,"name":"shape-299","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/ridgvqpc","slide":11,"name":"text-300","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/qh4fmlor","slide":11,"name":"text-301","text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"notes","id":"nt/f8dcz8","slide":11,"text":"[Sources]\n- Report preview: C:\\laragon\\www\\sistema-pollos\\tmp\\pdfs\\auditoria-imagenes\\reporte-2026-08-21-pagina-1.png\n- Report source PDF: C:/Users/Gustavo/Downloads/ventas-clientes-2026-08-21-2026-08-21.pdf\n- C:/laragon/www/sistema-pollos/app/Http/Controllers/Web/ReportController.php\n- C:/laragon/www/sistema-pollos/app/Services/ReportDataService.php\n[/Sources]"}
+{"kind":"slide","id":"sl/i8r80i","slide":12,"title":"ESCENARIO VALIDADO","textShapes":8}
+{"kind":"textbox","id":"sh/i1c3y5k7","slide":12,"name":"text-302","text":"ESCENARIO VALIDADO","textPreview":"ESCENARIO VALIDADO","textChars":18,"textLines":1,"bbox":[64,38,520,26]}
+{"kind":"textbox","id":"sh/54nmtkji","slide":12,"name":"text-303","text":"Reporte de prueba: peso, venta y devolución","textPreview":"Reporte de prueba: peso, venta y devolución","textChars":43,"textLines":1,"bbox":[64,66,1152,72]}
+{"kind":"textbox","id":"sh/43el0f2x","slide":12,"name":"text-304","text":"PESO NETO POR CLIENTE (KG)","textPreview":"PESO NETO POR CLIENTE (KG)","textChars":26,"textLines":1,"bbox":[64,142,500,28]}
+{"kind":"shape","id":"sh/tsnmxkju","slide":12,"name":"shape-305","bbox":[724,474,492,88]}
+{"kind":"textbox","id":"sh/s7el4f29","slide":12,"name":"text-306","text":"3 javas  •  30 aves  •  10 kg devueltos","textPreview":"3 javas  •  30 aves  •  10 kg devueltos","textChars":39,"textLines":1,"bbox":[746,492,448,36]}
+{"kind":"textbox","id":"sh/fup4zu10","slide":12,"name":"text-307","text":"La devolución queda registrada dentro del mismo escenario.","textPreview":"La devolución queda registrada dentro del mismo escenario.","textChars":58,"textLines":1,"bbox":[748,532,444,24]}
+{"kind":"textbox","id":"sh/etw36pkf","slide":12,"name":"text-308","text":"Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real.","textPreview":"Ejemplo elaborado con datos de prueba validados; no corresponde a información de un cliente real.","textChars":97,"textLines":1,"bbox":[64,610,1152,28]}
+{"kind":"shape","id":"sh/ob694jy1","slide":12,"name":"shape-309","bbox":[64,674,1152,1]}
+{"kind":"textbox","id":"sh/pcfqdofm","slide":12,"name":"text-310","text":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textPreview":"SISTEMA AVÍCOLA  •  PRESENTACIÓN COMERCIAL","textChars":42,"textLines":1,"bbox":[64,682,520,20]}
+{"kind":"textbox","id":"sh/29or29gv","slide":12,"name":"text-311","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1150,682,66,20]}
+{"kind":"chart","id":"ch/nidcjuts","slide":12,"name":"","chartType":"bar","bbox":[56,170,620,400]}
+{"kind":"table","id":"tb/zm1k76d4","slide":12,"name":"","rows":4,"cols":4,"preview":"Cliente | Peso neto | Venta | Aves","bbox":[724,190,492,252]}
+{"kind":"notes","id":"nt/i8r80i","slide":12,"text":"[Sources]\n- C:/laragon/www/sistema-pollos/tests/Feature/ReportPdfTest.php (validated fixture: Cliente Alfa/Beta, totals 125 kg, S/ 705, 30 birds, 3 containers, 10 kg return).\n- C:/laragon/www/sistema-pollos/app/Services/ReportDataService.php\n[/Sources]"}
+{"kind":"slide","id":"sl/copu25","slide":13,"title":"AGENDA UNA DEMOSTRACIÓN","textShapes":13}
+{"kind":"shape","id":"sh/xg769wfq","slide":13,"name":"shape-313","bbox":[638,0,12,720]}
+{"kind":"textbox","id":"sh/na5432xo","slide":13,"name":"text-315","text":"AGENDA UNA DEMOSTRACIÓN","textPreview":"AGENDA UNA DEMOSTRACIÓN","textChars":23,"textLines":1,"bbox":[152,62,370,28]}
+{"kind":"textbox","id":"sh/mpwnuhw3","slide":13,"name":"text-316","text":"Tu flujo real es\nel punto de partida.","textPreview":"Tu flujo real es | el punto de partida.","textChars":37,"textLines":2,"bbox":[64,152,520,146]}
+{"kind":"textbox","id":"sh/9c765cfe","slide":13,"name":"text-317","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[64,344,44,28]}
+{"kind":"textbox","id":"sh/obe5w7et","slide":13,"name":"text-318","text":"Revisamos","textPreview":"Revisamos","textChars":9,"textLines":1,"bbox":[122,340,226,34]}
+{"kind":"textbox","id":"sh/769of6xs","slide":13,"name":"text-319","text":"cómo vendes y despachas","textPreview":"cómo vendes y despachas","textChars":23,"textLines":1,"bbox":[356,344,232,34]}
+{"kind":"textbox","id":"sh/6l0n61w7","slide":13,"name":"text-320","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[64,420,44,28]}
+{"kind":"textbox","id":"sh/wvilw3qp","slide":13,"name":"text-321","text":"Configuramos","textPreview":"Configuramos","textChars":12,"textLines":1,"bbox":[122,416,226,34]}
+{"kind":"textbox","id":"sh/xwbmp87u","slide":13,"name":"text-322","text":"puestos, precios y accesos","textPreview":"puestos, precios y accesos","textChars":26,"textLines":1,"bbox":[356,420,232,34]}
+{"kind":"textbox","id":"sh/at03ut8j","slide":13,"name":"text-323","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[64,496,44,28]}
+{"kind":"textbox","id":"sh/bu94nyp4","slide":13,"name":"text-324","text":"Personalizamos","textPreview":"Personalizamos","textChars":14,"textLines":1,"bbox":[122,492,226,34]}
+{"kind":"textbox","id":"sh/orilsjqd","slide":13,"name":"text-325","text":"los pasos necesarios","textPreview":"los pasos necesarios","textChars":20,"textLines":1,"bbox":[356,496,232,34]}
+{"kind":"shape","id":"sh/9srmlo7y","slide":13,"name":"shape-326","bbox":[64,583,150,5]}
+{"kind":"textbox","id":"sh/mp03q987","slide":13,"name":"text-327","text":"Gustavo Noriega","textPreview":"Gustavo Noriega","textChars":15,"textLines":1,"bbox":[64,610,290,36]}
+{"kind":"textbox","id":"sh/nq94jeps","slide":13,"name":"text-328","text":"WhatsApp  949 421 023","textPreview":"WhatsApp  949 421 023","textChars":21,"textLines":1,"bbox":[64,652,360,36]}
+{"kind":"image","id":"im/ja9srihg","slide":13,"name":"","geometry":"rect","alt":"Venta minorista con balanza y atención al cliente","bbox":[650,0,630,720]}
+{"kind":"image","id":"im/5crat8zm","slide":13,"name":"","geometry":"roundRect","alt":"Ícono del Sistema Avícola","bbox":[64,48,64,64]}
+{"kind":"notes","id":"nt/copu25","slide":13,"text":"[Sources]\n- Visual asset: C:\\laragon\\www\\sistema-pollos\\public\\images\\youtube\\miniatura-despacho-minorista-base.png\n- Brand icon: C:\\laragon\\www\\sistema-pollos\\public\\icons\\icon-512.png\n- Authorship and contact supplied directly by Gustavo Noriega.\n- Customization language based on verified configuration surfaces and implementation scope.\n[/Sources]"}

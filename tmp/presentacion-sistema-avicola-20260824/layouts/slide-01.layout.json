@@ -1,0 +1,652 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/9eq9dn",
+    "id": "9eq9dn",
+    "slide": 1,
+    "layoutId": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#0A1E22",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Arial"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "ddd88b8d-6b05-463d-a5c3-80aa8ad6fe3a",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "e9966b83-ff48-4f28-9103-2a456e599593",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/tsja9wry",
+      "id": "1",
+      "bbox": [
+        560,
+        0,
+        720,
+        720
+      ],
+      "geometry": "rect",
+      "alt": "Operación mayorista con balanza y javas",
+      "contentType": "image/png",
+      "imageCrop": {
+        "left": 0.12,
+        "top": 0,
+        "right": 0,
+        "bottom": 0
+      },
+      "imageFit": "cover",
+      "imageMask": {
+        "geometry": "rect"
+      },
+      "asset": {
+        "assetId": "3f6b942c-ccb1-4624-a573-2cecc6fad538",
+        "contentType": "image/png",
+        "byteLength": 1967941
+      }
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bipkz2pg",
+      "id": "2",
+      "name": "shape-2",
+      "bbox": [
+        548,
+        0,
+        12,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#F6C344",
+      "lineColor": "#F6C344",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/7q1s7m9s",
+      "id": "3",
+      "bbox": [
+        64,
+        50,
+        72,
+        72
+      ],
+      "geometry": "roundRect",
+      "alt": "Ícono del Sistema Avícola",
+      "contentType": "image/png",
+      "imageFit": "contain",
+      "imageMask": {
+        "geometry": "roundRect",
+        "adjustmentList": [
+          {
+            "name": "adj",
+            "formula": "val 25000"
+          }
+        ]
+      },
+      "asset": {
+        "assetId": "229800ce-1d99-42d7-b0d6-e9a7d6cf72a6",
+        "contentType": "image/png",
+        "byteLength": 3484
+      }
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l8r25c7i",
+      "id": "4",
+      "name": "text-4",
+      "bbox": [
+        160,
+        60,
+        330,
+        28
+      ],
+      "geometry": "rect",
+      "text": "PRESENTACIÓN COMERCIAL",
+      "textPreview": "PRESENTACIÓN COMERCIAL",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#F6C344",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "PRESENTACIÓN COMERCIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "PRESENTACIÓN COMERCIAL",
+          "resolvedTextStyle": {
+            "fontSize": 16,
+            "typeface": "Arial",
+            "color": "#F6C344",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "PRESENTACIÓN COMERCIAL",
+              "fontSize": 16,
+              "typeface": "Arial",
+              "color": "#F6C344",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/07ilwrqd",
+      "id": "5",
+      "name": "text-5",
+      "bbox": [
+        64,
+        176,
+        430,
+        90
+      ],
+      "geometry": "rect",
+      "text": "SISTEMA",
+      "textPreview": "SISTEMA",
+      "resolvedFontSize": 78,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 78,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SISTEMA"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SISTEMA",
+          "resolvedTextStyle": {
+            "fontSize": 78,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "SISTEMA",
+              "fontSize": 78,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z69k3mps",
+      "id": "6",
+      "name": "text-6",
+      "bbox": [
+        64,
+        254,
+        430,
+        94
+      ],
+      "geometry": "rect",
+      "text": "AVÍCOLA",
+      "textPreview": "AVÍCOLA",
+      "resolvedFontSize": 82,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 82,
+        "typeface": "Arial",
+        "color": "#F6C344",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "AVÍCOLA"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "AVÍCOLA",
+          "resolvedTextStyle": {
+            "fontSize": 82,
+            "typeface": "Arial",
+            "color": "#F6C344",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "AVÍCOLA",
+              "fontSize": 82,
+              "typeface": "Arial",
+              "color": "#F6C344",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/y5g3uh87",
+      "id": "7",
+      "name": "text-7",
+      "bbox": [
+        68,
+        374,
+        420,
+        98
+      ],
+      "geometry": "rect",
+      "text": "Control integral desde la recepción hasta el reporte.",
+      "textPreview": "Control integral desde la recepción hasta el reporte.",
+      "resolvedFontSize": 29,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 29,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Control integral desde la"
+          },
+          {
+            "index": 2,
+            "text": "recepción hasta el reporte."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Control integral desde la recepción hasta el reporte.",
+          "resolvedTextStyle": {
+            "fontSize": 29,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Control integral desde la recepción hasta el reporte.",
+              "fontSize": 29,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1cn2ts7e",
+      "id": "8",
+      "name": "shape-8",
+      "bbox": [
+        68,
+        510,
+        130,
+        5
+      ],
+      "geometry": "rect",
+      "fillColor": "#18B9D4",
+      "lineColor": "#18B9D4",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gbelknqt",
+      "id": "9",
+      "name": "text-9",
+      "bbox": [
+        68,
+        546,
+        300,
+        26
+      ],
+      "geometry": "rect",
+      "text": "Creado y desarrollado por",
+      "textPreview": "Creado y desarrollado por",
+      "resolvedFontSize": 18,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 18,
+        "typeface": "Arial",
+        "color": "#A9B7B8",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Creado y desarrollado por"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Creado y desarrollado por",
+          "resolvedTextStyle": {
+            "fontSize": 18,
+            "typeface": "Arial",
+            "color": "#A9B7B8",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Creado y desarrollado por",
+              "fontSize": 18,
+              "typeface": "Arial",
+              "color": "#A9B7B8",
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e5knmtkv",
+      "id": "10",
+      "name": "text-10",
+      "bbox": [
+        68,
+        578,
+        360,
+        42
+      ],
+      "geometry": "rect",
+      "text": "Gustavo Noriega",
+      "textPreview": "Gustavo Noriega",
+      "resolvedFontSize": 31,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 31,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Gustavo Noriega"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Gustavo Noriega",
+          "resolvedTextStyle": {
+            "fontSize": 31,
+            "typeface": "Arial",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Gustavo Noriega",
+              "fontSize": 31,
+              "typeface": "Arial",
+              "color": "#FFFFFF",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/f6t4fylg",
+      "id": "11",
+      "name": "text-11",
+      "bbox": [
+        68,
+        628,
+        390,
+        38
+      ],
+      "geometry": "rect",
+      "text": "WhatsApp  949 421 023",
+      "textPreview": "WhatsApp  949 421 023",
+      "resolvedFontSize": 26,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 26,
+        "typeface": "Arial",
+        "color": "#F6C344",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "WhatsApp  949 421 023"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "WhatsApp  949 421 023",
+          "resolvedTextStyle": {
+            "fontSize": 26,
+            "typeface": "Arial",
+            "color": "#F6C344",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "WhatsApp  949 421 023",
+              "fontSize": 26,
+              "typeface": "Arial",
+              "color": "#F6C344",
+              "bold": true,
+              "alignment": "left"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}
