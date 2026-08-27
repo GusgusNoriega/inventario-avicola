@@ -41,7 +41,11 @@ test("el historial consulta una jornada con estado, origen y paginación sin par
   assert.doesNotMatch(source, /method:\s*["'](?:PUT|POST|PATCH|DELETE)["']/);
 });
 
-test("los reportes descargables usan únicamente la jornada seleccionada y rechazan identificadores inválidos", () => {
+test("los reportes usan únicamente la jornada seleccionada y rechazan identificadores inválidos", () => {
+  assert.equal(
+    buildHistoryReportUrl("preview", 84),
+    "/recepcion-pollo-vivo/historial/reporte/pdf?journey_id=84&preview=1",
+  );
   assert.equal(
     buildHistoryReportUrl("pdf", 84),
     "/recepcion-pollo-vivo/historial/reporte/pdf?journey_id=84",
@@ -50,15 +54,21 @@ test("los reportes descargables usan únicamente la jornada seleccionada y recha
     buildHistoryReportUrl("images", "92"),
     "/recepcion-pollo-vivo/historial/reporte/imagenes?journey_id=92",
   );
+  assert.equal(buildHistoryReportUrl("preview", ""), "");
   assert.equal(buildHistoryReportUrl("pdf", ""), "");
   assert.equal(buildHistoryReportUrl("images", 0), "");
   assert.equal(buildHistoryReportUrl("spreadsheet", 84), "");
 
+  assert.match(view, /id="liveHistoryReportPreview"[^>]*target="_blank"[^>]*rel="noopener"[^>]*aria-disabled="true"/);
   assert.match(view, /id="liveHistoryReportPdf"[^>]*aria-disabled="true"/);
   assert.match(view, /id="liveHistoryReportImages"[^>]*aria-disabled="true"/);
   assert.match(source, /function updateReportLinks\(journeyId = elements\.journey\.value\)/);
+  assert.match(source, /elements\.reportPreview, buildHistoryReportUrl\("preview", journeyId\)/);
   assert.match(source, /elements\.journey\.addEventListener\("change", \(\) => \{\s*updateReportLinks\(elements\.journey\.value\)/s);
+  assert.match(stylesheet, /\.live-history-report-actions\s*\{[^}]*grid-template-columns:\s*repeat\(3,/);
   assert.match(stylesheet, /@media \(max-width:\s*1024px\)[\s\S]*?\.live-history-report-actions\s*\{[^}]*width:\s*100%/);
+  assert.match(stylesheet, /@media \(max-width:\s*820px\)[\s\S]*?\.live-history-report-btn\.is-images\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+  assert.match(stylesheet, /@media \(max-width:\s*700px\)[\s\S]*?\.live-history-report-btn\.is-images\s*\{[^}]*grid-column:\s*auto/);
   assert.match(stylesheet, /\.live-history-report-btn\[aria-disabled="true"\]\s*\{[^}]*pointer-events:\s*none/);
 });
 

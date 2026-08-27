@@ -94,6 +94,13 @@
           </div>
         </div>
         <div class="live-history-report-actions">
+          <a id="liveHistoryReportPreview" class="btn live-history-report-btn is-preview" target="_blank" rel="noopener" aria-describedby="liveHistoryReportHelp" aria-disabled="true" tabindex="-1">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5"></path>
+              <circle cx="12" cy="12" r="2.5"></circle>
+            </svg>
+            <span>Previsualizar PDF</span>
+          </a>
           <a id="liveHistoryReportPdf" class="btn live-history-report-btn is-pdf" aria-describedby="liveHistoryReportHelp" aria-disabled="true" tabindex="-1">
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M7 3h7l4 4v14H7zM14 3v5h5"></path>

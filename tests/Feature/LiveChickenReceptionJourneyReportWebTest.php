@@ -58,6 +58,24 @@ class LiveChickenReceptionJourneyReportWebTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $response->getContent());
     }
 
+    public function test_pdf_can_be_previewed_inline_for_the_selected_journey(): void
+    {
+        $response = $this->get(route('recepcion-pollo-vivo.historial.report.pdf', [
+            'journey_id' => $this->journeyId,
+            'preview' => 1,
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader(
+                'Content-Disposition',
+                'inline; filename="'.$this->basename().'.pdf"',
+            )
+            ->assertHeader('Cache-Control');
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
     public function test_a_single_report_image_is_downloaded_as_png(): void
     {
         $response = $this->get(route('recepcion-pollo-vivo.historial.report.images', [
@@ -124,6 +142,12 @@ class LiveChickenReceptionJourneyReportWebTest extends TestCase
         $this->getJson(route('recepcion-pollo-vivo.historial.report.images', ['journey_id' => 0]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors('journey_id');
+        $this->getJson(route('recepcion-pollo-vivo.historial.report.pdf', [
+            'journey_id' => $this->journeyId,
+            'preview' => 'invalid',
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preview');
 
         $unauthorized = $this->createUserForCompany($this->user, [
             'sucursal_id' => $this->branchId,

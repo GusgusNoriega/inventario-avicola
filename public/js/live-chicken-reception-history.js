@@ -132,7 +132,8 @@ export function buildHistoryReportUrl(format, journeyId) {
   const normalizedFormat = String(format || "").toLowerCase();
   const normalizedJourneyId = String(journeyId ?? "").trim();
   const numericJourneyId = Number(normalizedJourneyId);
-  const reportPath = normalizedFormat === "pdf"
+  const isPreview = normalizedFormat === "preview";
+  const reportPath = normalizedFormat === "pdf" || isPreview
     ? "pdf"
     : (normalizedFormat === "images" ? "imagenes" : "");
 
@@ -145,7 +146,9 @@ export function buildHistoryReportUrl(format, journeyId) {
     return "";
   }
 
-  return `/recepcion-pollo-vivo/historial/reporte/${reportPath}?journey_id=${numericJourneyId}`;
+  const previewQuery = isPreview ? "&preview=1" : "";
+
+  return `/recepcion-pollo-vivo/historial/reporte/${reportPath}?journey_id=${numericJourneyId}${previewQuery}`;
 }
 
 function sourceFor(record = {}) {

@@ -25,6 +25,10 @@ class LiveChickenReceptionJourneyReportController extends Controller
 
     public function pdf(Request $request): Response
     {
+        $request->validate([
+            'preview' => ['nullable', 'boolean'],
+        ]);
+
         [$company, $report, $journeyId] = $this->reportPayload($request);
         $html = view('reports.live-chicken-reception-journey', [
             'company' => $company,
@@ -46,6 +50,7 @@ class LiveChickenReceptionJourneyReportController extends Controller
         return response($dompdf->output(), 200, $this->downloadHeaders(
             'application/pdf',
             $this->basename($report, $journeyId).'.pdf',
+            $request->boolean('preview'),
         ));
     }
 
@@ -138,11 +143,11 @@ class LiveChickenReceptionJourneyReportController extends Controller
     }
 
     /** @return array<string, string> */
-    private function downloadHeaders(string $contentType, string $filename): array
+    private function downloadHeaders(string $contentType, string $filename, bool $inline = false): array
     {
         return [
             'Content-Type' => $contentType,
-            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment').'; filename="'.$filename.'"',
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ];

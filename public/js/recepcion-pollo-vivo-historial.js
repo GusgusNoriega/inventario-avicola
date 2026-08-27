@@ -42,6 +42,7 @@ if (root) {
     pagePrevious: document.getElementById("liveHistoryPagePrevious"),
     pageNext: document.getElementById("liveHistoryPageNext"),
     pageStatus: document.getElementById("liveHistoryPageStatus"),
+    reportPreview: document.getElementById("liveHistoryReportPreview"),
     reportPdf: document.getElementById("liveHistoryReportPdf"),
     reportImages: document.getElementById("liveHistoryReportImages"),
   };
@@ -108,6 +109,7 @@ if (root) {
 
   function updateReportLinks(journeyId = elements.journey.value) {
     [
+      [elements.reportPreview, buildHistoryReportUrl("preview", journeyId)],
       [elements.reportPdf, buildHistoryReportUrl("pdf", journeyId)],
       [elements.reportImages, buildHistoryReportUrl("images", journeyId)],
     ].forEach(([link, url]) => {

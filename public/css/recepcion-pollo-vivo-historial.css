@@ -250,7 +250,7 @@ body.live-reception-history-page {
 
 .live-history-report-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(178px, 1fr));
+  grid-template-columns: repeat(3, minmax(158px, 1fr));
   gap: 10px;
   flex: 0 0 auto;
 }
@@ -277,6 +277,12 @@ body.live-reception-history-page {
   border-color: rgba(255, 101, 101, 0.55);
   color: #ffd0d0;
   background: rgba(154, 32, 32, 0.22);
+}
+
+.live-history-report-btn.is-preview {
+  border-color: rgba(180, 132, 255, 0.55);
+  color: #eadcff;
+  background: rgba(91, 48, 153, 0.24);
 }
 
 .live-history-report-btn.is-images {
@@ -668,6 +674,10 @@ body.live-reception-history-page {
   .live-history-report-actions {
     grid-template-columns: 1fr 1fr;
   }
+
+  .live-history-report-btn.is-images {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 700px) {
@@ -693,6 +703,10 @@ body.live-reception-history-page {
 
   .live-history-report-actions {
     grid-template-columns: 1fr;
+  }
+
+  .live-history-report-btn.is-images {
+    grid-column: auto;
   }
 
   .live-history-header p:last-child {
