@@ -10,6 +10,8 @@ import {
   buildTicketUpdatePayload,
   calculateDraftTotals,
   dispatchDraftFingerprint,
+  newestReceptionRowsFirst,
+  nextDraftWeighingNumber,
   normalizeDispatchDraft,
   remainingDispatchDraftAfterRegistration,
   receptionRecordLane,
@@ -93,21 +95,81 @@ test("los totales se apoyan en el final real de cada columna", () => {
 });
 
 test("cada columna presenta registros grandes en una tabla desplazable", () => {
+  const recordTableBlock = source.match(
+    /function renderRecordTable\(lane, rows, emptyMessage\)[\s\S]*?(?=\nfunction renderRecords)/,
+  )?.[0] || "";
+  const headers = [...recordTableBlock.matchAll(/<th scope="col">([^<]+)<\/th>/g)]
+    .map(([, label]) => label);
+  const rowRenderers = [
+    source.match(/function renderReceptionRecord\(record\)[\s\S]*?(?=\nfunction renderDispatchTicketRecord)/)?.[0] || "",
+    source.match(/function renderDispatchTicketRecord\(record\)[\s\S]*?(?=\nfunction renderDraftWeighing)/)?.[0] || "",
+    source.match(/function renderDraftWeighing\(weighing, lane, index\)[\s\S]*?(?=\nconst RECORD_TABLE_COLUMN_COUNT)/)?.[0] || "",
+  ];
+
   assert.match(view, /role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna/);
   assert.match(view, /dentro de cada tabla, mueve a los lados para ver todos los datos/);
   assert.match(source, /<table class="lir-record-table">/);
-  assert.match(source, /<th scope="col">Propietario<\/th>/);
-  assert.match(source, /<th scope="col">Peso bruto<\/th>/);
-  assert.match(source, /<th scope="col">Peso neto<\/th>/);
+  assert.deepEqual(headers.slice(0, 4), ["Registro", "Peso bruto", "Sexo", "Destino"]);
+  assert.equal(headers.length, 13);
+  rowRenderers.forEach((renderer) => {
+    const cellPositions = [
+      renderer.indexOf('class="lir-record-identity"'),
+      renderer.indexOf('class="lir-weight-cell is-gross"'),
+      renderer.indexOf('class="lir-sex-chip'),
+      renderer.indexOf('class="lir-record-destination"'),
+    ];
+    assert.ok(cellPositions.every((position) => position >= 0));
+    assert.deepEqual([...cellPositions].sort((left, right) => left - right), cellPositions);
+  });
   assert.match(source, /const RECORD_TABLE_COLUMN_COUNT = 13/);
   assert.match(stylesheet, /\.lir-record-table \{[^}]*min-width: 1410px;[^}]*font-size: \.86rem;/);
   assert.match(stylesheet, /\.lir-record-table thead th \{[^}]*position: sticky;/);
+  assert.match(stylesheet, /\.lir-weight-cell\.is-gross \{[^}]*font-size: 1rem;/);
   assert.match(stylesheet, /\.lir-weight-cell\.is-net \{[^}]*font-size: 1rem;/);
   assert.doesNotMatch(stylesheet, /\.lir-record-destination \{[^}]*text-overflow: ellipsis;/);
   assert.doesNotMatch(source, /<tr[^>]*role="button"/);
   assert.match(source, /class="lir-row-action is-edit"[^>]*data-live-edit-weighing/);
   assert.match(source, /class="lir-row-action is-edit"[^>]*data-live-edit-draft-weighing/);
   assert.doesNotMatch(source, /event\.target\.closest\("\[data-live-open-ticket\], \[data-live-edit-weighing\], \[data-live-edit-draft-weighing\]"\)/);
+});
+
+test("las pesadas se ordenan por su fecha real con las más recientes arriba", () => {
+  const rows = [
+    { id: "anterior", weighed_at: "2026-08-26T23:55:00-05:00" },
+    { id: "reciente", weighed_at: "2026-08-27T00:10:00-05:00" },
+    { id: "sin-fecha", weighed_at: "fecha-invalida" },
+  ];
+  const originalOrder = [...rows];
+
+  assert.deepEqual(
+    newestReceptionRowsFirst(rows).map(({ id }) => id),
+    ["reciente", "anterior", "sin-fecha"],
+  );
+  assert.deepEqual(rows, originalOrder);
+  assert.deepEqual(
+    newestReceptionRowsFirst([
+      { id: "primera", weighed_at: "2026-08-27T00:10:00-05:00", sort_tie: 1 },
+      { id: "agregada-después", weighed_at: "2026-08-27T00:10:00-05:00", sort_tie: 2 },
+    ]).map(({ id }) => id),
+    ["agregada-después", "primera"],
+  );
+  assert.match(source, /newestReceptionRowsFirst\(rows\)/);
+  assert.match(source, /<strong>Pesada \$\{normalized\.number\}<\/strong>/);
+});
+
+test("la numeración del borrador se conserva al editar y no se repite después de quitar", () => {
+  const draftSaveBlock = source.match(
+    /if \(state\.editingRecord\.kind === "draft"\)[\s\S]*?(?=\n  const reason = elements\.editReason)/,
+  )?.[0] || "";
+
+  assert.equal(nextDraftWeighingNumber([]), 1);
+  assert.equal(nextDraftWeighingNumber([{ number: 1 }, { number: 3 }]), 4);
+  assert.equal(nextDraftWeighingNumber([{}, {}]), 3);
+  assert.equal(source.match(/number: nextDraftWeighingNumber\(draft\.weighings\)/g)?.length, 2);
+  assert.match(
+    draftSaveBlock,
+    /\.\.\.values,[\s\S]*?number: draft\.weighings\[index\]\.number \?\? draft\.weighings\[index\]\.numero \?\? index \+ 1/,
+  );
 });
 
 test("la configuración de balanza vive en su propio popup", () => {

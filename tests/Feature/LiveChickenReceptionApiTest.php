@@ -11,6 +11,7 @@ use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TipoPollo;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -157,6 +158,33 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonPath('data.catalog.delivery_trucks.0.id', $this->deliveryVehicleId)
             ->assertJsonPath('data.catalog.delivery_drivers.0.id', $this->deliveryDriverId)
             ->assertJsonPath('data.totals.daily.weighings', 0);
+    }
+
+    public function test_overview_orders_weighings_by_actual_time_descending_across_midnight(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-08-27 00:30:00', 'America/Lima'));
+
+        try {
+            $this->saveConfiguration();
+            $recentId = (int) $this->postJson(
+                '/api/v1/recepcion-pollo-vivo/pesadas',
+                $this->payload(['weighed_at' => '2026-08-27T00:10:00-05:00']),
+            )->assertCreated()->json('weighing_id');
+            $olderId = (int) $this->postJson(
+                '/api/v1/recepcion-pollo-vivo/pesadas',
+                $this->payload(['weighed_at' => '2026-08-26T23:55:00-05:00']),
+            )->assertCreated()->json('weighing_id');
+
+            $recordIds = collect(
+                $this->getJson('/api/v1/recepcion-pollo-vivo')
+                    ->assertOk()
+                    ->json('data.records'),
+            )->pluck('id')->map(fn (mixed $id): int => (int) $id)->all();
+
+            $this->assertSame([$recentId, $olderId], $recordIds);
+        } finally {
+            $this->travelBack();
+        }
     }
 
     public function test_own_warehouse_weighing_updates_only_own_chicken_and_java_inventory(): void

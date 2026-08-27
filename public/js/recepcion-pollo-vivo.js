@@ -18,6 +18,8 @@ import {
   dispatchDraftFingerprint,
   dispatchDraftWeighingFingerprint,
   isDispatchTicketRecord,
+  newestReceptionRowsFirst,
+  nextDraftWeighingNumber,
   normalizeDispatchDraft,
   normalizeDraftWeighing,
   normalizeFullTicket,
@@ -569,6 +571,7 @@ function migratePendingDispatchToDraft(payload, sourceKey) {
     const tare = Math.round(cageWeight * cages * 1000) / 1000;
     draft.weighings.push(normalizeDraftWeighing({
       ...payload,
+      number: nextDraftWeighingNumber(draft.weighings),
       local_id: payload.idempotency_key,
       idempotency_key: payload.idempotency_key,
       cage_type_name: cageType?.name || `Java #${payload.cage_type_id}`,
@@ -1189,15 +1192,15 @@ function renderReceptionRecord(record) {
     <tr class="lir-record-row lir-weighing-row ${ownerExternal ? "is-external" : "is-own"} ${editable ? "is-clickable" : "is-readonly"}"
       ${editable ? `data-live-edit-weighing="${record.id}"` : ""}>
       <td class="lir-record-identity"><strong>#${record.number}</strong>${previousLayout}</td>
+      <td class="lir-weight-cell is-gross">${formatKg(record.gross_weight_kg)}</td>
+      <td><span class="lir-sex-chip ${record.sex === "HEMBRA" ? "is-female" : "is-male"}">${sexLabel}</span></td>
+      <td class="lir-record-destination">${escapeHtml(destinationLabel)}</td>
       <td class="lir-record-time">${formatTime(record.weighed_at)}</td>
       <td class="lir-record-owner">${escapeHtml(ownerLabel || "Empresa externa")}</td>
-      <td class="lir-record-destination">${escapeHtml(destinationLabel)}</td>
-      <td><span class="lir-sex-chip ${record.sex === "HEMBRA" ? "is-female" : "is-male"}">${sexLabel}</span></td>
       <td class="lir-record-cage-type">${escapeHtml(cageTypeLabel)}</td>
       <td class="lir-number-cell">${record.cages}</td>
       <td class="lir-number-cell">${record.birds_per_cage}</td>
       <td class="lir-number-cell is-birds">${record.birds}</td>
-      <td class="lir-weight-cell">${formatKg(record.gross_weight_kg)}</td>
       <td class="lir-weight-cell">${formatKg(record.tare_weight_kg)}</td>
       <td class="lir-weight-cell is-net">${formatKg(record.net_weight_kg)}</td>
       <td class="lir-record-actions">${editable
@@ -1233,15 +1236,15 @@ function renderDispatchTicketRecord(record) {
   return `
     <tr class="lir-record-row lir-ticket-record is-clickable" data-live-open-ticket="${ticketId}">
       <td class="lir-record-identity"><strong>${escapeHtml(code)}</strong><small class="lir-ticket-status">${escapeHtml(status === "CERRADO" ? "Despachado" : status)}</small></td>
+      <td class="lir-weight-cell is-gross">${formatKg(gross)}</td>
+      <td><span class="lir-sex-chip ${sex === "HEMBRA" ? "is-female" : "is-male"}">${sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
+      <td class="lir-record-destination">${escapeHtml(client.name || "Sin cliente")}</td>
       <td class="lir-record-time">${formatTime(record.weighed_at)}</td>
       <td class="lir-record-owner">${escapeHtml(owner.name || "Mi empresa")}</td>
-      <td class="lir-record-destination">${escapeHtml(client.name || "Sin cliente")}</td>
-      <td><span class="lir-sex-chip ${sex === "HEMBRA" ? "is-female" : "is-male"}">${sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
       <td class="lir-record-cage-type">${escapeHtml(cageType.name || cageType.code || "Tipos de java mixtos")}</td>
       <td class="lir-number-cell">${cages}</td>
       <td class="lir-number-cell">${record.birds_per_cage ?? "Mixto"}</td>
       <td class="lir-number-cell is-birds">${birds}</td>
-      <td class="lir-weight-cell">${formatKg(gross)}</td>
       <td class="lir-weight-cell">${formatKg(tare)}</td>
       <td class="lir-weight-cell is-net">${formatKg(net)}</td>
       <td class="lir-record-actions"><div class="lir-row-actions"><button class="lir-row-action is-open" type="button" data-live-open-ticket="${ticketId}" aria-label="Abrir ${escapeHtml(code)} completo">Abrir (${weighings})</button></div></td>
@@ -1255,23 +1258,23 @@ function renderDraftWeighing(weighing, lane, index) {
   return `
     <tr class="lir-record-row lir-weighing-row lir-draft-weighing ${registrationPending ? "is-readonly" : "is-clickable"}"
       ${registrationPending ? "" : `data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}"`} data-live-draft-lane="${lane}">
-      <td class="lir-record-identity"><strong>Pesada ${index + 1}</strong><small class="lir-draft-chip">Borrador</small></td>
+      <td class="lir-record-identity"><strong>Pesada ${normalized.number}</strong><small class="lir-draft-chip">Borrador</small></td>
+      <td class="lir-weight-cell is-gross">${formatKg(normalized.gross_weight_kg)}</td>
+      <td><span class="lir-sex-chip ${normalized.sex === "HEMBRA" ? "is-female" : "is-male"}">${normalized.sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
+      <td class="lir-record-destination">${escapeHtml(clientName)}</td>
       <td class="lir-record-time">${formatTime(normalized.weighed_at)}</td>
       <td class="lir-record-owner">Mi empresa</td>
-      <td class="lir-record-destination">${escapeHtml(clientName)}</td>
-      <td><span class="lir-sex-chip ${normalized.sex === "HEMBRA" ? "is-female" : "is-male"}">${normalized.sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
       <td class="lir-record-cage-type">${escapeHtml(normalized.cage_type_name)}</td>
       <td class="lir-number-cell">${normalized.cage_count}</td>
       <td class="lir-number-cell">${normalized.birds_per_cage}</td>
       <td class="lir-number-cell is-birds">${normalized.birds}</td>
-      <td class="lir-weight-cell">${formatKg(normalized.gross_weight_kg)}</td>
       <td class="lir-weight-cell">${formatKg(normalized.tare_weight_kg)}</td>
       <td class="lir-weight-cell is-net">${formatKg(normalized.net_weight_kg)}</td>
       <td class="lir-record-actions">${registrationPending
         ? '<small class="lir-readonly-chip">Confirmando</small>'
         : `<div class="lir-row-actions">
-            <button class="lir-row-action is-edit" type="button" data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Editar pesada ${index + 1} del borrador">Editar</button>
-            <button class="lir-row-action is-danger" type="button" data-live-delete-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Quitar pesada ${index + 1}">Quitar</button>
+            <button class="lir-row-action is-edit" type="button" data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Editar pesada ${normalized.number} del borrador">Editar</button>
+            <button class="lir-row-action is-danger" type="button" data-live-delete-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Quitar pesada ${normalized.number}">Quitar</button>
           </div>`}</td>
     </tr>`;
 }
@@ -1289,15 +1292,15 @@ function renderRecordTable(lane, rows, emptyMessage) {
       <thead>
         <tr>
           <th scope="col">Registro</th>
+          <th scope="col">Peso bruto</th>
+          <th scope="col">Sexo</th>
+          <th scope="col">Destino</th>
           <th scope="col">Hora</th>
           <th scope="col">Propietario</th>
-          <th scope="col">Destino</th>
-          <th scope="col">Sexo</th>
           <th scope="col">Tipo de java</th>
           <th scope="col">Javas</th>
           <th scope="col">Aves/java</th>
           <th scope="col">Pollos</th>
-          <th scope="col">Peso bruto</th>
           <th scope="col">Tara</th>
           <th scope="col">Peso neto</th>
           <th scope="col">Acciones</th>
@@ -1310,15 +1313,18 @@ function renderRecordTable(lane, rows, emptyMessage) {
 function renderRecords() {
   const records = state.data?.records || [];
   LANE_NUMBERS.forEach((lane) => {
+    let alertMarkup = null;
     const laneRecords = records.filter((record) => receptionRecordLane(record) === lane);
-    const recordMarkup = laneRecords.map((record) => (
-      isDispatchTicketRecord(record) ? renderDispatchTicketRecord(record) : renderReceptionRecord(record)
-    ));
+    const rows = laneRecords.map((record, index) => ({
+      weighed_at: record.weighed_at,
+      sort_tie: -index,
+      markup: isDispatchTicketRecord(record) ? renderDispatchTicketRecord(record) : renderReceptionRecord(record),
+    }));
     if ([5, 6].includes(lane)) {
       if (state.dispatchDraftsBlocked) {
         const expiredDraft = state.expiredDispatchDrafts?.[lane] || state.expiredDispatchDrafts?.[String(lane)] || {};
         const hasRegistrationAttempt = Boolean(expiredDraft.registration_attempt);
-        recordMarkup.unshift(`
+        alertMarkup = `
           <tr class="lir-expired-draft-row"><td colspan="${RECORD_TABLE_COLUMN_COUNT}">
             <div class="lir-expired-draft" role="alert">
               <strong>Borrador de otra jornada</strong>
@@ -1328,11 +1334,20 @@ function renderRecords() {
                 : ""}
               <button type="button" data-live-discard-expired-drafts>${hasRegistrationAttempt ? "Descartar sin comprobar" : "Descartar borradores vencidos"}</button>
             </div>
-          </td></tr>`);
+          </td></tr>`;
       } else {
-        recordMarkup.unshift(...dispatchDraft(lane).weighings.map((weighing, index) => renderDraftWeighing(weighing, lane, index)));
+        dispatchDraft(lane).weighings.forEach((weighing, index) => {
+          const normalized = normalizeDraftWeighing(weighing, index);
+          rows.push({
+            weighed_at: normalized.weighed_at,
+            sort_tie: laneRecords.length + index,
+            markup: renderDraftWeighing(weighing, lane, index),
+          });
+        });
       }
     }
+    const recordMarkup = newestReceptionRowsFirst(rows).map(({ markup }) => markup);
+    if (alertMarkup) recordMarkup.unshift(alertMarkup);
     elements.laneRows[lane - 1].innerHTML = renderRecordTable(
       lane,
       recordMarkup,
@@ -1655,6 +1670,7 @@ function addCaptureToDispatchDraft(payload) {
   draft.dispatch_client_name = String(client.name);
   draft.weighings.push(normalizeDraftWeighing({
     ...payload,
+    number: nextDraftWeighingNumber(draft.weighings),
     local_id: payload.idempotency_key,
     idempotency_key: payload.idempotency_key,
     cage_type_name: cageType.name,
@@ -2008,6 +2024,7 @@ async function saveWeighingEditor(event) {
         draft.weighings[index] = normalizeDraftWeighing({
           ...draft.weighings[index],
           ...values,
+          number: draft.weighings[index].number ?? draft.weighings[index].numero ?? index + 1,
           local_id: draft.weighings[index].local_id,
           idempotency_key: draft.weighings[index].idempotency_key || draft.weighings[index].local_id,
         }, index);

@@ -67,6 +67,29 @@ export function receptionRecordLane(record) {
   return normalizeReceptionSex(firstDefined(record?.sex, record?.chicken_sex)) === "HEMBRA" ? 2 : 1;
 }
 
+export function newestReceptionRowsFirst(rows) {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .map((row, index) => {
+      const timestamp = Date.parse(String(firstDefined(row?.weighed_at, row?.captured_at, "")));
+      const sortTie = Number(row?.sort_tie);
+      return {
+        row,
+        index,
+        timestamp: Number.isFinite(timestamp) ? timestamp : null,
+        sortTie: Number.isFinite(sortTie) ? sortTie : index,
+      };
+    })
+    .sort((left, right) => {
+      if (left.timestamp === null && right.timestamp !== null) return 1;
+      if (left.timestamp !== null && right.timestamp === null) return -1;
+      if (left.timestamp !== right.timestamp) return (right.timestamp ?? 0) - (left.timestamp ?? 0);
+      return right.sortTie - left.sortTie || right.index - left.index;
+    })
+    .map(({ row }) => row);
+}
+
 export function normalizeDraftWeighing(weighing = {}, index = 0) {
   const cages = numberValue(weighing.cage_count, weighing.cages, weighing.java_count, weighing.javas);
   const birdsPerCage = numberValue(
@@ -114,6 +137,17 @@ export function normalizeDraftWeighing(weighing = {}, index = 0) {
     weighed_at: String(firstDefined(weighing.weighed_at, weighing.captured_at, new Date().toISOString())),
     scale_reading: weighing.scale_reading || null,
   };
+}
+
+export function nextDraftWeighingNumber(weighings) {
+  if (!Array.isArray(weighings) || !weighings.length) return 1;
+
+  const highestNumber = weighings.reduce((highest, weighing, index) => {
+    const candidate = Number(firstDefined(weighing?.number, weighing?.numero, index + 1));
+    return Number.isInteger(candidate) && candidate > highest ? candidate : highest;
+  }, 0);
+
+  return highestNumber + 1;
 }
 
 export function createEmptyDispatchDraft(lane, draftId) {
