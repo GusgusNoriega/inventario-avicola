@@ -172,6 +172,22 @@ test("el editor de pesada conserva tamaño completo y cabe en modo vertical", ()
   assert.match(stylesheet, /@media \(max-width: 360px\) \{[\s\S]*?\.lir-modal-card\.is-weighing-editor > footer \{[^}]*flex-wrap: wrap;/);
 });
 
+test("el editor permite eliminar la pesada abierta y conserva los errores dentro del popup", () => {
+  const editor = view.match(/<form id="liveIntakeWeighingEditorForm"[\s\S]*?<\/form>/)?.[0] || "";
+  const deleteEditor = source.match(/async function deleteEditingWeighing\(\)[\s\S]*?(?=\nfunction setTicketEditorMessage)/)?.[0] || "";
+  assert.match(editor, /id="liveIntakeDeleteWeighing"[^>]*class="is-danger lir-editor-delete"[^>]*type="button"/);
+  assert.match(source, /deleteWeighingButton: document\.getElementById\("liveIntakeDeleteWeighing"\)/);
+  assert.match(deleteEditor, /editingContext\.kind === "draft"/);
+  assert.match(deleteEditor, /deleteDraftWeighing\([\s\S]*?editingContext\.originalFingerprint/);
+  assert.match(deleteEditor, /deleteWeighing\([\s\S]*?editingContext\.record\.updated_at/);
+  assert.match(source, /expectedFingerprint && visibleFingerprint !== expectedFingerprint/);
+  assert.match(source, /expected_updated_at: expectedUpdatedAt/);
+  assert.match(deleteEditor, /if \(!result\) return;[\s\S]*?elements\.weighingEditorModal\.hidden = true/);
+  assert.match(deleteEditor, /elements\.laneRows\[Number\(editingContext\.lane\) - 1\]\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(source, /elements\.deleteWeighingButton\.addEventListener\("click"/);
+  assert.match(stylesheet, /\.lir-modal-card button\.is-danger \{[^}]*color: var\(--lir-red\);/);
+});
+
 test("la captura usa una sola balanza, guarda entradas y agrega despachos al borrador", () => {
   assert.match(source, /new RetailScaleController\(/);
   assert.equal((source.match(/new RetailScaleController\(/g) || []).length, 1);

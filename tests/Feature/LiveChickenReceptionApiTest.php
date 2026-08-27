@@ -706,6 +706,32 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseHas('movimientos_inventario', ['estado' => 'ANULADO']);
     }
 
+    public function test_voiding_rejects_a_stale_weighing_version(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $staleUpdatedAt = (string) $created->json('data.records.0.updated_at');
+
+        PesadaRecepcionPolloVivo::query()
+            ->whereKey($weighingId)
+            ->update(['updated_at' => now()->addMinute()]);
+
+        $this->deleteJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'expected_updated_at' => $staleUpdatedAt,
+        ])->assertConflict()
+            ->assertJsonPath('message', 'La pesada fue modificada por otro usuario. Vuelve a abrirla antes de eliminarla.');
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'estado' => PesadaRecepcionPolloVivo::STATUS_ACTIVE,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+    }
+
     public function test_registered_reception_ticket_can_be_loaded_and_all_weighings_updated(): void
     {
         $this->saveConfiguration();

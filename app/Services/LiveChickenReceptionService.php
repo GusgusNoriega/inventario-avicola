@@ -333,8 +333,9 @@ class LiveChickenReceptionService
         object $branch,
         User $actor,
         int $weighingId,
+        ?string $expectedUpdatedAt = null,
     ): void {
-        DB::transaction(function () use ($companyId, $branch, $actor, $weighingId): void {
+        DB::transaction(function () use ($companyId, $branch, $actor, $weighingId, $expectedUpdatedAt): void {
             $this->receptionTicketInventory->lockCompanyScope($companyId);
             $weighing = PesadaRecepcionPolloVivo::query()
                 ->whereKey($weighingId)
@@ -347,6 +348,13 @@ class LiveChickenReceptionService
 
             if ($weighing->estado === PesadaRecepcionPolloVivo::STATUS_VOIDED) {
                 return;
+            }
+
+            if (filled($expectedUpdatedAt)
+                && $weighing->updated_at
+                && CarbonImmutable::parse($expectedUpdatedAt)->getTimestamp()
+                    !== $weighing->updated_at->getTimestamp()) {
+                abort(409, 'La pesada fue modificada por otro usuario. Vuelve a abrirla antes de eliminarla.');
             }
 
             $journey = JornadaOperativa::query()

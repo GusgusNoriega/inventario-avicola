@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\LiveChickenReception\StoreLiveChickenReceptionWeighingRequest;
 use App\Http\Requests\LiveChickenReception\UpdateLiveChickenReceptionConfigurationRequest;
 use App\Http\Requests\LiveChickenReception\UpdateLiveChickenReceptionWeighingRequest;
+use App\Http\Requests\LiveChickenReception\VoidLiveChickenReceptionWeighingRequest;
 use App\Services\LiveChickenReceptionService;
 use App\Services\OperationContextService;
 use Illuminate\Http\JsonResponse;
@@ -70,7 +71,7 @@ class LiveChickenReceptionController extends Controller
     }
 
     public function destroy(
-        Request $request,
+        VoidLiveChickenReceptionWeighingRequest $request,
         int $weighing,
     ): JsonResponse {
         $branch = $this->context->branch($request);
@@ -81,6 +82,7 @@ class LiveChickenReceptionController extends Controller
             $branch,
             $actor,
             $weighing,
+            $request->validated('expected_updated_at'),
         );
 
         return response()->json([

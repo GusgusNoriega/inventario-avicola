@@ -141,6 +141,7 @@ const elements = {
   weighingEditorCaption: document.getElementById("liveIntakeWeighingEditorCaption"),
   weighingEditorTitle: document.getElementById("liveIntakeWeighingEditorTitle"),
   weighingEditorMessage: document.getElementById("liveIntakeWeighingEditorMessage"),
+  deleteWeighingButton: document.getElementById("liveIntakeDeleteWeighing"),
   editSex: document.getElementById("liveIntakeEditSex"),
   editCageType: document.getElementById("liveIntakeEditCageType"),
   editBirdsPerCage: document.getElementById("liveIntakeEditBirdsPerCage"),
@@ -1801,23 +1802,29 @@ async function captureWeighing() {
   );
 }
 
-async function deleteWeighing(id) {
+async function deleteWeighing(id, feedback = setMessage, expectedUpdatedAt = null) {
   const record = state.data?.records?.find((item) => !isDispatchTicketRecord(item) && Number(item.id) === Number(id));
-  if (!record) return;
+  if (!record) return null;
   const confirmed = window.confirm(
-    `¿Anular la pesada #${record.number} de ${record.birds} aves y ${formatKg(record.net_weight_kg)}?`,
+    `¿Eliminar la pesada #${record.number} de ${record.birds} aves y ${formatKg(record.net_weight_kg)}? Quedará anulada y se corregirán los totales.`,
   );
-  if (!confirmed) return;
+  if (!confirmed) return null;
 
   state.busy = true;
   updateScaleUi();
-  setMessage("Anulando la pesada y corrigiendo los totales…");
+  feedback("Eliminando la pesada y corrigiendo los totales…");
   try {
-    const response = await apiRequest(`/recepcion-pollo-vivo/pesadas/${record.id}`, { method: "DELETE" });
+    const response = await apiRequest(`/recepcion-pollo-vivo/pesadas/${record.id}`, {
+      method: "DELETE",
+      ...(expectedUpdatedAt ? { body: JSON.stringify({ expected_updated_at: expectedUpdatedAt }) } : {}),
+    });
     renderData(response.data);
-    setMessage(response.message || "Pesada anulada.", "success");
+    const message = response.message || "Pesada eliminada correctamente.";
+    feedback(message, "success");
+    return { message };
   } catch (error) {
-    setMessage(firstValidationMessage(error), "error");
+    feedback(firstValidationMessage(error), "error");
+    return null;
   } finally {
     state.busy = false;
     updateScaleUi();
@@ -1915,6 +1922,14 @@ function openWeighingEditor(record, context = {}) {
   elements.editReason.value = "";
   elements.editReason.required = context.kind !== "draft";
   elements.editReason.closest("label").hidden = context.kind === "draft";
+  elements.deleteWeighingButton.textContent = context.kind === "draft" ? "Quitar" : "Eliminar";
+  elements.deleteWeighingButton.setAttribute(
+    "aria-label",
+    context.kind === "draft"
+      ? "Quitar pesada del borrador"
+      : `Eliminar pesada #${record.number || record.id}`,
+  );
+  elements.deleteWeighingButton.disabled = false;
   setWeighingEditorMessage(context.kind === "draft"
     ? "Los cambios se guardarán únicamente en este borrador."
     : "El peso corregido se registrará como manual y quedará auditado.");
@@ -2057,17 +2072,25 @@ async function saveWeighingEditor(event) {
   }
 }
 
-async function deleteDraftWeighing(lane, localId) {
+async function deleteDraftWeighing(lane, localId, feedback = setMessage, expectedFingerprint = null) {
   const laneNumber = Number(lane);
   const draft = dispatchDraft(laneNumber);
   const weighing = draft.weighings.find((item) => String(item.local_id) === String(localId));
-  if (!weighing) return;
-  if (draft.registration_attempt) {
-    setMessage("El ticket está pendiente de confirmación y no admite cambios.", "error");
-    return;
+  if (!weighing) {
+    feedback("La pesada ya fue retirada del borrador en otra pestaña.", "error");
+    return null;
   }
-  if (!window.confirm(`¿Quitar esta pesada de ${weighing.birds} pollos del borrador?`)) return;
-  const originalFingerprint = dispatchDraftWeighingFingerprint(weighing);
+  if (draft.registration_attempt) {
+    feedback("El ticket está pendiente de confirmación y no admite cambios.", "error");
+    return null;
+  }
+  const visibleFingerprint = dispatchDraftWeighingFingerprint(weighing);
+  if (expectedFingerprint && visibleFingerprint !== expectedFingerprint) {
+    feedback("La pesada cambió en otra pestaña. Vuelve a abrirla antes de eliminarla.", "error");
+    return null;
+  }
+  if (!window.confirm(`¿Quitar esta pesada de ${weighing.birds} pollos del borrador?`)) return null;
+  const originalFingerprint = expectedFingerprint || visibleFingerprint;
   let remainingCount = draft.weighings.length;
   try {
     const lockResult = await withDispatchDraftLock(laneNumber, async () => {
@@ -2089,20 +2112,57 @@ async function deleteDraftWeighing(lane, localId) {
       remainingCount = currentDraft.weighings.length;
     });
     if (!lockResult.acquired) {
-      setMessage("Otra pestaña está modificando este ticket. Intenta quitar la pesada nuevamente.", "error");
-      return;
+      feedback("Otra pestaña está modificando este ticket. Intenta quitar la pesada nuevamente.", "error");
+      return null;
     }
   } catch (error) {
-    setMessage(error.message, "error");
-    return;
+    feedback(error.message, "error");
+    return null;
   }
   renderRecords();
   renderTotals();
   renderLaneAssignments();
   updateCaptureAvailability();
-  setMessage(remainingCount
+  const message = remainingCount
     ? "Pesada retirada del borrador."
-    : "Borrador vacío; ya puedes cambiar el cliente.", "success");
+    : "Borrador vacío; ya puedes cambiar el cliente.";
+  feedback(message, "success");
+  return { message };
+}
+
+async function deleteEditingWeighing() {
+  if (!state.editingRecord || state.busy || elements.deleteWeighingButton.disabled) return;
+  const editingContext = { ...state.editingRecord };
+  elements.deleteWeighingButton.disabled = true;
+  state.busy = true;
+  updateScaleUi();
+  let result;
+  try {
+    result = editingContext.kind === "draft"
+      ? await deleteDraftWeighing(
+        editingContext.lane,
+        editingContext.localId,
+        setWeighingEditorMessage,
+        editingContext.originalFingerprint,
+      )
+      : await deleteWeighing(
+        editingContext.record.id,
+        setWeighingEditorMessage,
+        editingContext.record.updated_at,
+      );
+  } finally {
+    state.busy = false;
+    elements.deleteWeighingButton.disabled = false;
+    updateScaleUi();
+  }
+  if (!result) return;
+
+  editingContext.trigger?.setAttribute("aria-expanded", "false");
+  state.editingRecord = null;
+  elements.weighingEditorModal.hidden = true;
+  syncModalEnvironment();
+  elements.laneRows[Number(editingContext.lane) - 1]?.focus({ preventScroll: true });
+  setMessage(result.message, "success");
 }
 
 function setTicketEditorMessage(message, tone = "") {
@@ -2784,6 +2844,7 @@ elements.openManualWeight.addEventListener("click", openManualWeight);
 elements.manualWeightForm.addEventListener("submit", applyManualWeight);
 document.querySelectorAll("[data-live-close-manual-weight]").forEach((button) => button.addEventListener("click", closeManualWeight));
 elements.weighingEditorForm.addEventListener("submit", saveWeighingEditor);
+elements.deleteWeighingButton.addEventListener("click", () => { void deleteEditingWeighing(); });
 document.querySelectorAll("[data-live-close-weighing-editor]").forEach((button) => button.addEventListener("click", closeWeighingEditor));
 elements.ticketEditorForm.addEventListener("submit", saveTicketEditor);
 elements.printTicket.addEventListener("click", () => printRegisteredTicket());

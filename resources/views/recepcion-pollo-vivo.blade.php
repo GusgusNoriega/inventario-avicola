@@ -268,7 +268,7 @@
         <label class="lir-editor-reason"><span>Motivo de la corrección</span><input id="liveIntakeEditReason" type="text" minlength="3" maxlength="250" required placeholder="Ej. Corrección de lectura"></label>
       </section>
       <p id="liveIntakeWeighingEditorMessage" class="lir-message" role="status" aria-live="polite"></p>
-      <footer><button type="button" data-live-close-weighing-editor>Cancelar</button><button class="is-primary" type="submit">Guardar pesada</button></footer>
+      <footer><button id="liveIntakeDeleteWeighing" class="is-danger lir-editor-delete" type="button">Eliminar</button><button type="button" data-live-close-weighing-editor>Cancelar</button><button class="is-primary" type="submit">Guardar pesada</button></footer>
     </form>
   </div>
 

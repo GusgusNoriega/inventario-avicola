@@ -325,6 +325,8 @@ button, select { touch-action: manipulation; }
 .lir-modal-card > footer { bottom: 0; justify-content: flex-end; border-top: 1px solid var(--lir-border); }
 .lir-modal-card > footer button { padding: 0 18px; }
 .lir-modal-card button.is-primary { background: var(--lir-green); color: #062016; border-color: var(--lir-green); }
+.lir-modal-card button.is-danger { border-color: rgba(255, 127, 129, .48); background: rgba(255, 127, 129, .1); color: var(--lir-red); }
+.lir-modal-card.is-weighing-editor > footer .lir-editor-delete { margin-right: auto; }
 
 @media (max-width: 820px) {
   .lir-zoom-surface { padding: 8px; }
