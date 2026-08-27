@@ -9,6 +9,7 @@
 </head>
 <body class="live-intake-page">
   <main id="liveIntakeMain" class="lir-shell" data-live-user-id="{{ auth()->id() }}">
+    <div id="liveIntakeZoomSurface" class="lir-zoom-surface">
     <header class="lir-topbar">
       <div>
         <p>Camión del día</p>
@@ -163,6 +164,7 @@
       <div><span>Bruto</span><strong id="liveIntakeSelectedGross">0.000 kg</strong></div>
       <div class="is-net"><span>Neto</span><strong id="liveIntakeSelectedNet">0.000 kg</strong></div>
     </footer>
+    </div>
   </main>
 
   <div id="liveIntakeSettingsModal" class="lir-modal" hidden>

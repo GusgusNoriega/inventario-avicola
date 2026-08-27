@@ -147,16 +147,23 @@ test("el zoom de recepción es independiente y respeta sus niveles", () => {
   assert.match(source, /const ZOOM_LEVELS = \[67, 75, 80, 90, 100, 110, 125, 150\]/);
   assert.match(source, /sistema-pollos-recepcion-pollo-vivo-zoom-v1/);
   assert.match(source, /document\.documentElement\.style\.removeProperty\("zoom"\)/);
-  assert.match(source, /elements\.main\.style\.zoom = String\(normalized \/ 100\)/);
+  assert.match(source, /elements\.main\.style\.removeProperty\("zoom"\)/);
+  assert.match(source, /elements\.zoomSurface\.style\.removeProperty\("width"\)/);
+  assert.match(source, /elements\.zoomSurface\.style\.zoom = String\(scale\)/);
+  assert.doesNotMatch(source, /elements\.main\.style\.zoom\s*=/);
+  assert.doesNotMatch(source, /elements\.zoomSurface\.style\.width\s*=/);
   assert.doesNotMatch(source, /document\.documentElement\.style\.zoom\s*=/);
   assert.match(source, /event\.key === ZOOM_STORAGE_KEY/);
 });
 
 test("el editor de pesada conserva tamaño completo y cabe en modo vertical", () => {
   const mainMarkup = view.match(/<main[\s\S]*?<\/main>/)?.[0] || "";
+  assert.match(mainMarkup, /id="liveIntakeZoomSurface" class="lir-zoom-surface"/);
   assert.ok(view.indexOf("</main>") < view.indexOf('id="liveIntakeWeighingEditorModal"'));
   assert.doesNotMatch(mainMarkup, /class="lir-modal"/);
   assert.equal((view.match(/class="lir-modal"/g) || []).length, 8);
+  assert.match(stylesheet, /\.lir-shell \{[^}]*max-width: 100vw;[^}]*overflow-x: hidden;[^}]*overflow-x: clip;/);
+  assert.match(stylesheet, /\.lir-zoom-surface \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*padding: 12px;/);
   assert.match(stylesheet, /\.lir-modal-card \{[^}]*max-height: calc\(100dvh - 32px\);[^}]*overflow: auto;/);
   assert.match(stylesheet, /\.lir-modal > \.lir-modal-card \{[^}]*max-height: min\(calc\(100dvh - 32px\), 100%\);/);
   assert.match(stylesheet, /\.lir-editor-grid label \{[^}]*min-width: 0;[^}]*max-width: 100%;/);

@@ -48,6 +48,7 @@ const FALLBACK_LANE_PROFILES = {
 
 const elements = {
   main: document.getElementById("liveIntakeMain"),
+  zoomSurface: document.getElementById("liveIntakeZoomSurface"),
   operatingDate: document.getElementById("liveIntakeOperatingDate"),
   openSettings: document.getElementById("liveIntakeOpenSettings"),
   settingsModal: document.getElementById("liveIntakeSettingsModal"),
@@ -708,11 +709,14 @@ async function restorePendingCapture(companyId, branchId) {
 
 function applyZoom(value, persist = true) {
   const normalized = ZOOM_LEVELS.includes(Number(value)) ? Number(value) : 100;
+  const scale = normalized / 100;
   state.zoom = normalized;
-  // El zoom pertenece a la superficie de trabajo. Los modales son hermanos
-  // del <main> y deben conservar controles y texto a tamaño completo.
+  // El shell conserva el tamaño físico del viewport para que los modales se
+  // centren en la pantalla real. Solo el contenido interior recibe el zoom.
   document.documentElement.style.removeProperty("zoom");
-  elements.main.style.zoom = String(normalized / 100);
+  elements.main.style.removeProperty("zoom");
+  elements.zoomSurface.style.removeProperty("width");
+  elements.zoomSurface.style.zoom = String(scale);
   elements.zoomValue.textContent = `${normalized} %`;
   elements.zoomOut.disabled = normalized === ZOOM_LEVELS[0];
   elements.zoomIn.disabled = normalized === ZOOM_LEVELS.at(-1);

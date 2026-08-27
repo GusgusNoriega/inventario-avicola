@@ -70,6 +70,7 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('id="liveIntakeDeliveryTruckModal"', $view);
         $this->assertStringContainsString('id="liveIntakeDeliveryDriverModal"', $view);
         $this->assertStringContainsString('id="liveIntakeWeighingEditorModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeZoomSurface"', $view);
         $this->assertStringContainsString('id="liveIntakeTicketEditorModal"', $view);
         $this->assertStringContainsString('id="liveIntakeTicketEditReason"', $view);
         $this->assertStringContainsString('role="region" aria-label="Clientes disponibles"', $view);
@@ -84,7 +85,11 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('BALANZA_RECEPCION_POLLO_VIVO', $javascript);
         $this->assertStringContainsString('ZOOM_STORAGE_KEY', $javascript);
         $this->assertStringContainsString('document.documentElement.style.removeProperty("zoom")', $javascript);
-        $this->assertStringContainsString('elements.main.style.zoom', $javascript);
+        $this->assertStringContainsString('elements.main.style.removeProperty("zoom")', $javascript);
+        $this->assertStringContainsString('elements.zoomSurface.style.removeProperty("width")', $javascript);
+        $this->assertStringContainsString('elements.zoomSurface.style.zoom = String(scale)', $javascript);
+        $this->assertStringNotContainsString('elements.main.style.zoom =', $javascript);
+        $this->assertStringNotContainsString('elements.zoomSurface.style.width =', $javascript);
         $this->assertStringNotContainsString('document.documentElement.style.zoom =', $javascript);
         $this->assertStringContainsString('/recepcion-pollo-vivo/pesadas', $javascript);
         $this->assertStringContainsString('/recepcion-pollo-vivo/tickets', $javascript);
@@ -112,6 +117,9 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('.lir-lanes.is-warehouse-lanes', $stylesheet);
         $this->assertStringContainsString('width: calc(200% + 8px)', $stylesheet);
         $this->assertStringContainsString('body { min-width: 0; overflow-x: hidden; }', $stylesheet);
+        $this->assertStringContainsString('.lir-zoom-surface', $stylesheet);
+        $this->assertStringContainsString('max-width: 100vw', $stylesheet);
+        $this->assertStringContainsString('overflow-x: clip', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-warehouse', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-client', $stylesheet);
         $this->assertStringContainsString('.lir-client-picker-trigger', $stylesheet);
