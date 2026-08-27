@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Web\AuthController as WebAuthController;
+use App\Http\Controllers\Web\LiveChickenReceptionJourneyReportController;
 use App\Http\Controllers\Web\ReportController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,6 +41,10 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('recepcion-pollo-vivo');
             Route::view('/recepcion-pollo-vivo/historial', 'recepcion-pollo-vivo-historial')
                 ->name('recepcion-pollo-vivo.historial');
+            Route::get('/recepcion-pollo-vivo/historial/reporte/pdf', [LiveChickenReceptionJourneyReportController::class, 'pdf'])
+                ->name('recepcion-pollo-vivo.historial.report.pdf');
+            Route::get('/recepcion-pollo-vivo/historial/reporte/imagenes', [LiveChickenReceptionJourneyReportController::class, 'images'])
+                ->name('recepcion-pollo-vivo.historial.report.images');
         });
 
         Route::view('/operacion/pantalla-cliente', 'pantalla-cliente')

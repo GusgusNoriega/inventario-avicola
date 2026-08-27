@@ -80,6 +80,37 @@
           <button id="liveHistoryFilterReset" class="btn btn-ghost" type="button">Restablecer</button>
         </div>
       </div>
+      <div class="live-history-report-bar" aria-labelledby="liveHistoryReportTitle">
+        <div class="live-history-report-copy">
+          <span class="live-history-report-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7 3h7l4 4v14H7z"></path>
+              <path d="M14 3v5h5M9.5 13h5M9.5 16h5"></path>
+            </svg>
+          </span>
+          <div>
+            <h3 id="liveHistoryReportTitle">Reporte completo de la jornada</h3>
+            <p id="liveHistoryReportHelp">Incluye todas las pesadas activas y los totales de Mi empresa, Empresa externa y Total general.</p>
+          </div>
+        </div>
+        <div class="live-history-report-actions">
+          <a id="liveHistoryReportPdf" class="btn live-history-report-btn is-pdf" aria-describedby="liveHistoryReportHelp" aria-disabled="true" tabindex="-1">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M7 3h7l4 4v14H7zM14 3v5h5"></path>
+              <path d="M9 13h6M9 16h4"></path>
+            </svg>
+            <span>Descargar PDF</span>
+          </a>
+          <a id="liveHistoryReportImages" class="btn live-history-report-btn is-images" aria-describedby="liveHistoryReportHelp" aria-disabled="true" tabindex="-1">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+              <circle cx="9" cy="10" r="1.5"></circle>
+              <path d="m5 17 4.5-4 3.2 2.7 2.6-2.3L19 17"></path>
+            </svg>
+            <span>Descargar imágenes</span>
+          </a>
+        </div>
+      </div>
     </form>
 
     <p id="liveHistoryMessage" class="live-history-message" role="status" aria-live="polite"></p>

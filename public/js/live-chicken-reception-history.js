@@ -128,6 +128,26 @@ export function buildHistoryQuery({
   return params.toString();
 }
 
+export function buildHistoryReportUrl(format, journeyId) {
+  const normalizedFormat = String(format || "").toLowerCase();
+  const normalizedJourneyId = String(journeyId ?? "").trim();
+  const numericJourneyId = Number(normalizedJourneyId);
+  const reportPath = normalizedFormat === "pdf"
+    ? "pdf"
+    : (normalizedFormat === "images" ? "imagenes" : "");
+
+  if (
+    !reportPath
+    || !/^\d+$/.test(normalizedJourneyId)
+    || !Number.isSafeInteger(numericJourneyId)
+    || numericJourneyId < 1
+  ) {
+    return "";
+  }
+
+  return `/recepcion-pollo-vivo/historial/reporte/${reportPath}?journey_id=${numericJourneyId}`;
+}
+
 function sourceFor(record = {}) {
   if (record.source) return String(record.source).toUpperCase();
   return record.record_kind === "DISPATCH_TICKET_WEIGHING" ? "TICKET" : "RECEPCION";

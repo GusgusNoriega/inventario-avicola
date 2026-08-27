@@ -123,6 +123,50 @@ class LiveChickenReceptionHistoryService
         ];
     }
 
+    /**
+     * Build the complete, active-only dataset used by the journey report.
+     *
+     * @return array<string, mixed>
+     */
+    public function report(int $companyId, object $branch, int $journeyId): array
+    {
+        $window = $this->journeys->currentWindow($companyId, $branch);
+        $journey = $this->journeyRows($companyId, (int) $branch->id)
+            ->first(fn (object $row): bool => (int) $row->id === $journeyId);
+
+        abort_unless($journey, 404, 'Jornada operativa no encontrada.');
+
+        $activeRecords = DB::query()
+            ->fromSub(
+                $this->normalizedRows($companyId, (int) $branch->id, $journeyId),
+                'report_rows',
+            )
+            ->where('effective_status', PesadaRecepcionPolloVivo::STATUS_ACTIVE)
+            ->orderBy('weighed_at')
+            ->orderBy('source_rank')
+            ->orderBy('weighing_id')
+            ->get();
+        $summary = $this->reportSummary($activeRecords);
+        $records = $activeRecords
+            ->map(fn (object $record): array => $this->formatRecord($record))
+            ->all();
+
+        return [
+            'branch' => [
+                'id' => (int) $branch->id,
+                'name' => (string) $branch->nombre,
+                'timezone' => (string) $branch->zona_horaria,
+            ],
+            'journey' => $this->formatJourney(
+                $journey,
+                (string) $journey->operating_date === $window['operating_date']->format('Y-m-d'),
+            ),
+            'records' => $records,
+            'summary' => $summary,
+            'generated_at' => CarbonImmutable::now((string) $branch->zona_horaria)->toISOString(),
+        ];
+    }
+
     /** @return Collection<int, object> */
     private function journeyRows(int $companyId, int $branchId): Collection
     {
@@ -364,6 +408,45 @@ class LiveChickenReceptionHistoryService
             'voided' => $voided,
             'total' => $this->addSummaries($active, $voided),
         ];
+    }
+
+    /**
+     * @param  Collection<int, object>  $records
+     * @return array<string, array<string, int|float>>
+     */
+    private function reportSummary(Collection $records): array
+    {
+        $own = $this->summarizeRecords($records->where(
+            'owner_type',
+            PesadaRecepcionPolloVivo::OWNER_OWN,
+        ));
+        $external = $this->summarizeRecords($records->where(
+            'owner_type',
+            PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+        ));
+
+        return [
+            'own' => $own,
+            'external' => $external,
+            'total' => $this->addSummaries($own, $external),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, object>  $records
+     * @return array<string, int|float>
+     */
+    private function summarizeRecords(Collection $records): array
+    {
+        return $this->formatSummary((object) [
+            'weighings' => $records->count(),
+            'cages' => $records->sum('cages'),
+            'birds' => $records->sum('birds'),
+            'read_weight_kg' => $records->sum('read_weight_kg'),
+            'gross_weight_kg' => $records->sum('gross_weight_kg'),
+            'tare_weight_kg' => $records->sum('tare_weight_kg'),
+            'net_weight_kg' => $records->sum('net_weight_kg'),
+        ]);
     }
 
     /** @return array<string, int|float> */

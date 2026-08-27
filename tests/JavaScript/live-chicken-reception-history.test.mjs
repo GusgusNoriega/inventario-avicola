@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   buildHistoryQuery,
+  buildHistoryReportUrl,
   historySourceLabel,
   normalizeHistoryPayload,
   renderHistoryRow,
@@ -38,6 +39,27 @@ test("el historial consulta una jornada con estado, origen y paginación sin par
   );
   assert.match(source, /\/recepcion-pollo-vivo\/historial\?\$\{buildHistoryQuery\(request\)\}/);
   assert.doesNotMatch(source, /method:\s*["'](?:PUT|POST|PATCH|DELETE)["']/);
+});
+
+test("los reportes descargables usan únicamente la jornada seleccionada y rechazan identificadores inválidos", () => {
+  assert.equal(
+    buildHistoryReportUrl("pdf", 84),
+    "/recepcion-pollo-vivo/historial/reporte/pdf?journey_id=84",
+  );
+  assert.equal(
+    buildHistoryReportUrl("images", "92"),
+    "/recepcion-pollo-vivo/historial/reporte/imagenes?journey_id=92",
+  );
+  assert.equal(buildHistoryReportUrl("pdf", ""), "");
+  assert.equal(buildHistoryReportUrl("images", 0), "");
+  assert.equal(buildHistoryReportUrl("spreadsheet", 84), "");
+
+  assert.match(view, /id="liveHistoryReportPdf"[^>]*aria-disabled="true"/);
+  assert.match(view, /id="liveHistoryReportImages"[^>]*aria-disabled="true"/);
+  assert.match(source, /function updateReportLinks\(journeyId = elements\.journey\.value\)/);
+  assert.match(source, /elements\.journey\.addEventListener\("change", \(\) => \{\s*updateReportLinks\(elements\.journey\.value\)/s);
+  assert.match(stylesheet, /@media \(max-width:\s*1024px\)[\s\S]*?\.live-history-report-actions\s*\{[^}]*width:\s*100%/);
+  assert.match(stylesheet, /\.live-history-report-btn\[aria-disabled="true"\]\s*\{[^}]*pointer-events:\s*none/);
 });
 
 test("normaliza por separado los totales activos, anulados y generales de la jornada", () => {

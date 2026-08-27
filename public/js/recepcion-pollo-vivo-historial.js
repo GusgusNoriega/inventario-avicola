@@ -1,6 +1,7 @@
 import { apiRequest } from "./api-client.js";
 import {
   buildHistoryQuery,
+  buildHistoryReportUrl,
   formatHistoryNumber,
   formatHistoryWeight,
   normalizeHistoryPayload,
@@ -41,6 +42,8 @@ if (root) {
     pagePrevious: document.getElementById("liveHistoryPagePrevious"),
     pageNext: document.getElementById("liveHistoryPageNext"),
     pageStatus: document.getElementById("liveHistoryPageStatus"),
+    reportPdf: document.getElementById("liveHistoryReportPdf"),
+    reportImages: document.getElementById("liveHistoryReportImages"),
   };
 
   const journeyDateFormatter = new Intl.DateTimeFormat("es-PE", {
@@ -101,6 +104,24 @@ if (root) {
     elements.returnCurrent.disabled = disabled;
     elements.pagePrevious.disabled = disabled;
     elements.pageNext.disabled = disabled;
+  }
+
+  function updateReportLinks(journeyId = elements.journey.value) {
+    [
+      [elements.reportPdf, buildHistoryReportUrl("pdf", journeyId)],
+      [elements.reportImages, buildHistoryReportUrl("images", journeyId)],
+    ].forEach(([link, url]) => {
+      if (url) {
+        link.href = url;
+        link.setAttribute("aria-disabled", "false");
+        link.removeAttribute("tabindex");
+        return;
+      }
+
+      link.removeAttribute("href");
+      link.setAttribute("aria-disabled", "true");
+      link.setAttribute("tabindex", "-1");
+    });
   }
 
   function renderTableState(message, { error = false, retry = false } = {}) {
@@ -169,6 +190,7 @@ if (root) {
     elements.journey.replaceChildren(...options);
     elements.journey.value = selected?.id ? String(selected.id) : "";
     elements.journey.disabled = state.loading || !selected?.id;
+    updateReportLinks(elements.journey.value);
   }
 
   function renderFilterValues(data) {
@@ -360,6 +382,7 @@ if (root) {
   });
 
   elements.journey.addEventListener("change", () => {
+    updateReportLinks(elements.journey.value);
     void loadHistory({ page: 1 });
   });
 
@@ -370,6 +393,7 @@ if (root) {
     elements.journey.value = selectedOptionExists(elements.journey, journeyId)
       ? String(journeyId)
       : elements.journey.value;
+    updateReportLinks(elements.journey.value);
     void loadHistory({ page: 1 });
   });
 
@@ -379,6 +403,7 @@ if (root) {
     elements.journey.value = String(currentJourneyId);
     elements.status.value = "";
     elements.source.value = "";
+    updateReportLinks(elements.journey.value);
     void loadHistory({
       page: 1,
       filters: { journey_id: currentJourneyId, status: "", source: "" },
@@ -402,5 +427,6 @@ if (root) {
   });
 
   const initial = initialFilters();
+  updateReportLinks("");
   void loadHistory({ page: initial.page, filters: initial });
 }
