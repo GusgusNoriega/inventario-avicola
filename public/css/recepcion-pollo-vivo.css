@@ -218,7 +218,7 @@ button, select { touch-action: manipulation; }
 .lir-expired-draft span { color: var(--lir-muted); font-size: .72rem; line-height: 1.4; }
 .lir-expired-draft button { min-height: 46px; border: 1px solid var(--lir-red); border-radius: 9px; background: transparent; color: var(--lir-red); font-weight: 900; }
 
-.lir-modal-card.is-fleet-picker { width: min(620px, 100%); max-height: calc(100dvh - 32px); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.lir-modal-card.is-fleet-picker { width: min(620px, 100%); max-height: min(calc(100dvh - 32px), 100%); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
 .lir-fleet-picker-body { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; overflow: hidden; }
 .lir-fleet-options { min-height: 0; display: grid; align-content: start; gap: 8px; overflow-y: auto; }
 .lir-fleet-option { width: 100%; min-height: 62px; padding: 10px 12px; display: grid; gap: 3px; text-align: left; }
@@ -229,6 +229,9 @@ button, select { touch-action: manipulation; }
 
 .lir-modal-card.is-weighing-editor { width: min(760px, 100%); }
 .lir-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.lir-editor-grid label { min-width: 0; max-width: 100%; }
+.lir-modal-card.is-weighing-editor input,
+.lir-modal-card.is-weighing-editor select { min-width: 0; max-width: 100%; }
 .lir-editor-reason { grid-column: 1 / -1; }
 .lir-modal-card.is-ticket-editor { width: min(1120px, 100%); }
 .lir-modal-card.is-ticket-editor > header small { display: block; margin-top: 4px; color: var(--lir-muted); }
@@ -254,12 +257,26 @@ button, select { touch-action: manipulation; }
 .lir-selected-total strong { display: block; margin-top: 2px; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lir-selected-total .is-net strong { color: var(--lir-green); font-size: 1.1rem; }
 
-.lir-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(2, 8, 14, .84); }
+.lir-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: rgba(2, 8, 14, .84);
+}
 .lir-modal[hidden] { display: none; }
-.lir-modal-card { width: min(760px, 100%); max-height: calc(100vh - 32px); overflow: auto; border-radius: 18px; }
+.lir-modal-card { width: min(760px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); max-height: min(calc(100dvh - 32px), 100%); overflow: auto; border-radius: 18px; }
 .lir-modal-card.is-scale-modal { width: min(680px, 100%); }
 .lir-modal-card.is-compact { width: min(430px, 100%); }
-.lir-modal-card.is-client-picker { width: min(560px, 100%); max-height: calc(100dvh - 32px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.lir-modal-card.is-client-picker { width: min(560px, 100%); max-height: min(calc(100dvh - 32px), 100%); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.lir-modal > .lir-modal-card { max-height: calc(100vh - 32px); max-height: min(calc(100dvh - 32px), 100%); }
 .lir-modal-card > header, .lir-modal-card > footer { position: sticky; z-index: 2; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--lir-panel); }
 .lir-modal-card > header { top: 0; border-bottom: 1px solid var(--lir-border); }
 .lir-modal-card > header button { width: 44px; min-height: 44px; font-size: 1.5rem; }
@@ -267,6 +284,10 @@ button, select { touch-action: manipulation; }
 .lir-modal-card h3 { margin: 0 0 10px; font-size: .95rem; }
 .lir-modal-card label span { display: block; margin-bottom: 5px; color: var(--lir-muted); font-size: .72rem; font-weight: 800; }
 .lir-modal-card input, .lir-modal-card select { width: 100%; padding: 0 10px; background: #091522; color: var(--lir-text); }
+.lir-modal-card.is-weighing-editor label span { margin-bottom: 7px; font-size: .78rem; }
+.lir-modal-card.is-weighing-editor input, .lir-modal-card.is-weighing-editor select { min-height: 50px; font-size: .96rem; }
+.lir-modal-card.is-weighing-editor > .lir-message { min-height: 42px; display: flex; align-items: center; font-size: .8rem; line-height: 1.4; }
+.lir-modal-card.is-weighing-editor > footer button { min-height: 50px; font-size: .9rem; }
 .lir-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lir-settings-grid.is-scale { grid-template-columns: repeat(3, 1fr); align-items: end; }
 .lir-modal-help { margin: 0 0 12px; color: var(--lir-muted); font-size: .75rem; line-height: 1.45; }
@@ -342,7 +363,7 @@ button, select { touch-action: manipulation; }
   .lir-ticket-draft .lir-client-picker-trigger { width: calc(100% - 12px); margin: 0 6px 7px; }
   .lir-ticket-draft-footer { grid-template-columns: 1fr !important; }
   .lir-register-ticket { min-height: 52px; }
-  .lir-modal-card.is-client-picker { max-height: calc(100dvh - 32px); }
+  .lir-modal-card.is-client-picker { max-height: min(calc(100dvh - 32px), 100%); }
   .lir-client-options { padding-bottom: env(safe-area-inset-bottom); }
   .lir-selected-total { grid-template-columns: repeat(3, 1fr); }
   .lir-selected-total > div:nth-child(3) { border-right: 0; }
@@ -353,6 +374,21 @@ button, select { touch-action: manipulation; }
   .lir-ticket-weighing-editor { grid-template-columns: 1fr 1fr; }
   .lir-modal-card.is-ticket-editor > footer { flex-wrap: wrap; }
   .lir-modal-card.is-ticket-editor > footer button { flex: 1 1 145px; }
+}
+
+@media (max-width: 360px) {
+  .lir-modal {
+    padding:
+      max(8px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+  .lir-modal-card.is-weighing-editor { border-radius: 14px; }
+  .lir-modal-card.is-weighing-editor > header,
+  .lir-modal-card.is-weighing-editor > section { padding: 11px 12px; }
+  .lir-modal-card.is-weighing-editor > footer { padding: 10px 12px; flex-wrap: wrap; }
+  .lir-modal-card.is-weighing-editor > footer button { min-width: 0; flex: 1 1 125px; padding-inline: 10px; }
 }
 
 @media (max-height: 850px) {

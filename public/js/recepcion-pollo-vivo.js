@@ -709,7 +709,10 @@ async function restorePendingCapture(companyId, branchId) {
 function applyZoom(value, persist = true) {
   const normalized = ZOOM_LEVELS.includes(Number(value)) ? Number(value) : 100;
   state.zoom = normalized;
-  document.documentElement.style.zoom = String(normalized / 100);
+  // El zoom pertenece a la superficie de trabajo. Los modales son hermanos
+  // del <main> y deben conservar controles y texto a tamaño completo.
+  document.documentElement.style.removeProperty("zoom");
+  elements.main.style.zoom = String(normalized / 100);
   elements.zoomValue.textContent = `${normalized} %`;
   elements.zoomOut.disabled = normalized === ZOOM_LEVELS[0];
   elements.zoomIn.disabled = normalized === ZOOM_LEVELS.at(-1);

@@ -83,7 +83,9 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('RetailScaleController', $javascript);
         $this->assertStringContainsString('BALANZA_RECEPCION_POLLO_VIVO', $javascript);
         $this->assertStringContainsString('ZOOM_STORAGE_KEY', $javascript);
-        $this->assertStringContainsString('document.documentElement.style.zoom', $javascript);
+        $this->assertStringContainsString('document.documentElement.style.removeProperty("zoom")', $javascript);
+        $this->assertStringContainsString('elements.main.style.zoom', $javascript);
+        $this->assertStringNotContainsString('document.documentElement.style.zoom =', $javascript);
         $this->assertStringContainsString('/recepcion-pollo-vivo/pesadas', $javascript);
         $this->assertStringContainsString('/recepcion-pollo-vivo/tickets', $javascript);
         $this->assertStringContainsString('printWeightControlTicket', $javascript);
@@ -121,6 +123,10 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('touch-action: pan-x pan-y pinch-zoom', $stylesheet);
         $this->assertStringContainsString('font-size: 1rem', $stylesheet);
         $this->assertStringContainsString('.lir-ticket-weighing-editor', $stylesheet);
+        $this->assertStringContainsString('max-height: calc(100dvh - 32px)', $stylesheet);
+        $this->assertStringContainsString('max-height: min(calc(100dvh - 32px), 100%)', $stylesheet);
+        $this->assertStringContainsString('.lir-modal-card.is-weighing-editor label span', $stylesheet);
+        $this->assertStringContainsString('@media (max-width: 360px)', $stylesheet);
         $this->assertStringContainsString('.lir-register-ticket', $stylesheet);
         $this->assertStringContainsString('grid-template-rows: auto minmax(0, 1fr) auto', $stylesheet);
         $this->assertStringContainsString('.lir-selected-total { position: static;', $stylesheet);

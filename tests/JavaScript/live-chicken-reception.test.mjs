@@ -146,8 +146,22 @@ test("el peso manual se abre desde la lectura y no desde la configuración gener
 test("el zoom de recepción es independiente y respeta sus niveles", () => {
   assert.match(source, /const ZOOM_LEVELS = \[67, 75, 80, 90, 100, 110, 125, 150\]/);
   assert.match(source, /sistema-pollos-recepcion-pollo-vivo-zoom-v1/);
-  assert.match(source, /document\.documentElement\.style\.zoom = String\(normalized \/ 100\)/);
+  assert.match(source, /document\.documentElement\.style\.removeProperty\("zoom"\)/);
+  assert.match(source, /elements\.main\.style\.zoom = String\(normalized \/ 100\)/);
+  assert.doesNotMatch(source, /document\.documentElement\.style\.zoom\s*=/);
   assert.match(source, /event\.key === ZOOM_STORAGE_KEY/);
+});
+
+test("el editor de pesada conserva tamaño completo y cabe en modo vertical", () => {
+  const mainMarkup = view.match(/<main[\s\S]*?<\/main>/)?.[0] || "";
+  assert.ok(view.indexOf("</main>") < view.indexOf('id="liveIntakeWeighingEditorModal"'));
+  assert.doesNotMatch(mainMarkup, /class="lir-modal"/);
+  assert.equal((view.match(/class="lir-modal"/g) || []).length, 8);
+  assert.match(stylesheet, /\.lir-modal-card \{[^}]*max-height: calc\(100dvh - 32px\);[^}]*overflow: auto;/);
+  assert.match(stylesheet, /\.lir-modal > \.lir-modal-card \{[^}]*max-height: min\(calc\(100dvh - 32px\), 100%\);/);
+  assert.match(stylesheet, /\.lir-editor-grid label \{[^}]*min-width: 0;[^}]*max-width: 100%;/);
+  assert.match(stylesheet, /\.lir-modal-card\.is-weighing-editor input,[\s\S]*?\.lir-modal-card\.is-weighing-editor select \{[^}]*min-width: 0;[^}]*max-width: 100%;/);
+  assert.match(stylesheet, /@media \(max-width: 360px\) \{[\s\S]*?\.lir-modal-card\.is-weighing-editor > footer \{[^}]*flex-wrap: wrap;/);
 });
 
 test("la captura usa una sola balanza, guarda entradas y agrega despachos al borrador", () => {
