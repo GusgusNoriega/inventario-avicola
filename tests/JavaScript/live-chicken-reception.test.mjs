@@ -144,7 +144,8 @@ test("el peso manual se abre desde la lectura y no desde la configuración gener
 });
 
 test("el zoom de recepción es independiente y respeta sus niveles", () => {
-  assert.match(source, /const ZOOM_LEVELS = \[67, 75, 80, 90, 100, 110, 125, 150\]/);
+  assert.match(view, /content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover"/);
+  assert.match(source, /const ZOOM_LEVELS = \[100, 110, 125, 150\]/);
   assert.match(source, /sistema-pollos-recepcion-pollo-vivo-zoom-v1/);
   assert.match(source, /document\.documentElement\.style\.removeProperty\("zoom"\)/);
   assert.match(source, /elements\.main\.style\.removeProperty\("zoom"\)/);

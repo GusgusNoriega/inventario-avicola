@@ -27,7 +27,7 @@ import {
   ticketRecordId,
 } from "./live-chicken-reception-tickets.js";
 
-const ZOOM_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
+const ZOOM_LEVELS = [100, 110, 125, 150];
 const ZOOM_STORAGE_KEY = "sistema-pollos-recepcion-pollo-vivo-zoom-v1";
 const SCALE_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-balanza-v1";
 const LEGACY_PENDING_CAPTURE_V2_STORAGE_PREFIX = "sistema-pollos-recepcion-pollo-vivo-pendiente-v2";

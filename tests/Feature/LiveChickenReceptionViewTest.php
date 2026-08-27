@@ -59,6 +59,11 @@ class LiveChickenReceptionViewTest extends TestCase
         $javascript = (string) file_get_contents(public_path('js/recepcion-pollo-vivo.js'));
         $stylesheet = (string) file_get_contents(public_path('css/recepcion-pollo-vivo.css'));
 
+        $this->assertStringContainsString(
+            'content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover"',
+            $view,
+        );
+
         preg_match('/<form id="liveIntakeSettingsForm"[\s\S]*?<\/form>/', $view, $generalSettings);
         $this->assertNotEmpty($generalSettings);
         $this->assertStringNotContainsString('liveIntakeManualWeight', $generalSettings[0]);
@@ -84,6 +89,7 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('RetailScaleController', $javascript);
         $this->assertStringContainsString('BALANZA_RECEPCION_POLLO_VIVO', $javascript);
         $this->assertStringContainsString('ZOOM_STORAGE_KEY', $javascript);
+        $this->assertStringContainsString('const ZOOM_LEVELS = [100, 110, 125, 150]', $javascript);
         $this->assertStringContainsString('document.documentElement.style.removeProperty("zoom")', $javascript);
         $this->assertStringContainsString('elements.main.style.removeProperty("zoom")', $javascript);
         $this->assertStringContainsString('elements.zoomSurface.style.removeProperty("width")', $javascript);
