@@ -1194,7 +1194,6 @@ function renderReceptionRecord(record) {
   return `
     <tr class="lir-record-row lir-weighing-row ${ownerExternal ? "is-external" : "is-own"} ${editable ? "is-clickable" : "is-readonly"}"
       ${editable ? `data-live-edit-weighing="${record.id}"` : ""}>
-      <td class="lir-record-identity"><strong>#${record.number}</strong>${previousLayout}</td>
       <td class="lir-weight-cell is-gross">${formatKg(record.gross_weight_kg)}</td>
       <td><span class="lir-sex-chip ${record.sex === "HEMBRA" ? "is-female" : "is-male"}">${sexLabel}</span></td>
       <td class="lir-record-destination">${escapeHtml(destinationLabel)}</td>
@@ -1212,6 +1211,7 @@ function renderReceptionRecord(record) {
             <button class="lir-row-action is-danger" type="button" data-live-delete-weighing="${record.id}" aria-label="Anular pesada ${record.number}">Anular</button>
           </div>`
         : '<small class="lir-readonly-chip">Histórico</small>'}</td>
+      <td class="lir-record-identity"><strong>#${record.number}</strong>${previousLayout}</td>
     </tr>`;
 }
 
@@ -1238,7 +1238,6 @@ function renderDispatchTicketRecord(record) {
   const net = Number(totals.net_weight_kg ?? record.net_weight_kg ?? 0);
   return `
     <tr class="lir-record-row lir-ticket-record is-clickable" data-live-open-ticket="${ticketId}">
-      <td class="lir-record-identity"><strong>${escapeHtml(code)}</strong><small class="lir-ticket-status">${escapeHtml(status === "CERRADO" ? "Despachado" : status)}</small></td>
       <td class="lir-weight-cell is-gross">${formatKg(gross)}</td>
       <td><span class="lir-sex-chip ${sex === "HEMBRA" ? "is-female" : "is-male"}">${sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
       <td class="lir-record-destination">${escapeHtml(client.name || "Sin cliente")}</td>
@@ -1251,6 +1250,7 @@ function renderDispatchTicketRecord(record) {
       <td class="lir-weight-cell">${formatKg(tare)}</td>
       <td class="lir-weight-cell is-net">${formatKg(net)}</td>
       <td class="lir-record-actions"><div class="lir-row-actions"><button class="lir-row-action is-open" type="button" data-live-open-ticket="${ticketId}" aria-label="Abrir ${escapeHtml(code)} completo">Abrir (${weighings})</button></div></td>
+      <td class="lir-record-identity"><strong>${escapeHtml(code)}</strong><small class="lir-ticket-status">${escapeHtml(status === "CERRADO" ? "Despachado" : status)}</small></td>
     </tr>`;
 }
 
@@ -1261,7 +1261,6 @@ function renderDraftWeighing(weighing, lane, index) {
   return `
     <tr class="lir-record-row lir-weighing-row lir-draft-weighing ${registrationPending ? "is-readonly" : "is-clickable"}"
       ${registrationPending ? "" : `data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}"`} data-live-draft-lane="${lane}">
-      <td class="lir-record-identity"><strong>Pesada ${normalized.number}</strong><small class="lir-draft-chip">Borrador</small></td>
       <td class="lir-weight-cell is-gross">${formatKg(normalized.gross_weight_kg)}</td>
       <td><span class="lir-sex-chip ${normalized.sex === "HEMBRA" ? "is-female" : "is-male"}">${normalized.sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
       <td class="lir-record-destination">${escapeHtml(clientName)}</td>
@@ -1279,6 +1278,7 @@ function renderDraftWeighing(weighing, lane, index) {
             <button class="lir-row-action is-edit" type="button" data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Editar pesada ${normalized.number} del borrador">Editar</button>
             <button class="lir-row-action is-danger" type="button" data-live-delete-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Quitar pesada ${normalized.number}">Quitar</button>
           </div>`}</td>
+      <td class="lir-record-identity"><strong>Pesada ${normalized.number}</strong><small class="lir-draft-chip">Borrador</small></td>
     </tr>`;
 }
 
@@ -1294,7 +1294,6 @@ function renderRecordTable(lane, rows, emptyMessage) {
       <caption class="lir-visually-hidden">Registros de la columna ${lane}. Desplaza la tabla horizontalmente para consultar todos los datos.</caption>
       <thead>
         <tr>
-          <th scope="col">Registro</th>
           <th scope="col">Peso bruto</th>
           <th scope="col">Sexo</th>
           <th scope="col">Destino</th>
@@ -1307,6 +1306,7 @@ function renderRecordTable(lane, rows, emptyMessage) {
           <th scope="col">Tara</th>
           <th scope="col">Peso neto</th>
           <th scope="col">Acciones</th>
+          <th scope="col">Registro</th>
         </tr>
       </thead>
       <tbody>${tableRows}</tbody>

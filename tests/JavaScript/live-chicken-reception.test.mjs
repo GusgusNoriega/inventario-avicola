@@ -130,21 +130,44 @@ test("cada columna presenta registros grandes en una tabla desplazable", () => {
   assert.match(view, /role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna/);
   assert.match(view, /dentro de cada tabla, mueve a los lados para ver todos los datos/);
   assert.match(source, /<table class="lir-record-table">/);
-  assert.deepEqual(headers.slice(0, 4), ["Registro", "Peso bruto", "Sexo", "Destino"]);
-  assert.equal(headers.length, 13);
+  assert.deepEqual(headers, [
+    "Peso bruto",
+    "Sexo",
+    "Destino",
+    "Hora",
+    "Propietario",
+    "Tipo de java",
+    "Javas",
+    "Aves/java",
+    "Pollos",
+    "Tara",
+    "Peso neto",
+    "Acciones",
+    "Registro",
+  ]);
   rowRenderers.forEach((renderer) => {
+    const cellClasses = [...renderer.matchAll(/<td(?: class="([^"]*)")?>/g)]
+      .map(([, className]) => className || "");
     const cellPositions = [
-      renderer.indexOf('class="lir-record-identity"'),
       renderer.indexOf('class="lir-weight-cell is-gross"'),
       renderer.indexOf('class="lir-sex-chip'),
       renderer.indexOf('class="lir-record-destination"'),
+      renderer.indexOf('class="lir-record-actions"'),
+      renderer.indexOf('class="lir-record-identity"'),
     ];
+    assert.equal(cellClasses.length, 13);
+    assert.equal(cellClasses[0], "lir-weight-cell is-gross");
+    assert.equal(cellClasses[11], "lir-record-actions");
+    assert.equal(cellClasses[12], "lir-record-identity");
     assert.ok(cellPositions.every((position) => position >= 0));
     assert.deepEqual([...cellPositions].sort((left, right) => left - right), cellPositions);
   });
   assert.match(source, /const RECORD_TABLE_COLUMN_COUNT = 13/);
   assert.match(stylesheet, /\.lir-record-table \{[^}]*min-width: 1410px;[^}]*font-size: \.86rem;/);
   assert.match(stylesheet, /\.lir-record-table thead th \{[^}]*position: sticky;/);
+  assert.match(stylesheet, /\.lir-record-table tbody td:first-child \{[^}]*position: sticky;/);
+  assert.match(stylesheet, /\.lir-record-table th:nth-child\(1\), \.lir-record-table td:nth-child\(1\) \{[^}]*text-align: right;/);
+  assert.match(stylesheet, /\.lir-record-table th:nth-child\(13\), \.lir-record-table td:nth-child\(13\) \{[^}]*text-align: center;/);
   assert.match(stylesheet, /\.lir-weight-cell\.is-gross \{[^}]*font-size: 1rem;/);
   assert.match(stylesheet, /\.lir-weight-cell\.is-net \{[^}]*font-size: 1rem;/);
   assert.doesNotMatch(stylesheet, /\.lir-record-destination \{[^}]*text-overflow: ellipsis;/);

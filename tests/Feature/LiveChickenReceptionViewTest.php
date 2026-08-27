@@ -137,6 +137,10 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('<table class="lir-record-table">', $javascript);
         $this->assertStringContainsString('<th scope="col">Peso bruto</th>', $javascript);
         $this->assertStringContainsString('<th scope="col">Peso neto</th>', $javascript);
+        $this->assertMatchesRegularExpression(
+            '/<thead>[\s\S]*?<th scope="col">Peso bruto<\/th>[\s\S]*?<th scope="col">Acciones<\/th>\s*<th scope="col">Registro<\/th>[\s\S]*?<\/thead>/u',
+            $javascript,
+        );
         $this->assertStringNotContainsString('data-live-owner=', $view);
         $this->assertStringContainsString('@media (max-width: 820px)', $stylesheet);
         $this->assertStringContainsString('scroll-snap-type: x mandatory', $stylesheet);
