@@ -27,6 +27,7 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertSee('Balanza de recepción')
             ->assertSee('Mi empresa')
             ->assertSee('Empresa externa')
+            ->assertSee('Todas las pesadas')
             ->assertDontSee('data-live-owner=', false)
             ->assertSee('Asignación automática')
             ->assertSee('Cuatro columnas por propietario y sexo')
@@ -50,6 +51,9 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertDontSee(asset('js/app.js'), false);
 
         $this->assertSame(2, substr_count($response->getContent(), 'data-live-choose-client='));
+        $this->assertSame(4, substr_count($response->getContent(), 'data-live-summary-scope="daily"'));
+        $this->assertSame(1, substr_count($response->getContent(), 'data-live-summary-scope="own"'));
+        $this->assertSame(1, substr_count($response->getContent(), 'data-live-summary-scope="external"'));
 
         $renderedView = $response->getContent();
         $laneMatrix = [
@@ -97,6 +101,11 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('id="liveIntakeWeighingEditorModal"', $view);
         $this->assertStringContainsString('id="liveIntakeZoomSurface"', $view);
         $this->assertStringContainsString('id="liveIntakeTicketEditorModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeSummaryModal"', $view);
+        $this->assertStringContainsString('role="dialog" aria-modal="true" aria-labelledby="liveIntakeSummaryTitle"', $view);
+        $this->assertStringContainsString('id="liveIntakeSummaryRows" class="lir-summary-table-scroll" role="region" tabindex="0"', $view);
+        $this->assertStringContainsString('data-live-summary-total="gross_weight_kg"', $view);
+        $this->assertStringContainsString('data-live-summary-total="net_weight_kg"', $view);
         $this->assertStringContainsString('id="liveIntakeTicketEditReason"', $view);
         $this->assertStringContainsString('role="region" aria-label="Clientes disponibles"', $view);
         $this->assertStringContainsString('role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna', $view);
@@ -126,6 +135,8 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('function addCaptureToDispatchDraft', $javascript);
         $this->assertStringContainsString('function submitDispatchTicket', $javascript);
         $this->assertStringContainsString('function saveTicketEditor', $javascript);
+        $this->assertStringContainsString('function renderSummaryDetail', $javascript);
+        $this->assertStringContainsString('receptionSummaryRows', $javascript);
         $this->assertStringContainsString('data-live-select-lane', $javascript);
         $this->assertStringContainsString('const LANE_NUMBERS = [1, 2, 3, 4, 5, 6]', $javascript);
         $this->assertStringContainsString('layout_version: LAYOUT_VERSION', $javascript);
@@ -167,6 +178,9 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('touch-action: pan-x pan-y pinch-zoom', $stylesheet);
         $this->assertStringContainsString('font-size: 1rem', $stylesheet);
         $this->assertStringContainsString('.lir-ticket-weighing-editor', $stylesheet);
+        $this->assertStringContainsString('.lir-modal-card.is-summary-detail', $stylesheet);
+        $this->assertStringContainsString('.lir-summary-table-scroll', $stylesheet);
+        $this->assertStringContainsString('.lir-summary-totals', $stylesheet);
         $this->assertStringContainsString('max-height: calc(100dvh - 32px)', $stylesheet);
         $this->assertStringContainsString('max-height: min(calc(100dvh - 32px), 100%)', $stylesheet);
         $this->assertStringContainsString('.lir-modal-card.is-weighing-editor label span', $stylesheet);

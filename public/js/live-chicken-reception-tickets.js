@@ -90,6 +90,62 @@ export function newestReceptionRowsFirst(rows) {
     .map(({ row }) => row);
 }
 
+export function receptionSummaryRows(records = [], scope = "daily") {
+  const normalizedScope = ["own", "external"].includes(String(scope))
+    ? String(scope)
+    : "daily";
+  const requiredOwnerType = normalizedScope === "own"
+    ? "PROPIA"
+    : (normalizedScope === "external" ? "EXTERNA" : null);
+  const rows = [];
+
+  (Array.isArray(records) ? records : []).forEach((record, recordIndex) => {
+    const ownerType = String(record?.owner?.type || "").toUpperCase();
+    if (requiredOwnerType && ownerType !== requiredOwnerType) return;
+
+    const sharedContext = {
+      owner: record?.owner || null,
+      destination: record?.destination || null,
+      lane: receptionRecordLane(record),
+      source_lane: Number(record?.source_lane ?? record?.lane) || null,
+      dispatched: Boolean(record?.dispatched),
+      ticket_id: ticketRecordId(record),
+      ticket_code: String(firstDefined(record?.ticket_code, record?.ticket?.code, "")),
+    };
+    const ticketWeighings = isDispatchTicketRecord(record) && Array.isArray(record?.weighings)
+      ? record.weighings
+      : [];
+
+    if (ticketWeighings.length) {
+      ticketWeighings.forEach((weighing, weighingIndex) => {
+        const normalized = normalizeDraftWeighing(weighing, weighingIndex);
+        rows.push({
+          ...normalized,
+          ...sharedContext,
+          record_kind: "dispatch_ticket_weighing",
+          row_key: `${record?.row_key || `ticket:${sharedContext.ticket_id || recordIndex}`}:weighing:${normalized.id || weighingIndex}`,
+          cage_type: weighing?.cage_type || record?.cage_type || null,
+          sort_tie: (-recordIndex * 1000) + weighingIndex,
+        });
+      });
+      return;
+    }
+
+    const normalized = normalizeDraftWeighing(record, recordIndex);
+    rows.push({
+      ...normalized,
+      ...sharedContext,
+      record_kind: record?.record_kind || "reception_weighing",
+      row_key: record?.row_key || `reception:${normalized.id || recordIndex}`,
+      cage_type: record?.cage_type || null,
+      ticket_id: sharedContext.ticket_id,
+      sort_tie: -recordIndex,
+    });
+  });
+
+  return newestReceptionRowsFirst(rows);
+}
+
 export function normalizeDraftWeighing(weighing = {}, index = 0) {
   const cages = numberValue(weighing.cage_count, weighing.cages, weighing.java_count, weighing.javas);
   const birdsPerCage = numberValue(

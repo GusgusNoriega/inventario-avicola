@@ -13,6 +13,7 @@ import {
   newestReceptionRowsFirst,
   nextDraftWeighingNumber,
   normalizeDispatchDraft,
+  receptionSummaryRows,
   remainingDispatchDraftAfterRegistration,
   receptionRecordLane,
 } from "../../public/js/live-chicken-reception-tickets.js";
@@ -201,6 +202,113 @@ test("las pesadas se ordenan por su fecha real con las más recientes arriba", (
   assert.match(source, /<strong>Pesada \$\{normalized\.number\}<\/strong>/);
 });
 
+test("el resumen expande cada pesada de los tickets y filtra los tres alcances", () => {
+  const records = [
+    {
+      record_kind: "reception_weighing",
+      id: 1,
+      number: 1,
+      owner: { type: "PROPIA", name: "Mi empresa" },
+      destination: { type: "ALMACEN", name: "Almacén 1" },
+      sex: "MACHO",
+      cages: 1,
+      birds_per_cage: 7,
+      birds: 7,
+      gross_weight_kg: 20,
+      tare_weight_kg: 2,
+      net_weight_kg: 18,
+      weighed_at: "2026-08-27T10:00:00-05:00",
+    },
+    {
+      record_kind: "reception_weighing",
+      id: 2,
+      number: 2,
+      owner: { type: "EXTERNA", name: "Empresa externa" },
+      destination: { type: "ALMACEN", name: "Almacén 2" },
+      sex: "HEMBRA",
+      cages: 2,
+      birds_per_cage: 6,
+      birds: 12,
+      gross_weight_kg: 30,
+      tare_weight_kg: 4,
+      net_weight_kg: 26,
+      weighed_at: "2026-08-27T11:00:00-05:00",
+    },
+    {
+      record_kind: "dispatch_ticket",
+      row_key: "ticket:30:MACHO",
+      ticket_id: 30,
+      ticket_code: "PV-030",
+      source_lane: 5,
+      owner: { type: "PROPIA", name: "Mi empresa" },
+      destination: { type: "CLIENTE", name: "Cliente A" },
+      weighings: [
+        { id: 31, number: 3, sex: "MACHO", cages: 1, birds_per_cage: 8, birds: 8, gross_weight_kg: 25, tare_weight_kg: 2, net_weight_kg: 23, weighed_at: "2026-08-27T12:00:00-05:00" },
+        { id: 32, number: 4, sex: "MACHO", cages: 1, birds_per_cage: 8, birds: 8, gross_weight_kg: 24, tare_weight_kg: 2, net_weight_kg: 22, weighed_at: "2026-08-27T09:00:00-05:00" },
+      ],
+    },
+  ];
+  const snapshot = JSON.parse(JSON.stringify(records));
+  const daily = receptionSummaryRows(records, "daily");
+  const own = receptionSummaryRows(records, "own");
+  const external = receptionSummaryRows(records, "external");
+
+  assert.deepEqual(daily.map(({ id }) => id), [31, 2, 1, 32]);
+  assert.deepEqual(own.map(({ id }) => id), [31, 1, 32]);
+  assert.deepEqual(external.map(({ id }) => id), [2]);
+  assert.equal(daily.filter(({ record_kind }) => record_kind === "dispatch_ticket_weighing").length, 2);
+  assert.equal(daily[0].ticket_code, "PV-030");
+  assert.equal(daily[0].destination.name, "Cliente A");
+  assert.equal(daily[0].owner.type, "PROPIA");
+  assert.deepEqual(records, snapshot);
+});
+
+test("los tres grupos del resumen abren el mismo popup accesible y adaptable", () => {
+  const dailySummary = view.match(/<section class="lir-daily-summary"[\s\S]*?<\/section>/)?.[0] || "";
+  const summaryModal = view.match(/<div id="liveIntakeSummaryModal"[\s\S]*?(?=\n\s*<div id="liveIntakeSettingsModal")/)?.[0] || "";
+  const summaryTriggers = [...dailySummary.matchAll(/<button class="lir-summary-trigger"([^>]*)>/g)];
+  const modalEnvironment = source.match(/function syncModalEnvironment\(\)[\s\S]*?(?=\nfunction openDialog)/)?.[0] || "";
+  const summaryRenderer = source.match(/function renderSummaryDetail\([\s\S]*?(?=\nfunction openSummaryDetail)/)?.[0] || "";
+  const tabletStyles = stylesheet.match(/@media \(max-width: 820px\) \{[\s\S]*?(?=\n@media \(max-width: 560px\))/)?.[0] || "";
+
+  assert.equal(summaryTriggers.length, 6);
+  assert.deepEqual(summaryTriggers.map(([, attributes]) => attributes.match(/data-live-summary-scope="([^"]+)"/)?.[1]), [
+    "daily", "daily", "daily", "daily", "own", "external",
+  ]);
+  summaryTriggers.forEach(([, attributes]) => {
+    assert.match(attributes, /type="button"/);
+    assert.match(attributes, /aria-haspopup="dialog"/);
+    assert.match(attributes, /aria-controls="liveIntakeSummaryModal"/);
+    assert.match(attributes, /aria-expanded="false"/);
+    assert.doesNotMatch(attributes, /aria-label=/);
+  });
+  assert.match(summaryModal, /role="dialog" aria-modal="true" aria-labelledby="liveIntakeSummaryTitle"/);
+  assert.match(summaryModal, /id="liveIntakeSummaryRows"[^>]*role="region" tabindex="0"/);
+  ["weighings", "cages", "birds", "gross_weight_kg", "tare_weight_kg", "net_weight_kg"].forEach((key) => {
+    assert.match(summaryModal, new RegExp(`data-live-summary-total="${key}"`));
+  });
+  assert.match(source, /elements\.summaryTriggers\.forEach\(\(button\) => button\.addEventListener\("click", \(\) => \{[\s\S]*?openSummaryDetail\(button\.dataset\.liveSummaryScope, button\)/);
+  assert.match(source, /querySelectorAll\("\[data-live-close-summary\]"\)[\s\S]*?addEventListener\("click", closeSummaryDetail\)/);
+  assert.match(modalEnvironment, /elements\.summaryModal/);
+  assert.match(source, /receptionSummaryRows\(state\.data\?\.records \|\| \[\], normalizedScope\)/);
+  assert.match(summaryRenderer, /state\.data\?\.totals\?\.\[normalizedScope\]/);
+  assert.match(summaryRenderer, /summaryTotals\.weighings\.textContent = String\(totals\.weighings \|\| 0\)/);
+  assert.match(summaryRenderer, /summaryTotals\.gross_weight_kg\.textContent = formatKg\(totals\.gross_weight_kg\)/);
+  assert.match(summaryRenderer, /summaryTotals\.net_weight_kg\.textContent = formatKg\(totals\.net_weight_kg\)/);
+  assert.match(source, /function renderSummaryTable\(rows, title\)[\s\S]*?<tbody>\$\{rows\.map\(renderSummaryRow\)\.join\(""\)\}<\/tbody>/);
+  assert.match(source, /function renderSummaryRow\(row\)[\s\S]*?row\?\.gross_weight_kg[\s\S]*?row\?\.tare_weight_kg[\s\S]*?row\?\.net_weight_kg/);
+  assert.match(source, /const multipleExternalOwners = recordedExternalOwners\.length > 1/);
+  assert.match(source, /multipleExternalOwners \? "Pesadas de empresas externas"/);
+  assert.match(source, /openDialog\(elements\.summaryModal, trigger, elements\.summaryClose\)/);
+  assert.match(source, /closeDialog\(elements\.summaryModal, trigger\)/);
+  assert.match(source, /openModal === elements\.summaryModal\) closeSummaryDetail\(\)/);
+  assert.match(source, /\[elements\.summaryModal,[\s\S]*?if \(modal === elements\.summaryModal\) closeSummaryDetail\(\)/);
+  assert.match(source, /if \(state\.summaryScope && !elements\.summaryModal\.hidden\) \{[\s\S]*?renderSummaryDetail\(state\.summaryScope\)/);
+  assert.match(stylesheet, /\.lir-modal-card\.is-summary-detail \{[^}]*height: min\(860px, calc\(100dvh - 32px\)\);[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;[^}]*overflow: hidden;/);
+  assert.match(stylesheet, /\.lir-summary-table-scroll \{[^}]*min-height: 0;[^}]*overflow: auto;[^}]*overscroll-behavior: contain;[^}]*touch-action: pan-x pan-y pinch-zoom;/);
+  assert.match(tabletStyles, /\.lir-summary-totals \{ grid-template-columns: repeat\(3,/);
+});
+
 test("la numeración del borrador se conserva al editar y no se repite después de quitar", () => {
   const draftSaveBlock = source.match(
     /if \(state\.editingRecord\.kind === "draft"\)[\s\S]*?(?=\n  const reason = elements\.editReason)/,
@@ -268,7 +376,7 @@ test("el editor de pesada conserva tamaño completo y cabe en modo vertical", ()
   assert.match(mainMarkup, /id="liveIntakeZoomSurface" class="lir-zoom-surface"/);
   assert.ok(view.indexOf("</main>") < view.indexOf('id="liveIntakeWeighingEditorModal"'));
   assert.doesNotMatch(mainMarkup, /class="lir-modal"/);
-  assert.equal((view.match(/class="lir-modal"/g) || []).length, 8);
+  assert.equal((view.match(/class="lir-modal"/g) || []).length, 9);
   assert.match(stylesheet, /\.lir-shell \{[^}]*max-width: 100vw;[^}]*overflow-x: hidden;[^}]*overflow-x: clip;/);
   assert.match(stylesheet, /\.lir-zoom-surface \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*padding: 12px;/);
   assert.match(stylesheet, /\.lir-modal-card \{[^}]*max-height: calc\(100dvh - 32px\);[^}]*overflow: auto;/);

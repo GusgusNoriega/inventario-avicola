@@ -26,6 +26,7 @@ import {
   normalizeReceptionSex,
   remainingDispatchDraftAfterRegistration,
   receptionRecordLane,
+  receptionSummaryRows,
   ticketRecordId,
 } from "./live-chicken-reception-tickets.js";
 
@@ -121,6 +122,21 @@ const elements = {
   ownBirds: document.getElementById("liveIntakeOwnBirds"),
   externalSummaryLabel: document.getElementById("liveIntakeExternalSummaryLabel"),
   externalBirds: document.getElementById("liveIntakeExternalBirds"),
+  summaryTriggers: Array.from(document.querySelectorAll("[data-live-summary-scope]")),
+  summaryModal: document.getElementById("liveIntakeSummaryModal"),
+  summaryCaption: document.getElementById("liveIntakeSummaryCaption"),
+  summaryTitle: document.getElementById("liveIntakeSummaryTitle"),
+  summaryHelp: document.getElementById("liveIntakeSummaryHelp"),
+  summaryClose: document.getElementById("liveIntakeSummaryClose"),
+  summaryRows: document.getElementById("liveIntakeSummaryRows"),
+  summaryTotals: {
+    weighings: document.querySelector('[data-live-summary-total="weighings"]'),
+    cages: document.querySelector('[data-live-summary-total="cages"]'),
+    birds: document.querySelector('[data-live-summary-total="birds"]'),
+    gross_weight_kg: document.querySelector('[data-live-summary-total="gross_weight_kg"]'),
+    tare_weight_kg: document.querySelector('[data-live-summary-total="tare_weight_kg"]'),
+    net_weight_kg: document.querySelector('[data-live-summary-total="net_weight_kg"]'),
+  },
   laneCages: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneCages${lane}`)),
   laneBirds: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneBirds${lane}`)),
   laneNet: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneNet${lane}`)),
@@ -195,6 +211,8 @@ const state = {
   editingTicket: null,
   ticketEditorTrigger: null,
   lastRegisteredTicket: null,
+  summaryScope: null,
+  summaryTrigger: null,
   zoom: readZoom(),
   scale: null,
 };
@@ -772,6 +790,7 @@ function setClientMessage(message, tone = "") {
 
 function syncModalEnvironment() {
   const modalOpen = [
+    elements.summaryModal,
     elements.settingsModal,
     elements.scaleSettingsModal,
     elements.manualWeightModal,
@@ -840,6 +859,17 @@ function formatTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "--:--";
   return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "--";
+  return new Intl.DateTimeFormat("es", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function formatOperatingDate(value) {
@@ -1359,6 +1389,147 @@ function renderRecords() {
   });
 }
 
+function summaryPresentation(scope, rows) {
+  const companyName = state.data?.company?.name || "Mi empresa";
+  const configuredExternalOwner = catalogItem(
+    "external_owners",
+    state.data?.configuration?.default_external_owner_id,
+  );
+  const recordedExternalOwners = [...new Set(rows
+    .filter((row) => String(row?.owner?.type || "").toUpperCase() === "EXTERNA")
+    .map((row) => String(row?.owner?.name || "").trim())
+    .filter(Boolean))];
+  const multipleExternalOwners = recordedExternalOwners.length > 1;
+  const externalOwnerName = recordedExternalOwners[0]
+    || configuredExternalOwner?.name
+    || "Empresa externa";
+
+  if (scope === "own") {
+    return {
+      caption: companyName,
+      title: "Pesadas de mi empresa",
+      subject: "Mi empresa",
+    };
+  }
+  if (scope === "external") {
+    return {
+      caption: multipleExternalOwners ? "Empresas externas" : "Empresa externa",
+      title: multipleExternalOwners ? "Pesadas de empresas externas" : `Pesadas de ${externalOwnerName}`,
+      subject: multipleExternalOwners ? "Empresas externas" : externalOwnerName,
+    };
+  }
+  return {
+    caption: `Mi empresa + ${multipleExternalOwners ? "empresas externas" : "empresa externa"}`,
+    title: "Todas las pesadas",
+    subject: "Resumen combinado",
+  };
+}
+
+function summaryWeightSource(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) return { label: "Sin dato", manual: false };
+  if (normalized === "MANUAL") return { label: "Manual", manual: true };
+  if (normalized.includes("BALANZA")) return { label: "Balanza", manual: false };
+  return {
+    label: normalized.replaceAll("_", " ").toLocaleLowerCase("es"),
+    manual: false,
+  };
+}
+
+function renderSummaryRow(row) {
+  const ownerExternal = String(row?.owner?.type || "").toUpperCase() === "EXTERNA";
+  const ownerName = row?.owner?.name || (ownerExternal ? "Empresa externa" : "Mi empresa");
+  const destinationName = row?.destination?.name || "Sin destino";
+  const cageTypeName = row?.cage_type?.name
+    || row?.cage_type_name
+    || row?.cage_type?.code
+    || "Sin tipo de java";
+  const sex = normalizeReceptionSex(row?.sex);
+  const recordNumber = row?.number || row?.id || "--";
+  const sourceLane = Number(row?.source_lane ?? row?.lane) || null;
+  const recordContext = row?.ticket_code
+    ? `Ticket ${row.ticket_code}`
+    : `Columna ${sourceLane || "--"}`;
+  const weightSource = summaryWeightSource(row?.weight_source);
+
+  return `
+    <tr class="${ownerExternal ? "is-external" : "is-own"}">
+      <td class="lir-summary-record"><strong>Pesada #${escapeHtml(recordNumber)}</strong><small>${escapeHtml(recordContext)}</small></td>
+      <td class="lir-summary-time">${escapeHtml(formatDateTime(row?.weighed_at))}</td>
+      <td><span class="lir-sex-chip ${sex === "HEMBRA" ? "is-female" : "is-male"}">${sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
+      <td class="lir-summary-owner">${escapeHtml(ownerName)}</td>
+      <td class="lir-summary-destination">${escapeHtml(destinationName)}</td>
+      <td class="lir-summary-cage-type">${escapeHtml(cageTypeName)}</td>
+      <td class="lir-summary-number">${Number(row?.cages ?? row?.cage_count) || 0}</td>
+      <td class="lir-summary-number">${Number(row?.birds_per_cage) || 0}</td>
+      <td class="lir-summary-number lir-summary-birds">${Number(row?.birds) || 0}</td>
+      <td class="lir-summary-weight">${formatKg(row?.gross_weight_kg)}</td>
+      <td class="lir-summary-weight">${formatKg(row?.tare_weight_kg)}</td>
+      <td class="lir-summary-weight lir-summary-net">${formatKg(row?.net_weight_kg)}</td>
+      <td><span class="lir-summary-source ${weightSource.manual ? "is-manual" : ""}" title="${escapeHtml(row?.weight_source || "Sin dato")}">${escapeHtml(weightSource.label)}</span></td>
+    </tr>`;
+}
+
+function renderSummaryTable(rows, title) {
+  if (!rows.length) {
+    return '<p class="lir-summary-empty">Aún no hay pesadas registradas en este grupo.</p>';
+  }
+
+  return `
+    <table class="lir-summary-table">
+      <caption class="lir-visually-hidden">${escapeHtml(title)}. Cada fila corresponde a una pesada registrada.</caption>
+      <thead><tr>
+        <th scope="col">Registro</th>
+        <th scope="col">Fecha y hora</th>
+        <th scope="col">Sexo</th>
+        <th scope="col">Propietario</th>
+        <th scope="col">Destino</th>
+        <th scope="col">Tipo de java</th>
+        <th scope="col">Javas</th>
+        <th scope="col">Aves/java</th>
+        <th scope="col">Pollos</th>
+        <th scope="col">Peso bruto</th>
+        <th scope="col">Tara</th>
+        <th scope="col">Peso neto</th>
+        <th scope="col">Origen</th>
+      </tr></thead>
+      <tbody>${rows.map(renderSummaryRow).join("")}</tbody>
+    </table>`;
+}
+
+function renderSummaryDetail(scope = state.summaryScope || "daily") {
+  const normalizedScope = ["own", "external"].includes(String(scope)) ? String(scope) : "daily";
+  const rows = receptionSummaryRows(state.data?.records || [], normalizedScope);
+  const totals = state.data?.totals?.[normalizedScope] || {};
+  const presentation = summaryPresentation(normalizedScope, rows);
+  state.summaryScope = normalizedScope;
+
+  elements.summaryCaption.textContent = presentation.caption;
+  elements.summaryTitle.textContent = presentation.title;
+  elements.summaryHelp.textContent = `${presentation.subject} · ${formatOperatingDate(state.data?.operating_date)}. ${rows.length} ${rows.length === 1 ? "pesada registrada" : "pesadas registradas"}. Desliza la tabla para consultar todos los datos.`;
+  elements.summaryTotals.weighings.textContent = String(totals.weighings || 0);
+  elements.summaryTotals.cages.textContent = String(totals.cages || 0);
+  elements.summaryTotals.birds.textContent = String(totals.birds || 0);
+  elements.summaryTotals.gross_weight_kg.textContent = formatKg(totals.gross_weight_kg);
+  elements.summaryTotals.tare_weight_kg.textContent = formatKg(totals.tare_weight_kg);
+  elements.summaryTotals.net_weight_kg.textContent = formatKg(totals.net_weight_kg);
+  elements.summaryRows.setAttribute("aria-label", `Tabla desplazable: ${presentation.title}`);
+  elements.summaryRows.innerHTML = renderSummaryTable(rows, presentation.title);
+}
+
+function openSummaryDetail(scope, trigger) {
+  state.summaryTrigger = trigger;
+  renderSummaryDetail(scope);
+  openDialog(elements.summaryModal, trigger, elements.summaryClose);
+}
+
+function closeSummaryDetail() {
+  const trigger = state.summaryTrigger || elements.summaryTriggers[0] || elements.capture;
+  closeDialog(elements.summaryModal, trigger);
+  state.summaryScope = null;
+  state.summaryTrigger = null;
+}
+
 function renderTotals() {
   const daily = state.data?.totals?.daily || {};
   const own = state.data?.totals?.own || {};
@@ -1418,6 +1589,9 @@ function renderData(data, { resetDirectClients = false } = {}) {
   populateConfiguration();
   renderRecords();
   renderTotals();
+  if (state.summaryScope && !elements.summaryModal.hidden) {
+    renderSummaryDetail(state.summaryScope);
+  }
   updateCaptureAvailability();
 }
 
@@ -2825,6 +2999,10 @@ state.scale = new RetailScaleController({
   },
 });
 
+elements.summaryTriggers.forEach((button) => button.addEventListener("click", () => {
+  openSummaryDetail(button.dataset.liveSummaryScope, button);
+}));
+document.querySelectorAll("[data-live-close-summary]").forEach((button) => button.addEventListener("click", closeSummaryDetail));
 elements.laneButtons.forEach((button) => button.addEventListener("click", () => selectLane(button.dataset.liveSelectLane)));
 elements.clientPickerButtons.forEach((button) => button.addEventListener("click", () => {
   openClientPicker(button.dataset.liveChooseClient, button);
@@ -2930,6 +3108,7 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   const openModal = [
+    elements.summaryModal,
     elements.ticketEditorModal,
     elements.weighingEditorModal,
     elements.deliveryDriverModal,
@@ -2941,7 +3120,8 @@ document.addEventListener("keydown", (event) => {
   ].find((modal) => !modal.hidden);
   if (!openModal) return;
   if (event.key === "Escape") {
-    if (openModal === elements.ticketEditorModal) closeTicketEditor();
+    if (openModal === elements.summaryModal) closeSummaryDetail();
+    else if (openModal === elements.ticketEditorModal) closeTicketEditor();
     else if (openModal === elements.weighingEditorModal) closeWeighingEditor();
     else if ([elements.deliveryTruckModal, elements.deliveryDriverModal].includes(openModal)) closeDeliverySelection();
     else if (openModal === elements.clientModal) closeClientPicker();
@@ -2952,11 +3132,12 @@ document.addEventListener("keydown", (event) => {
   }
   trapDialogFocus(event, openModal);
 });
-[elements.settingsModal, elements.scaleSettingsModal, elements.manualWeightModal, elements.clientModal,
+[elements.summaryModal, elements.settingsModal, elements.scaleSettingsModal, elements.manualWeightModal, elements.clientModal,
   elements.deliveryTruckModal, elements.deliveryDriverModal, elements.weighingEditorModal, elements.ticketEditorModal].forEach((modal) => {
   modal.addEventListener("click", (event) => {
     if (event.target !== modal) return;
-    if (modal === elements.ticketEditorModal) closeTicketEditor();
+    if (modal === elements.summaryModal) closeSummaryDetail();
+    else if (modal === elements.ticketEditorModal) closeTicketEditor();
     else if (modal === elements.weighingEditorModal) closeWeighingEditor();
     else if ([elements.deliveryTruckModal, elements.deliveryDriverModal].includes(modal)) closeDeliverySelection();
     else if (modal === elements.clientModal) closeClientPicker();

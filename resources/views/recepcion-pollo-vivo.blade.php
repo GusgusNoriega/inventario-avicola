@@ -56,12 +56,12 @@
     </section>
 
     <section class="lir-daily-summary" aria-label="Totales del camión del día">
-      <article><span>Pesadas</span><strong id="liveIntakeDailyWeighings">0</strong></article>
-      <article><span>Javas</span><strong id="liveIntakeDailyCages">0</strong></article>
-      <article><span>Pollos</span><strong id="liveIntakeDailyBirds">0</strong></article>
-      <article><span>Peso neto</span><strong id="liveIntakeDailyNet">0.000 kg</strong></article>
-      <article class="is-own"><span>Solo mi empresa</span><strong id="liveIntakeOwnBirds">0 pollos</strong></article>
-      <article class="is-external"><span id="liveIntakeExternalSummaryLabel">Empresa externa</span><strong id="liveIntakeExternalBirds">0 pollos</strong></article>
+      <article><button class="lir-summary-trigger" type="button" data-live-summary-scope="daily" aria-haspopup="dialog" aria-controls="liveIntakeSummaryModal" aria-expanded="false"><span>Pesadas</span><strong id="liveIntakeDailyWeighings">0</strong></button></article>
+      <article><button class="lir-summary-trigger" type="button" data-live-summary-scope="daily" aria-haspopup="dialog" aria-controls="liveIntakeSummaryModal" aria-expanded="false"><span>Javas</span><strong id="liveIntakeDailyCages">0</strong></button></article>
+      <article><button class="lir-summary-trigger" type="button" data-live-summary-scope="daily" aria-haspopup="dialog" aria-controls="liveIntakeSummaryModal" aria-expanded="false"><span>Pollos</span><strong id="liveIntakeDailyBirds">0</strong></button></article>
+      <article><button class="lir-summary-trigger" type="button" data-live-summary-scope="daily" aria-haspopup="dialog" aria-controls="liveIntakeSummaryModal" aria-expanded="false"><span>Peso neto</span><strong id="liveIntakeDailyNet">0.000 kg</strong></button></article>
+      <article class="is-own"><button class="lir-summary-trigger" type="button" data-live-summary-scope="own" aria-haspopup="dialog" aria-controls="liveIntakeSummaryModal" aria-expanded="false"><span>Solo mi empresa</span><strong id="liveIntakeOwnBirds">0 pollos</strong></button></article>
+      <article class="is-external"><button class="lir-summary-trigger" type="button" data-live-summary-scope="external" aria-haspopup="dialog" aria-controls="liveIntakeSummaryModal" aria-expanded="false"><span id="liveIntakeExternalSummaryLabel">Empresa externa</span><strong id="liveIntakeExternalBirds">0 pollos</strong></button></article>
     </section>
 
     <section class="lir-capture-panel" aria-label="Datos de la siguiente pesada">
@@ -194,6 +194,30 @@
     </footer>
     </div>
   </main>
+
+  <div id="liveIntakeSummaryModal" class="lir-modal" hidden>
+    <section class="lir-modal-card is-summary-detail" role="dialog" aria-modal="true" aria-labelledby="liveIntakeSummaryTitle" aria-describedby="liveIntakeSummaryHelp">
+      <header>
+        <div><p id="liveIntakeSummaryCaption">Resumen de la jornada</p><h2 id="liveIntakeSummaryTitle">Todas las pesadas</h2></div>
+        <button id="liveIntakeSummaryClose" type="button" data-live-close-summary aria-label="Cerrar detalle de pesadas">×</button>
+      </header>
+      <section class="lir-summary-detail-body">
+        <p id="liveIntakeSummaryHelp" class="lir-modal-help">Pesadas registradas de la jornada actual. Desliza la tabla para consultar todos los datos.</p>
+        <div id="liveIntakeSummaryTotals" class="lir-summary-totals" aria-label="Totales de las pesadas seleccionadas">
+          <span><small>Pesadas</small><strong data-live-summary-total="weighings">0</strong></span>
+          <span><small>Javas</small><strong data-live-summary-total="cages">0</strong></span>
+          <span><small>Pollos</small><strong data-live-summary-total="birds">0</strong></span>
+          <span><small>Peso bruto</small><strong data-live-summary-total="gross_weight_kg">0.000 kg</strong></span>
+          <span><small>Tara</small><strong data-live-summary-total="tare_weight_kg">0.000 kg</strong></span>
+          <span class="is-net"><small>Peso neto</small><strong data-live-summary-total="net_weight_kg">0.000 kg</strong></span>
+        </div>
+        <div id="liveIntakeSummaryRows" class="lir-summary-table-scroll" role="region" tabindex="0" aria-label="Tabla desplazable de todas las pesadas seleccionadas">
+          <p class="lir-summary-empty">Aún no hay pesadas registradas.</p>
+        </div>
+      </section>
+      <footer><button type="button" data-live-close-summary>Cerrar</button></footer>
+    </section>
+  </div>
 
   <div id="liveIntakeSettingsModal" class="lir-modal" hidden>
     <form id="liveIntakeSettingsForm" class="lir-modal-card" role="dialog" aria-modal="true" aria-labelledby="liveIntakeSettingsTitle">
