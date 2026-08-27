@@ -127,6 +127,7 @@ const elements = {
   summaryCaption: document.getElementById("liveIntakeSummaryCaption"),
   summaryTitle: document.getElementById("liveIntakeSummaryTitle"),
   summaryHelp: document.getElementById("liveIntakeSummaryHelp"),
+  summaryMessage: document.getElementById("liveIntakeSummaryMessage"),
   summaryClose: document.getElementById("liveIntakeSummaryClose"),
   summaryRows: document.getElementById("liveIntakeSummaryRows"),
   summaryTotals: {
@@ -160,6 +161,12 @@ const elements = {
   weighingEditorTitle: document.getElementById("liveIntakeWeighingEditorTitle"),
   weighingEditorMessage: document.getElementById("liveIntakeWeighingEditorMessage"),
   deleteWeighingButton: document.getElementById("liveIntakeDeleteWeighing"),
+  cancelWeighingButton: document.getElementById("liveIntakeCancelWeighing"),
+  saveWeighingButton: document.getElementById("liveIntakeSaveWeighing"),
+  editOwnerField: document.getElementById("liveIntakeEditOwnerField"),
+  editOwner: document.getElementById("liveIntakeEditOwner"),
+  editAssignmentField: document.getElementById("liveIntakeEditAssignmentField"),
+  editAssignment: document.getElementById("liveIntakeEditAssignment"),
   editSex: document.getElementById("liveIntakeEditSex"),
   editCageType: document.getElementById("liveIntakeEditCageType"),
   editBirdsPerCage: document.getElementById("liveIntakeEditBirdsPerCage"),
@@ -170,12 +177,15 @@ const elements = {
   ticketEditorModal: document.getElementById("liveIntakeTicketEditorModal"),
   ticketEditorForm: document.getElementById("liveIntakeTicketEditorForm"),
   ticketEditorTitle: document.getElementById("liveIntakeTicketEditorTitle"),
+  ticketEditorOwner: document.getElementById("liveIntakeTicketEditorOwner"),
   ticketEditorClient: document.getElementById("liveIntakeTicketEditorClient"),
+  ticketEditorHelp: document.getElementById("liveIntakeTicketEditorHelp"),
   ticketEditorSummary: document.getElementById("liveIntakeTicketEditorSummary"),
   ticketEditorRows: document.getElementById("liveIntakeTicketEditorRows"),
   ticketEditorMessage: document.getElementById("liveIntakeTicketEditorMessage"),
   ticketEditReason: document.getElementById("liveIntakeTicketEditReason"),
   printTicket: document.getElementById("liveIntakePrintTicket"),
+  cancelTicket: document.getElementById("liveIntakeCancelTicket"),
   saveTicket: document.getElementById("liveIntakeSaveTicket"),
 };
 
@@ -210,9 +220,12 @@ const state = {
   editingRecord: null,
   editingTicket: null,
   ticketEditorTrigger: null,
+  ticketEditorFocusWeighingId: null,
+  ticketEditorRequestId: 0,
   lastRegisteredTicket: null,
   summaryScope: null,
   summaryTrigger: null,
+  summaryEditorReturn: null,
   zoom: readZoom(),
   scale: null,
 };
@@ -820,11 +833,16 @@ function closeDialog(modal, trigger) {
   focusTarget?.focus({ preventScroll: true });
 }
 
+function hideDialogWithoutFocus(modal, trigger) {
+  modal.hidden = true;
+  trigger?.setAttribute("aria-expanded", "false");
+}
+
 function trapDialogFocus(event, modal) {
   if (event.key !== "Tab") return;
   const controls = Array.from(modal.querySelectorAll(
     'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )).filter((control) => !control.hidden);
+  )).filter((control) => !control.hidden && !control.closest("[hidden]"));
   if (!controls.length) return;
   const first = controls[0];
   const last = controls.at(-1);
@@ -955,6 +973,73 @@ function laneDestination(lane) {
     document_number: null,
     pending: true,
   };
+}
+
+function configuredExternalOwner() {
+  return catalogItem("external_owners", state.data?.configuration?.default_external_owner_id);
+}
+
+function warehouseLaneFor(ownerType, sex) {
+  const external = String(ownerType || "").toUpperCase() === "EXTERNA";
+  const female = normalizeReceptionSex(sex) === "HEMBRA";
+  if (external) return female ? 4 : 3;
+  return female ? 2 : 1;
+}
+
+function recordOwnerType(record = {}) {
+  const explicit = String(record?.owner?.type || record?.owner_type || "").toUpperCase();
+  if (["PROPIA", "EXTERNA"].includes(explicit)) return explicit;
+  return laneProfile(record?.lane).ownerType === "EXTERNA" ? "EXTERNA" : "PROPIA";
+}
+
+function populateWeighingOwnerOptions(record = {}, readonly = false) {
+  const currentOwnerType = recordOwnerType(record);
+  const externalOwner = configuredExternalOwner();
+  const historicalExternalName = currentOwnerType === "EXTERNA"
+    ? (record?.owner?.name || "Empresa externa histórica")
+    : "";
+  const externalName = historicalExternalName || externalOwner?.name || "Empresa externa sin configurar";
+  const keepsHistoricalExternal = currentOwnerType === "EXTERNA";
+  const options = ['<option value="PROPIA">Mi empresa</option>'];
+  options.push(`<option value="EXTERNA" ${externalOwner || keepsHistoricalExternal ? "" : "disabled"}>${escapeHtml(externalName)}${externalOwner || keepsHistoricalExternal ? "" : " · configura una empresa"}</option>`);
+  elements.editOwner.innerHTML = options.join("");
+  elements.editOwner.value = currentOwnerType;
+  elements.editOwner.disabled = readonly;
+  return currentOwnerType !== "EXTERNA" || keepsHistoricalExternal || Boolean(externalOwner);
+}
+
+function updateWeighingEditorAssignment(event = null) {
+  if (state.editingRecord?.kind === "draft") return;
+  const readonly = state.editingRecord?.kind === "readonly";
+  elements.editAssignmentField.querySelector("span").textContent = readonly
+    ? "Destino y columna registrados"
+    : "Destino y columna automáticos";
+  if (readonly) {
+    const record = state.editingRecord.record || {};
+    const recordedLane = Number(record.source_lane ?? record.lane) || warehouseLaneFor(recordOwnerType(record), record.sex);
+    elements.editAssignment.textContent = `Columna ${recordedLane} · ${record.destination?.name || "Sin destino registrado"}`;
+    elements.editAssignment.classList.toggle("is-missing", !record.destination?.name);
+    return;
+  }
+  const ownerType = elements.editOwner.value;
+  const record = state.editingRecord?.record || {};
+  const keepsHistoricalExternal = ownerType === "EXTERNA" && recordOwnerType(record) === "EXTERNA";
+  const ownerReady = ownerType !== "EXTERNA" || keepsHistoricalExternal || Boolean(configuredExternalOwner());
+  const lane = warehouseLaneFor(ownerType, elements.editSex.value);
+  const sameLane = lane === Number(record.source_lane ?? record.lane);
+  const historicalDestination = record?.destination
+    || catalogItem("warehouses", record?.warehouse_id ?? record?.warehouse?.id);
+  const destination = sameLane ? (historicalDestination || laneDestination(lane)) : laneDestination(lane);
+  elements.editAssignment.textContent = `Columna ${lane} · ${destination?.name || "Sin almacén configurado"}`;
+  elements.editAssignment.classList.toggle("is-missing", !destination);
+  if (state.editingRecord?.kind === "weighing") {
+    elements.saveWeighingButton.disabled = !ownerReady;
+    if (event) {
+      setWeighingEditorMessage(ownerReady
+        ? "La asignación de columna y destino solo cambiará si modificas el propietario o el sexo. La corrección quedará auditada."
+        : "Configura la empresa externa predeterminada antes de corregir esta pesada.", ownerReady ? "" : "error");
+    }
+  }
 }
 
 function reconcileDirectClientSelections(reset = false) {
@@ -1451,10 +1536,29 @@ function renderSummaryRow(row) {
     ? `Ticket ${row.ticket_code}`
     : `Columna ${sourceLane || "--"}`;
   const weightSource = summaryWeightSource(row?.weight_source);
+  const ticketWeighing = row?.record_kind === "dispatch_ticket_weighing";
+  const readonly = !ticketWeighing && (
+    String(row?.editable_mode || "weighing").toLowerCase() === "readonly"
+    || String(row?.record_kind || "").toLowerCase() === "legacy_direct_weighing"
+  );
+  const grossWeight = formatKg(row?.gross_weight_kg);
+  const actionLabel = `Peso bruto ${grossWeight}. ${ticketWeighing
+    ? `Abrir ticket completo desde la pesada #${recordNumber}`
+    : (readonly ? `Consultar detalle de la pesada #${recordNumber}` : `Editar pesada #${recordNumber}`)}`;
+  const actionHint = ticketWeighing ? "Abrir ticket" : (readonly ? "Consultar" : "Editar pesada");
+  const controlledModal = ticketWeighing ? "liveIntakeTicketEditorModal" : "liveIntakeWeighingEditorModal";
+  const focusKey = row?.summary_focus_key || `${ticketWeighing ? "ticket" : "reception"}-weighing:${row?.id || recordNumber}`;
 
   return `
-    <tr class="${ownerExternal ? "is-external" : "is-own"}">
-      <td class="lir-summary-record"><strong>Pesada #${escapeHtml(recordNumber)}</strong><small>${escapeHtml(recordContext)}</small></td>
+    <tr class="${ownerExternal ? "is-external" : "is-own"} ${readonly ? "is-readonly" : "is-editable"}"
+      data-live-summary-row
+      data-live-summary-record-kind="${escapeHtml(row?.record_kind || "reception_weighing")}"
+      data-live-summary-record-id="${escapeHtml(row?.id || "")}"
+      data-live-summary-ticket-id="${escapeHtml(row?.ticket_id || "")}"
+      data-live-summary-weighing-id="${escapeHtml(row?.id || "")}"
+      data-live-summary-editable-mode="${readonly ? "readonly" : (ticketWeighing ? "ticket" : "weighing")}"
+      data-live-summary-focus-key="${escapeHtml(focusKey)}">
+      <td class="lir-summary-weight lir-summary-gross"><button class="lir-summary-row-open" type="button" data-live-open-summary-row aria-haspopup="dialog" aria-controls="${controlledModal}" aria-expanded="false" aria-label="${escapeHtml(actionLabel)}"><strong>${grossWeight}</strong><small>${escapeHtml(actionHint)}</small></button></td>
       <td class="lir-summary-time">${escapeHtml(formatDateTime(row?.weighed_at))}</td>
       <td><span class="lir-sex-chip ${sex === "HEMBRA" ? "is-female" : "is-male"}">${sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
       <td class="lir-summary-owner">${escapeHtml(ownerName)}</td>
@@ -1463,10 +1567,10 @@ function renderSummaryRow(row) {
       <td class="lir-summary-number">${Number(row?.cages ?? row?.cage_count) || 0}</td>
       <td class="lir-summary-number">${Number(row?.birds_per_cage) || 0}</td>
       <td class="lir-summary-number lir-summary-birds">${Number(row?.birds) || 0}</td>
-      <td class="lir-summary-weight">${formatKg(row?.gross_weight_kg)}</td>
       <td class="lir-summary-weight">${formatKg(row?.tare_weight_kg)}</td>
       <td class="lir-summary-weight lir-summary-net">${formatKg(row?.net_weight_kg)}</td>
       <td><span class="lir-summary-source ${weightSource.manual ? "is-manual" : ""}" title="${escapeHtml(row?.weight_source || "Sin dato")}">${escapeHtml(weightSource.label)}</span></td>
+      <td class="lir-summary-record"><strong>Pesada #${escapeHtml(recordNumber)}</strong><small>${escapeHtml(recordContext)}</small></td>
     </tr>`;
 }
 
@@ -1477,9 +1581,9 @@ function renderSummaryTable(rows, title) {
 
   return `
     <table class="lir-summary-table">
-      <caption class="lir-visually-hidden">${escapeHtml(title)}. Cada fila corresponde a una pesada registrada.</caption>
+      <caption class="lir-visually-hidden">${escapeHtml(title)}. Cada fila corresponde a una pesada registrada; usa el botón de peso bruto para abrir su detalle.</caption>
       <thead><tr>
-        <th scope="col">Registro</th>
+        <th scope="col">Peso bruto</th>
         <th scope="col">Fecha y hora</th>
         <th scope="col">Sexo</th>
         <th scope="col">Propietario</th>
@@ -1488,13 +1592,20 @@ function renderSummaryTable(rows, title) {
         <th scope="col">Javas</th>
         <th scope="col">Aves/java</th>
         <th scope="col">Pollos</th>
-        <th scope="col">Peso bruto</th>
         <th scope="col">Tara</th>
         <th scope="col">Peso neto</th>
         <th scope="col">Origen</th>
+        <th scope="col">Registro</th>
       </tr></thead>
       <tbody>${rows.map(renderSummaryRow).join("")}</tbody>
     </table>`;
+}
+
+function setSummaryMessage(message = "", tone = "") {
+  elements.summaryMessage.textContent = message;
+  elements.summaryMessage.hidden = !message;
+  elements.summaryMessage.classList.toggle("is-error", tone === "error");
+  elements.summaryMessage.classList.toggle("is-success", tone === "success");
 }
 
 function renderSummaryDetail(scope = state.summaryScope || "daily") {
@@ -1519,6 +1630,8 @@ function renderSummaryDetail(scope = state.summaryScope || "daily") {
 
 function openSummaryDetail(scope, trigger) {
   state.summaryTrigger = trigger;
+  state.summaryEditorReturn = null;
+  setSummaryMessage("");
   renderSummaryDetail(scope);
   openDialog(elements.summaryModal, trigger, elements.summaryClose);
 }
@@ -1526,8 +1639,86 @@ function openSummaryDetail(scope, trigger) {
 function closeSummaryDetail() {
   const trigger = state.summaryTrigger || elements.summaryTriggers[0] || elements.capture;
   closeDialog(elements.summaryModal, trigger);
+  state.summaryEditorReturn = null;
   state.summaryScope = null;
   state.summaryTrigger = null;
+}
+
+function suspendSummaryDetailForEditor(row) {
+  const rows = Array.from(elements.summaryRows.querySelectorAll("[data-live-summary-row]"));
+  const rowButton = row.querySelector("[data-live-open-summary-row]");
+  state.summaryEditorReturn = {
+    scope: state.summaryScope || "daily",
+    topTrigger: state.summaryTrigger || elements.summaryTriggers[0] || elements.capture,
+    focusKey: row.dataset.liveSummaryFocusKey || "",
+    rowIndex: Math.max(0, rows.indexOf(row)),
+    scrollLeft: elements.summaryRows.scrollLeft,
+    scrollTop: elements.summaryRows.scrollTop,
+    message: "",
+    tone: "",
+  };
+  rowButton?.setAttribute("aria-expanded", "true");
+  hideDialogWithoutFocus(elements.summaryModal, state.summaryEditorReturn.topTrigger);
+  return rowButton;
+}
+
+function restoreSummaryDetailAfterEditor(message = "", tone = "") {
+  const returnState = state.summaryEditorReturn;
+  if (!returnState) return false;
+
+  state.summaryEditorReturn = null;
+  state.summaryScope = returnState.scope;
+  state.summaryTrigger = returnState.topTrigger;
+  renderSummaryDetail(returnState.scope);
+  setSummaryMessage(message || returnState.message, tone || returnState.tone);
+  elements.summaryModal.hidden = false;
+  returnState.topTrigger?.setAttribute("aria-expanded", "true");
+  syncModalEnvironment();
+
+  const restoreFocusAndScroll = () => {
+    const buttons = Array.from(elements.summaryRows.querySelectorAll("[data-live-open-summary-row]"));
+    const exactButton = buttons.find((button) => button.closest("[data-live-summary-row]")?.dataset.liveSummaryFocusKey === returnState.focusKey);
+    const fallbackButton = buttons[Math.min(returnState.rowIndex, Math.max(0, buttons.length - 1))];
+    const focusTarget = exactButton || fallbackButton || elements.summaryRows;
+    focusTarget.focus({ preventScroll: true });
+    elements.summaryRows.scrollLeft = returnState.scrollLeft;
+    elements.summaryRows.scrollTop = returnState.scrollTop;
+  };
+  (globalThis.requestAnimationFrame || globalThis.setTimeout)(restoreFocusAndScroll);
+  return true;
+}
+
+function openSummaryRow(row) {
+  if (!row || state.busy) return;
+  const ticketWeighing = row.dataset.liveSummaryRecordKind === "dispatch_ticket_weighing";
+  const weighingId = Number(row.dataset.liveSummaryWeighingId || row.dataset.liveSummaryRecordId);
+  const ticketId = Number(row.dataset.liveSummaryTicketId);
+  const rowButton = row.querySelector("[data-live-open-summary-row]");
+
+  if (ticketWeighing) {
+    if (!Number.isInteger(ticketId) || ticketId < 1) {
+      setSummaryMessage("No se encontró el ticket completo de esta pesada.", "error");
+      return;
+    }
+    const trigger = suspendSummaryDetailForEditor(row);
+    void openTicketEditor(ticketId, trigger, { focusWeighingId: weighingId });
+    return;
+  }
+
+  const record = state.data?.records?.find((item) => !isDispatchTicketRecord(item) && Number(item.id) === weighingId);
+  if (!record) {
+    setSummaryMessage("La pesada ya no está disponible. Actualiza el resumen e inténtalo de nuevo.", "error");
+    rowButton?.focus({ preventScroll: true });
+    return;
+  }
+
+  const trigger = suspendSummaryDetailForEditor(row);
+  const readonly = row.dataset.liveSummaryEditableMode === "readonly";
+  openWeighingEditor(record, {
+    kind: readonly ? "readonly" : "weighing",
+    lane: record.lane,
+    trigger,
+  });
 }
 
 function renderTotals() {
@@ -2091,49 +2282,98 @@ function setWeighingEditorMessage(message, tone = "") {
 
 function openWeighingEditor(record, context = {}) {
   const normalized = normalizeDraftWeighing(record);
+  const kind = context.kind || "weighing";
+  const readonly = kind === "readonly";
   state.editingRecord = {
-    kind: context.kind || "weighing",
+    kind,
     lane: Number(context.lane || record.lane),
     localId: context.localId || normalized.local_id,
     record,
-    originalFingerprint: context.kind === "draft" ? dispatchDraftWeighingFingerprint(record) : null,
+    originalFingerprint: kind === "draft" ? dispatchDraftWeighingFingerprint(record) : null,
     trigger: context.trigger || elements.capture,
   };
-  elements.weighingEditorCaption.textContent = context.kind === "draft" ? "Borrador de ticket" : "Pesada de recepción";
-  elements.weighingEditorTitle.textContent = context.kind === "draft"
+  elements.weighingEditorCaption.textContent = kind === "draft"
+    ? "Borrador de ticket"
+    : (readonly ? "Consulta histórica" : "Pesada de recepción");
+  elements.weighingEditorTitle.textContent = kind === "draft"
     ? `Editar pesada del ticket ${context.lane}`
-    : `Editar pesada #${record.number || record.id}`;
+    : (readonly ? `Detalle de pesada #${record.number || record.id}` : `Editar pesada #${record.number || record.id}`);
   elements.editCageType.innerHTML = cageTypeOptionMarkup(normalized.cage_type_id, record.cage_type || {
     name: normalized.cage_type_name,
     weight_kg: record.cage_weight_kg ?? record.cage_type?.weight_kg,
   });
+  const ownerReady = kind === "draft" ? true : populateWeighingOwnerOptions(record, readonly);
+  elements.editOwnerField.hidden = kind === "draft";
+  elements.editAssignmentField.hidden = kind === "draft";
   elements.editSex.value = normalized.sex;
   elements.editBirdsPerCage.value = String(normalized.birds_per_cage);
   elements.editCageCount.value = String(normalized.cage_count);
   elements.editWeight.value = Number(normalized.read_weight_kg || normalized.gross_weight_kg).toFixed(3);
   elements.editWeighedAt.value = toDateTimeLocal(normalized.weighed_at);
   elements.editReason.value = "";
-  elements.editReason.required = context.kind !== "draft";
-  elements.editReason.closest("label").hidden = context.kind === "draft";
-  elements.deleteWeighingButton.textContent = context.kind === "draft" ? "Quitar" : "Eliminar";
+  [elements.editSex, elements.editCageType, elements.editBirdsPerCage, elements.editCageCount, elements.editWeight, elements.editWeighedAt, elements.editReason]
+    .forEach((control) => { control.disabled = readonly; });
+  if (kind === "draft") elements.editOwner.disabled = true;
+  elements.editReason.required = kind === "weighing";
+  elements.editReason.closest("label").hidden = kind !== "weighing";
+  elements.deleteWeighingButton.hidden = readonly;
+  elements.saveWeighingButton.hidden = readonly;
+  elements.saveWeighingButton.disabled = readonly || !ownerReady;
+  elements.cancelWeighingButton.textContent = readonly ? "Cerrar" : "Cancelar";
+  elements.deleteWeighingButton.textContent = kind === "draft" ? "Quitar" : "Eliminar";
   elements.deleteWeighingButton.setAttribute(
     "aria-label",
-    context.kind === "draft"
+    kind === "draft"
       ? "Quitar pesada del borrador"
       : `Eliminar pesada #${record.number || record.id}`,
   );
-  elements.deleteWeighingButton.disabled = false;
-  setWeighingEditorMessage(context.kind === "draft"
-    ? "Los cambios se guardarán únicamente en este borrador."
-    : "El peso corregido se registrará como manual y quedará auditado.");
-  openDialog(elements.weighingEditorModal, context.trigger || elements.capture, elements.editBirdsPerCage);
+  elements.deleteWeighingButton.disabled = readonly;
+  elements.weighingEditorModal.querySelector("header [data-live-close-weighing-editor]")?.setAttribute(
+    "aria-label",
+    readonly ? "Cerrar detalle de pesada" : "Cerrar editor de pesada",
+  );
+  if (kind !== "draft") updateWeighingEditorAssignment();
+  if (readonly) {
+    setWeighingEditorMessage("Este registro pertenece a una distribución anterior y está disponible únicamente para consulta.");
+  } else if (!ownerReady) {
+    setWeighingEditorMessage("Configura la empresa externa predeterminada antes de corregir esta pesada.", "error");
+  } else {
+    setWeighingEditorMessage(kind === "draft"
+      ? "Los cambios se guardarán únicamente en este borrador."
+      : "La asignación de columna y destino solo cambiará si modificas el propietario o el sexo. La corrección quedará auditada.");
+  }
+  const initialFocus = readonly
+    ? elements.cancelWeighingButton
+    : (kind === "draft" ? elements.editBirdsPerCage : elements.editOwner);
+  openDialog(elements.weighingEditorModal, context.trigger || elements.capture, initialFocus);
 }
 
 function closeWeighingEditor() {
   if (state.busy) return;
   const trigger = state.editingRecord?.trigger || elements.capture;
+  if (state.summaryEditorReturn) {
+    trigger?.setAttribute("aria-expanded", "false");
+    state.editingRecord = null;
+    elements.weighingEditorModal.hidden = true;
+    restoreSummaryDetailAfterEditor();
+    return;
+  }
   state.editingRecord = null;
   closeDialog(elements.weighingEditorModal, trigger);
+}
+
+function finishWeighingEditor(message = "", tone = "") {
+  const editingContext = state.editingRecord;
+  editingContext?.trigger?.setAttribute("aria-expanded", "false");
+  state.editingRecord = null;
+  elements.weighingEditorModal.hidden = true;
+  if (restoreSummaryDetailAfterEditor(message, tone)) {
+    if (message) setMessage(message, tone);
+    return;
+  }
+  syncModalEnvironment();
+  elements.laneRows[Number(editingContext?.lane) - 1]?.focus({ preventScroll: true });
+  if (message) setMessage(message, tone);
 }
 
 function editedWeighingValues() {
@@ -2148,7 +2388,12 @@ function editedWeighingValues() {
   if (!Number.isInteger(cages) || cages < 1) throw new Error("Ingresa una cantidad válida de javas.");
   if (!Number.isInteger(birdsPerCage) || birdsPerCage < 1) throw new Error("Ingresa una cantidad válida de aves por java.");
   if (!Number.isFinite(readWeight) || readWeight <= tare) throw new Error("El peso leído debe ser mayor que la tara total.");
+  const ownerType = String(elements.editOwner.value || "").toUpperCase();
+  if (state.editingRecord?.kind !== "draft" && !["PROPIA", "EXTERNA"].includes(ownerType)) {
+    throw new Error("Selecciona un propietario válido.");
+  }
   return normalizeDraftWeighing({
+    ...(state.editingRecord?.kind === "draft" ? {} : { owner_type: ownerType }),
     sex: elements.editSex.value,
     cage_type_id: Number(cageType.id),
     cage_type_name: cageType.name,
@@ -2172,7 +2417,7 @@ function editedWeighingValues() {
 
 async function saveWeighingEditor(event) {
   event.preventDefault();
-  if (!state.editingRecord || state.busy) return;
+  if (!state.editingRecord || state.editingRecord.kind === "readonly" || state.busy || elements.saveWeighingButton.disabled) return;
   let values;
   try {
     values = editedWeighingValues();
@@ -2215,14 +2460,11 @@ async function saveWeighingEditor(event) {
       setWeighingEditorMessage(error.message, "error");
       return;
     }
-    state.editingRecord = null;
-    elements.weighingEditorModal.hidden = true;
-    syncModalEnvironment();
     renderRecords();
     renderTotals();
     renderLaneAssignments();
     updateCaptureAvailability();
-    setMessage("Pesada del borrador actualizada.", "success");
+    finishWeighingEditor("Pesada del borrador actualizada.", "success");
     return;
   }
 
@@ -2238,9 +2480,10 @@ async function saveWeighingEditor(event) {
   const weightChanged = Math.abs(Number(values.read_weight_kg) - Number(record.read_weight_kg ?? record.gross_weight_kg)) > 0.0005;
   try {
     const updatePayload = {
-      layout_version: 4,
+      layout_version: LAYOUT_VERSION,
       expected_updated_at: record.updated_at,
       correction_reason: reason,
+      owner_type: values.owner_type,
       sex: values.sex,
       cage_type_id: values.cage_type_id,
       birds_per_cage: values.birds_per_cage,
@@ -2254,10 +2497,7 @@ async function saveWeighingEditor(event) {
       body: JSON.stringify(updatePayload),
     });
     renderData(response.data);
-    state.editingRecord = null;
-    elements.weighingEditorModal.hidden = true;
-    syncModalEnvironment();
-    setMessage(response.message || "Pesada actualizada correctamente.", "success");
+    finishWeighingEditor(response.message || "Pesada actualizada correctamente.", "success");
   } catch (error) {
     setWeighingEditorMessage(firstValidationMessage(error), "error");
   } finally {
@@ -2325,7 +2565,7 @@ async function deleteDraftWeighing(lane, localId, feedback = setMessage, expecte
 }
 
 async function deleteEditingWeighing() {
-  if (!state.editingRecord || state.busy || elements.deleteWeighingButton.disabled) return;
+  if (!state.editingRecord || state.editingRecord.kind === "readonly" || state.busy || elements.deleteWeighingButton.disabled) return;
   const editingContext = { ...state.editingRecord };
   elements.deleteWeighingButton.disabled = true;
   state.busy = true;
@@ -2350,13 +2590,7 @@ async function deleteEditingWeighing() {
     updateScaleUi();
   }
   if (!result) return;
-
-  editingContext.trigger?.setAttribute("aria-expanded", "false");
-  state.editingRecord = null;
-  elements.weighingEditorModal.hidden = true;
-  syncModalEnvironment();
-  elements.laneRows[Number(editingContext.lane) - 1]?.focus({ preventScroll: true });
-  setMessage(result.message, "success");
+  finishWeighingEditor(result.message, "success");
 }
 
 function setTicketEditorMessage(message, tone = "") {
@@ -2368,9 +2602,14 @@ function setTicketEditorMessage(message, tone = "") {
 function renderTicketEditor() {
   const ticket = state.editingTicket;
   if (!ticket) return;
+  const readonly = ticket.editable === false;
   const totals = calculateDraftTotals(ticket.weighings);
   elements.ticketEditorTitle.textContent = ticket.code;
+  elements.ticketEditorOwner.textContent = "Propietario: Mi empresa · fijo";
   elements.ticketEditorClient.textContent = `${ticket.client.name} · Cliente conservado`;
+  elements.ticketEditorHelp.textContent = readonly
+    ? "Consulta todas las pesadas del ticket. El propietario y el cliente se conservan para mantener su trazabilidad."
+    : "Puedes corregir todas las pesadas y guardarlas juntas. El propietario permanece fijo como Mi empresa y el cliente se conserva para mantener la trazabilidad del despacho.";
   elements.ticketEditorSummary.innerHTML = `
     <span><small>Pesadas</small><strong>${totals.weighings}</strong></span>
     <span><small>Javas</small><strong>${totals.cages}</strong></span>
@@ -2380,7 +2619,7 @@ function renderTicketEditor() {
     <span class="is-net"><small>Neto</small><strong>${formatKg(totals.net_weight_kg)}</strong></span>`;
   elements.ticketEditorRows.innerHTML = ticket.weighings.length
     ? ticket.weighings.map((weighing, index) => `
-      <fieldset class="lir-ticket-weighing-editor" data-live-ticket-weighing="${weighing.id}">
+      <fieldset class="lir-ticket-weighing-editor ${Number(weighing.id) === Number(state.ticketEditorFocusWeighingId) ? "is-summary-target" : ""}" data-live-ticket-weighing="${weighing.id}" ${Number(weighing.id) === Number(state.ticketEditorFocusWeighingId) ? 'tabindex="-1"' : ""}>
         <legend><span>Pesada ${weighing.number || index + 1}</span><b>${weighing.sex === "HEMBRA" ? "Hembra" : "Macho"}</b></legend>
         <label><span>Sexo</span><select data-ticket-field="sex"><option value="MACHO" ${weighing.sex === "MACHO" ? "selected" : ""}>Macho</option><option value="HEMBRA" ${weighing.sex === "HEMBRA" ? "selected" : ""}>Hembra</option></select></label>
         <label><span>Tipo de java</span><select data-ticket-field="cage_type_id">${cageTypeOptionMarkup(weighing.cage_type_id, weighing.cage_type)}</select></label>
@@ -2389,21 +2628,42 @@ function renderTicketEditor() {
         <label><span>Peso leído (kg)</span><input data-ticket-field="read_weight_kg" type="number" min="0.001" step="0.001" value="${Number(weighing.read_weight_kg || weighing.gross_weight_kg).toFixed(3)}"></label>
         <label><span>Fecha y hora</span><input data-ticket-field="weighed_at" type="datetime-local" step="1" value="${toDateTimeLocal(weighing.weighed_at)}"></label>
       </fieldset>`).join("")
-    : '<p class="lir-client-empty">Este ticket no tiene pesadas editables.</p>';
+    : '<p class="lir-client-empty">Este ticket no tiene pesadas disponibles.</p>';
   elements.ticketEditReason.value = "";
+  elements.ticketEditorRows.querySelectorAll("input, select").forEach((control) => { control.disabled = readonly; });
+  elements.ticketEditReason.disabled = readonly;
+  elements.ticketEditReason.required = !readonly;
+  elements.ticketEditReason.closest("label").hidden = readonly;
   elements.printTicket.disabled = ticket.weighings.length === 0;
-  elements.saveTicket.disabled = ticket.weighings.length === 0 || ticket.editable === false;
-  setTicketEditorMessage(ticket.editable === false
+  elements.saveTicket.hidden = readonly;
+  elements.saveTicket.disabled = ticket.weighings.length === 0 || readonly;
+  elements.cancelTicket.textContent = readonly ? "Cerrar" : "Cancelar";
+  elements.ticketEditorModal.querySelector("header [data-live-close-ticket-editor]")?.setAttribute(
+    "aria-label",
+    readonly ? "Cerrar detalle del ticket" : "Cerrar editor de ticket",
+  );
+  setTicketEditorMessage(readonly
     ? (ticket.edit_restriction || "Este ticket está disponible únicamente para consulta.")
-    : "Al guardar, todas las pesadas se validarán y actualizarán en una sola operación.", ticket.editable === false ? "error" : "");
+    : "Al guardar, todas las pesadas se validarán y actualizarán en una sola operación.", readonly ? "error" : "");
+
+  const focusTarget = elements.ticketEditorRows.querySelector(".is-summary-target");
+  if (focusTarget) {
+    (globalThis.requestAnimationFrame || globalThis.setTimeout)(() => {
+      focusTarget.focus({ preventScroll: true });
+      focusTarget.scrollIntoView({ block: "center", inline: "nearest" });
+    });
+  }
 }
 
-async function openTicketEditor(ticketId, trigger) {
+async function openTicketEditor(ticketId, trigger, options = {}) {
   const id = Number(ticketId);
   if (!Number.isInteger(id) || id < 1 || state.busy) return;
+  const requestId = ++state.ticketEditorRequestId;
   state.ticketEditorTrigger = trigger || elements.capture;
+  state.ticketEditorFocusWeighingId = Number(options.focusWeighingId) || null;
   state.editingTicket = null;
   elements.ticketEditorTitle.textContent = `Ticket #${id}`;
+  elements.ticketEditorOwner.textContent = "Propietario: Mi empresa · fijo";
   elements.ticketEditorClient.textContent = "Cargando información completa…";
   elements.ticketEditorSummary.innerHTML = "";
   elements.ticketEditorRows.innerHTML = '<p class="lir-client-empty">Cargando pesadas…</p>';
@@ -2413,10 +2673,12 @@ async function openTicketEditor(ticketId, trigger) {
   openDialog(elements.ticketEditorModal, state.ticketEditorTrigger, elements.ticketEditorModal.querySelector("[data-live-close-ticket-editor]"));
   try {
     const response = await apiRequest(`/recepcion-pollo-vivo/tickets/${id}`);
+    if (requestId !== state.ticketEditorRequestId || elements.ticketEditorModal.hidden) return;
     state.ticketEditorCatalog = response.data?.catalog || response.catalog || {};
     state.editingTicket = normalizeFullTicket(response.data?.ticket || response.ticket || response.data);
     renderTicketEditor();
   } catch (error) {
+    if (requestId !== state.ticketEditorRequestId || elements.ticketEditorModal.hidden) return;
     elements.ticketEditorRows.innerHTML = '<p class="lir-client-empty">No se pudo cargar el ticket.</p>';
     setTicketEditorMessage(firstValidationMessage(error), "error");
   }
@@ -2425,10 +2687,36 @@ async function openTicketEditor(ticketId, trigger) {
 function closeTicketEditor() {
   if (state.busy) return;
   const trigger = state.ticketEditorTrigger || elements.capture;
+  state.ticketEditorRequestId += 1;
   state.editingTicket = null;
   state.ticketEditorCatalog = null;
   state.ticketEditorTrigger = null;
+  state.ticketEditorFocusWeighingId = null;
+  if (state.summaryEditorReturn) {
+    trigger?.setAttribute("aria-expanded", "false");
+    elements.ticketEditorModal.hidden = true;
+    restoreSummaryDetailAfterEditor();
+    return;
+  }
   closeDialog(elements.ticketEditorModal, trigger);
+}
+
+function finishTicketEditor(message = "", tone = "") {
+  const trigger = state.ticketEditorTrigger || elements.capture;
+  state.ticketEditorRequestId += 1;
+  trigger?.setAttribute("aria-expanded", "false");
+  state.editingTicket = null;
+  state.ticketEditorCatalog = null;
+  state.ticketEditorTrigger = null;
+  state.ticketEditorFocusWeighingId = null;
+  elements.ticketEditorModal.hidden = true;
+  if (restoreSummaryDetailAfterEditor(message, tone)) {
+    if (message) setMessage(message, tone);
+    return;
+  }
+  syncModalEnvironment();
+  trigger?.focus({ preventScroll: true });
+  if (message) setMessage(message, tone);
 }
 
 function ticketEditorWeighings() {
@@ -2495,9 +2783,14 @@ async function saveTicketEditor(event) {
     });
     renderData(response.data);
     state.editingTicket = normalizeFullTicket(response.ticket || response.data?.ticket || state.editingTicket);
+    const successMessage = response.message || "Ticket actualizado completamente.";
+    if (state.summaryEditorReturn) {
+      finishTicketEditor(successMessage, "success");
+      return;
+    }
     renderTicketEditor();
-    setTicketEditorMessage(response.message || "Ticket actualizado completamente.", "success");
-    setMessage(response.message || "Ticket actualizado completamente.", "success");
+    setTicketEditorMessage(successMessage, "success");
+    setMessage(successMessage, "success");
   } catch (error) {
     setTicketEditorMessage(firstValidationMessage(error), "error");
   } finally {
@@ -3043,6 +3336,8 @@ elements.manualWeightForm.addEventListener("submit", applyManualWeight);
 document.querySelectorAll("[data-live-close-manual-weight]").forEach((button) => button.addEventListener("click", closeManualWeight));
 elements.weighingEditorForm.addEventListener("submit", saveWeighingEditor);
 elements.deleteWeighingButton.addEventListener("click", () => { void deleteEditingWeighing(); });
+elements.editOwner.addEventListener("change", updateWeighingEditorAssignment);
+elements.editSex.addEventListener("change", updateWeighingEditorAssignment);
 document.querySelectorAll("[data-live-close-weighing-editor]").forEach((button) => button.addEventListener("click", closeWeighingEditor));
 elements.ticketEditorForm.addEventListener("submit", saveTicketEditor);
 elements.printTicket.addEventListener("click", () => printRegisteredTicket());
@@ -3066,6 +3361,12 @@ elements.zoomOut.addEventListener("click", () => stepZoom(-1));
 elements.zoomIn.addEventListener("click", () => stepZoom(1));
 elements.zoomReset.addEventListener("click", () => applyZoom(100));
 document.addEventListener("click", (event) => {
+  const summaryRow = event.target.closest("[data-live-summary-row]");
+  if (summaryRow) {
+    event.preventDefault();
+    openSummaryRow(summaryRow);
+    return;
+  }
   const retryExpiredButton = event.target.closest("[data-live-retry-expired-ticket]");
   if (retryExpiredButton) {
     void retryExpiredDispatchTicket(retryExpiredButton.dataset.liveRetryExpiredTicket, retryExpiredButton);

@@ -311,6 +311,556 @@ class LiveChickenReceptionApiTest extends TestCase
         ]);
     }
 
+    public function test_own_reception_weighing_can_be_reassigned_to_the_configured_external_owner(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'La pesada pertenece a la empresa externa',
+            'owner_type' => 'externa',
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)
+            ->assertJsonPath('data.records.0.owner.id', $this->externalOwnerId)
+            ->assertJsonPath('data.records.0.lane', 3)
+            ->assertJsonPath('data.totals.own.birds', 0)
+            ->assertJsonPath('data.totals.external.birds', 14);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'columna' => 3,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'propietario_externo_id' => $this->externalOwnerId,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_total' => 0,
+        ]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseOneId,
+            'cantidad_aves' => 0,
+            'peso_neto_kg' => 0,
+        ]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'almacen_destino_id' => $this->warehouseOneId,
+            'estado' => 'ANULADO',
+        ]);
+    }
+
+    public function test_owner_cannot_be_changed_to_external_after_own_stock_was_consumed(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        DB::table('existencias_almacen')
+            ->where('almacen_id', $this->warehouseOneId)
+            ->where('tipo_pollo_id', $this->liveChickenTypeId)
+            ->update([
+                'cantidad_aves' => 5,
+                'peso_neto_kg' => 30,
+            ]);
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Intento de retirar inventario ya consumido',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('weighing');
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'propietario_externo_id' => null,
+        ]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseOneId,
+            'cantidad_aves' => 5,
+            'peso_neto_kg' => 30,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+        $this->assertDatabaseHas('movimientos_inventario', ['estado' => 'CONFIRMADO']);
+    }
+
+    public function test_owner_cannot_be_reassigned_when_its_inventory_movement_is_already_voided(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $movementId = (int) DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
+            ->value('movimiento_id');
+        DB::table('movimientos_inventario')
+            ->where('id', $movementId)
+            ->update(['estado' => 'ANULADO']);
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'No duplicar una reversa de inventario',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('weighing');
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'propietario_externo_id' => null,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseOneId,
+            'cantidad_aves' => 14,
+            'peso_neto_kg' => 86,
+        ]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'id' => $movementId,
+            'estado' => 'ANULADO',
+        ]);
+    }
+
+    public function test_owner_cannot_be_reassigned_without_its_inventory_detail(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
+            ->delete();
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'No reasignar sin trazabilidad de inventario',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('weighing');
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'propietario_externo_id' => null,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseOneId,
+            'cantidad_aves' => 14,
+            'peso_neto_kg' => 86,
+        ]);
+        $this->assertDatabaseCount('movimiento_detalles', 0);
+    }
+
+    public function test_external_reception_weighing_can_be_reassigned_to_own_inventory(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 3]),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'La pesada corresponde a mi empresa',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'sex' => Pesada::SEX_FEMALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 3,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 120,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.records.0.owner.id', null)
+            ->assertJsonPath('data.records.0.lane', 2)
+            ->assertJsonPath('data.totals.own.birds', 24)
+            ->assertJsonPath('data.totals.external.birds', 0);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'columna' => 2,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'propietario_externo_id' => null,
+            'almacen_destino_id' => $this->warehouseTwoId,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_total' => 3,
+        ]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseTwoId,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
+        ]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'almacen_destino_id' => $this->warehouseTwoId,
+            'estado' => 'CONFIRMADO',
+        ]);
+        $this->assertDatabaseHas('movimiento_detalles', [
+            'pesada_recepcion_pollo_vivo_id' => $weighingId,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
+        ]);
+    }
+
+    public function test_external_reception_weighing_full_edit_keeps_own_inventory_untouched(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 3]),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Corrección completa de pesada externa',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_FEMALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 3,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 120,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)
+            ->assertJsonPath('data.records.0.owner.id', $this->externalOwnerId)
+            ->assertJsonPath('data.records.0.lane', 4)
+            ->assertJsonPath('data.records.0.birds', 24)
+            ->assertJsonPath('data.totals.external.net_weight_kg', 99);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'columna' => 4,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'propietario_externo_id' => $this->externalOwnerId,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
+        ]);
+        $this->assertDatabaseCount('existencias_almacen', 0);
+        $this->assertDatabaseCount('inventarios_javas', 0);
+        $this->assertDatabaseCount('movimientos_inventario', 0);
+        $this->assertDatabaseCount('movimiento_detalles', 0);
+    }
+
+    public function test_external_reception_weighing_keeps_its_historical_owner_when_the_default_changes(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 3]),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $newExternalOwnerId = $this->createParty(
+            '20900000002',
+            'Nueva empresa externa predeterminada',
+            TerceroRole::PROVIDER,
+        );
+        $this->putJson(
+            '/api/v1/recepcion-pollo-vivo/configuracion',
+            $this->configurationPayload(['default_external_owner_id' => $newExternalOwnerId]),
+        )->assertOk();
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Corregir peso sin cambiar la empresa propietaria',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.owner.id', $this->externalOwnerId)
+            ->assertJsonPath('data.records.0.owner.name', 'Empresa del hermano');
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'propietario_externo_id' => $this->externalOwnerId,
+        ]);
+        $this->assertDatabaseCount('inventarios_javas', 0);
+        $this->assertDatabaseCount('movimientos_inventario', 0);
+    }
+
+    public function test_external_reception_weighing_remains_editable_when_the_default_owner_is_cleared(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(['lane' => 3]),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $this->putJson(
+            '/api/v1/recepcion-pollo-vivo/configuracion',
+            $this->configurationPayload(['default_external_owner_id' => null]),
+        )->assertOk();
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Corregir pesada externa histórica',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 2,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 110,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.owner.id', $this->externalOwnerId)
+            ->assertJsonPath('data.records.0.birds', 16)
+            ->assertJsonPath('data.records.0.net_weight_kg', 96);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'propietario_externo_id' => $this->externalOwnerId,
+            'cantidad_aves' => 16,
+            'peso_neto_kg' => 96,
+        ]);
+        $this->assertDatabaseCount('inventarios_javas', 0);
+        $this->assertDatabaseCount('movimientos_inventario', 0);
+    }
+
+    public function test_same_lane_edit_keeps_the_historical_warehouse_after_configuration_changes(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $movementId = (int) DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
+            ->value('movimiento_id');
+        $this->putJson(
+            '/api/v1/recepcion-pollo-vivo/configuracion',
+            $this->configurationPayload(['lane_1_warehouse_id' => $this->warehouseTwoId]),
+        )->assertOk();
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Corregir datos sin trasladar inventario',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 2,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 110,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.lane', 1)
+            ->assertJsonPath('data.records.0.destination.id', $this->warehouseOneId)
+            ->assertJsonPath('data.records.0.birds', 16);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'almacen_destino_id' => $this->warehouseOneId,
+            'cantidad_aves' => 16,
+            'peso_neto_kg' => 96,
+        ]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseOneId,
+            'tipo_pollo_id' => $this->liveChickenTypeId,
+            'cantidad_aves' => 16,
+            'peso_neto_kg' => 96,
+        ]);
+        $this->assertSame(0, DB::table('existencias_almacen')
+            ->where('almacen_id', $this->warehouseTwoId)
+            ->where('tipo_pollo_id', $this->liveChickenTypeId)
+            ->count());
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'id' => $movementId,
+            'almacen_destino_id' => $this->warehouseOneId,
+            'estado' => 'CONFIRMADO',
+        ]);
+    }
+
+    public function test_owner_round_trip_reuses_the_same_inventory_movement(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $movementId = (int) DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
+            ->value('movimiento_id');
+
+        $external = $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Cambio temporal a propietario externo',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk();
+
+        $returned = $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $external->json('data.records.0.updated_at'),
+            'correction_reason' => 'Regreso al inventario de mi empresa',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 1,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 50,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.records.0.cages', 1);
+
+        $this->assertSame(1, DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
+            ->count());
+        $this->assertDatabaseHas('movimiento_detalles', [
+            'movimiento_id' => $movementId,
+            'pesada_recepcion_pollo_vivo_id' => $weighingId,
+            'cantidad_aves' => 7,
+            'peso_neto_kg' => 43,
+        ]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'id' => $movementId,
+            'estado' => 'CONFIRMADO',
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 1]);
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $returned->json('data.records.0.updated_at'),
+            'correction_reason' => 'Corrección posterior al cambio de propietario',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'sex' => Pesada::SEX_FEMALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 2,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 80,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.lane', 2)
+            ->assertJsonPath('data.records.0.birds', 16);
+
+        $this->assertDatabaseHas('movimiento_detalles', [
+            'movimiento_id' => $movementId,
+            'cantidad_aves' => 16,
+            'peso_neto_kg' => 66,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+    }
+
+    public function test_external_owner_selection_uses_only_the_configured_default(): void
+    {
+        $this->putJson(
+            '/api/v1/recepcion-pollo-vivo/configuracion',
+            $this->configurationPayload(['default_external_owner_id' => null]),
+        )->assertOk();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $payload = [
+            'layout_version' => 4,
+            'expected_updated_at' => $created->json('data.records.0.updated_at'),
+            'correction_reason' => 'Intento sin empresa externa configurada',
+            'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => $created->json('data.records.0.weighed_at'),
+        ];
+
+        $this->putJson(
+            "/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}",
+            $payload,
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors('owner_type');
+        $this->putJson(
+            "/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}",
+            [
+                ...$payload,
+                'external_owner_id' => $this->externalOwnerId,
+                'lane' => 3,
+                'warehouse_id' => $this->warehouseOneId,
+                'destination_id' => $this->warehouseOneId,
+                'dispatch_client_id' => $this->clientFiveId,
+            ],
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'external_owner_id',
+                'lane',
+                'warehouse_id',
+                'destination_id',
+                'dispatch_client_id',
+            ]);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_OWN,
+            'propietario_externo_id' => null,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+    }
+
     public function test_native_reception_weighing_can_be_updated_with_negative_container_inventory(): void
     {
         $this->saveConfiguration();
@@ -804,6 +1354,78 @@ class LiveChickenReceptionApiTest extends TestCase
         ]);
         $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 0]);
         $this->assertDatabaseHas('movimientos_inventario', ['estado' => 'ANULADO']);
+    }
+
+    public function test_voiding_a_legacy_direct_weighing_reverses_its_dispatch_trace(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $weighing = PesadaRecepcionPolloVivo::query()
+            ->with('recepcion:id,jornada_id')
+            ->findOrFail($weighingId);
+        $movementId = (int) DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
+            ->value('movimiento_id');
+
+        DB::table('existencias_almacen')
+            ->where('almacen_id', $this->warehouseOneId)
+            ->where('tipo_pollo_id', $this->liveChickenTypeId)
+            ->delete();
+        DB::table('pesadas_recepcion_pollo_vivo')
+            ->where('id', $weighingId)
+            ->update([
+                'columna' => 5,
+                'destino_tipo' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+                'almacen_destino_id' => null,
+                'cliente_destino_id' => $this->clientFiveId,
+            ]);
+        DB::table('movimientos_inventario')
+            ->where('id', $movementId)
+            ->update([
+                'tipo' => 'DESPACHO_DIRECTO',
+                'almacen_destino_id' => null,
+                'tercero_destino_id' => $this->clientFiveId,
+            ]);
+        MovimientoJava::query()->create([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $weighing->recepcion->jornada_id,
+            'cliente_id' => $this->clientFiveId,
+            'tipo' => MovimientoJava::TYPE_DISPATCH,
+            'cantidad' => 2,
+            'cantidad_bandejas' => 0,
+            'ticket_despacho_id' => null,
+            'pesada_recepcion_pollo_vivo_id' => $weighingId,
+            'vehiculo_id' => null,
+            'conductor_id' => null,
+            'fecha_movimiento' => $weighing->pesada_at,
+            'observaciones' => 'Despacho directo histórico de prueba.',
+            'created_by' => $this->user->id,
+        ]);
+
+        $this->deleteJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}")
+            ->assertOk()
+            ->assertJsonPath('data.totals.daily.weighings', 0)
+            ->assertJsonPath('data.totals.own.birds', 0);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'estado' => PesadaRecepcionPolloVivo::STATUS_VOIDED,
+            'anulada_por' => $this->user->id,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 0]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'id' => $movementId,
+            'tipo' => 'DESPACHO_DIRECTO',
+            'estado' => 'ANULADO',
+        ]);
+        $this->assertDatabaseMissing('movimientos_javas', [
+            'pesada_recepcion_pollo_vivo_id' => $weighingId,
+        ]);
     }
 
     public function test_voiding_rejects_a_stale_weighing_version(): void

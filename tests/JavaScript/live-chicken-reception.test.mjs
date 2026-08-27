@@ -220,7 +220,7 @@ test("el resumen expande cada pesada de los tickets y filtra los tres alcances",
       weighed_at: "2026-08-27T10:00:00-05:00",
     },
     {
-      record_kind: "reception_weighing",
+      record_kind: "legacy_direct_weighing",
       id: 2,
       number: 2,
       owner: { type: "EXTERNA", name: "Empresa externa" },
@@ -260,6 +260,9 @@ test("el resumen expande cada pesada de los tickets y filtra los tres alcances",
   assert.equal(daily[0].ticket_code, "PV-030");
   assert.equal(daily[0].destination.name, "Cliente A");
   assert.equal(daily[0].owner.type, "PROPIA");
+  assert.equal(daily[0].summary_focus_key, "ticket-weighing:31");
+  assert.equal(daily.find(({ id }) => id === 2).editable_mode, "readonly");
+  assert.equal(daily.find(({ id }) => id === 2).summary_focus_key, "reception-weighing:2");
   assert.deepEqual(records, snapshot);
 });
 
@@ -284,6 +287,7 @@ test("los tres grupos del resumen abren el mismo popup accesible y adaptable", (
   });
   assert.match(summaryModal, /role="dialog" aria-modal="true" aria-labelledby="liveIntakeSummaryTitle"/);
   assert.match(summaryModal, /id="liveIntakeSummaryRows"[^>]*role="region" tabindex="0"/);
+  assert.match(summaryModal, /class="lir-summary-intro"[\s\S]*?id="liveIntakeSummaryHelp"[\s\S]*?id="liveIntakeSummaryMessage"/);
   ["weighings", "cages", "birds", "gross_weight_kg", "tare_weight_kg", "net_weight_kg"].forEach((key) => {
     assert.match(summaryModal, new RegExp(`data-live-summary-total="${key}"`));
   });
@@ -305,8 +309,113 @@ test("los tres grupos del resumen abren el mismo popup accesible y adaptable", (
   assert.match(source, /\[elements\.summaryModal,[\s\S]*?if \(modal === elements\.summaryModal\) closeSummaryDetail\(\)/);
   assert.match(source, /if \(state\.summaryScope && !elements\.summaryModal\.hidden\) \{[\s\S]*?renderSummaryDetail\(state\.summaryScope\)/);
   assert.match(stylesheet, /\.lir-modal-card\.is-summary-detail \{[^}]*height: min\(860px, calc\(100dvh - 32px\)\);[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;[^}]*overflow: hidden;/);
+  assert.match(stylesheet, /\.lir-summary-detail-body \{[^}]*grid-template-rows: auto auto minmax\(0, 1fr\);/);
   assert.match(stylesheet, /\.lir-summary-table-scroll \{[^}]*min-height: 0;[^}]*overflow: auto;[^}]*overscroll-behavior: contain;[^}]*touch-action: pan-x pan-y pinch-zoom;/);
   assert.match(tabletStyles, /\.lir-summary-totals \{ grid-template-columns: repeat\(3,/);
+});
+
+test("cada fila del resumen abre su detalle desde cualquier celda con un botón real en peso bruto", () => {
+  const rowRenderer = source.match(/function renderSummaryRow\(row\)[\s\S]*?(?=\nfunction renderSummaryTable)/)?.[0] || "";
+  const tableRenderer = source.match(/function renderSummaryTable\(rows, title\)[\s\S]*?(?=\nfunction setSummaryMessage)/)?.[0] || "";
+  const header = tableRenderer.match(/<thead><tr>([\s\S]*?)<\/tr><\/thead>/)?.[1] || "";
+  const labels = [...header.matchAll(/<th scope="col">([^<]+)<\/th>/g)].map(([, label]) => label);
+
+  assert.deepEqual(labels, [
+    "Peso bruto", "Fecha y hora", "Sexo", "Propietario", "Destino", "Tipo de java",
+    "Javas", "Aves/java", "Pollos", "Tara", "Peso neto", "Origen", "Registro",
+  ]);
+  assert.match(rowRenderer, /<tr class="[\s\S]*?data-live-summary-row/);
+  assert.doesNotMatch(rowRenderer, /<tr[^>]*role="button"/);
+  assert.match(rowRenderer, /<td class="lir-summary-weight lir-summary-gross"><button class="lir-summary-row-open" type="button" data-live-open-summary-row aria-haspopup="dialog"/);
+  assert.match(rowRenderer, /aria-controls="\$\{controlledModal\}" aria-expanded="false" aria-label=/);
+  assert.match(source, /const summaryRow = event\.target\.closest\("\[data-live-summary-row\]"\);[\s\S]*?openSummaryRow\(summaryRow\);[\s\S]*?return;/);
+  assert.equal((source.match(/openSummaryRow\(summaryRow\)/g) || []).length, 1);
+  assert.match(stylesheet, /\.lir-summary-table tbody td:first-child, \.lir-summary-table thead th:first-child \{[^}]*position: sticky;[^}]*left: 0;/);
+  assert.match(stylesheet, /\.lir-summary-row-open \{[^}]*width: 100%;[^}]*min-height: 50px;/);
+});
+
+test("el resumen enruta pesadas nativas, tickets e históricos sin ofrecer acciones indebidas", () => {
+  const rowRenderer = source.match(/function renderSummaryRow\(row\)[\s\S]*?(?=\nfunction renderSummaryTable)/)?.[0] || "";
+  const opener = source.match(/function openSummaryRow\(row\)[\s\S]*?(?=\nfunction renderTotals)/)?.[0] || "";
+  const weighingEditor = source.match(/function openWeighingEditor\(record, context = \{\}\)[\s\S]*?(?=\nfunction closeWeighingEditor)/)?.[0] || "";
+  const saveWeighing = source.match(/async function saveWeighingEditor\(event\)[\s\S]*?(?=\nasync function deleteDraftWeighing)/)?.[0] || "";
+
+  assert.ok(opener.indexOf("if (ticketWeighing)") < opener.indexOf("state.data?.records?.find"));
+  assert.match(opener, /openTicketEditor\(ticketId, trigger, \{ focusWeighingId: weighingId \}\)/);
+  assert.match(opener, /!isDispatchTicketRecord\(item\) && Number\(item\.id\) === weighingId/);
+  assert.match(opener, /kind: readonly \? "readonly" : "weighing"/);
+  assert.match(weighingEditor, /readonly \? `Detalle de pesada/);
+  assert.match(weighingEditor, /deleteWeighingButton\.hidden = readonly/);
+  assert.match(weighingEditor, /saveWeighingButton\.hidden = readonly/);
+  assert.match(saveWeighing, /state\.editingRecord\.kind === "readonly"/);
+  assert.match(rowRenderer, /readonly \? "Consultar" : "Editar pesada"/);
+});
+
+test("el editor individual limita propietario y muestra la asignación automática", () => {
+  const ownerOptions = source.match(/function populateWeighingOwnerOptions\([\s\S]*?(?=\nfunction updateWeighingEditorAssignment)/)?.[0] || "";
+  const assignment = source.match(/function updateWeighingEditorAssignment\([\s\S]*?(?=\nfunction reconcileDirectClientSelections)/)?.[0] || "";
+  const saveWeighing = source.match(/async function saveWeighingEditor\(event\)[\s\S]*?(?=\nasync function deleteDraftWeighing)/)?.[0] || "";
+  const saveTicket = source.match(/async function saveTicketEditor\(event\)[\s\S]*?(?=\nfunction printRegisteredTicket)/)?.[0] || "";
+
+  assert.match(view, /id="liveIntakeEditOwner"/);
+  assert.match(view, /id="liveIntakeEditAssignment"/);
+  assert.match(ownerOptions, /<option value="PROPIA">Mi empresa<\/option>/);
+  assert.match(ownerOptions, /<option value="EXTERNA"/);
+  assert.match(ownerOptions, /configuredExternalOwner\(\)/);
+  assert.match(ownerOptions, /historicalExternalName \|\| externalOwner\?\.name/);
+  assert.match(ownerOptions, /externalOwner \|\| keepsHistoricalExternal/);
+  assert.match(ownerOptions, /elements\.editOwner\.disabled = readonly/);
+  assert.doesNotMatch(ownerOptions, /elements\.editOwner\.disabled = readonly \|\|/);
+  assert.match(source, /function warehouseLaneFor\(ownerType, sex\)[\s\S]*?female \? 4 : 3[\s\S]*?female \? 2 : 1/);
+  assert.match(assignment, /`Columna \$\{lane\} · \$\{destination\?\.name \|\| "Sin almacén configurado"\}`/);
+  assert.match(assignment, /keepsHistoricalExternal = ownerType === "EXTERNA" && recordOwnerType\(record\) === "EXTERNA"/);
+  assert.match(assignment, /sameLane = lane === Number\(record\.source_lane \?\? record\.lane\)/);
+  assert.match(assignment, /sameLane \? \(historicalDestination \|\| laneDestination\(lane\)\) : laneDestination\(lane\)/);
+  assert.match(source, /editOwnerField\.hidden = kind === "draft"/);
+  assert.match(source, /editAssignmentField\.hidden = kind === "draft"/);
+  assert.match(assignment, /saveWeighingButton\.disabled = !ownerReady/);
+  assert.match(saveWeighing, /owner_type: values\.owner_type/);
+  assert.doesNotMatch(saveTicket, /owner_type/);
+  assert.match(view, /id="liveIntakeTicketEditorOwner">Propietario: Mi empresa · fijo/);
+});
+
+test("cerrar, guardar o borrar vuelve al mismo resumen, fila y desplazamiento", () => {
+  const suspension = source.match(/function suspendSummaryDetailForEditor\(row\)[\s\S]*?(?=\nfunction restoreSummaryDetailAfterEditor)/)?.[0] || "";
+  const restoration = source.match(/function restoreSummaryDetailAfterEditor\([\s\S]*?(?=\nfunction openSummaryRow)/)?.[0] || "";
+  const closeWeighing = source.match(/function closeWeighingEditor\(\)[\s\S]*?(?=\nfunction finishWeighingEditor)/)?.[0] || "";
+  const finishWeighing = source.match(/function finishWeighingEditor\([\s\S]*?(?=\nfunction editedWeighingValues)/)?.[0] || "";
+  const closeTicket = source.match(/function closeTicketEditor\(\)[\s\S]*?(?=\nfunction finishTicketEditor)/)?.[0] || "";
+  const finishTicket = source.match(/function finishTicketEditor\([\s\S]*?(?=\nfunction ticketEditorWeighings)/)?.[0] || "";
+
+  assert.match(view, /id="liveIntakeSummaryMessage"[^>]*role="status" aria-live="polite"/);
+  assert.match(suspension, /scope: state\.summaryScope \|\| "daily"/);
+  assert.match(suspension, /focusKey: row\.dataset\.liveSummaryFocusKey/);
+  assert.match(suspension, /scrollLeft: elements\.summaryRows\.scrollLeft/);
+  assert.match(suspension, /scrollTop: elements\.summaryRows\.scrollTop/);
+  assert.match(suspension, /hideDialogWithoutFocus\(elements\.summaryModal/);
+  assert.match(restoration, /renderSummaryDetail\(returnState\.scope\)/);
+  assert.match(restoration, /dataset\.liveSummaryFocusKey === returnState\.focusKey/);
+  assert.match(restoration, /elements\.summaryRows\.scrollLeft = returnState\.scrollLeft/);
+  assert.match(restoration, /elements\.summaryRows\.scrollTop = returnState\.scrollTop/);
+  assert.match(closeWeighing, /restoreSummaryDetailAfterEditor\(\)/);
+  assert.match(finishWeighing, /restoreSummaryDetailAfterEditor\(message, tone\)/);
+  assert.match(closeTicket, /restoreSummaryDetailAfterEditor\(\)/);
+  assert.match(finishTicket, /restoreSummaryDetailAfterEditor\(message, tone\)/);
+  assert.match(source, /finishWeighingEditor\(response\.message \|\| "Pesada actualizada correctamente\."/);
+  assert.match(source, /finishWeighingEditor\(result\.message, "success"\)/);
+  assert.match(source, /if \(state\.summaryEditorReturn\) \{[\s\S]*?finishTicketEditor\(successMessage, "success"\)/);
+});
+
+test("el ticket enfoca la pesada elegida y bloquea todos los campos si es de consulta", () => {
+  const ticketRenderer = source.match(/function renderTicketEditor\(\)[\s\S]*?(?=\nasync function openTicketEditor)/)?.[0] || "";
+  assert.match(ticketRenderer, /is-summary-target/);
+  assert.match(ticketRenderer, /tabindex="-1"/);
+  assert.match(ticketRenderer, /focusTarget\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(ticketRenderer, /scrollIntoView\(\{ block: "center", inline: "nearest" \}\)/);
+  assert.match(ticketRenderer, /querySelectorAll\("input, select"\)\.forEach\(\(control\) => \{ control\.disabled = readonly; \}\)/);
+  assert.match(ticketRenderer, /ticketEditReason\.closest\("label"\)\.hidden = readonly/);
+  assert.match(ticketRenderer, /saveTicket\.hidden = readonly/);
+  assert.match(stylesheet, /\.lir-ticket-weighing-editor\.is-summary-target \{[^}]*scroll-margin-block: 80px;/);
 });
 
 test("la numeración del borrador se conserva al editar y no se repite después de quitar", () => {
@@ -389,6 +498,7 @@ test("el editor de pesada conserva tamaño completo y cabe en modo vertical", ()
 test("el editor permite eliminar la pesada abierta y conserva los errores dentro del popup", () => {
   const editor = view.match(/<form id="liveIntakeWeighingEditorForm"[\s\S]*?<\/form>/)?.[0] || "";
   const deleteEditor = source.match(/async function deleteEditingWeighing\(\)[\s\S]*?(?=\nfunction setTicketEditorMessage)/)?.[0] || "";
+  const finishEditor = source.match(/function finishWeighingEditor\([\s\S]*?(?=\nfunction editedWeighingValues)/)?.[0] || "";
   assert.match(editor, /id="liveIntakeDeleteWeighing"[^>]*class="is-danger lir-editor-delete"[^>]*type="button"/);
   assert.match(source, /deleteWeighingButton: document\.getElementById\("liveIntakeDeleteWeighing"\)/);
   assert.match(deleteEditor, /editingContext\.kind === "draft"/);
@@ -396,8 +506,9 @@ test("el editor permite eliminar la pesada abierta y conserva los errores dentro
   assert.match(deleteEditor, /deleteWeighing\([\s\S]*?editingContext\.record\.updated_at/);
   assert.match(source, /expectedFingerprint && visibleFingerprint !== expectedFingerprint/);
   assert.match(source, /expected_updated_at: expectedUpdatedAt/);
-  assert.match(deleteEditor, /if \(!result\) return;[\s\S]*?elements\.weighingEditorModal\.hidden = true/);
-  assert.match(deleteEditor, /elements\.laneRows\[Number\(editingContext\.lane\) - 1\]\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(deleteEditor, /if \(!result\) return;[\s\S]*?finishWeighingEditor\(result\.message, "success"\)/);
+  assert.match(finishEditor, /elements\.weighingEditorModal\.hidden = true/);
+  assert.match(finishEditor, /elements\.laneRows\[Number\(editingContext\?\.lane\) - 1\]\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(source, /elements\.deleteWeighingButton\.addEventListener\("click"/);
   assert.match(stylesheet, /\.lir-modal-card button\.is-danger \{[^}]*color: var\(--lir-red\);/);
 });

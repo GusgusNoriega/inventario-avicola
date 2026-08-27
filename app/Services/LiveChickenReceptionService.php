@@ -468,10 +468,31 @@ class LiveChickenReceptionService
                 $catalog['external_owners'],
             );
             $sex = (string) $data['sex'];
-            $newLane = $record->propietario_tipo === PesadaRecepcionPolloVivo::OWNER_OWN
+            $previousOwnerType = (string) $record->propietario_tipo;
+            $newOwnerType = (string) ($data['owner_type'] ?? $previousOwnerType);
+            $ownerTypeChanged = $newOwnerType !== $previousOwnerType;
+            $newExternalOwnerId = null;
+            if ($newOwnerType === PesadaRecepcionPolloVivo::OWNER_EXTERNAL) {
+                $newExternalOwnerId = ! $ownerTypeChanged
+                    ? (int) $record->propietario_externo_id
+                    : (int) ($configuration['default_external_owner_id'] ?? 0);
+                if (! $newExternalOwnerId) {
+                    throw ValidationException::withMessages([
+                        'owner_type' => 'Configura la empresa externa predeterminada antes de asignarle esta pesada.',
+                    ]);
+                }
+                if ($ownerTypeChanged) {
+                    $this->assertExternalOwner($companyId, $newExternalOwnerId, 'owner_type');
+                }
+            }
+
+            $newLane = $newOwnerType === PesadaRecepcionPolloVivo::OWNER_OWN
                 ? ($sex === Pesada::SEX_MALE ? 1 : 2)
                 : ($sex === Pesada::SEX_MALE ? 3 : 4);
-            $newWarehouseId = (int) ($configuration['lanes'][(string) $newLane]['destination_id'] ?? 0);
+            $laneChanged = $newLane !== (int) $record->columna;
+            $newWarehouseId = $laneChanged
+                ? (int) ($configuration['lanes'][(string) $newLane]['destination_id'] ?? 0)
+                : (int) $record->almacen_destino_id;
             if (! $newWarehouseId) {
                 throw ValidationException::withMessages([
                     'sex' => 'Configura el almacén de la columna correspondiente antes de cambiar el sexo.',
@@ -518,22 +539,29 @@ class LiveChickenReceptionService
                 $nextUpdatedAt = $record->updated_at->copy()->addSecond();
             }
 
-            if ($record->propietario_tipo === PesadaRecepcionPolloVivo::OWNER_OWN) {
-                $this->applyReceptionWeighingCorrection(
-                    $companyId,
-                    $actor,
-                    $record,
-                    $newWarehouseId,
-                    $cages,
-                    $birds,
-                    $netWeight,
-                    $weighedAt,
-                );
+            if ($previousOwnerType === PesadaRecepcionPolloVivo::OWNER_OWN) {
+                if ($newOwnerType === PesadaRecepcionPolloVivo::OWNER_OWN) {
+                    $this->applyReceptionWeighingCorrection(
+                        $companyId,
+                        $actor,
+                        $record,
+                        $newWarehouseId,
+                        $cages,
+                        $birds,
+                        $netWeight,
+                        $weighedAt,
+                    );
+                } else {
+                    $this->reverseOwnInventory($companyId, $actor, $record);
+                }
             }
 
             $record->fill([
                 'columna' => $newLane,
+                'propietario_tipo' => $newOwnerType,
+                'propietario_externo_id' => $newExternalOwnerId,
                 'almacen_destino_id' => $newWarehouseId,
+                'cliente_destino_id' => null,
                 'sexo' => $sex,
                 'tipo_java_id' => (int) $cageType->id,
                 'lectura_balanza_id' => $scaleReadingId,
@@ -553,6 +581,16 @@ class LiveChickenReceptionService
             // concurrencia distinto, incluso dentro del mismo segundo.
             $record->setUpdatedAt($nextUpdatedAt);
             $record->save();
+            if ($previousOwnerType === PesadaRecepcionPolloVivo::OWNER_EXTERNAL
+                && $newOwnerType === PesadaRecepcionPolloVivo::OWNER_OWN) {
+                $this->applyOwnInventory(
+                    $companyId,
+                    (int) $branch->id,
+                    $journey,
+                    $actor,
+                    $record,
+                );
+            }
             $this->audit->record(
                 $companyId,
                 (int) $actor->id,
@@ -814,6 +852,34 @@ class LiveChickenReceptionService
         User $actor,
         PesadaRecepcionPolloVivo $weighing,
     ): void {
+        $existingDetail = DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighing->id)
+            ->lockForUpdate()
+            ->first();
+        $existingMovement = $existingDetail
+            ? DB::table('movimientos_inventario')
+                ->where('id', $existingDetail->movimiento_id)
+                ->lockForUpdate()
+                ->first()
+            : null;
+        $otherMovementDetail = $existingDetail
+            ? DB::table('movimiento_detalles')
+                ->where('movimiento_id', $existingDetail->movimiento_id)
+                ->where('id', '<>', $existingDetail->id)
+                ->lockForUpdate()
+                ->first()
+            : null;
+        if ($existingDetail
+            && (! $existingMovement
+                || (string) $existingMovement->estado !== 'ANULADO'
+                || $existingMovement->ticket_id !== null
+                || (string) $existingMovement->tipo !== 'ENTRADA_RECEPCION'
+                || $otherMovementDetail)) {
+            throw ValidationException::withMessages([
+                'weighing' => 'La pesada tiene un movimiento de inventario activo o incompleto y no puede reasignarse.',
+            ]);
+        }
+
         $inventory = InventarioJava::query()
             ->where('empresa_id', $companyId)
             ->lockForUpdate()
@@ -833,7 +899,7 @@ class LiveChickenReceptionService
             ]);
         }
 
-        $movementId = DB::table('movimientos_inventario')->insertGetId([
+        $movementValues = [
             'sucursal_id' => $branchId,
             'ticket_id' => null,
             'tipo' => $weighing->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE
@@ -847,19 +913,35 @@ class LiveChickenReceptionService
             'fecha_hora' => $weighing->pesada_at,
             'confirmado_por' => $actor->id,
             'confirmado_at' => now(),
-            'created_by' => $actor->id,
-            'created_at' => now(),
             'updated_at' => now(),
-        ]);
-        DB::table('movimiento_detalles')->insert([
-            'movimiento_id' => $movementId,
+        ];
+        $detailValues = [
             'pesada_id' => null,
             'pesada_recepcion_pollo_vivo_id' => $weighing->id,
             'tipo_pollo_id' => $weighing->tipo_pollo_id,
             'cantidad_aves' => $weighing->cantidad_aves,
             'peso_neto_kg' => $weighing->peso_neto_kg,
-            'created_at' => now(),
-        ]);
+        ];
+
+        if ($existingDetail) {
+            DB::table('movimientos_inventario')
+                ->where('id', $existingDetail->movimiento_id)
+                ->update($movementValues);
+            DB::table('movimiento_detalles')
+                ->where('id', $existingDetail->id)
+                ->update($detailValues);
+        } else {
+            $movementId = DB::table('movimientos_inventario')->insertGetId([
+                ...$movementValues,
+                'created_by' => $actor->id,
+                'created_at' => now(),
+            ]);
+            DB::table('movimiento_detalles')->insert([
+                ...$detailValues,
+                'movimiento_id' => $movementId,
+                'created_at' => now(),
+            ]);
+        }
 
         if ($weighing->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE) {
             $this->increaseWarehouseStock($weighing);
@@ -925,6 +1007,7 @@ class LiveChickenReceptionService
         float $newNetWeight,
         CarbonImmutable $weighedAt,
     ): void {
+        $inventoryTrace = $this->lockConfirmedOwnInventoryMovement($record);
         $inventory = InventarioJava::query()
             ->where('empresa_id', $companyId)
             ->lockForUpdate()
@@ -962,24 +1045,14 @@ class LiveChickenReceptionService
             );
         }
 
-        $detail = DB::table('movimiento_detalles')
-            ->where('pesada_recepcion_pollo_vivo_id', $record->id)
-            ->lockForUpdate()
-            ->first();
-        if (! $detail) {
-            throw ValidationException::withMessages([
-                'weighing' => 'La pesada no tiene el movimiento de inventario requerido para corregirla.',
-            ]);
-        }
-
         DB::table('movimiento_detalles')
-            ->where('id', $detail->id)
+            ->where('id', $inventoryTrace['detail']->id)
             ->update([
                 'cantidad_aves' => $newBirds,
                 'peso_neto_kg' => round($newNetWeight, 3),
             ]);
         DB::table('movimientos_inventario')
-            ->where('id', $detail->movimiento_id)
+            ->where('id', $inventoryTrace['movement']->id)
             ->update([
                 'almacen_destino_id' => $newWarehouseId,
                 'fecha_hora' => $weighedAt,
@@ -1035,6 +1108,7 @@ class LiveChickenReceptionService
 
     private function reverseOwnInventory(int $companyId, User $actor, PesadaRecepcionPolloVivo $weighing): void
     {
+        $inventoryTrace = $this->lockConfirmedOwnInventoryMovement($weighing);
         $inventory = InventarioJava::query()
             ->where('empresa_id', $companyId)
             ->lockForUpdate()
@@ -1081,16 +1155,50 @@ class LiveChickenReceptionService
             'cantidad_total' => (int) $inventory->cantidad_total - (int) $weighing->cantidad_javas,
             'updated_by' => $actor->id,
         ]);
-        $movementId = DB::table('movimiento_detalles')
-            ->where('pesada_recepcion_pollo_vivo_id', $weighing->id)
-            ->value('movimiento_id');
-
-        if ($movementId) {
-            DB::table('movimientos_inventario')->where('id', $movementId)->update([
+        DB::table('movimientos_inventario')
+            ->where('id', $inventoryTrace['movement']->id)
+            ->update([
                 'estado' => 'ANULADO',
                 'updated_at' => now(),
             ]);
+    }
+
+    /** @return array{detail: object, movement: object} */
+    private function lockConfirmedOwnInventoryMovement(PesadaRecepcionPolloVivo $weighing): array
+    {
+        $expectedMovementType = $weighing->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE
+            ? 'ENTRADA_RECEPCION'
+            : 'DESPACHO_DIRECTO';
+        $detail = DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $weighing->id)
+            ->lockForUpdate()
+            ->first();
+        $movement = $detail
+            ? DB::table('movimientos_inventario')
+                ->where('id', $detail->movimiento_id)
+                ->lockForUpdate()
+                ->first()
+            : null;
+        $otherDetail = $detail
+            ? DB::table('movimiento_detalles')
+                ->where('movimiento_id', $detail->movimiento_id)
+                ->where('id', '<>', $detail->id)
+                ->lockForUpdate()
+                ->first()
+            : null;
+
+        if (! $detail
+            || ! $movement
+            || (string) $movement->estado !== 'CONFIRMADO'
+            || $movement->ticket_id !== null
+            || (string) $movement->tipo !== $expectedMovementType
+            || $otherDetail) {
+            throw ValidationException::withMessages([
+                'weighing' => 'La pesada no tiene un movimiento de inventario confirmado y exclusivo para corregirla.',
+            ]);
         }
+
+        return ['detail' => $detail, 'movement' => $movement];
     }
 
     private function assertJavaInventoryCanBeReversed(

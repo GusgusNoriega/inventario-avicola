@@ -202,7 +202,10 @@
         <button id="liveIntakeSummaryClose" type="button" data-live-close-summary aria-label="Cerrar detalle de pesadas">×</button>
       </header>
       <section class="lir-summary-detail-body">
-        <p id="liveIntakeSummaryHelp" class="lir-modal-help">Pesadas registradas de la jornada actual. Desliza la tabla para consultar todos los datos.</p>
+        <div class="lir-summary-intro">
+          <p id="liveIntakeSummaryHelp" class="lir-modal-help">Pesadas registradas de la jornada actual. Desliza la tabla para consultar todos los datos.</p>
+          <p id="liveIntakeSummaryMessage" class="lir-message lir-summary-message" role="status" aria-live="polite" hidden></p>
+        </div>
         <div id="liveIntakeSummaryTotals" class="lir-summary-totals" aria-label="Totales de las pesadas seleccionadas">
           <span><small>Pesadas</small><strong data-live-summary-total="weighings">0</strong></span>
           <span><small>Javas</small><strong data-live-summary-total="cages">0</strong></span>
@@ -311,7 +314,9 @@
         <button type="button" data-live-close-weighing-editor aria-label="Cerrar editor de pesada">×</button>
       </header>
       <section class="lir-editor-grid">
+        <label id="liveIntakeEditOwnerField"><span>Propietario</span><select id="liveIntakeEditOwner"></select></label>
         <label><span>Sexo</span><select id="liveIntakeEditSex"><option value="MACHO">Macho</option><option value="HEMBRA">Hembra</option></select></label>
+        <label id="liveIntakeEditAssignmentField" class="lir-editor-assignment"><span>Destino y columna automáticos</span><output id="liveIntakeEditAssignment">Selecciona propietario y sexo</output></label>
         <label><span>Tipo de java</span><select id="liveIntakeEditCageType"></select></label>
         <label><span>Aves por java</span><input id="liveIntakeEditBirdsPerCage" type="number" min="1" max="1000" step="1" inputmode="numeric"></label>
         <label><span>Cantidad de javas</span><input id="liveIntakeEditCageCount" type="number" min="1" max="10000" step="1" inputmode="numeric"></label>
@@ -320,26 +325,26 @@
         <label class="lir-editor-reason"><span>Motivo de la corrección</span><input id="liveIntakeEditReason" type="text" minlength="3" maxlength="250" required placeholder="Ej. Corrección de lectura"></label>
       </section>
       <p id="liveIntakeWeighingEditorMessage" class="lir-message" role="status" aria-live="polite"></p>
-      <footer><button id="liveIntakeDeleteWeighing" class="is-danger lir-editor-delete" type="button">Eliminar</button><button type="button" data-live-close-weighing-editor>Cancelar</button><button class="is-primary" type="submit">Guardar pesada</button></footer>
+      <footer><button id="liveIntakeDeleteWeighing" class="is-danger lir-editor-delete" type="button">Eliminar</button><button id="liveIntakeCancelWeighing" type="button" data-live-close-weighing-editor>Cancelar</button><button id="liveIntakeSaveWeighing" class="is-primary" type="submit">Guardar pesada</button></footer>
     </form>
   </div>
 
   <div id="liveIntakeTicketEditorModal" class="lir-modal" hidden>
     <form id="liveIntakeTicketEditorForm" class="lir-modal-card is-ticket-editor" role="dialog" aria-modal="true" aria-labelledby="liveIntakeTicketEditorTitle">
       <header>
-        <div><p>Ticket registrado</p><h2 id="liveIntakeTicketEditorTitle">Cargando ticket…</h2><small id="liveIntakeTicketEditorClient">Espere un momento</small></div>
+        <div><p>Ticket registrado</p><h2 id="liveIntakeTicketEditorTitle">Cargando ticket…</h2><small id="liveIntakeTicketEditorOwner">Propietario: Mi empresa · fijo</small><small id="liveIntakeTicketEditorClient">Espere un momento</small></div>
         <button type="button" data-live-close-ticket-editor aria-label="Cerrar editor de ticket">×</button>
       </header>
       <section id="liveIntakeTicketEditorSummary" class="lir-ticket-editor-summary"></section>
       <section class="lir-ticket-editor-content">
-        <p class="lir-modal-help">Puedes corregir todas las pesadas y guardarlas juntas. El cliente se conserva para mantener la trazabilidad del despacho.</p>
+        <p id="liveIntakeTicketEditorHelp" class="lir-modal-help">Puedes corregir todas las pesadas y guardarlas juntas. El cliente se conserva para mantener la trazabilidad del despacho.</p>
         <div id="liveIntakeTicketEditorRows" class="lir-ticket-editor-rows"><p class="lir-client-empty">Cargando pesadas…</p></div>
         <label class="lir-ticket-correction-reason"><span>Motivo de la corrección</span><input id="liveIntakeTicketEditReason" type="text" minlength="3" maxlength="250" required placeholder="Ej. Corrección del ticket completo"></label>
       </section>
       <p id="liveIntakeTicketEditorMessage" class="lir-message" role="status" aria-live="polite"></p>
       <footer>
         <button id="liveIntakePrintTicket" type="button" disabled>Imprimir ticket</button>
-        <button type="button" data-live-close-ticket-editor>Cancelar</button>
+        <button id="liveIntakeCancelTicket" type="button" data-live-close-ticket-editor>Cancelar</button>
         <button id="liveIntakeSaveTicket" class="is-primary" type="submit" disabled>Actualizar ticket completo</button>
       </footer>
     </form>

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Balanza;
 use App\Models\Pesada;
+use App\Models\PesadaRecepcionPolloVivo;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
@@ -386,6 +387,47 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             'estado' => Pesada::STATUS_ACTIVE,
             'tipo_pollo_id' => DB::table('tipos_pollo')->where('codigo', TipoPollo::CHICKEN_LIVE)->value('id'),
         ]);
+    }
+
+    public function test_registered_reception_ticket_rejects_owner_and_lane_reassignment(): void
+    {
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/tickets',
+            $this->ticketPayload(),
+        )->assertCreated();
+        $ticket = $created->json('ticket');
+        $payload = $this->ticketUpdatePayload($ticket);
+        $payload['owner_type'] = PesadaRecepcionPolloVivo::OWNER_EXTERNAL;
+        $payload['external_owner_id'] = $this->clientId;
+        $payload['lane'] = 3;
+        $payload['warehouse_id'] = 1;
+        $payload['destination_id'] = $this->clientId;
+        $payload['dispatch_client_id'] = $this->clientId;
+
+        $this->putJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}",
+            $payload,
+        )->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'owner_type',
+                'external_owner_id',
+                'lane',
+                'warehouse_id',
+                'destination_id',
+                'dispatch_client_id',
+            ]);
+
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
+            'ticket_despacho_id' => $ticket['id'],
+            'revision' => $ticket['link_revision'],
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $ticket['weighings'][0]['id'],
+            'cantidad_javas' => $ticket['weighings'][0]['cages'],
+        ]);
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN);
     }
 
     public function test_batch_correction_preserves_existing_scale_provenance_when_weight_is_unchanged(): void

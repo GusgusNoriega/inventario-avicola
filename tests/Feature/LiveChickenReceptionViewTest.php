@@ -104,8 +104,14 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('id="liveIntakeSummaryModal"', $view);
         $this->assertStringContainsString('role="dialog" aria-modal="true" aria-labelledby="liveIntakeSummaryTitle"', $view);
         $this->assertStringContainsString('id="liveIntakeSummaryRows" class="lir-summary-table-scroll" role="region" tabindex="0"', $view);
+        $this->assertStringContainsString('class="lir-summary-intro"', $view);
+        $this->assertStringContainsString('id="liveIntakeSummaryMessage" class="lir-message lir-summary-message" role="status" aria-live="polite"', $view);
         $this->assertStringContainsString('data-live-summary-total="gross_weight_kg"', $view);
         $this->assertStringContainsString('data-live-summary-total="net_weight_kg"', $view);
+        $this->assertStringContainsString('id="liveIntakeEditOwner"', $view);
+        $this->assertStringContainsString('id="liveIntakeEditAssignment"', $view);
+        $this->assertStringContainsString('Destino y columna automáticos', $view);
+        $this->assertStringContainsString('id="liveIntakeTicketEditorOwner">Propietario: Mi empresa · fijo', $view);
         $this->assertStringContainsString('id="liveIntakeTicketEditReason"', $view);
         $this->assertStringContainsString('role="region" aria-label="Clientes disponibles"', $view);
         $this->assertStringContainsString('role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna', $view);
@@ -136,6 +142,13 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('function submitDispatchTicket', $javascript);
         $this->assertStringContainsString('function saveTicketEditor', $javascript);
         $this->assertStringContainsString('function renderSummaryDetail', $javascript);
+        $this->assertStringContainsString('function openSummaryRow', $javascript);
+        $this->assertStringContainsString('function restoreSummaryDetailAfterEditor', $javascript);
+        $this->assertStringContainsString('data-live-summary-row', $javascript);
+        $this->assertStringContainsString('data-live-open-summary-row', $javascript);
+        $this->assertStringContainsString('owner_type: values.owner_type', $javascript);
+        $this->assertStringContainsString('kind: readonly ? "readonly" : "weighing"', $javascript);
+        $this->assertStringContainsString('openTicketEditor(ticketId, trigger, { focusWeighingId: weighingId })', $javascript);
         $this->assertStringContainsString('receptionSummaryRows', $javascript);
         $this->assertStringContainsString('data-live-select-lane', $javascript);
         $this->assertStringContainsString('const LANE_NUMBERS = [1, 2, 3, 4, 5, 6]', $javascript);
@@ -152,6 +165,11 @@ class LiveChickenReceptionViewTest extends TestCase
             '/<thead>[\s\S]*?<th scope="col">Peso bruto<\/th>[\s\S]*?<th scope="col">Acciones<\/th>\s*<th scope="col">Registro<\/th>[\s\S]*?<\/thead>/u',
             $javascript,
         );
+        $this->assertMatchesRegularExpression(
+            '/function renderSummaryTable[\s\S]*?<thead><tr>\s*<th scope="col">Peso bruto<\/th>[\s\S]*?<th scope="col">Registro<\/th>\s*<\/tr><\/thead>[\s\S]*?function setSummaryMessage/u',
+            $javascript,
+        );
+        $this->assertDoesNotMatchRegularExpression('/<tr[^>]*role="button"/u', $javascript);
         $this->assertStringNotContainsString('data-live-owner=', $view);
         $this->assertStringContainsString('@media (max-width: 820px)', $stylesheet);
         $this->assertStringContainsString('scroll-snap-type: x mandatory', $stylesheet);
@@ -181,6 +199,10 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('.lir-modal-card.is-summary-detail', $stylesheet);
         $this->assertStringContainsString('.lir-summary-table-scroll', $stylesheet);
         $this->assertStringContainsString('.lir-summary-totals', $stylesheet);
+        $this->assertStringContainsString('.lir-summary-row-open', $stylesheet);
+        $this->assertStringContainsString('.lir-summary-intro', $stylesheet);
+        $this->assertStringContainsString('.lir-editor-assignment output', $stylesheet);
+        $this->assertStringContainsString('.lir-ticket-weighing-editor.is-summary-target', $stylesheet);
         $this->assertStringContainsString('max-height: calc(100dvh - 32px)', $stylesheet);
         $this->assertStringContainsString('max-height: min(calc(100dvh - 32px), 100%)', $stylesheet);
         $this->assertStringContainsString('.lir-modal-card.is-weighing-editor label span', $stylesheet);

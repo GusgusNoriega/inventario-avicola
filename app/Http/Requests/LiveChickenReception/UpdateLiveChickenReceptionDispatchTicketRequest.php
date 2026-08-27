@@ -21,6 +21,12 @@ class UpdateLiveChickenReceptionDispatchTicketRequest extends FormRequest
             'layout_version' => ['required', 'integer', Rule::in([4])],
             'expected_revision' => ['required', 'integer', 'min:0'],
             'correction_reason' => ['required', 'string', 'min:3', 'max:250'],
+            'owner_type' => ['prohibited'],
+            'external_owner_id' => ['prohibited'],
+            'lane' => ['prohibited'],
+            'warehouse_id' => ['prohibited'],
+            'destination_id' => ['prohibited'],
+            'dispatch_client_id' => ['prohibited'],
             'weighings' => ['required', 'array', 'min:1', 'max:500'],
             'weighings.*' => [
                 'required',
@@ -43,6 +49,19 @@ class UpdateLiveChickenReceptionDispatchTicketRequest extends FormRequest
             'weighings.*.scale_reading.connection_mode' => ['nullable', Rule::in(['SERIAL', 'BLE', 'BLUETOOTH'])],
             'weighings.*.scale_reading.device_name' => ['nullable', 'string', 'max:180'],
             'weighings.*.scale_reading.captured_at' => ['nullable', 'date'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'owner_type.prohibited' => 'Los tickets de recepción siempre pertenecen a Mi empresa.',
+            'external_owner_id.prohibited' => 'Los tickets de recepción no admiten una empresa propietaria externa.',
+            'lane.prohibited' => 'La columna original del ticket se conserva para mantener su trazabilidad.',
+            'warehouse_id.prohibited' => 'El destino del ticket registrado se conserva para mantener su trazabilidad.',
+            'destination_id.prohibited' => 'El destino del ticket registrado se conserva para mantener su trazabilidad.',
+            'dispatch_client_id.prohibited' => 'El cliente del ticket registrado se conserva para mantener su trazabilidad.',
         ];
     }
 

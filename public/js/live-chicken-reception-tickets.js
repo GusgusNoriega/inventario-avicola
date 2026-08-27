@@ -111,6 +111,12 @@ export function receptionSummaryRows(records = [], scope = "daily") {
       dispatched: Boolean(record?.dispatched),
       ticket_id: ticketRecordId(record),
       ticket_code: String(firstDefined(record?.ticket_code, record?.ticket?.code, "")),
+      editable_mode: String(firstDefined(
+        record?.editable_mode,
+        isDispatchTicketRecord(record)
+          ? "ticket"
+          : (String(record?.record_kind || "").toLowerCase() === "legacy_direct_weighing" ? "readonly" : "weighing"),
+      )).toLowerCase(),
     };
     const ticketWeighings = isDispatchTicketRecord(record) && Array.isArray(record?.weighings)
       ? record.weighings
@@ -124,6 +130,7 @@ export function receptionSummaryRows(records = [], scope = "daily") {
           ...sharedContext,
           record_kind: "dispatch_ticket_weighing",
           row_key: `${record?.row_key || `ticket:${sharedContext.ticket_id || recordIndex}`}:weighing:${normalized.id || weighingIndex}`,
+          summary_focus_key: `ticket-weighing:${normalized.id || `${sharedContext.ticket_id || recordIndex}:${weighingIndex}`}`,
           cage_type: weighing?.cage_type || record?.cage_type || null,
           sort_tie: (-recordIndex * 1000) + weighingIndex,
         });
@@ -137,6 +144,7 @@ export function receptionSummaryRows(records = [], scope = "daily") {
       ...sharedContext,
       record_kind: record?.record_kind || "reception_weighing",
       row_key: record?.row_key || `reception:${normalized.id || recordIndex}`,
+      summary_focus_key: `reception-weighing:${normalized.id || recordIndex}`,
       cage_type: record?.cage_type || null,
       ticket_id: sharedContext.ticket_id,
       sort_tie: -recordIndex,
