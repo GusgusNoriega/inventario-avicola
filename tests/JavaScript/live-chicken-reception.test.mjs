@@ -63,7 +63,7 @@ test("las columnas identifican sexo y propietario con señales visuales independ
   assert.match(stylesheet, /\.lir-lane\.is-female-lane \{[^}]*--lir-lane-sex-accent: var\(--lir-pink\)/);
   assert.match(stylesheet, /\.lir-lane\.is-warehouse \{[^}]*border-color: var\(--lir-lane-owner-accent\)/);
   assert.match(stylesheet, /\.lir-lane\.is-warehouse \.lir-lane-select \{[^}]*border-top: 4px solid var\(--lir-lane-sex-accent\)/);
-  assert.match(stylesheet, /\.lir-lane\.is-active \{[^}]*var\(--lir-lane-owner-accent\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-active \{[^}]*outline: 5px solid rgba\(245, 248, 251, \.96\);[^}]*outline-offset: -5px;[^}]*var\(--lir-lane-owner-accent\)/);
   assert.match(stylesheet, /\.lir-sex-chip\.is-female \{[^}]*color: var\(--lir-pink\)/);
 });
 
