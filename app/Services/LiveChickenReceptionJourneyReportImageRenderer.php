@@ -328,7 +328,7 @@ class LiveChickenReceptionJourneyReportImageRenderer
      */
     private function drawSummary(GdImage $image, array $report, int $cursorY, array $colors): void
     {
-        $cursorY = min($cursorY, self::HEIGHT - 290);
+        $cursorY = min($cursorY, self::HEIGHT - 350);
         $this->drawCellText(
             $image,
             'RESUMEN DETALLADO DE TOTALES ACTIVOS',
@@ -350,7 +350,7 @@ class LiveChickenReceptionJourneyReportImageRenderer
         ];
         $gap = 20;
         $cardWidth = (int) floor((self::WIDTH - (self::MARGIN * 2) - ($gap * 2)) / 3);
-        $cardHeight = 196;
+        $cardHeight = 244;
 
         foreach ($cards as $index => $card) {
             $x = self::MARGIN + (($cardWidth + $gap) * $index);
@@ -370,9 +370,33 @@ class LiveChickenReceptionJourneyReportImageRenderer
                     number_format((int) ($summary['birds'] ?? 0), 0, '.', ','),
                 ),
                 $x + 18,
-                $cursorY + 45,
+                $cursorY + 42,
                 $cardWidth - 28,
-                30,
+                26,
+                10,
+                $colors['ink'],
+                false,
+                'left',
+            );
+            $this->drawCellText(
+                $image,
+                'Pollos macho: '.number_format((int) ($summary['male_birds'] ?? 0), 0, '.', ','),
+                $x + 18,
+                $cursorY + 69,
+                $cardWidth - 28,
+                24,
+                10,
+                $colors['ink'],
+                false,
+                'left',
+            );
+            $this->drawCellText(
+                $image,
+                'Pollos hembra: '.number_format((int) ($summary['female_birds'] ?? 0), 0, '.', ','),
+                $x + 18,
+                $cursorY + 93,
+                $cardWidth - 28,
+                24,
                 10,
                 $colors['ink'],
                 false,
@@ -382,9 +406,9 @@ class LiveChickenReceptionJourneyReportImageRenderer
                 $image,
                 'Peso bruto: '.$this->weight($summary['gross_weight_kg'] ?? 0).' kg',
                 $x + 18,
-                $cursorY + 79,
+                $cursorY + 117,
                 $cardWidth - 28,
-                28,
+                26,
                 10,
                 $colors['ink'],
                 false,
@@ -394,9 +418,9 @@ class LiveChickenReceptionJourneyReportImageRenderer
                 $image,
                 'Tara: '.$this->weight($summary['tare_weight_kg'] ?? 0).' kg',
                 $x + 18,
-                $cursorY + 107,
+                $cursorY + 143,
                 $cardWidth - 28,
-                28,
+                26,
                 10,
                 $colors['ink'],
                 false,
@@ -406,7 +430,7 @@ class LiveChickenReceptionJourneyReportImageRenderer
                 $image,
                 'Peso neto: '.$this->weight($summary['net_weight_kg'] ?? 0).' kg',
                 $x + 18,
-                $cursorY + 135,
+                $cursorY + 169,
                 $cardWidth - 28,
                 32,
                 12,
@@ -418,9 +442,9 @@ class LiveChickenReceptionJourneyReportImageRenderer
                 $image,
                 'Promedio por pollo: '.$this->weight($summary['average_weight_per_bird_kg'] ?? 0).' kg',
                 $x + 18,
-                $cursorY + 163,
+                $cursorY + 204,
                 $cardWidth - 28,
-                27,
+                30,
                 9,
                 $colors['muted'],
                 false,

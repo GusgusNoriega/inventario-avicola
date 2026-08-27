@@ -309,6 +309,8 @@
               <tr><td class="summary-label">Pesadas activas</td><td class="summary-value">{{ number_format((int) data_get($summary, 'weighings', 0)) }}</td></tr>
               <tr><td class="summary-label">Javas</td><td class="summary-value">{{ number_format((int) data_get($summary, 'cages', 0)) }}</td></tr>
               <tr><td class="summary-label">Pollos</td><td class="summary-value">{{ number_format((int) data_get($summary, 'birds', 0)) }}</td></tr>
+              <tr><td class="summary-label">Pollos macho</td><td class="summary-value">{{ number_format((int) data_get($summary, 'male_birds', 0)) }}</td></tr>
+              <tr><td class="summary-label">Pollos hembra</td><td class="summary-value">{{ number_format((int) data_get($summary, 'female_birds', 0)) }}</td></tr>
               <tr><td class="summary-label">Peso bruto</td><td class="summary-value">{{ $formatKg(data_get($summary, 'gross_weight_kg')) }}</td></tr>
               <tr><td class="summary-label">Tara total</td><td class="summary-value">{{ $formatKg(data_get($summary, 'tare_weight_kg')) }}</td></tr>
               <tr class="summary-net"><td class="summary-label">Peso neto</td><td class="summary-value">{{ $formatKg(data_get($summary, 'net_weight_kg')) }}</td></tr>

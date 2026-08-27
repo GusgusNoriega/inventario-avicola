@@ -111,6 +111,7 @@ class LiveChickenReceptionHistoryReportDataTest extends TestCase
             '2026-08-25 23:00:00',
             PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
             PesadaRecepcionPolloVivo::STATUS_ACTIVE,
+            Pesada::SEX_FEMALE,
         );
         $this->createNativeWeighing(
             $this->receptionId,
@@ -191,6 +192,8 @@ class LiveChickenReceptionHistoryReportDataTest extends TestCase
             'tare_weight_kg' => 266.0,
             'net_weight_kg' => 1634.0,
             'average_weight_per_bird_kg' => 6.143,
+            'male_birds' => 266,
+            'female_birds' => 0,
         ], $report['summary']['own']);
         $this->assertSame([
             'weighings' => 1,
@@ -201,6 +204,8 @@ class LiveChickenReceptionHistoryReportDataTest extends TestCase
             'tare_weight_kg' => 14.0,
             'net_weight_kg' => 86.0,
             'average_weight_per_bird_kg' => 6.143,
+            'male_birds' => 0,
+            'female_birds' => 14,
         ], $report['summary']['external']);
         $this->assertSame([
             'weighings' => 37,
@@ -211,7 +216,15 @@ class LiveChickenReceptionHistoryReportDataTest extends TestCase
             'tare_weight_kg' => 280.0,
             'net_weight_kg' => 1720.0,
             'average_weight_per_bird_kg' => 6.143,
+            'male_birds' => 266,
+            'female_birds' => 14,
         ], $report['summary']['total']);
+        foreach ($report['summary'] as $ownerSummary) {
+            $this->assertSame(
+                $ownerSummary['birds'],
+                $ownerSummary['male_birds'] + $ownerSummary['female_birds'],
+            );
+        }
     }
 
     public function test_report_rejects_journeys_outside_the_branch_or_reception_module_catalog(): void
@@ -302,6 +315,7 @@ class LiveChickenReceptionHistoryReportDataTest extends TestCase
         string $weighedAt,
         string $ownerType = PesadaRecepcionPolloVivo::OWNER_OWN,
         string $status = PesadaRecepcionPolloVivo::STATUS_ACTIVE,
+        string $sex = Pesada::SEX_MALE,
     ): int {
         $tare = $cages * 7;
 
@@ -317,7 +331,7 @@ class LiveChickenReceptionHistoryReportDataTest extends TestCase
             'destino_tipo' => PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE,
             'almacen_destino_id' => $this->warehouseId,
             'cliente_destino_id' => null,
-            'sexo' => Pesada::SEX_MALE,
+            'sexo' => $sex,
             'tipo_pollo_id' => $this->chickenTypeId,
             'tipo_java_id' => $this->cageTypeId,
             'lectura_balanza_id' => null,

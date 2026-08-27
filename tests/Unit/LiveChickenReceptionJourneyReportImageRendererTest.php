@@ -35,6 +35,26 @@ class LiveChickenReceptionJourneyReportImageRendererTest extends TestCase
         }
     }
 
+    public function test_the_gender_breakdown_changes_the_rendered_summary(): void
+    {
+        $company = new Empresa([
+            'razon_social' => 'Avícola de prueba S.A.C.',
+            'nombre_comercial' => 'Avícola de prueba',
+        ]);
+        $firstReport = $this->report([]);
+        $secondReport = $firstReport;
+        $secondReport['summary']['own']['male_birds'] = 999;
+        $secondReport['summary']['own']['female_birds'] = 888;
+
+        $renderer = app(LiveChickenReceptionJourneyReportImageRenderer::class);
+        $firstPages = $renderer->render($company, $firstReport);
+        $secondPages = $renderer->render($company, $secondReport);
+
+        $this->assertCount(1, $firstPages);
+        $this->assertCount(1, $secondPages);
+        $this->assertNotSame(hash('sha256', $firstPages[0]), hash('sha256', $secondPages[0]));
+    }
+
     /**
      * @param  list<array<string, mixed>>  $records
      * @return array<string, mixed>
@@ -92,6 +112,8 @@ class LiveChickenReceptionJourneyReportImageRendererTest extends TestCase
             'weighings' => $weighings,
             'cages' => $weighings * 2,
             'birds' => $weighings * 14,
+            'male_birds' => $weighings * 7,
+            'female_birds' => $weighings * 7,
             'gross_weight_kg' => $weighings * 100,
             'tare_weight_kg' => $weighings * 14,
             'net_weight_kg' => $weighings * 86,

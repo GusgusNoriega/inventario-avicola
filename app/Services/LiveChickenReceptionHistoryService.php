@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Pesada;
 use App\Models\PesadaRecepcionPolloVivo;
 use App\Models\TicketDespacho;
 use Carbon\CarbonImmutable;
@@ -438,15 +439,23 @@ class LiveChickenReceptionHistoryService
      */
     private function summarizeRecords(Collection $records): array
     {
-        return $this->formatSummary((object) [
-            'weighings' => $records->count(),
-            'cages' => $records->sum('cages'),
-            'birds' => $records->sum('birds'),
-            'read_weight_kg' => $records->sum('read_weight_kg'),
-            'gross_weight_kg' => $records->sum('gross_weight_kg'),
-            'tare_weight_kg' => $records->sum('tare_weight_kg'),
-            'net_weight_kg' => $records->sum('net_weight_kg'),
-        ]);
+        return [
+            ...$this->formatSummary((object) [
+                'weighings' => $records->count(),
+                'cages' => $records->sum('cages'),
+                'birds' => $records->sum('birds'),
+                'read_weight_kg' => $records->sum('read_weight_kg'),
+                'gross_weight_kg' => $records->sum('gross_weight_kg'),
+                'tare_weight_kg' => $records->sum('tare_weight_kg'),
+                'net_weight_kg' => $records->sum('net_weight_kg'),
+            ]),
+            'male_birds' => (int) $records
+                ->whereStrict('sex', Pesada::SEX_MALE)
+                ->sum('birds'),
+            'female_birds' => (int) $records
+                ->whereStrict('sex', Pesada::SEX_FEMALE)
+                ->sum('birds'),
+        ];
     }
 
     /** @return array<string, int|float> */
@@ -482,7 +491,7 @@ class LiveChickenReceptionHistoryService
             3,
         );
 
-        return [
+        $summary = [
             'weighings' => (int) $left['weighings'] + (int) $right['weighings'],
             'cages' => (int) $left['cages'] + (int) $right['cages'],
             'birds' => $birds,
@@ -503,6 +512,15 @@ class LiveChickenReceptionHistoryService
                 ? round($netWeight / $birds, 3)
                 : 0.0,
         ];
+
+        if (array_key_exists('male_birds', $left) || array_key_exists('male_birds', $right)) {
+            $summary['male_birds'] = (int) ($left['male_birds'] ?? 0)
+                + (int) ($right['male_birds'] ?? 0);
+            $summary['female_birds'] = (int) ($left['female_birds'] ?? 0)
+                + (int) ($right['female_birds'] ?? 0);
+        }
+
+        return $summary;
     }
 
     /** @return array<string, mixed> */
