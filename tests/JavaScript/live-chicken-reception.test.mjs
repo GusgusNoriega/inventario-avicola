@@ -87,9 +87,27 @@ test("las cuatro entradas se deslizan horizontalmente y los dos despachos perman
 
 test("los totales se apoyan en el final real de cada columna", () => {
   assert.match(stylesheet, /\.lir-lane \{[^}]*display: grid;[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;/);
-  assert.match(stylesheet, /\.lir-lane-rows, \.lir-lane\.is-warehouse \.lir-lane-rows \{[^}]*height: auto;[^}]*min-height: 0;[^}]*overflow-y: auto;/);
+  assert.match(stylesheet, /\.lir-lane-rows, \.lir-lane\.is-warehouse \.lir-lane-rows \{[^}]*height: auto;[^}]*min-width: 0;[^}]*min-height: 0;[^}]*overflow: auto;[^}]*overscroll-behavior-inline: contain;[^}]*touch-action: pan-x pan-y pinch-zoom;/);
   assert.match(stylesheet, /\.lir-lane > footer \{ position: static;/);
   assert.match(stylesheet, /\.lir-selected-total \{ position: static;/);
+});
+
+test("cada columna presenta registros grandes en una tabla desplazable", () => {
+  assert.match(view, /role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna/);
+  assert.match(view, /dentro de cada tabla, mueve a los lados para ver todos los datos/);
+  assert.match(source, /<table class="lir-record-table">/);
+  assert.match(source, /<th scope="col">Propietario<\/th>/);
+  assert.match(source, /<th scope="col">Peso bruto<\/th>/);
+  assert.match(source, /<th scope="col">Peso neto<\/th>/);
+  assert.match(source, /const RECORD_TABLE_COLUMN_COUNT = 13/);
+  assert.match(stylesheet, /\.lir-record-table \{[^}]*min-width: 1410px;[^}]*font-size: \.86rem;/);
+  assert.match(stylesheet, /\.lir-record-table thead th \{[^}]*position: sticky;/);
+  assert.match(stylesheet, /\.lir-weight-cell\.is-net \{[^}]*font-size: 1rem;/);
+  assert.doesNotMatch(stylesheet, /\.lir-record-destination \{[^}]*text-overflow: ellipsis;/);
+  assert.doesNotMatch(source, /<tr[^>]*role="button"/);
+  assert.match(source, /class="lir-row-action is-edit"[^>]*data-live-edit-weighing/);
+  assert.match(source, /class="lir-row-action is-edit"[^>]*data-live-edit-draft-weighing/);
+  assert.doesNotMatch(source, /event\.target\.closest\("\[data-live-open-ticket\], \[data-live-edit-weighing\], \[data-live-edit-draft-weighing\]"\)/);
 });
 
 test("la configuración de balanza vive en su propio popup", () => {

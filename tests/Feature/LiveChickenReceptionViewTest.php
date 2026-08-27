@@ -30,6 +30,7 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertDontSee('data-live-owner=', false)
             ->assertSee('Asignación automática')
             ->assertSee('Cuatro columnas por propietario y sexo')
+            ->assertSee('dentro de cada tabla')
             ->assertSee('Entrada a almacén')
             ->assertSee('Tickets de despacho Mayorista 1')
             ->assertSee('Dos borradores independientes')
@@ -72,6 +73,7 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('id="liveIntakeTicketEditorModal"', $view);
         $this->assertStringContainsString('id="liveIntakeTicketEditReason"', $view);
         $this->assertStringContainsString('role="region" aria-label="Clientes disponibles"', $view);
+        $this->assertStringContainsString('role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna', $view);
         $this->assertMatchesRegularExpression(
             '/<header class="lir-direct-lane-head">[\s\S]*?<button class="lir-lane-select"[\s\S]*?<\/button>\s*<button[\s\S]*?data-live-choose-client=/u',
             $view,
@@ -98,6 +100,10 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('dispatch_client_id', $javascript);
         $this->assertStringContainsString('function openClientPicker', $javascript);
         $this->assertStringContainsString('function captureRequestPayload', $javascript);
+        $this->assertStringContainsString('const RECORD_TABLE_COLUMN_COUNT = 13', $javascript);
+        $this->assertStringContainsString('<table class="lir-record-table">', $javascript);
+        $this->assertStringContainsString('<th scope="col">Peso bruto</th>', $javascript);
+        $this->assertStringContainsString('<th scope="col">Peso neto</th>', $javascript);
         $this->assertStringNotContainsString('data-live-owner=', $view);
         $this->assertStringContainsString('@media (max-width: 820px)', $stylesheet);
         $this->assertStringContainsString('scroll-snap-type: x mandatory', $stylesheet);
@@ -109,6 +115,11 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('.lir-client-picker-trigger', $stylesheet);
         $this->assertStringContainsString('.lir-client-options', $stylesheet);
         $this->assertStringContainsString('.lir-ticket-record', $stylesheet);
+        $this->assertStringContainsString('.lir-record-table', $stylesheet);
+        $this->assertStringContainsString('min-width: 1410px', $stylesheet);
+        $this->assertStringContainsString('overscroll-behavior-inline: contain', $stylesheet);
+        $this->assertStringContainsString('touch-action: pan-x pan-y pinch-zoom', $stylesheet);
+        $this->assertStringContainsString('font-size: 1rem', $stylesheet);
         $this->assertStringContainsString('.lir-ticket-weighing-editor', $stylesheet);
         $this->assertStringContainsString('.lir-register-ticket', $stylesheet);
         $this->assertStringContainsString('grid-template-rows: auto minmax(0, 1fr) auto', $stylesheet);

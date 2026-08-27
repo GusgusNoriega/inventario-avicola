@@ -80,7 +80,7 @@
       <div class="lir-lane-group is-warehouse-group">
         <header class="lir-lane-group-head">
           <div><span>Entradas a almacén</span><strong>Cuatro columnas por propietario y sexo</strong></div>
-          <small>Desliza con el dedo para ver las demás columnas.</small>
+          <small>Desliza entre columnas; dentro de cada tabla, mueve a los lados para ver todos los datos.</small>
         </header>
         <div class="lir-lane-track" tabindex="0" aria-label="Desplazamiento horizontal de entradas a almacén">
           <div class="lir-lanes is-warehouse-lanes">
@@ -98,7 +98,7 @@
                 <em id="liveIntakeLaneProfile{{ $lane }}">{{ $ownerLabel }} · {{ $sexLabel }}</em>
                 <small id="liveIntakeLaneDestination{{ $lane }}">Sin configurar</small>
               </button>
-              <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows">
+              <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows" role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna {{ $lane }}">
                 <p class="lir-empty-lane">Aún no hay pesadas</p>
               </div>
               <footer>
@@ -138,7 +138,7 @@
                 aria-label="Elegir cliente de despacho para la columna {{ $lane }}"
               >Elegir cliente</button>
             </header>
-            <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows">
+            <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows" role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna {{ $lane }}">
               <p class="lir-empty-lane">Agrega la primera pesada del ticket</p>
             </div>
             <footer class="lir-ticket-draft-footer">

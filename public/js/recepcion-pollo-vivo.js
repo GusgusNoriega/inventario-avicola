@@ -1168,28 +1168,37 @@ async function assignDispatchClient(clientId) {
 
 function renderReceptionRecord(record) {
   const ownerExternal = record.owner?.type === "EXTERNA";
-  const sexLabel = record.sex === "HEMBRA" ? "H" : "M";
+  const sexLabel = record.sex === "HEMBRA" ? "Hembra" : "Macho";
   const ownerLabel = ownerExternal ? record.owner?.name : "Mi empresa";
+  const destinationLabel = record.destination?.name || "Sin destino";
+  const cageTypeLabel = record.cage_type?.name || record.cage_type?.code || "Sin tipo de java";
   const legacyDirect = String(record.record_kind || "").toLowerCase() === "legacy_direct_weighing";
   const editable = !legacyDirect;
   const previousLayout = record.uses_previous_layout
-    ? '<small class="lir-record-legacy">Registro anterior a esta distribución</small>'
+    ? '<small class="lir-record-legacy">Distribución anterior</small>'
     : "";
   return `
-    <article class="lir-weighing-row ${ownerExternal ? "is-external" : "is-own"} ${editable ? "is-clickable" : "is-readonly"}"
-      ${editable ? `role="button" tabindex="0" data-live-edit-weighing="${record.id}"` : ""}>
-      <header>
-        <span>#${record.number} · ${formatTime(record.weighed_at)}</span>
-        ${editable
-          ? `<button type="button" data-live-delete-weighing="${record.id}" aria-label="Anular pesada ${record.number}">×</button>`
-          : '<small class="lir-readonly-chip">Histórico</small>'}
-      </header>
-      <strong title="${escapeHtml(ownerLabel)}">${escapeHtml(ownerLabel)}</strong>
-      ${previousLayout}
-      <small class="lir-record-destination" title="${escapeHtml(record.destination?.name || "Sin destino")}">Destino: ${escapeHtml(record.destination?.name || "Sin destino")}</small>
-      <div><span>${sexLabel}</span><span>${record.cages} J × ${record.birds_per_cage}</span><span>${record.birds} aves</span></div>
-      <footer><small>Tara ${formatKg(record.tare_weight_kg)}</small><b>${formatKg(record.net_weight_kg)}</b></footer>
-    </article>`;
+    <tr class="lir-record-row lir-weighing-row ${ownerExternal ? "is-external" : "is-own"} ${editable ? "is-clickable" : "is-readonly"}"
+      ${editable ? `data-live-edit-weighing="${record.id}"` : ""}>
+      <td class="lir-record-identity"><strong>#${record.number}</strong>${previousLayout}</td>
+      <td class="lir-record-time">${formatTime(record.weighed_at)}</td>
+      <td class="lir-record-owner">${escapeHtml(ownerLabel || "Empresa externa")}</td>
+      <td class="lir-record-destination">${escapeHtml(destinationLabel)}</td>
+      <td><span class="lir-sex-chip ${record.sex === "HEMBRA" ? "is-female" : "is-male"}">${sexLabel}</span></td>
+      <td class="lir-record-cage-type">${escapeHtml(cageTypeLabel)}</td>
+      <td class="lir-number-cell">${record.cages}</td>
+      <td class="lir-number-cell">${record.birds_per_cage}</td>
+      <td class="lir-number-cell is-birds">${record.birds}</td>
+      <td class="lir-weight-cell">${formatKg(record.gross_weight_kg)}</td>
+      <td class="lir-weight-cell">${formatKg(record.tare_weight_kg)}</td>
+      <td class="lir-weight-cell is-net">${formatKg(record.net_weight_kg)}</td>
+      <td class="lir-record-actions">${editable
+        ? `<div class="lir-row-actions">
+            <button class="lir-row-action is-edit" type="button" data-live-edit-weighing="${record.id}" aria-label="Editar pesada ${record.number}">Editar</button>
+            <button class="lir-row-action is-danger" type="button" data-live-delete-weighing="${record.id}" aria-label="Anular pesada ${record.number}">Anular</button>
+          </div>`
+        : '<small class="lir-readonly-chip">Histórico</small>'}</td>
+    </tr>`;
 }
 
 function renderDispatchTicketRecord(record) {
@@ -1200,6 +1209,8 @@ function renderDispatchTicketRecord(record) {
   const code = record.ticket_code || ticket.code || `Ticket #${ticketId}`;
   const client = record.client || record.destination || ticket.destination || {};
   const status = record.ticket_status || ticket.status || "CERRADO";
+  const owner = record.owner || {};
+  const cageType = record.cage_type || {};
   const weighings = Number(
     totals.weighing_count
       ?? record.weighing_count
@@ -1212,28 +1223,80 @@ function renderDispatchTicketRecord(record) {
   const tare = Number(totals.tare_weight_kg ?? record.tare_weight_kg ?? 0);
   const net = Number(totals.net_weight_kg ?? record.net_weight_kg ?? 0);
   return `
-    <article class="lir-ticket-record is-clickable" role="button" tabindex="0" data-live-open-ticket="${ticketId}" aria-label="Abrir ${escapeHtml(code)} completo">
-      <header><span class="lir-ticket-status">${escapeHtml(status === "CERRADO" ? "Despachado" : status)}</span><small>${sex === "HEMBRA" ? "Hembra" : "Macho"}</small></header>
-      <strong>${escapeHtml(code)}</strong>
-      <span class="lir-ticket-client" title="${escapeHtml(client.name || "Sin cliente")}">${escapeHtml(client.name || "Sin cliente")}</span>
-      <div><span>${weighings} pesadas</span><span>${cages} javas</span><span>${birds} pollos</span></div>
-      <footer><small>Bruto ${formatKg(gross)} · Tara ${formatKg(tare)}</small><b>${formatKg(net)}</b></footer>
-    </article>`;
+    <tr class="lir-record-row lir-ticket-record is-clickable" data-live-open-ticket="${ticketId}">
+      <td class="lir-record-identity"><strong>${escapeHtml(code)}</strong><small class="lir-ticket-status">${escapeHtml(status === "CERRADO" ? "Despachado" : status)}</small></td>
+      <td class="lir-record-time">${formatTime(record.weighed_at)}</td>
+      <td class="lir-record-owner">${escapeHtml(owner.name || "Mi empresa")}</td>
+      <td class="lir-record-destination">${escapeHtml(client.name || "Sin cliente")}</td>
+      <td><span class="lir-sex-chip ${sex === "HEMBRA" ? "is-female" : "is-male"}">${sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
+      <td class="lir-record-cage-type">${escapeHtml(cageType.name || cageType.code || "Tipos de java mixtos")}</td>
+      <td class="lir-number-cell">${cages}</td>
+      <td class="lir-number-cell">${record.birds_per_cage ?? "Mixto"}</td>
+      <td class="lir-number-cell is-birds">${birds}</td>
+      <td class="lir-weight-cell">${formatKg(gross)}</td>
+      <td class="lir-weight-cell">${formatKg(tare)}</td>
+      <td class="lir-weight-cell is-net">${formatKg(net)}</td>
+      <td class="lir-record-actions"><div class="lir-row-actions"><button class="lir-row-action is-open" type="button" data-live-open-ticket="${ticketId}" aria-label="Abrir ${escapeHtml(code)} completo">Abrir (${weighings})</button></div></td>
+    </tr>`;
 }
 
 function renderDraftWeighing(weighing, lane, index) {
   const normalized = normalizeDraftWeighing(weighing, index);
   const registrationPending = dispatchDraftHasPendingRegistration(lane);
+  const clientName = dispatchDraft(lane).dispatch_client_name || "Cliente por elegir";
   return `
-    <article class="lir-weighing-row lir-draft-weighing ${registrationPending ? "is-readonly" : "is-clickable"}"
-      ${registrationPending ? "" : `role="button" tabindex="0" data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}"`} data-live-draft-lane="${lane}">
-      <header><span>Pesada ${index + 1} · ${formatTime(normalized.weighed_at)}</span>${registrationPending
+    <tr class="lir-record-row lir-weighing-row lir-draft-weighing ${registrationPending ? "is-readonly" : "is-clickable"}"
+      ${registrationPending ? "" : `data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}"`} data-live-draft-lane="${lane}">
+      <td class="lir-record-identity"><strong>Pesada ${index + 1}</strong><small class="lir-draft-chip">Borrador</small></td>
+      <td class="lir-record-time">${formatTime(normalized.weighed_at)}</td>
+      <td class="lir-record-owner">Mi empresa</td>
+      <td class="lir-record-destination">${escapeHtml(clientName)}</td>
+      <td><span class="lir-sex-chip ${normalized.sex === "HEMBRA" ? "is-female" : "is-male"}">${normalized.sex === "HEMBRA" ? "Hembra" : "Macho"}</span></td>
+      <td class="lir-record-cage-type">${escapeHtml(normalized.cage_type_name)}</td>
+      <td class="lir-number-cell">${normalized.cage_count}</td>
+      <td class="lir-number-cell">${normalized.birds_per_cage}</td>
+      <td class="lir-number-cell is-birds">${normalized.birds}</td>
+      <td class="lir-weight-cell">${formatKg(normalized.gross_weight_kg)}</td>
+      <td class="lir-weight-cell">${formatKg(normalized.tare_weight_kg)}</td>
+      <td class="lir-weight-cell is-net">${formatKg(normalized.net_weight_kg)}</td>
+      <td class="lir-record-actions">${registrationPending
         ? '<small class="lir-readonly-chip">Confirmando</small>'
-        : `<button type="button" data-live-delete-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Quitar pesada ${index + 1}">×</button>`}</header>
-      <strong>${normalized.sex === "HEMBRA" ? "Hembra" : "Macho"} · ${escapeHtml(normalized.cage_type_name)}</strong>
-      <div><span>${normalized.cage_count} javas</span><span>${normalized.birds_per_cage} aves/java</span><span>${normalized.birds} pollos</span></div>
-      <footer><small>Tara ${formatKg(normalized.tare_weight_kg)}</small><b>${formatKg(normalized.net_weight_kg)}</b></footer>
-    </article>`;
+        : `<div class="lir-row-actions">
+            <button class="lir-row-action is-edit" type="button" data-live-edit-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Editar pesada ${index + 1} del borrador">Editar</button>
+            <button class="lir-row-action is-danger" type="button" data-live-delete-draft-weighing="${escapeHtml(normalized.local_id)}" data-live-draft-lane="${lane}" aria-label="Quitar pesada ${index + 1}">Quitar</button>
+          </div>`}</td>
+    </tr>`;
+}
+
+const RECORD_TABLE_COLUMN_COUNT = 13;
+
+function renderRecordTable(lane, rows, emptyMessage) {
+  const tableRows = rows.length
+    ? rows.join("")
+    : `<tr class="lir-empty-table-row"><td colspan="${RECORD_TABLE_COLUMN_COUNT}"><p class="lir-empty-lane">${escapeHtml(emptyMessage)}</p></td></tr>`;
+
+  return `
+    <table class="lir-record-table">
+      <caption class="lir-visually-hidden">Registros de la columna ${lane}. Desplaza la tabla horizontalmente para consultar todos los datos.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Registro</th>
+          <th scope="col">Hora</th>
+          <th scope="col">Propietario</th>
+          <th scope="col">Destino</th>
+          <th scope="col">Sexo</th>
+          <th scope="col">Tipo de java</th>
+          <th scope="col">Javas</th>
+          <th scope="col">Aves/java</th>
+          <th scope="col">Pollos</th>
+          <th scope="col">Peso bruto</th>
+          <th scope="col">Tara</th>
+          <th scope="col">Peso neto</th>
+          <th scope="col">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+    </table>`;
 }
 
 function renderRecords() {
@@ -1248,21 +1311,25 @@ function renderRecords() {
         const expiredDraft = state.expiredDispatchDrafts?.[lane] || state.expiredDispatchDrafts?.[String(lane)] || {};
         const hasRegistrationAttempt = Boolean(expiredDraft.registration_attempt);
         recordMarkup.unshift(`
-          <div class="lir-expired-draft" role="alert">
-            <strong>Borrador de otra jornada</strong>
-            <span>Hay pesadas pendientes del ${escapeHtml(state.expiredDraftOperatingDate)}. No se mezclarán con la jornada actual.</span>
-            ${hasRegistrationAttempt
-              ? `<button type="button" data-live-retry-expired-ticket="${lane}">Comprobar ticket antes de descartar</button>`
-              : ""}
-            <button type="button" data-live-discard-expired-drafts>${hasRegistrationAttempt ? "Descartar sin comprobar" : "Descartar borradores vencidos"}</button>
-          </div>`);
+          <tr class="lir-expired-draft-row"><td colspan="${RECORD_TABLE_COLUMN_COUNT}">
+            <div class="lir-expired-draft" role="alert">
+              <strong>Borrador de otra jornada</strong>
+              <span>Hay pesadas pendientes del ${escapeHtml(state.expiredDraftOperatingDate)}. No se mezclarán con la jornada actual.</span>
+              ${hasRegistrationAttempt
+                ? `<button type="button" data-live-retry-expired-ticket="${lane}">Comprobar ticket antes de descartar</button>`
+                : ""}
+              <button type="button" data-live-discard-expired-drafts>${hasRegistrationAttempt ? "Descartar sin comprobar" : "Descartar borradores vencidos"}</button>
+            </div>
+          </td></tr>`);
       } else {
         recordMarkup.unshift(...dispatchDraft(lane).weighings.map((weighing, index) => renderDraftWeighing(weighing, lane, index)));
       }
     }
-    elements.laneRows[lane - 1].innerHTML = recordMarkup.length
-      ? recordMarkup.join("")
-      : `<p class="lir-empty-lane">${[5, 6].includes(lane) ? "Agrega la primera pesada del ticket" : "Aún no hay pesadas"}</p>`;
+    elements.laneRows[lane - 1].innerHTML = renderRecordTable(
+      lane,
+      recordMarkup,
+      [5, 6].includes(lane) ? "Agrega la primera pesada del ticket" : "Aún no hay pesadas",
+    );
   });
 }
 
@@ -2784,16 +2851,7 @@ document.addEventListener("keydown", (event) => {
     elements.scaleSettingsModal,
     elements.settingsModal,
   ].find((modal) => !modal.hidden);
-  if (!openModal) {
-    if (["Enter", " "].includes(event.key)) {
-      const row = event.target.closest("[data-live-open-ticket], [data-live-edit-weighing], [data-live-edit-draft-weighing]");
-      if (row) {
-        event.preventDefault();
-        row.click();
-      }
-    }
-    return;
-  }
+  if (!openModal) return;
   if (event.key === "Escape") {
     if (openModal === elements.ticketEditorModal) closeTicketEditor();
     else if (openModal === elements.weighingEditorModal) closeWeighingEditor();
