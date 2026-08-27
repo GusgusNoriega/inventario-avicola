@@ -51,6 +51,26 @@ class LiveChickenReceptionViewTest extends TestCase
 
         $this->assertSame(2, substr_count($response->getContent(), 'data-live-choose-client='));
 
+        $renderedView = $response->getContent();
+        $laneMatrix = [
+            1 => ['is-own-lane', 'is-male-lane', 'lir-icon-rooster', 'Gallo · Macho', 'Mi empresa'],
+            2 => ['is-own-lane', 'is-female-lane', 'lir-icon-hen', 'Gallina · Hembra', 'Mi empresa'],
+            3 => ['is-external-lane', 'is-male-lane', 'lir-icon-rooster', 'Gallo · Macho', 'Empresa externa'],
+            4 => ['is-external-lane', 'is-female-lane', 'lir-icon-hen', 'Gallina · Hembra', 'Empresa externa'],
+        ];
+
+        foreach ($laneMatrix as $lane => [$ownerClass, $sexClass, $iconId, $sexText, $ownerText]) {
+            preg_match('/<article class="([^"]*)" data-live-lane="'.$lane.'">([\s\S]*?)<\/article>/u', $renderedView, $laneMarkup);
+
+            $this->assertNotEmpty($laneMarkup, "No se encontró la columna {$lane}.");
+            $this->assertStringContainsString($ownerClass, $laneMarkup[1]);
+            $this->assertStringContainsString($sexClass, $laneMarkup[1]);
+            $this->assertStringContainsString('href="#'.$iconId.'"', $laneMarkup[2]);
+            $this->assertStringContainsString('aria-hidden="true" focusable="false"', $laneMarkup[2]);
+            $this->assertStringContainsString($sexText, $laneMarkup[2]);
+            $this->assertStringContainsString($ownerText, $laneMarkup[2]);
+        }
+
         $this->get('/')
             ->assertOk()
             ->assertSee(route('recepcion-pollo-vivo'), false);
@@ -128,6 +148,12 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('overflow-x: clip', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-warehouse', $stylesheet);
         $this->assertStringContainsString('.lir-lane.is-client', $stylesheet);
+        $this->assertStringContainsString('.lir-lane.is-male-lane', $stylesheet);
+        $this->assertStringContainsString('.lir-lane.is-female-lane', $stylesheet);
+        $this->assertStringContainsString('--lir-lane-owner-accent', $stylesheet);
+        $this->assertStringContainsString('--lir-lane-sex-accent', $stylesheet);
+        $this->assertStringContainsString('.lir-lane-sex-icon', $stylesheet);
+        $this->assertStringContainsString('.lir-lane-owner-badge', $stylesheet);
         $this->assertStringContainsString('.lir-client-picker-trigger', $stylesheet);
         $this->assertStringContainsString('.lir-client-options', $stylesheet);
         $this->assertStringContainsString('.lir-ticket-record', $stylesheet);

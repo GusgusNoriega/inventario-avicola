@@ -8,6 +8,24 @@
   <link rel="stylesheet" href="{{ asset('css/recepcion-pollo-vivo.css') }}?v={{ filemtime(public_path('css/recepcion-pollo-vivo.css')) }}">
 </head>
 <body class="live-intake-page">
+  <svg class="lir-icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="lir-icon-rooster" viewBox="-1 0 66 64">
+      <path d="M18 27C10 24 6 19 5 12c7 1 13 5 16 11M16 32c-7-1-12-5-15-10 7-2 14 0 19 5" />
+      <path d="M42 29c-6-6-15-9-23-5-9 4-12 14-6 21 5 6 15 8 25 4 8-3 12-10 10-17l-6-3Z" />
+      <path d="M39 32c5-3 7-7 6-12-1-5 1-9 5-11 5 1 8 6 7 11-1 5-4 8-9 10" />
+      <path d="M49 9c-1-4 1-7 4-7 2 2 2 5 1 7 3-3 6-2 7 1 0 3-2 5-5 6" />
+      <path d="m57 17 6 3-6 3M29 31c7 1 11 5 11 10-6 3-13 1-16-4M25 50l-1 9m13-10 2 10m-19 0h8m7 0h8" />
+      <circle cx="52" cy="16" r="1.5" fill="currentColor" stroke="none" />
+    </symbol>
+    <symbol id="lir-icon-hen" viewBox="-1 0 66 64">
+      <path d="M17 29c-6-1-11-5-14-10 7-1 13 1 18 6" />
+      <path d="M45 30c-5-6-14-9-23-6-10 3-15 13-10 21 5 8 17 10 28 5 8-4 12-12 9-19l-4-1Z" />
+      <path d="M40 33c5-3 7-7 6-12-1-4 1-8 5-10 4 1 7 5 7 9 0 5-4 8-9 10" />
+      <path d="M49 11c0-3 2-5 4-5 2 2 2 4 1 6 2-2 5-1 5 2 0 2-1 4-4 5" />
+      <path d="m58 18 5 3-5 3M29 32c6 1 10 5 10 10-6 3-13 1-16-4M25 51l-1 8m13-9 2 9m-19 0h8m7 0h8" />
+      <circle cx="53" cy="17" r="1.5" fill="currentColor" stroke="none" />
+    </symbol>
+  </svg>
   <main id="liveIntakeMain" class="lir-shell" data-live-user-id="{{ auth()->id() }}">
     <div id="liveIntakeZoomSurface" class="lir-zoom-surface">
     <header class="lir-topbar">
@@ -92,11 +110,21 @@
               $ownerLabel = $ownLane ? 'Mi empresa' : 'Empresa externa';
               $sexLabel = $maleLane ? 'Macho' : 'Hembra';
             @endphp
-            <article class="lir-lane is-warehouse {{ $ownLane ? 'is-own-lane' : 'is-external-lane' }} {{ $lane === 1 ? 'is-active' : '' }}" data-live-lane="{{ $lane }}">
-              <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}">
-                <span>Columna {{ $lane }}</span>
-                <strong>Entrada a almacén</strong>
-                <em id="liveIntakeLaneProfile{{ $lane }}">{{ $ownerLabel }} · {{ $sexLabel }}</em>
+            <article class="lir-lane is-warehouse {{ $ownLane ? 'is-own-lane' : 'is-external-lane' }} {{ $maleLane ? 'is-male-lane' : 'is-female-lane' }} {{ $lane === 1 ? 'is-active' : '' }}" data-live-lane="{{ $lane }}">
+              <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}" aria-label="Seleccionar columna {{ $lane }}: {{ $ownerLabel }}, {{ $sexLabel }}">
+                <span class="lir-lane-profile-row">
+                  <span class="lir-lane-number">Columna {{ $lane }}</span>
+                  <em id="liveIntakeLaneProfile{{ $lane }}" class="lir-lane-owner-badge">{{ $ownerLabel }}</em>
+                </span>
+                <span class="lir-lane-identity">
+                  <svg class="lir-lane-sex-icon" aria-hidden="true" focusable="false">
+                    <use href="#{{ $maleLane ? 'lir-icon-rooster' : 'lir-icon-hen' }}"></use>
+                  </svg>
+                  <span class="lir-lane-identity-copy">
+                    <strong>Entrada a almacén</strong>
+                    <b>{{ $maleLane ? 'Gallo · Macho' : 'Gallina · Hembra' }}</b>
+                  </span>
+                </span>
                 <small id="liveIntakeLaneDestination{{ $lane }}">Sin configurar</small>
               </button>
               <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows" role="region" tabindex="0" aria-label="Tabla desplazable de registros de la columna {{ $lane }}">

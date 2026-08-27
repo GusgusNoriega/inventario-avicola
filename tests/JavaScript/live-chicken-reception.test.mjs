@@ -46,6 +46,27 @@ test("cada columna define el propietario y las entradas definen también el sexo
   assert.match(view, /id="liveIntakeExternalBirds"/);
 });
 
+test("las columnas identifican sexo y propietario con señales visuales independientes", () => {
+  assert.match(view, /\{\{ \$ownLane \? 'is-own-lane' : 'is-external-lane' \}\}/);
+  assert.match(view, /\{\{ \$maleLane \? 'is-male-lane' : 'is-female-lane' \}\}/);
+  assert.match(view, /id="lir-icon-rooster"/);
+  assert.match(view, /id="lir-icon-hen"/);
+  assert.match(view, /class="lir-lane-sex-icon" aria-hidden="true" focusable="false"/);
+  assert.match(view, /href="#\{\{ \$maleLane \? 'lir-icon-rooster' : 'lir-icon-hen' \}\}"/);
+  assert.match(view, /\{\{ \$maleLane \? 'Gallo · Macho' : 'Gallina · Hembra' \}\}/);
+  assert.match(view, /class="lir-lane-owner-badge"/);
+  assert.match(source, /\? `Externa · \$\{externalOwner\?\.name \|\| "sin configurar"\}`/);
+  assert.match(source, /elements\.laneProfileLabels\[lane - 1\]\.title = profileLabel/);
+  assert.match(stylesheet, /\.lir-lane\.is-own-lane \{[^}]*--lir-lane-owner-accent: var\(--lir-green\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-external-lane \{[^}]*--lir-lane-owner-accent: var\(--lir-amber\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-male-lane \{[^}]*--lir-lane-sex-accent: var\(--lir-blue\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-female-lane \{[^}]*--lir-lane-sex-accent: var\(--lir-pink\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-warehouse \{[^}]*border-color: var\(--lir-lane-owner-accent\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-warehouse \.lir-lane-select \{[^}]*border-top: 4px solid var\(--lir-lane-sex-accent\)/);
+  assert.match(stylesheet, /\.lir-lane\.is-active \{[^}]*var\(--lir-lane-owner-accent\)/);
+  assert.match(stylesheet, /\.lir-sex-chip\.is-female \{[^}]*color: var\(--lir-pink\)/);
+});
+
 test("cada borrador permite elegir un cliente distinto y lo bloquea al tener pesadas", () => {
   assert.match(view, /data-live-choose-client="\{\{ \$lane \}\}"/);
   assert.match(view, /id="liveIntakeClientModal"[\s\S]*?role="dialog" aria-modal="true"/);

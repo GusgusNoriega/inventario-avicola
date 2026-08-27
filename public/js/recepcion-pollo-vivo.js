@@ -982,14 +982,17 @@ function renderLaneAssignments() {
     const ownerLabel = profile.ownerType === "EXTERNA"
       ? (externalOwner?.name || "Empresa externa sin configurar")
       : "Mi empresa";
-    const sexLabel = profile.sex === "HEMBRA" ? "Hembra" : (profile.sex === "MACHO" ? "Macho" : "Sexo al registrar");
-    elements.laneProfileLabels[lane - 1].textContent = [5, 6].includes(lane)
+    const profileLabel = [5, 6].includes(lane)
       ? (state.dispatchDraftsBlocked
           ? `Mayorista 1 · Borrador vencido (${state.expiredDraftOperatingDate})`
           : (dispatchDraftHasPendingRegistration(lane)
               ? `Mayorista 1 · Confirmación pendiente · ${dispatchDraft(lane).weighings.length} pesadas`
               : `Mayorista 1 · ${dispatchDraft(lane).weighings.length || "Borrador vacío"}${dispatchDraft(lane).weighings.length ? " pesadas" : ""}`))
-      : `${ownerLabel} · ${sexLabel}`;
+      : (profile.ownerType === "EXTERNA"
+          ? `Externa · ${externalOwner?.name || "sin configurar"}`
+          : ownerLabel);
+    elements.laneProfileLabels[lane - 1].textContent = profileLabel;
+    elements.laneProfileLabels[lane - 1].title = profileLabel;
   });
 
   elements.clientPickerButtons.forEach((button) => {
