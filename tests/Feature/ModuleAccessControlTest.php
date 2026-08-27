@@ -18,7 +18,9 @@ class ModuleAccessControlTest extends TestCase
         foreach ([
             '/',
             '/operacion',
+            '/recepcion-pollo-vivo/menu',
             '/recepcion-pollo-vivo',
+            '/recepcion-pollo-vivo/historial',
             '/despacho-mayorista-2',
             '/precios-jornada',
             '/reporte-proveedores',
@@ -44,7 +46,9 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/recepcion-pollo-vivo/menu',
             '/recepcion-pollo-vivo',
+            '/recepcion-pollo-vivo/historial',
             '/despacho-mayorista-2',
             '/precios-jornada',
             '/reporte-proveedores',
@@ -77,6 +81,22 @@ class ModuleAccessControlTest extends TestCase
             '/finanzas/tickets',
             '/compras',
             '/compras/nueva',
+        ] as $path) {
+            $this->get($path)->assertOk();
+        }
+    }
+
+    public function test_live_chicken_reception_module_unlocks_all_of_its_internal_web_views(): void
+    {
+        $user = User::factory()->create();
+        $this->grantModules($user, ['MODULO_RECEPCION_POLLO_VIVO']);
+
+        $this->actingAs($user);
+
+        foreach ([
+            '/recepcion-pollo-vivo/menu',
+            '/recepcion-pollo-vivo',
+            '/recepcion-pollo-vivo/historial',
         ] as $path) {
             $this->get($path)->assertOk();
         }
@@ -126,6 +146,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertSee(route('directorio'), false)
             ->assertSee(route('finanzas'), false)
             ->assertDontSee(route('control-javas'), false)
+            ->assertDontSee(route('recepcion-pollo-vivo.menu'), false)
             ->assertDontSee(route('recepcion-pollo-vivo'), false)
             ->assertDontSee(route('operacion'), false);
     }
@@ -140,6 +161,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertOk()
             ->assertSee(route('finanzas'), false)
             ->assertDontSee(route('operacion'), false)
+            ->assertDontSee(route('recepcion-pollo-vivo.menu'), false)
             ->assertDontSee(route('recepcion-pollo-vivo'), false)
             ->assertDontSee(route('despacho-mayorista-2'), false)
             ->assertDontSee(route('despacho-minorista'), false)
@@ -177,7 +199,9 @@ class ModuleAccessControlTest extends TestCase
 
         foreach ([
             '/operacion',
+            '/recepcion-pollo-vivo/menu',
             '/recepcion-pollo-vivo',
+            '/recepcion-pollo-vivo/historial',
             '/despacho-mayorista-2',
             '/despacho-minorista',
             '/despacho-minorista-2',

@@ -77,7 +77,7 @@
         @endif
 
         @if ($user->hasModule('MODULO_RECEPCION_POLLO_VIVO'))
-        <a class="menu-tile menu-tile-primary" href="{{ route('recepcion-pollo-vivo') }}">
+        <a class="menu-tile menu-tile-primary" href="{{ route('recepcion-pollo-vivo.menu') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M3 7h12v10H3z"></path>
@@ -89,9 +89,9 @@
           </span>
           <span class="menu-tile-text">
             <strong>Recepción de pollo vivo</strong>
-            <small>Entrada diaria propia y de empresas externas</small>
+            <small>Registro y consulta de pesadas por jornada</small>
           </span>
-          <span class="menu-status">Nuevo</span>
+          <span class="menu-status">Abrir</span>
         </a>
         @endif
 

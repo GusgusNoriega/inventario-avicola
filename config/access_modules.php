@@ -26,7 +26,7 @@ return [
         'MODULO_RECEPCION_POLLO_VIVO' => [
             'name' => 'Recepción de pollo vivo',
             'description' => 'Entrada diaria de pollo vivo propio o de terceros, con almacenes y despachos directos.',
-            'path' => '/recepcion-pollo-vivo',
+            'path' => '/recepcion-pollo-vivo/menu',
             'technical_permissions' => [
                 'RECEPCIONES_VER',
                 'RECEPCIONES_CREAR',

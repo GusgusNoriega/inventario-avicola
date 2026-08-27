@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JourneyPriceController;
 use App\Http\Controllers\Api\V1\LiveChickenReceptionController;
 use App\Http\Controllers\Api\V1\LiveChickenReceptionDispatchTicketController;
+use App\Http\Controllers\Api\V1\LiveChickenReceptionHistoryController;
 use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
@@ -385,6 +386,7 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($liveChickenReceptionMiddleware)
         ->group(function (): void {
             Route::get('/', [LiveChickenReceptionController::class, 'index']);
+            Route::get('/historial', LiveChickenReceptionHistoryController::class);
             Route::put('/configuracion', [LiveChickenReceptionController::class, 'updateConfiguration']);
             Route::post('/pesadas', [LiveChickenReceptionController::class, 'store']);
             Route::post('/tickets', [LiveChickenReceptionDispatchTicketController::class, 'store']);

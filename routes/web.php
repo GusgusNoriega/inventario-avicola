@@ -33,9 +33,14 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             ->middleware('module:MODULO_DESPACHO_MAYORISTA')
             ->name('operacion');
 
-        Route::view('/recepcion-pollo-vivo', 'recepcion-pollo-vivo')
-            ->middleware('module:MODULO_RECEPCION_POLLO_VIVO')
-            ->name('recepcion-pollo-vivo');
+        Route::middleware('module:MODULO_RECEPCION_POLLO_VIVO')->group(function (): void {
+            Route::view('/recepcion-pollo-vivo/menu', 'recepcion-pollo-vivo-menu')
+                ->name('recepcion-pollo-vivo.menu');
+            Route::view('/recepcion-pollo-vivo', 'recepcion-pollo-vivo')
+                ->name('recepcion-pollo-vivo');
+            Route::view('/recepcion-pollo-vivo/historial', 'recepcion-pollo-vivo-historial')
+                ->name('recepcion-pollo-vivo.historial');
+        });
 
         Route::view('/operacion/pantalla-cliente', 'pantalla-cliente')
             ->middleware('module:MODULO_DESPACHO_MAYORISTA')
