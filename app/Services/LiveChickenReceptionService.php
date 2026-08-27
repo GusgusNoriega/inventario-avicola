@@ -938,12 +938,6 @@ class LiveChickenReceptionService
         $nextCageTotal = (int) $inventory->cantidad_total
             - (int) $record->cantidad_javas
             + $newCages;
-        $assignedCages = $this->assignedCages($companyId);
-        if ($nextCageTotal < 0 || $nextCageTotal < $assignedCages) {
-            throw ValidationException::withMessages([
-                'cage_count' => "La corrección dejaría {$assignedCages} javas con clientes y solo {$nextCageTotal} en el inventario general.",
-            ]);
-        }
 
         $oldWarehouseId = (int) $record->almacen_destino_id;
         if ($oldWarehouseId === $newWarehouseId) {
@@ -1039,33 +1033,6 @@ class LiveChickenReceptionService
         ]);
     }
 
-    private function assignedCages(int $companyId): int
-    {
-        $balances = [];
-        foreach (MovimientoJava::query()
-            ->where('empresa_id', $companyId)
-            ->lockForUpdate()
-            ->get(['cliente_id', 'tipo', 'cantidad']) as $movement) {
-            $clientId = (int) $movement->cliente_id;
-            $balances[$clientId] = ($balances[$clientId] ?? 0) + match ($movement->tipo) {
-                MovimientoJava::TYPE_DISPATCH => (int) $movement->cantidad,
-                MovimientoJava::TYPE_RECEIPT => -(int) $movement->cantidad,
-                default => 0,
-            };
-        }
-
-        foreach (DB::table('ajustes_saldos_javas')
-            ->where('empresa_id', $companyId)
-            ->lockForUpdate()
-            ->get(['cliente_id', 'diferencia_javas']) as $adjustment) {
-            $clientId = (int) $adjustment->cliente_id;
-            $balances[$clientId] = ($balances[$clientId] ?? 0)
-                + (int) $adjustment->diferencia_javas;
-        }
-
-        return (int) collect($balances)->filter(fn (int $balance): bool => $balance > 0)->sum();
-    }
-
     private function reverseOwnInventory(int $companyId, User $actor, PesadaRecepcionPolloVivo $weighing): void
     {
         $inventory = InventarioJava::query()
@@ -1073,13 +1040,13 @@ class LiveChickenReceptionService
             ->lockForUpdate()
             ->first();
 
-        if (! $inventory || (int) $inventory->cantidad_total < (int) $weighing->cantidad_javas) {
+        if (! $inventory) {
             throw ValidationException::withMessages([
-                'weighing' => 'No se puede anular porque el total actual de javas ya no cubre esta recepción.',
+                'weighing' => 'No existe el inventario general que respalda esta pesada.',
             ]);
         }
 
-        $this->assertJavaInventoryCanBeReversed($companyId, $inventory, $weighing);
+        $this->assertJavaInventoryCanBeReversed($companyId, $weighing);
 
         if ($weighing->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE) {
             $stock = DB::table('existencias_almacen')
@@ -1128,9 +1095,12 @@ class LiveChickenReceptionService
 
     private function assertJavaInventoryCanBeReversed(
         int $companyId,
-        InventarioJava $inventory,
         PesadaRecepcionPolloVivo $weighing,
     ): void {
+        if ($weighing->destino_tipo !== PesadaRecepcionPolloVivo::DESTINATION_CLIENT) {
+            return;
+        }
+
         $movements = MovimientoJava::query()
             ->where('empresa_id', $companyId)
             ->lockForUpdate()
@@ -1160,36 +1130,23 @@ class LiveChickenReceptionService
             $balances[$clientId] = ($balances[$clientId] ?? 0) + (int) $adjustment->diferencia_javas;
         }
 
-        if ($weighing->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_CLIENT) {
-            $directMovement = $movements->first(
-                fn (MovimientoJava $movement): bool => (int) $movement->pesada_recepcion_pollo_vivo_id === (int) $weighing->id,
-            );
+        $directMovement = $movements->first(
+            fn (MovimientoJava $movement): bool => (int) $movement->pesada_recepcion_pollo_vivo_id === (int) $weighing->id,
+        );
 
-            if (! $directMovement
-                || (int) $directMovement->cantidad !== (int) $weighing->cantidad_javas) {
-                throw ValidationException::withMessages([
-                    'weighing' => 'No se puede anular porque el despacho de javas ya no coincide con esta pesada.',
-                ]);
-            }
-
-            $clientId = (int) $directMovement->cliente_id;
-            $balances[$clientId] = ($balances[$clientId] ?? 0) - (int) $directMovement->cantidad;
-
-            if ($balances[$clientId] < 0) {
-                throw ValidationException::withMessages([
-                    'weighing' => 'No se puede anular porque el cliente ya devolvió javas asociadas a este despacho.',
-                ]);
-            }
+        if (! $directMovement
+            || (int) $directMovement->cantidad !== (int) $weighing->cantidad_javas) {
+            throw ValidationException::withMessages([
+                'weighing' => 'No se puede anular porque el despacho de javas ya no coincide con esta pesada.',
+            ]);
         }
 
-        $nextInventoryTotal = (int) $inventory->cantidad_total - (int) $weighing->cantidad_javas;
-        $assignedToClients = (int) collect($balances)
-            ->filter(fn (int $balance): bool => $balance > 0)
-            ->sum();
+        $clientId = (int) $directMovement->cliente_id;
+        $balances[$clientId] = ($balances[$clientId] ?? 0) - (int) $directMovement->cantidad;
 
-        if ($nextInventoryTotal < $assignedToClients) {
+        if ($balances[$clientId] < 0) {
             throw ValidationException::withMessages([
-                'weighing' => "No se puede anular: quedarían {$assignedToClients} javas con clientes y solo {$nextInventoryTotal} en el inventario general.",
+                'weighing' => 'No se puede anular porque el cliente ya devolvió javas asociadas a este despacho.',
             ]);
         }
     }

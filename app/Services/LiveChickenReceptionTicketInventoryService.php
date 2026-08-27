@@ -108,19 +108,6 @@ class LiveChickenReceptionTicketInventoryService
         $currentTotal = (int) ($inventory?->cantidad_total ?? 0);
         $nextTotal = $currentTotal + $delta;
 
-        if ($nextTotal < 0) {
-            throw ValidationException::withMessages([
-                'cages' => 'La corrección dejaría negativo el inventario general de javas.',
-            ]);
-        }
-
-        $assignedToClients = $this->assignedCages($companyId);
-        if ($nextTotal < $assignedToClients) {
-            throw ValidationException::withMessages([
-                'cages' => "No se puede reducir el ingreso: quedarían {$assignedToClients} javas con clientes y solo {$nextTotal} en el inventario general.",
-            ]);
-        }
-
         $changed = $forceRevision;
         if ($inventory) {
             if ($delta !== 0) {
@@ -265,33 +252,5 @@ class LiveChickenReceptionTicketInventoryService
         }
 
         return $changed;
-    }
-
-    private function assignedCages(int $companyId): int
-    {
-        $balances = [];
-        $movements = MovimientoJava::query()
-            ->where('empresa_id', $companyId)
-            ->lockForUpdate()
-            ->get(['cliente_id', 'tipo', 'cantidad']);
-
-        foreach ($movements as $movement) {
-            $clientId = (int) $movement->cliente_id;
-            $balances[$clientId] = ($balances[$clientId] ?? 0) + match ($movement->tipo) {
-                MovimientoJava::TYPE_DISPATCH => (int) $movement->cantidad,
-                MovimientoJava::TYPE_RECEIPT => -(int) $movement->cantidad,
-                default => 0,
-            };
-        }
-
-        foreach (DB::table('ajustes_saldos_javas')
-            ->where('empresa_id', $companyId)
-            ->lockForUpdate()
-            ->get(['cliente_id', 'diferencia_javas']) as $adjustment) {
-            $clientId = (int) $adjustment->cliente_id;
-            $balances[$clientId] = ($balances[$clientId] ?? 0) + (int) $adjustment->diferencia_javas;
-        }
-
-        return (int) collect($balances)->filter(fn (int $balance): bool => $balance > 0)->sum();
     }
 }

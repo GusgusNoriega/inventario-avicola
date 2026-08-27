@@ -500,6 +500,13 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
         )->assertCreated();
         $ticketId = (int) $created->json('ticket.id');
 
+        DB::table('inventarios_javas')
+            ->where('empresa_id', $this->user->empresa_id)
+            ->update([
+                'cantidad_total' => -4,
+                'cantidad_total_bandejas' => -6,
+            ]);
+
         $this->postJson("/api/v1/operacion/tickets/{$ticketId}/anular", [
             'motivo' => 'Ticket de recepción duplicado',
         ])->assertOk()
@@ -510,7 +517,10 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             'cantidad_javas_aplicada' => 0,
             'revision' => 2,
         ]);
-        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 0]);
+        $this->assertDatabaseHas('inventarios_javas', [
+            'cantidad_total' => -7,
+            'cantidad_total_bandejas' => -6,
+        ]);
         $this->assertDatabaseHas('movimientos_inventario', [
             'ticket_id' => $ticketId,
             'estado' => 'ANULADO',
