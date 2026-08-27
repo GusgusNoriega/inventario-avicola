@@ -38,6 +38,8 @@ class TicketDespacho extends Model
 
     public const SOURCE_WHOLESALE_TWO = 'MODULO_DESPACHO_MAYORISTA_2';
 
+    public const SOURCE_LIVE_CHICKEN_RECEPTION = 'MODULO_RECEPCION_POLLO_VIVO';
+
     public const PUBLIC_SALE_LABEL = 'Venta público';
 
     public const OPERATION_DISPATCH = 'DESPACHO';
@@ -128,6 +130,14 @@ class TicketDespacho extends Model
     public function movimientoJavas(): HasOne
     {
         return $this->hasOne(MovimientoJava::class, 'ticket_despacho_id');
+    }
+
+    /**
+     * @return HasOne<RecepcionPolloVivoTicket, $this>
+     */
+    public function recepcionPolloVivo(): HasOne
+    {
+        return $this->hasOne(RecepcionPolloVivoTicket::class, 'ticket_despacho_id');
     }
 
     public function resolvedDeliveryMode(): ?string

@@ -668,6 +668,18 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        DB::table('recepcion_pollo_vivo_tickets')->insert([
+            'recepcion_id' => $liveReceptionId,
+            'ticket_despacho_id' => $ticketId,
+            'movimiento_inventario_id' => $inventoryMovementId,
+            'columna' => 5,
+            'request_hash' => hash('sha256', 'cleanup-fixture'),
+            'cantidad_javas_aplicada' => 1,
+            'revision' => 1,
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         DB::table('movimiento_detalles')->insert([
             'movimiento_id' => $inventoryMovementId,
             'pesada_id' => $weighingId,

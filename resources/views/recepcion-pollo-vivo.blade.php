@@ -114,18 +114,18 @@
 
       <div class="lir-lane-group is-client-group">
         <header class="lir-lane-group-head">
-          <div><span>Recepción y despacho automático</span><strong>Siempre para mi empresa</strong></div>
-          <small>Elige el cliente y el sexo; la recepción y el despacho se guardan juntos.</small>
+          <div><span>Tickets de despacho Mayorista 1</span><strong>Dos borradores independientes</strong></div>
+          <small>Agrega pesadas, revisa los totales y registra cada ticket cuando esté completo.</small>
         </header>
         <div class="lir-lanes is-client-lanes">
         @for ($lane = 5; $lane <= 6; $lane++)
-          <article class="lir-lane is-client is-own-lane" data-live-lane="{{ $lane }}">
+          <article class="lir-lane is-client is-own-lane lir-ticket-draft" data-live-lane="{{ $lane }}">
             <header class="lir-direct-lane-head">
               <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="false">
                 <span>Columna {{ $lane }}</span>
-                <strong>Recepción + despacho simultáneo</strong>
-                <em id="liveIntakeLaneProfile{{ $lane }}">Mi empresa · Sexo al registrar</em>
-                <small>Próximo despacho: <b id="liveIntakeLaneDestination{{ $lane }}">Sin cliente</b></small>
+                <strong>Ticket de despacho</strong>
+                <em id="liveIntakeLaneProfile{{ $lane }}">Mayorista 1 · Borrador vacío</em>
+                <small>Cliente: <b id="liveIntakeLaneDestination{{ $lane }}">Sin cliente</b></small>
               </button>
               <button
                 id="liveIntakeChooseClient{{ $lane }}"
@@ -139,12 +139,15 @@
               >Elegir cliente</button>
             </header>
             <div id="liveIntakeLaneRows{{ $lane }}" class="lir-lane-rows">
-              <p class="lir-empty-lane">Aún no hay pesadas</p>
+              <p class="lir-empty-lane">Agrega la primera pesada del ticket</p>
             </div>
-            <footer>
-              <span><b id="liveIntakeLaneCages{{ $lane }}">0</b> javas</span>
-              <span><b id="liveIntakeLaneBirds{{ $lane }}">0</b> pollos</span>
-              <strong id="liveIntakeLaneNet{{ $lane }}">0.000 kg</strong>
+            <footer class="lir-ticket-draft-footer">
+              <div class="lir-ticket-draft-totals">
+                <span><b id="liveIntakeLaneCages{{ $lane }}">0</b> javas</span>
+                <span><b id="liveIntakeLaneBirds{{ $lane }}">0</b> pollos</span>
+                <strong id="liveIntakeLaneNet{{ $lane }}">0.000 kg</strong>
+              </div>
+              <button class="lir-register-ticket" type="button" data-live-register-ticket="{{ $lane }}" disabled>Registrar ticket</button>
             </footer>
           </article>
         @endfor
@@ -217,6 +220,75 @@
       </section>
       <p id="liveIntakeClientMessage" class="lir-message" role="status" aria-live="polite"></p>
     </section>
+  </div>
+
+  <div id="liveIntakeDeliveryTruckModal" class="lir-modal" hidden>
+    <section class="lir-modal-card is-fleet-picker" role="dialog" aria-modal="true" aria-labelledby="liveIntakeDeliveryTruckTitle">
+      <header>
+        <div><p>Paso 1 de 2 · Entrega</p><h2 id="liveIntakeDeliveryTruckTitle">Seleccionar camión</h2></div>
+        <button type="button" data-live-close-delivery aria-label="Cerrar selección de transporte">×</button>
+      </header>
+      <section class="lir-fleet-picker-body">
+        <p id="liveIntakeDeliveryTruckHelp" class="lir-modal-help">Selecciona el camión que entregará este ticket.</p>
+        <label class="lir-client-search-field"><span>Buscar en mi flota</span><input id="liveIntakeDeliveryTruckSearch" type="search" placeholder="Placa, marca o modelo…" autocomplete="off"></label>
+        <div id="liveIntakeDeliveryTruckOptions" class="lir-fleet-options" role="listbox" aria-label="Camiones disponibles"></div>
+      </section>
+    </section>
+  </div>
+
+  <div id="liveIntakeDeliveryDriverModal" class="lir-modal" hidden>
+    <section class="lir-modal-card is-fleet-picker" role="dialog" aria-modal="true" aria-labelledby="liveIntakeDeliveryDriverTitle">
+      <header>
+        <div><p>Paso 2 de 2 · Entrega</p><h2 id="liveIntakeDeliveryDriverTitle">Seleccionar chofer</h2></div>
+        <button type="button" data-live-close-delivery aria-label="Cerrar selección de transporte">×</button>
+      </header>
+      <section class="lir-fleet-picker-body">
+        <p id="liveIntakeDeliveryDriverHelp" class="lir-modal-help">Selecciona el chofer responsable de la entrega.</p>
+        <label class="lir-client-search-field"><span>Buscar chofer</span><input id="liveIntakeDeliveryDriverSearch" type="search" placeholder="Nombre o documento…" autocomplete="off"></label>
+        <div id="liveIntakeDeliveryDriverOptions" class="lir-fleet-options" role="listbox" aria-label="Choferes disponibles"></div>
+      </section>
+    </section>
+  </div>
+
+  <div id="liveIntakeWeighingEditorModal" class="lir-modal" hidden>
+    <form id="liveIntakeWeighingEditorForm" class="lir-modal-card is-weighing-editor" role="dialog" aria-modal="true" aria-labelledby="liveIntakeWeighingEditorTitle">
+      <header>
+        <div><p id="liveIntakeWeighingEditorCaption">Corrección de pesada</p><h2 id="liveIntakeWeighingEditorTitle">Editar pesada</h2></div>
+        <button type="button" data-live-close-weighing-editor aria-label="Cerrar editor de pesada">×</button>
+      </header>
+      <section class="lir-editor-grid">
+        <label><span>Sexo</span><select id="liveIntakeEditSex"><option value="MACHO">Macho</option><option value="HEMBRA">Hembra</option></select></label>
+        <label><span>Tipo de java</span><select id="liveIntakeEditCageType"></select></label>
+        <label><span>Aves por java</span><input id="liveIntakeEditBirdsPerCage" type="number" min="1" max="1000" step="1" inputmode="numeric"></label>
+        <label><span>Cantidad de javas</span><input id="liveIntakeEditCageCount" type="number" min="1" max="10000" step="1" inputmode="numeric"></label>
+        <label><span>Peso leído (kg)</span><input id="liveIntakeEditWeight" type="number" min="0.001" step="0.001" inputmode="decimal"></label>
+        <label><span>Fecha y hora</span><input id="liveIntakeEditWeighedAt" type="datetime-local" step="1"></label>
+        <label class="lir-editor-reason"><span>Motivo de la corrección</span><input id="liveIntakeEditReason" type="text" minlength="3" maxlength="250" required placeholder="Ej. Corrección de lectura"></label>
+      </section>
+      <p id="liveIntakeWeighingEditorMessage" class="lir-message" role="status" aria-live="polite"></p>
+      <footer><button type="button" data-live-close-weighing-editor>Cancelar</button><button class="is-primary" type="submit">Guardar pesada</button></footer>
+    </form>
+  </div>
+
+  <div id="liveIntakeTicketEditorModal" class="lir-modal" hidden>
+    <form id="liveIntakeTicketEditorForm" class="lir-modal-card is-ticket-editor" role="dialog" aria-modal="true" aria-labelledby="liveIntakeTicketEditorTitle">
+      <header>
+        <div><p>Ticket registrado</p><h2 id="liveIntakeTicketEditorTitle">Cargando ticket…</h2><small id="liveIntakeTicketEditorClient">Espere un momento</small></div>
+        <button type="button" data-live-close-ticket-editor aria-label="Cerrar editor de ticket">×</button>
+      </header>
+      <section id="liveIntakeTicketEditorSummary" class="lir-ticket-editor-summary"></section>
+      <section class="lir-ticket-editor-content">
+        <p class="lir-modal-help">Puedes corregir todas las pesadas y guardarlas juntas. El cliente se conserva para mantener la trazabilidad del despacho.</p>
+        <div id="liveIntakeTicketEditorRows" class="lir-ticket-editor-rows"><p class="lir-client-empty">Cargando pesadas…</p></div>
+        <label class="lir-ticket-correction-reason"><span>Motivo de la corrección</span><input id="liveIntakeTicketEditReason" type="text" minlength="3" maxlength="250" required placeholder="Ej. Corrección del ticket completo"></label>
+      </section>
+      <p id="liveIntakeTicketEditorMessage" class="lir-message" role="status" aria-live="polite"></p>
+      <footer>
+        <button id="liveIntakePrintTicket" type="button" disabled>Imprimir ticket</button>
+        <button type="button" data-live-close-ticket-editor>Cancelar</button>
+        <button id="liveIntakeSaveTicket" class="is-primary" type="submit" disabled>Actualizar ticket completo</button>
+      </footer>
+    </form>
   </div>
 
   <div id="liveIntakeScaleSettingsModal" class="lir-modal" hidden>

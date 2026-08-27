@@ -3,7 +3,6 @@
 namespace App\Http\Requests\LiveChickenReception;
 
 use App\Models\Balanza;
-use App\Models\Pesada;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,24 +17,13 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'layout_version' => ['required', 'integer', Rule::in([3])],
+            'layout_version' => ['required', 'integer', Rule::in([3, 4])],
             'idempotency_key' => ['required', 'uuid'],
-            'lane' => ['required', 'integer', 'between:1,6'],
+            'lane' => ['required', 'integer', Rule::in([1, 2, 3, 4])],
             'owner_type' => ['prohibited'],
             'external_owner_id' => ['prohibited'],
-            'sex' => [
-                Rule::prohibitedIf(fn (): bool => in_array((int) $this->input('lane'), [1, 2, 3, 4], true)),
-                Rule::requiredIf(fn (): bool => in_array((int) $this->input('lane'), [5, 6], true)),
-                'nullable',
-                Rule::in([Pesada::SEX_MALE, Pesada::SEX_FEMALE]),
-            ],
-            'dispatch_client_id' => [
-                Rule::prohibitedIf(fn (): bool => in_array((int) $this->input('lane'), [1, 2, 3, 4], true)),
-                Rule::requiredIf(fn (): bool => in_array((int) $this->input('lane'), [5, 6], true)),
-                'nullable',
-                'integer',
-                'min:1',
-            ],
+            'sex' => ['prohibited'],
+            'dispatch_client_id' => ['prohibited'],
             'cage_type_id' => ['required', 'integer', 'min:1'],
             'birds_per_cage' => ['required', 'integer', 'between:1,1000'],
             'cage_count' => ['required', 'integer', 'between:1,10000'],
@@ -60,16 +48,11 @@ class StoreLiveChickenReceptionWeighingRequest extends FormRequest
             'layout_version.required' => 'Actualiza la vista de recepción antes de registrar otra pesada.',
             'layout_version.in' => 'La distribución de columnas cambió. Recarga la vista antes de continuar.',
             'idempotency_key.required' => 'No se recibió el identificador único de la pesada.',
-            'lane.between' => 'Selecciona una de las seis columnas de recepción.',
+            'lane.in' => 'Las pesadas de entrada solo se registran en las columnas 1 a 4.',
             'owner_type.prohibited' => 'El propietario se define automáticamente según la columna.',
             'external_owner_id.prohibited' => 'La empresa externa se toma de la configuración de esta vista.',
             'sex.prohibited' => 'El sexo se define automáticamente en las columnas 1 a 4.',
-            'sex.required' => 'Selecciona si los pollos del despacho directo son machos o hembras.',
-            'sex.in' => 'Selecciona si los pollos son machos o hembras.',
-            'dispatch_client_id.prohibited' => 'El cliente de despacho solo aplica a las columnas 5 y 6.',
-            'dispatch_client_id.required' => 'Selecciona el cliente que recibirá este despacho directo.',
-            'dispatch_client_id.integer' => 'Selecciona un cliente de despacho válido.',
-            'dispatch_client_id.min' => 'Selecciona un cliente de despacho válido.',
+            'dispatch_client_id.prohibited' => 'Los despachos se registran como tickets desde las columnas 5 y 6.',
             'cage_type_id.required' => 'Selecciona el tipo de java.',
             'birds_per_cage.between' => 'La cantidad de aves por java debe estar entre 1 y 1000.',
             'cage_count.between' => 'La cantidad de javas debe estar entre 1 y 10000.',

@@ -16,6 +16,7 @@ class FinancialTicketLifecycleService
         private readonly FinancialObligationService $financialObligations,
         private readonly AccessAuditService $audit,
         private readonly TicketVoidWeighingResolver $voidedRecords,
+        private readonly LiveChickenReceptionTicketInventoryService $receptionTicketInventory,
     ) {}
 
     /**
@@ -65,6 +66,7 @@ class FinancialTicketLifecycleService
             $ticketId,
             $ip,
         ): array {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $ticket = TicketDespacho::query()
                 ->whereKey($ticketId)
                 ->whereHas(
@@ -142,6 +144,7 @@ class FinancialTicketLifecycleService
                 $companyId,
                 (int) $ticket->jornada->sucursal_id,
             );
+            $this->receptionTicketInventory->sync($companyId, $actor, $ticket);
             $restoredJavaMovement = DB::table('movimientos_javas')
                 ->where('ticket_despacho_id', $ticket->id)
                 ->first();

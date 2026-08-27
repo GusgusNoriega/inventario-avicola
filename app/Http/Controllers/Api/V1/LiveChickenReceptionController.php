@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LiveChickenReception\StoreLiveChickenReceptionWeighingRequest;
 use App\Http\Requests\LiveChickenReception\UpdateLiveChickenReceptionConfigurationRequest;
+use App\Http\Requests\LiveChickenReception\UpdateLiveChickenReceptionWeighingRequest;
 use App\Services\LiveChickenReceptionService;
 use App\Services\OperationContextService;
 use Illuminate\Http\JsonResponse;
@@ -85,6 +86,28 @@ class LiveChickenReceptionController extends Controller
         return response()->json([
             'data' => $this->reception->overview($companyId, $branch),
             'message' => 'Pesada anulada y totales corregidos.',
+        ]);
+    }
+
+    public function update(
+        UpdateLiveChickenReceptionWeighingRequest $request,
+        int $weighing,
+    ): JsonResponse {
+        $branch = $this->context->branch($request);
+        $companyId = $this->context->companyId($request);
+        $actor = $this->context->actor($request, (int) $branch->id);
+        $this->reception->update(
+            $companyId,
+            $branch,
+            $actor,
+            $weighing,
+            $request->validated(),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'data' => $this->reception->overview($companyId, $branch),
+            'message' => 'Pesada de recepción actualizada y totales corregidos.',
         ]);
     }
 }

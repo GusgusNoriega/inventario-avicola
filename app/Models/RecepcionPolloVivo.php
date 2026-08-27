@@ -30,4 +30,9 @@ class RecepcionPolloVivo extends Model
     {
         return $this->hasMany(PesadaRecepcionPolloVivo::class, 'recepcion_id');
     }
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(RecepcionPolloVivoTicket::class, 'recepcion_id');
+    }
 }

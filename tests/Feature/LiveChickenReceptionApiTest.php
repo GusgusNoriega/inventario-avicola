@@ -40,6 +40,12 @@ class LiveChickenReceptionApiTest extends TestCase
 
     private int $cageTypeId;
 
+    private int $liveChickenTypeId;
+
+    private int $deliveryVehicleId;
+
+    private int $deliveryDriverId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -58,7 +64,7 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->grantModules($this->user, ['MODULO_RECEPCION_POLLO_VIVO']);
         Sanctum::actingAs($this->user, ['api']);
 
-        DB::table('tipos_pollo')->insert([
+        $this->liveChickenTypeId = DB::table('tipos_pollo')->insertGetId([
             'codigo' => TipoPollo::CHICKEN_LIVE,
             'nombre' => 'Pollo vivo',
             'permite_despacho' => true,
@@ -79,6 +85,46 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->clientFiveId = $this->createParty('20100000001', 'Cliente externo 1', TerceroRole::CLIENT);
         $this->clientSixId = $this->createParty('20100000002', 'Cliente externo 2', TerceroRole::CLIENT);
         $this->externalOwnerId = $this->createParty('20900000001', 'Empresa del hermano', TerceroRole::PROVIDER);
+        $priceListId = DB::table('listas_precios')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => null,
+            'codigo' => 'GENERAL-RECEPCION',
+            'nombre' => 'Lista general recepción',
+            'operacion' => 'VENTA',
+            'estado' => 'ACTIVO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('precios_historial')->insert([
+            'lista_precio_id' => $priceListId,
+            'tipo_pollo_id' => $this->liveChickenTypeId,
+            'precio_kg' => 8.75,
+            'vigente_desde' => now()->subMinute(),
+            'vigente_hasta' => null,
+            'registrado_por' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        $this->deliveryVehicleId = DB::table('vehiculos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'placa' => 'REC-001',
+            'marca' => 'Hino',
+            'modelo' => '300',
+            'es_propio' => true,
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->deliveryDriverId = DB::table('conductores')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'nombre_completo' => 'Chofer de recepción',
+            'tipo_documento' => 'CC',
+            'numero_documento' => '10990001',
+            'telefono' => '3001234567',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     public function test_catalog_exposes_six_effective_lanes_and_external_owner_options(): void
@@ -108,6 +154,8 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonCount(2, 'data.catalog.warehouses')
             ->assertJsonCount(2, 'data.catalog.clients')
             ->assertJsonCount(1, 'data.catalog.external_owners')
+            ->assertJsonPath('data.catalog.delivery_trucks.0.id', $this->deliveryVehicleId)
+            ->assertJsonPath('data.catalog.delivery_drivers.0.id', $this->deliveryDriverId)
             ->assertJsonPath('data.totals.daily.weighings', 0);
     }
 
@@ -175,6 +223,66 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('comprobantes', 0);
     }
 
+    public function test_native_reception_weighing_can_be_updated_as_one_entry(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        $updatedAt = (string) $created->json('data.records.0.updated_at');
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $updatedAt,
+            'correction_reason' => 'Corrección de la captura de entrada',
+            'sex' => Pesada::SEX_FEMALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 3,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 120,
+            'weighed_at' => now('America/Lima')->subSeconds(30)->toIso8601String(),
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.record_kind', 'reception_weighing')
+            ->assertJsonPath('data.records.0.lane', 2)
+            ->assertJsonPath('data.records.0.sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('data.records.0.cages', 3)
+            ->assertJsonPath('data.records.0.birds', 24)
+            ->assertJsonPath('data.records.0.net_weight_kg', 99);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'columna' => 2,
+            'almacen_destino_id' => $this->warehouseTwoId,
+            'sexo' => Pesada::SEX_FEMALE,
+            'cantidad_javas' => 3,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 3]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseOneId,
+            'cantidad_aves' => 0,
+            'peso_neto_kg' => 0,
+        ]);
+        $this->assertDatabaseHas('existencias_almacen', [
+            'almacen_id' => $this->warehouseTwoId,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
+        ]);
+        $this->assertDatabaseHas('movimiento_detalles', [
+            'pesada_recepcion_pollo_vivo_id' => $weighingId,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
+        ]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'almacen_destino_id' => $this->warehouseTwoId,
+            'estado' => 'CONFIRMADO',
+        ]);
+    }
+
     public function test_warehouse_lane_profiles_define_owner_and_sex_without_client_overrides(): void
     {
         $this->saveConfiguration();
@@ -219,29 +327,29 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('movimientos_inventario', 0);
     }
 
-    public function test_direct_lanes_require_sex_client_and_the_current_layout_version(): void
+    public function test_direct_lanes_require_the_ticket_endpoint_and_current_layout(): void
     {
         $this->saveConfiguration();
 
         $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
             'lane' => 5,
-            'dispatch_client_id' => $this->clientFiveId,
         ]))
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('sex');
+            ->assertJsonValidationErrors('lane');
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
-            'lane' => 5,
-            'sex' => Pesada::SEX_MALE,
-        ]))->assertUnprocessable()
+        $invalid = $this->ticketPayload();
+        unset($invalid['dispatch_client_id']);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $invalid)
+            ->assertUnprocessable()
             ->assertJsonValidationErrors('dispatch_client_id');
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
-            'layout_version' => 2,
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
+            'layout_version' => 3,
         ]))->assertUnprocessable()
             ->assertJsonValidationErrors('layout_version');
 
         $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 0);
+        $this->assertDatabaseCount('tickets_despacho', 0);
     }
 
     public function test_warehouse_lanes_prohibit_a_dispatch_client_override(): void
@@ -259,27 +367,38 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('movimientos_javas', 0);
     }
 
-    public function test_own_direct_lane_dispatches_to_client_without_entering_warehouse(): void
+    public function test_reception_ticket_creates_standard_weighing_and_one_set_of_side_effects(): void
     {
         $this->saveConfiguration();
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
             'lane' => 5,
-            'sex' => Pesada::SEX_MALE,
             'dispatch_client_id' => $this->clientSixId,
         ]))
             ->assertCreated()
-            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
-            ->assertJsonPath('data.records.0.destination.type', PesadaRecepcionPolloVivo::DESTINATION_CLIENT)
+            ->assertJsonPath('ticket.source_module', 'MODULO_RECEPCION_POLLO_VIVO')
+            ->assertJsonPath('ticket.reception_lane', 5)
+            ->assertJsonPath('data.records.0.record_kind', 'dispatch_ticket')
+            ->assertJsonPath('data.records.0.lane', 1)
+            ->assertJsonPath('data.records.0.source_lane', 5)
             ->assertJsonPath('data.records.0.destination.id', $this->clientSixId)
-            ->assertJsonPath('data.totals.lanes.5.birds', 14);
+            ->assertJsonPath('data.totals.lanes.1.birds', 14);
 
         $this->assertDatabaseCount('existencias_almacen', 0);
-        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+        $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 0);
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
             'columna' => 5,
-            'propietario_tipo' => PesadaRecepcionPolloVivo::OWNER_OWN,
-            'destino_tipo' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+            'cantidad_javas_aplicada' => 2,
+        ]);
+        $this->assertDatabaseHas('tickets_despacho', [
+            'modulo_origen' => 'MODULO_RECEPCION_POLLO_VIVO',
             'cliente_destino_id' => $this->clientSixId,
+            'estado' => 'CERRADO',
+        ]);
+        $this->assertDatabaseHas('pesadas', [
+            'sexo' => Pesada::SEX_MALE,
+            'cantidad_javas' => 2,
+            'cantidad_aves' => 14,
         ]);
         $this->assertDatabaseHas('inventarios_javas', [
             'empresa_id' => $this->user->empresa_id,
@@ -294,24 +413,22 @@ class LiveChickenReceptionApiTest extends TestCase
             'cliente_id' => $this->clientSixId,
             'tipo' => 'DESPACHO',
             'cantidad' => 2,
-            'ticket_despacho_id' => null,
         ]);
         $this->assertDatabaseMissing('movimientos_inventario', [
             'tercero_destino_id' => $this->clientFiveId,
         ]);
-        $this->assertDatabaseCount('tickets_despacho', 0);
-        $this->assertDatabaseCount('comprobantes', 0);
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('comprobantes', 1);
     }
 
-    public function test_direct_lane_is_always_own_and_rejects_an_external_owner_override(): void
+    public function test_reception_ticket_lane_is_always_own_and_rejects_owner_overrides(): void
     {
         $this->saveConfiguration();
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
             'lane' => 6,
             'owner_type' => PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
             'external_owner_id' => $this->externalOwnerId,
-            'sex' => Pesada::SEX_FEMALE,
             'dispatch_client_id' => $this->clientFiveId,
         ]))->assertUnprocessable()
             ->assertJsonValidationErrors(['owner_type', 'external_owner_id']);
@@ -320,11 +437,12 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('movimientos_javas', 0);
         $this->assertDatabaseCount('inventarios_javas', 0);
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
             'lane' => 6,
-            'sex' => Pesada::SEX_FEMALE,
             'dispatch_client_id' => $this->clientFiveId,
+            'weighings' => [$this->ticketWeighing(['sex' => Pesada::SEX_FEMALE])],
         ]))->assertCreated()
+            ->assertJsonPath('data.records.0.record_kind', 'dispatch_ticket')
             ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
             ->assertJsonPath('data.records.0.destination.id', $this->clientFiveId)
             ->assertJsonPath('data.records.0.sex', Pesada::SEX_FEMALE)
@@ -351,32 +469,91 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
     }
 
-    public function test_repeating_a_direct_capture_keeps_the_original_dynamic_client(): void
+    public function test_reception_ticket_retry_requires_the_exact_original_payload(): void
     {
         $this->saveConfiguration();
-        $payload = $this->payload([
+        $payload = $this->ticketPayload([
             'lane' => 5,
-            'sex' => Pesada::SEX_MALE,
             'dispatch_client_id' => $this->clientSixId,
         ]);
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $payload)->assertCreated();
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', [
-            ...$payload,
-            'dispatch_client_id' => $this->clientFiveId,
-        ])->assertOk()
-            ->assertJsonPath('already_registered', true)
-            ->assertJsonPath('data.records.0.destination.id', $this->clientSixId);
+        $created = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertCreated();
+        $ticketId = (int) $created->json('ticket.id');
+        $this->assertSame(64, strlen((string) DB::table('recepcion_pollo_vivo_tickets')
+            ->where('ticket_despacho_id', $ticketId)
+            ->value('request_hash')));
 
-        $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 1);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true)
+            ->assertJsonPath('ticket.id', $ticketId)
+            ->assertJsonPath('ticket.reception_lane', 5)
+            ->assertJsonPath('ticket.destination.id', $this->clientSixId);
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', [
+            ...$payload,
+            'lane' => 6,
+            'dispatch_client_id' => $this->clientFiveId,
+        ])->assertConflict();
+
+        $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 0);
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('recepcion_pollo_vivo_tickets', 1);
         $this->assertDatabaseCount('movimientos_inventario', 1);
         $this->assertDatabaseCount('movimientos_javas', 1);
-        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+        $this->assertDatabaseHas('tickets_despacho', [
             'cliente_destino_id' => $this->clientSixId,
         ]);
-        $this->assertDatabaseMissing('pesadas_recepcion_pollo_vivo', [
+        $this->assertDatabaseMissing('tickets_despacho', [
             'cliente_destino_id' => $this->clientFiveId,
         ]);
+    }
+
+    public function test_exact_ticket_retry_survives_closed_journey_and_inactive_catalogs(): void
+    {
+        $this->saveConfiguration();
+        $payload = $this->ticketPayload();
+        $created = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertCreated();
+        $ticketId = (int) $created->json('ticket.id');
+        $journeyId = (int) DB::table('tickets_despacho')
+            ->where('id', $ticketId)
+            ->value('jornada_id');
+
+        DB::table('jornadas_operativas')->where('id', $journeyId)->update([
+            'estado' => JornadaOperativa::STATUS_CLOSED,
+        ]);
+        DB::table('terceros')->where('id', $this->clientFiveId)->update([
+            'estado' => 'INACTIVO',
+        ]);
+        DB::table('vehiculos')->where('id', $this->deliveryVehicleId)->update([
+            'estado' => 'INACTIVO',
+        ]);
+        DB::table('conductores')->where('id', $this->deliveryDriverId)->update([
+            'estado' => 'INACTIVO',
+        ]);
+        DB::table('tipos_java')->where('id', $this->cageTypeId)->update([
+            'estado' => 'INACTIVO',
+        ]);
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true)
+            ->assertJsonPath('ticket.id', $ticketId)
+            ->assertJsonPath('ticket.editable', false);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', [
+            ...$payload,
+            'weighings' => [[
+                ...$payload['weighings'][0],
+                'read_weight_kg' => 101,
+            ]],
+        ])->assertConflict();
+
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('recepcion_pollo_vivo_tickets', 1);
     }
 
     public function test_physical_scale_capture_keeps_its_audit_reading(): void
@@ -392,9 +569,14 @@ class LiveChickenReceptionApiTest extends TestCase
             ],
         ]);
 
-        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $payload)
+        $created = $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $payload)
             ->assertCreated()
             ->assertJsonPath('data.records.0.weight_source', Balanza::CODE_LIVE_CHICKEN_RECEPTION);
+        $weighingId = (int) $created->json('weighing_id');
+        $updatedAt = (string) $created->json('data.records.0.updated_at');
+        $readingId = (int) DB::table('pesadas_recepcion_pollo_vivo')
+            ->where('id', $weighingId)
+            ->value('lectura_balanza_id');
 
         $this->assertDatabaseHas('balanzas', [
             'sucursal_id' => $this->branchId,
@@ -405,6 +587,95 @@ class LiveChickenReceptionApiTest extends TestCase
             'trama_cruda' => 'ST,GS 100.000 kg',
             'modo_conexion' => 'SERIAL',
             'dispositivo' => 'Puerto COM de prueba',
+        ]);
+
+        $preservePayload = [
+            'layout_version' => 4,
+            'expected_updated_at' => $updatedAt,
+            'correction_reason' => 'Corrección de sexo sin reemplazar la lectura',
+            'sex' => Pesada::SEX_FEMALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 8,
+            'cage_count' => 2,
+            'read_weight_kg' => 100,
+            'weighed_at' => now('America/Lima')->subSeconds(30)->toIso8601String(),
+        ];
+        $preserved = $this->putJson(
+            "/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}",
+            $preservePayload,
+        )->assertOk()
+            ->assertJsonPath('data.records.0.weight_source', Balanza::CODE_LIVE_CHICKEN_RECEPTION);
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'lectura_balanza_id' => $readingId,
+            'origen_peso' => Balanza::CODE_LIVE_CHICKEN_RECEPTION,
+        ]);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $readingId,
+            'trama_cruda' => 'ST,GS 100.000 kg',
+        ]);
+
+        $this->putJson(
+            "/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}",
+            $preservePayload,
+        )->assertConflict();
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            ...$preservePayload,
+            'expected_updated_at' => $preserved->json('data.records.0.updated_at'),
+            'correction_reason' => 'Corrección manual del peso leído',
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 105,
+        ])->assertOk()
+            ->assertJsonPath('data.records.0.weight_source', 'MANUAL');
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'lectura_balanza_id' => null,
+            'origen_peso' => 'MANUAL',
+        ]);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+    }
+
+    public function test_native_correction_can_keep_its_inactive_cage_type_snapshot(): void
+    {
+        $this->saveConfiguration();
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/pesadas',
+            $this->payload(),
+        )->assertCreated();
+        $weighingId = (int) $created->json('weighing_id');
+        DB::table('tipos_java')->where('id', $this->cageTypeId)->update([
+            'estado' => 'INACTIVO',
+            'peso_kg' => 99,
+        ]);
+
+        $overview = $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk();
+        $inactiveType = collect($overview->json('data.catalog.cage_types'))
+            ->firstWhere('id', $this->cageTypeId);
+        $this->assertNotNull($inactiveType);
+        $this->assertFalse($inactiveType['active']);
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}", [
+            'layout_version' => 4,
+            'expected_updated_at' => $overview->json('data.records.0.updated_at'),
+            'correction_reason' => 'Conservar el tipo histórico de java',
+            'sex' => Pesada::SEX_MALE,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 110,
+            'weighed_at' => now('America/Lima')->subSeconds(30)->toIso8601String(),
+        ])->assertOk();
+
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'id' => $weighingId,
+            'tipo_java_id' => $this->cageTypeId,
+            'peso_java_kg_snapshot' => 7,
+            'tara_total_kg' => 14,
         ]);
     }
 
@@ -435,85 +706,93 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseHas('movimientos_inventario', ['estado' => 'ANULADO']);
     }
 
-    public function test_voiding_direct_weighing_reverses_the_dynamically_selected_client(): void
+    public function test_registered_reception_ticket_can_be_loaded_and_all_weighings_updated(): void
     {
         $this->saveConfiguration();
-        $weighingId = (int) $this->postJson(
-            '/api/v1/recepcion-pollo-vivo/pesadas',
-            $this->payload([
-                'lane' => 5,
-                'sex' => Pesada::SEX_MALE,
-                'dispatch_client_id' => $this->clientSixId,
-            ]),
-        )->assertCreated()->json('weighing_id');
-        $movementId = (int) DB::table('movimiento_detalles')
-            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
-            ->value('movimiento_id');
-        $javaMovementId = (int) DB::table('movimientos_javas')
-            ->where('pesada_recepcion_pollo_vivo_id', $weighingId)
-            ->value('id');
-
-        $this->deleteJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}")
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/tickets',
+            $this->ticketPayload(['dispatch_client_id' => $this->clientSixId]),
+        )->assertCreated();
+        $ticketId = (int) $created->json('ticket.id');
+        $loaded = $this->getJson("/api/v1/recepcion-pollo-vivo/tickets/{$ticketId}")
             ->assertOk()
-            ->assertJsonPath('data.totals.daily.weighings', 0);
+            ->assertJsonPath('data.ticket.id', $ticketId)
+            ->assertJsonPath('data.ticket.destination.id', $this->clientSixId)
+            ->assertJsonPath('data.ticket.weighings.0.cages', 2);
+        $revision = (int) $loaded->json('data.ticket.link_revision');
+        $weighingId = (int) $loaded->json('data.ticket.weighings.0.id');
 
-        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+        $this->putJson("/api/v1/recepcion-pollo-vivo/tickets/{$ticketId}", [
+            'layout_version' => 4,
+            'expected_revision' => $revision,
+            'correction_reason' => 'Corrección integral del ticket',
+            'weighings' => [[
+                'id' => $weighingId,
+                'sex' => Pesada::SEX_FEMALE,
+                'cage_type_id' => $this->cageTypeId,
+                'birds_per_cage' => 8,
+                'cage_count' => 3,
+                'weight_source' => 'MANUAL',
+                'read_weight_kg' => 120,
+                'weighed_at' => now('America/Lima')->subSeconds(30)->toIso8601String(),
+            ]],
+        ])->assertOk()
+            ->assertJsonPath('ticket.link_revision', $revision + 1)
+            ->assertJsonPath('ticket.weighings.0.chicken_sex', Pesada::SEX_FEMALE)
+            ->assertJsonPath('ticket.weighings.0.cages', 3)
+            ->assertJsonPath('data.records.0.record_kind', 'dispatch_ticket')
+            ->assertJsonPath('data.records.0.lane', 2);
+
+        $this->assertDatabaseHas('pesadas', [
             'id' => $weighingId,
-            'cliente_destino_id' => $this->clientSixId,
-            'estado' => PesadaRecepcionPolloVivo::STATUS_VOIDED,
+            'sexo' => Pesada::SEX_FEMALE,
+            'cantidad_javas' => 3,
+            'cantidad_aves' => 24,
+            'peso_neto_kg' => 99,
         ]);
-        $this->assertDatabaseHas('movimientos_inventario', [
-            'id' => $movementId,
-            'tercero_destino_id' => $this->clientSixId,
-            'estado' => 'ANULADO',
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 3]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticketId,
+            'cantidad' => 3,
         ]);
-        $this->assertDatabaseMissing('movimientos_javas', [
-            'id' => $javaMovementId,
-        ]);
-        $this->assertDatabaseHas('inventarios_javas', [
-            'empresa_id' => $this->user->empresa_id,
-            'cantidad_total' => 0,
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
+            'ticket_despacho_id' => $ticketId,
+            'cantidad_javas_aplicada' => 3,
+            'revision' => $revision + 1,
         ]);
     }
 
-    public function test_direct_weighing_cannot_be_voided_after_the_client_returned_its_cages(): void
+    public function test_ticket_update_rejects_a_stale_revision(): void
     {
         $this->saveConfiguration();
-        $weighingId = (int) $this->postJson(
-            '/api/v1/recepcion-pollo-vivo/pesadas',
-            $this->payload([
-                'lane' => 5,
+        $created = $this->postJson(
+            '/api/v1/recepcion-pollo-vivo/tickets',
+            $this->ticketPayload(),
+        )->assertCreated();
+        $ticketId = (int) $created->json('ticket.id');
+        $weighing = $created->json('ticket.weighings.0');
+        $staleRevision = (int) $created->json('ticket.link_revision') - 1;
+
+        $this->putJson("/api/v1/recepcion-pollo-vivo/tickets/{$ticketId}", [
+            'layout_version' => 4,
+            'expected_revision' => $staleRevision,
+            'correction_reason' => 'Intento con versión anterior',
+            'weighings' => [[
+                'id' => $weighing['id'],
                 'sex' => Pesada::SEX_MALE,
-                'dispatch_client_id' => $this->clientFiveId,
-            ]),
-        )->assertCreated()->json('weighing_id');
-        $weighing = PesadaRecepcionPolloVivo::query()
-            ->with('recepcion:id,jornada_id')
-            ->findOrFail($weighingId);
+                'cage_type_id' => $this->cageTypeId,
+                'birds_per_cage' => 7,
+                'cage_count' => 3,
+                'read_weight_kg' => 120,
+                'weighed_at' => now('America/Lima')->subMinute()->toIso8601String(),
+            ]],
+        ])->assertConflict();
 
-        MovimientoJava::query()->create([
-            'empresa_id' => $this->user->empresa_id,
-            'sucursal_id' => $this->branchId,
-            'jornada_id' => $weighing->recepcion->jornada_id,
-            'cliente_id' => $this->clientFiveId,
-            'tipo' => MovimientoJava::TYPE_RECEIPT,
-            'cantidad' => 2,
-            'cantidad_bandejas' => 0,
-            'fecha_movimiento' => now(),
-            'observaciones' => 'Devolución posterior de prueba.',
-            'created_by' => $this->user->id,
-        ]);
-
-        $this->deleteJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}")
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('weighing');
-
-        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
-            'id' => $weighingId,
-            'estado' => PesadaRecepcionPolloVivo::STATUS_ACTIVE,
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighing['id'],
+            'cantidad_javas' => 2,
         ]);
         $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
-        $this->assertDatabaseCount('movimientos_javas', 2);
     }
 
     public function test_warehouse_weighing_cannot_reduce_inventory_below_cages_assigned_to_clients(): void
@@ -598,7 +877,7 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('configuraciones_recepcion_pollo_vivo', 0);
     }
 
-    public function test_direct_capture_rejects_invalid_clients_without_side_effects(): void
+    public function test_reception_ticket_rejects_invalid_clients_without_side_effects(): void
     {
         $this->saveConfiguration();
         $otherUser = User::factory()->create();
@@ -619,13 +898,29 @@ class LiveChickenReceptionApiTest extends TestCase
         $providerOnlyId = $this->createParty('20777777774', 'Solo proveedor', TerceroRole::PROVIDER);
 
         foreach ([$otherClient->id, $inactiveClientId, $internalClientId, $providerOnlyId] as $invalidClientId) {
-            $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload([
+            $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
                 'lane' => 6,
-                'sex' => Pesada::SEX_FEMALE,
                 'dispatch_client_id' => $invalidClientId,
             ]))->assertUnprocessable()
                 ->assertJsonValidationErrors('dispatch_client_id');
         }
+
+        DB::table('vehiculos')->where('id', $this->deliveryVehicleId)->update(['estado' => 'INACTIVO']);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('delivery_vehicle_id');
+        DB::table('vehiculos')->where('id', $this->deliveryVehicleId)->update(['estado' => 'ACTIVO']);
+
+        DB::table('conductores')->where('id', $this->deliveryDriverId)->update(['estado' => 'INACTIVO']);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('delivery_driver_id');
+        DB::table('conductores')->where('id', $this->deliveryDriverId)->update(['estado' => 'ACTIVO']);
+
+        DB::table('tipos_java')->where('id', $this->cageTypeId)->update(['estado' => 'INACTIVO']);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.cage_type_id');
 
         $this->assertDatabaseCount('jornadas_operativas', 0);
         $this->assertDatabaseCount('recepciones_pollo_vivo', 0);
@@ -641,12 +936,16 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->saveConfiguration();
         $legacyOwnDirectId = (int) $this->postJson(
             '/api/v1/recepcion-pollo-vivo/pesadas',
-            $this->payload([
-                'lane' => 5,
-                'sex' => Pesada::SEX_MALE,
-                'dispatch_client_id' => $this->clientFiveId,
-            ]),
+            $this->payload(['lane' => 1]),
         )->assertCreated()->json('weighing_id');
+        DB::table('pesadas_recepcion_pollo_vivo')
+            ->where('id', $legacyOwnDirectId)
+            ->update([
+                'columna' => 5,
+                'destino_tipo' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+                'almacen_destino_id' => null,
+                'cliente_destino_id' => $this->clientFiveId,
+            ]);
         $legacyOwnMaleInLaneTwoId = (int) $this->postJson(
             '/api/v1/recepcion-pollo-vivo/pesadas',
             $this->payload(['lane' => 2]),
@@ -805,6 +1104,37 @@ class LiveChickenReceptionApiTest extends TestCase
             'layout_version' => 3,
             'idempotency_key' => (string) Str::uuid(),
             'lane' => 1,
+            'cage_type_id' => $this->cageTypeId,
+            'birds_per_cage' => 7,
+            'cage_count' => 2,
+            'weight_source' => 'MANUAL',
+            'read_weight_kg' => 100,
+            'weighed_at' => now('America/Lima')->subMinute()->toIso8601String(),
+            ...$overrides,
+        ];
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function ticketPayload(array $overrides = []): array
+    {
+        return [
+            'layout_version' => 4,
+            'draft_id' => (string) Str::uuid(),
+            'lane' => 5,
+            'dispatch_client_id' => $this->clientFiveId,
+            'delivery_vehicle_id' => $this->deliveryVehicleId,
+            'delivery_driver_id' => $this->deliveryDriverId,
+            'weighings' => [$this->ticketWeighing()],
+            ...$overrides,
+        ];
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function ticketWeighing(array $overrides = []): array
+    {
+        return [
+            'idempotency_key' => (string) Str::uuid(),
+            'sex' => Pesada::SEX_MALE,
             'cage_type_id' => $this->cageTypeId,
             'birds_per_cage' => 7,
             'cage_count' => 2,

@@ -12,7 +12,7 @@ class LiveChickenReceptionViewTest extends TestCase
     use InteractsWithAccessControl;
     use RefreshDatabase;
 
-    public function test_view_is_independent_and_contains_the_six_lane_touch_workflow(): void
+    public function test_view_is_independent_and_contains_reception_lanes_and_two_ticket_drafts(): void
     {
         $user = User::factory()->create();
         $this->grantModules($user, ['MODULO_RECEPCION_POLLO_VIVO']);
@@ -31,10 +31,12 @@ class LiveChickenReceptionViewTest extends TestCase
             ->assertSee('Asignación automática')
             ->assertSee('Cuatro columnas por propietario y sexo')
             ->assertSee('Entrada a almacén')
-            ->assertSee('Recepción y despacho automático')
-            ->assertSee('Recepción + despacho simultáneo')
+            ->assertSee('Tickets de despacho Mayorista 1')
+            ->assertSee('Dos borradores independientes')
+            ->assertSee('Ticket de despacho')
+            ->assertSee('Registrar ticket')
             ->assertSee('Elegir cliente')
-            ->assertSee('Próximo despacho')
+            ->assertSee('Cliente:')
             ->assertSee('Columna 6')
             ->assertSee('Columna seleccionada')
             ->assertSee('Zoom de la vista')
@@ -64,6 +66,11 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('id="liveIntakeManualWeightModal"', $view);
         $this->assertStringContainsString('id="liveIntakeClientModal"', $view);
         $this->assertStringContainsString('id="liveIntakeClientSearch"', $view);
+        $this->assertStringContainsString('id="liveIntakeDeliveryTruckModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeDeliveryDriverModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeWeighingEditorModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeTicketEditorModal"', $view);
+        $this->assertStringContainsString('id="liveIntakeTicketEditReason"', $view);
         $this->assertStringContainsString('role="region" aria-label="Clientes disponibles"', $view);
         $this->assertMatchesRegularExpression(
             '/<header class="lir-direct-lane-head">[\s\S]*?<button class="lir-lane-select"[\s\S]*?<\/button>\s*<button[\s\S]*?data-live-choose-client=/u',
@@ -76,10 +83,18 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('ZOOM_STORAGE_KEY', $javascript);
         $this->assertStringContainsString('document.documentElement.style.zoom', $javascript);
         $this->assertStringContainsString('/recepcion-pollo-vivo/pesadas', $javascript);
+        $this->assertStringContainsString('/recepcion-pollo-vivo/tickets', $javascript);
+        $this->assertStringContainsString('printWeightControlTicket', $javascript);
+        $this->assertStringContainsString('data-live-open-ticket', $javascript);
+        $this->assertStringContainsString('data-live-edit-weighing', $javascript);
+        $this->assertStringContainsString('data-live-edit-draft-weighing', $javascript);
+        $this->assertStringContainsString('function addCaptureToDispatchDraft', $javascript);
+        $this->assertStringContainsString('function submitDispatchTicket', $javascript);
+        $this->assertStringContainsString('function saveTicketEditor', $javascript);
         $this->assertStringContainsString('data-live-select-lane', $javascript);
         $this->assertStringContainsString('const LANE_NUMBERS = [1, 2, 3, 4, 5, 6]', $javascript);
         $this->assertStringContainsString('layout_version: LAYOUT_VERSION', $javascript);
-        $this->assertStringContainsString('const LAYOUT_VERSION = 3', $javascript);
+        $this->assertStringContainsString('const LAYOUT_VERSION = 4', $javascript);
         $this->assertStringContainsString('dispatch_client_id', $javascript);
         $this->assertStringContainsString('function openClientPicker', $javascript);
         $this->assertStringContainsString('function captureRequestPayload', $javascript);
@@ -93,6 +108,9 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('.lir-lane.is-client', $stylesheet);
         $this->assertStringContainsString('.lir-client-picker-trigger', $stylesheet);
         $this->assertStringContainsString('.lir-client-options', $stylesheet);
+        $this->assertStringContainsString('.lir-ticket-record', $stylesheet);
+        $this->assertStringContainsString('.lir-ticket-weighing-editor', $stylesheet);
+        $this->assertStringContainsString('.lir-register-ticket', $stylesheet);
         $this->assertStringContainsString('grid-template-rows: auto minmax(0, 1fr) auto', $stylesheet);
         $this->assertStringContainsString('.lir-selected-total { position: static;', $stylesheet);
     }

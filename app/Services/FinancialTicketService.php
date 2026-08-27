@@ -29,6 +29,7 @@ class FinancialTicketService
         private readonly FinancialObligationService $financialObligations,
         private readonly JavaControlService $javaControl,
         private readonly TicketVoidWeighingResolver $voidedRecords,
+        private readonly LiveChickenReceptionTicketInventoryService $receptionTicketInventory,
     ) {}
 
     /**
@@ -212,6 +213,7 @@ class FinancialTicketService
             $dateTime,
             $ip,
         ): array {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $ticket = $this->editableTicket($companyId, $ticketId);
 
             if ($ticket->estado !== TicketDespacho::STATUS_CLOSED) {
@@ -396,6 +398,7 @@ class FinancialTicketService
                 $companyId,
                 (int) $journeyContext->sucursal_id,
             );
+            $this->receptionTicketInventory->sync($companyId, $actor, $ticket);
             $this->syncFinancialDocument($companyId, $ticket, $actor);
 
             return $this->freshFormattedTicket($companyId, (int) $ticket->id);
@@ -413,10 +416,17 @@ class FinancialTicketService
         ?string $ip,
     ): array {
         return DB::transaction(function () use ($companyId, $actor, $ticketId, $clientId, $ip): array {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $ticket = $this->editableTicket($companyId, $ticketId);
             $isInternalClient = (bool) DB::table('terceros')
                 ->where('id', $clientId)
                 ->value('es_cliente_interno');
+            if ($ticket->modulo_origen === TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION
+                && $isInternalClient) {
+                throw ValidationException::withMessages([
+                    'cliente_id' => 'Los tickets creados desde Recepción de pollo vivo solo pueden mantener clientes externos.',
+                ]);
+            }
             $before = [
                 'cliente_destino_id' => $ticket->cliente_destino_id === null
                     ? null
@@ -482,6 +492,7 @@ class FinancialTicketService
                     $companyId,
                     (int) $ticket->jornada->sucursal_id,
                 );
+                $this->receptionTicketInventory->sync($companyId, $actor, $ticket);
                 $this->syncFinancialDocument($companyId, $ticket, $actor, true);
             }
 
@@ -862,6 +873,10 @@ class FinancialTicketService
             })
             ->values()
             ->all();
+        $canEditWeighings = $ticket->estado === TicketDespacho::STATUS_CLOSED
+            && $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $ticket->modulo_origen !== TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION
+            && $records->isNotEmpty();
 
         return [
             'id' => (int) $ticket->id,
@@ -874,6 +889,7 @@ class FinancialTicketService
                 ]
                 : null,
             'channel' => (string) $ticket->canal,
+            'source_module' => $ticket->modulo_origen,
             'operation_type' => (string) $ticket->tipo_operacion,
             'status' => (string) $ticket->estado,
             'registered_at' => $this->formattedRegisteredAt($ticket, $timezone),
@@ -892,9 +908,12 @@ class FinancialTicketService
             'amount' => $amount,
             'prices' => $prices,
             'weighing_count' => $ticket->pesadas->count(),
-            'can_edit_weighings' => $ticket->estado === TicketDespacho::STATUS_CLOSED
-                && $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
-                && $records->isNotEmpty(),
+            'can_edit_weighings' => $canEditWeighings,
+            'weighing_edit_restriction' => $canEditWeighings
+                ? null
+                : ($ticket->modulo_origen === TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION
+                    ? 'Las pesadas de este ticket se editan completas desde Recepción de pollo vivo.'
+                    : null),
             'can_edit_prices' => $ticket->estado !== TicketDespacho::STATUS_VOIDED
                 && $prices !== [],
             'can_change_client' => $ticket->estado !== TicketDespacho::STATUS_VOIDED

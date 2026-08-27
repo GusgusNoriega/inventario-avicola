@@ -17,6 +17,7 @@ class DispatchTicketVoidService
         private readonly FinancialObligationService $financialObligations,
         private readonly FinancialMovementService $financialMovements,
         private readonly AccessAuditService $audit,
+        private readonly LiveChickenReceptionTicketInventoryService $receptionTicketInventory,
     ) {}
 
     /**
@@ -50,6 +51,7 @@ class DispatchTicketVoidService
             $reason,
             $ip,
         ): array {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $ticket = TicketDespacho::query()
                 ->whereKey($ticketId)
                 ->whereHas(
@@ -136,6 +138,7 @@ class DispatchTicketVoidService
             $ticket->refresh();
 
             $this->javaControl->syncDispatchMovement($ticket, $companyId, $branchId);
+            $this->receptionTicketInventory->sync($companyId, $actor, $ticket);
             $movementAfter = DB::table('movimientos_javas')
                 ->where('ticket_despacho_id', $ticket->id)
                 ->first();

@@ -140,8 +140,70 @@ button, select { touch-action: manipulation; }
 .lir-weighing-row > div { color: var(--lir-muted); font-size: .63rem; }
 .lir-weighing-row > footer { margin-top: 5px; padding-top: 5px; border-top: 1px solid #233649; }
 .lir-weighing-row > footer b { color: var(--lir-text); font-size: .72rem; }
-.lir-lane footer { position: static; min-height: 50px; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 7px; border-top: 1px solid var(--lir-border); background: #0b1724; font-size: .7rem; }
-.lir-lane footer strong { grid-column: 1 / -1; color: var(--lir-green); font-size: .88rem; }
+.lir-lane > footer { position: static; min-height: 50px; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 7px; border-top: 1px solid var(--lir-border); background: #0b1724; font-size: .7rem; }
+.lir-lane > footer strong { grid-column: 1 / -1; color: var(--lir-green); font-size: .88rem; }
+
+.lir-ticket-draft .lir-direct-lane-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; }
+.lir-ticket-draft .lir-client-picker-trigger { width: auto; min-width: 132px; margin: 8px; }
+.lir-ticket-draft .lir-client-picker-trigger:disabled { border-color: #45586a; background: #172434; color: #91a0ae; }
+.lir-ticket-draft-footer { grid-template-columns: minmax(0, 1fr) minmax(142px, .45fr) !important; align-items: stretch; gap: 8px !important; }
+.lir-ticket-draft-totals { min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; align-content: center; }
+.lir-ticket-draft-totals strong { grid-column: 1 / -1; color: var(--lir-green); font-size: .88rem; }
+.lir-register-ticket { min-height: 50px; padding: 0 12px; border: 1px solid var(--lir-green); border-radius: 10px; background: var(--lir-green); color: #062016; font-weight: 900; }
+.lir-register-ticket:disabled { border-color: var(--lir-border); background: #1b2a39; color: #718191; opacity: .72; }
+
+.lir-weighing-row.is-clickable, .lir-ticket-record.is-clickable { cursor: pointer; transition: border-color .15s, transform .15s, background .15s; }
+.lir-weighing-row.is-clickable:hover, .lir-weighing-row.is-clickable:focus-visible,
+.lir-ticket-record.is-clickable:hover, .lir-ticket-record.is-clickable:focus-visible { border-color: var(--lir-blue); background: #102235; outline: 3px solid rgba(108, 184, 255, .2); outline-offset: 1px; transform: translateY(-1px); }
+.lir-weighing-row.is-readonly { opacity: .78; }
+.lir-readonly-chip { padding: 3px 6px; border: 1px solid #5f6670; border-radius: 999px; color: #b2bac3 !important; }
+.lir-draft-weighing { border-left-color: var(--lir-amber); }
+.lir-draft-weighing > strong { color: var(--lir-amber); }
+
+.lir-ticket-record { padding: 8px; border: 1px solid #42617c; border-left: 4px solid var(--lir-blue); border-radius: 10px; background: #0b1a29; }
+.lir-ticket-record > header, .lir-ticket-record > div, .lir-ticket-record > footer { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.lir-ticket-record > header small, .lir-ticket-record > footer small { color: var(--lir-muted); font-size: .62rem; }
+.lir-ticket-status { padding: 3px 7px; border-radius: 999px; background: rgba(84, 216, 139, .14); color: var(--lir-green); font-size: .62rem; font-weight: 900; text-transform: uppercase; }
+.lir-ticket-record > strong { display: block; margin: 6px 0 2px; color: var(--lir-blue); font-size: .82rem; }
+.lir-ticket-client { display: block; margin-bottom: 7px; overflow: hidden; color: var(--lir-text); font-size: .72rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.lir-ticket-record > div { color: var(--lir-muted); font-size: .63rem; }
+.lir-ticket-record > footer { margin-top: 6px; padding-top: 6px; border-top: 1px solid #2a4054; background: transparent; }
+.lir-ticket-record > footer b { color: var(--lir-green); font-size: .76rem; }
+
+.lir-expired-draft { margin: auto 0; padding: 12px; display: grid; gap: 8px; border: 1px solid var(--lir-red); border-radius: 10px; background: rgba(255, 127, 129, .08); text-align: center; }
+.lir-expired-draft strong { color: var(--lir-red); }
+.lir-expired-draft span { color: var(--lir-muted); font-size: .72rem; line-height: 1.4; }
+.lir-expired-draft button { min-height: 46px; border: 1px solid var(--lir-red); border-radius: 9px; background: transparent; color: var(--lir-red); font-weight: 900; }
+
+.lir-modal-card.is-fleet-picker { width: min(620px, 100%); max-height: calc(100dvh - 32px); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.lir-fleet-picker-body { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; overflow: hidden; }
+.lir-fleet-options { min-height: 0; display: grid; align-content: start; gap: 8px; overflow-y: auto; }
+.lir-fleet-option { width: 100%; min-height: 62px; padding: 10px 12px; display: grid; gap: 3px; text-align: left; }
+.lir-fleet-option strong, .lir-fleet-option small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lir-fleet-option strong { color: var(--lir-text); }
+.lir-fleet-option small { color: var(--lir-muted); font-size: .7rem; }
+.lir-fleet-option:hover, .lir-fleet-option:focus-visible { border-color: var(--lir-green); background: var(--lir-green-dark); outline: 3px solid rgba(84, 216, 139, .18); }
+
+.lir-modal-card.is-weighing-editor { width: min(760px, 100%); }
+.lir-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.lir-editor-reason { grid-column: 1 / -1; }
+.lir-modal-card.is-ticket-editor { width: min(1120px, 100%); }
+.lir-modal-card.is-ticket-editor > header small { display: block; margin-top: 4px; color: var(--lir-muted); }
+.lir-ticket-editor-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; background: #0b1724; }
+.lir-ticket-editor-summary span { min-width: 0; padding: 8px; border: 1px solid var(--lir-border); border-radius: 9px; }
+.lir-ticket-editor-summary small, .lir-ticket-editor-summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lir-ticket-editor-summary small { color: var(--lir-muted); font-size: .62rem; font-weight: 800; text-transform: uppercase; }
+.lir-ticket-editor-summary strong { margin-top: 3px; font-size: .78rem; }
+.lir-ticket-editor-summary .is-net strong { color: var(--lir-green); }
+.lir-ticket-editor-content { display: grid; gap: 12px; }
+.lir-ticket-editor-rows { display: grid; gap: 10px; }
+.lir-ticket-weighing-editor { margin: 0; padding: 10px; display: grid; grid-template-columns: repeat(6, minmax(105px, 1fr)); gap: 8px; border: 1px solid #36516a; border-radius: 11px; background: #0a1623; }
+.lir-ticket-weighing-editor legend { width: 100%; padding: 0 6px; display: flex; justify-content: space-between; color: var(--lir-blue); font-size: .75rem; font-weight: 900; }
+.lir-ticket-weighing-editor label span, .lir-ticket-correction-reason span { display: block; margin-bottom: 5px; color: var(--lir-muted); font-size: .65rem; font-weight: 800; text-transform: uppercase; }
+.lir-ticket-weighing-editor input, .lir-ticket-weighing-editor select, .lir-ticket-correction-reason input { width: 100%; min-height: 46px; padding: 0 8px; border: 1px solid var(--lir-border); border-radius: 9px; background: #07121d; color: var(--lir-text); }
+.lir-ticket-correction-reason { display: block; }
+.lir-ticket-editor .lir-message { padding: 10px 16px; }
+.ticket-print-frame { position: fixed; width: 1px; height: 1px; right: 0; bottom: 0; border: 0; opacity: 0; pointer-events: none; }
 
 .lir-selected-total { position: static; margin-top: 10px; padding: 9px 12px; border-radius: 14px; display: grid; grid-template-columns: 1.5fr repeat(5, .8fr); align-items: center; gap: 8px; border-color: #3c5c77; }
 .lir-selected-total > div { min-width: 0; padding-right: 8px; border-right: 1px solid var(--lir-border); }
@@ -204,6 +266,9 @@ button, select { touch-action: manipulation; }
   .lir-lane-group-head small { max-width: 230px; }
   .lir-lane.is-warehouse { height: 38vh; }
   .lir-lane.is-client { height: 28vh; }
+  .lir-ticket-draft { min-height: 390px !important; }
+  .lir-ticket-editor-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lir-ticket-weighing-editor { grid-template-columns: repeat(3, minmax(105px, 1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -229,12 +294,22 @@ button, select { touch-action: manipulation; }
   .lir-lane.is-client { min-height: 320px; }
   .lir-lane-select { min-height: 94px; padding: 8px; }
   .lir-direct-lane-head .lir-lane-select { min-height: 102px; }
+  .lir-ticket-draft .lir-direct-lane-head { grid-template-columns: 1fr; }
   .lir-client-picker-trigger { min-height: 48px; margin-inline: 6px; width: calc(100% - 12px); }
+  .lir-ticket-draft .lir-client-picker-trigger { width: calc(100% - 12px); margin: 0 6px 7px; }
+  .lir-ticket-draft-footer { grid-template-columns: 1fr !important; }
+  .lir-register-ticket { min-height: 52px; }
   .lir-modal-card.is-client-picker { max-height: calc(100dvh - 32px); }
   .lir-client-options { padding-bottom: env(safe-area-inset-bottom); }
   .lir-selected-total { grid-template-columns: repeat(3, 1fr); }
   .lir-selected-total > div:nth-child(3) { border-right: 0; }
   .lir-settings-grid, .lir-settings-grid.is-scale { grid-template-columns: 1fr; }
+  .lir-editor-grid { grid-template-columns: 1fr; }
+  .lir-editor-reason { grid-column: auto; }
+  .lir-ticket-editor-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lir-ticket-weighing-editor { grid-template-columns: 1fr 1fr; }
+  .lir-modal-card.is-ticket-editor > footer { flex-wrap: wrap; }
+  .lir-modal-card.is-ticket-editor > footer button { flex: 1 1 145px; }
 }
 
 @media (max-height: 850px) {

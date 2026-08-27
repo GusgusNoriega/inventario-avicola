@@ -14,6 +14,7 @@ use App\Models\TipoPollo;
 use App\Services\FinancialAuditService;
 use App\Services\FinancialObligationService;
 use App\Services\JavaControlService;
+use App\Services\LiveChickenReceptionTicketInventoryService;
 use App\Services\OperationContextService;
 use App\Services\TicketMessageService;
 use App\Services\TicketTitleService;
@@ -32,6 +33,7 @@ class TicketWeighingManagementController extends Controller
     public function __construct(
         private readonly OperationContextService $context,
         private readonly JavaControlService $javaControl,
+        private readonly LiveChickenReceptionTicketInventoryService $receptionTicketInventory,
         private readonly FinancialAuditService $financialAudit,
         private readonly FinancialObligationService $financialObligations,
         private readonly TicketMessageService $ticketMessages,
@@ -82,6 +84,11 @@ class TicketWeighingManagementController extends Controller
                 'status' => $ticket->estado,
                 'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
                 'editable' => $this->isEditable($ticket, $currentOperatingDate),
+                'edit_restriction' => $ticket->modulo_origen === TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION
+                    ? 'Las pesadas de este ticket se editan completas desde Recepción de pollo vivo.'
+                    : ($this->isEditable($ticket, $currentOperatingDate)
+                        ? null
+                        : 'Este ticket solo puede consultarse en esta vista.'),
                 'delivery_editable' => $this->isDeliveryEditable($ticket, $currentOperatingDate),
                 'delivery_mode' => $ticket->asignacion_transporte_posterior
                     ? $ticket->resolvedDeliveryMode()
@@ -249,6 +256,7 @@ class TicketWeighingManagementController extends Controller
         $selected = $allowHistoricalEditing
             ? $this->ticketForCompany($request, $ticket)
             : $this->ticketForBranch($request, $ticket);
+        $this->assertNotLiveChickenReceptionTicket($selected);
         $branch = $allowHistoricalEditing
             ? $this->branchForTicket($selected, $this->context->companyId($request))
             : $this->context->branch($request);
@@ -687,6 +695,12 @@ class TicketWeighingManagementController extends Controller
                 $companyId,
                 (int) $lockedBranch->id
             );
+            $this->receptionTicketInventory->sync(
+                $companyId,
+                $actor,
+                $lockedTicket,
+                true,
+            );
             $this->financialObligations->syncTicket(
                 $companyId,
                 $lockedTicket->fresh(),
@@ -726,6 +740,7 @@ class TicketWeighingManagementController extends Controller
     public function destroy(Request $request, int $ticket, int $weighing): JsonResponse
     {
         $selected = $this->ticketForBranch($request, $ticket);
+        $this->assertNotLiveChickenReceptionTicket($selected);
         $branch = $this->context->branch($request);
         $currentOperatingDate = $this->currentOperatingDate(
             (int) $branch->empresa_id,
@@ -773,6 +788,12 @@ class TicketWeighingManagementController extends Controller
                 $selected,
                 (int) $branch->empresa_id,
                 (int) $branch->id
+            );
+            $this->receptionTicketInventory->sync(
+                (int) $branch->empresa_id,
+                $actor,
+                $selected,
+                true,
             );
             $this->financialObligations->syncTicket(
                 (int) $branch->empresa_id,
@@ -876,6 +897,7 @@ class TicketWeighingManagementController extends Controller
         bool $allowHistoricalEditing = false,
     ): array {
         $records = $ticket->pesadas->where('estado', Pesada::STATUS_ACTIVE)->values();
+        $isLiveReception = $ticket->modulo_origen === TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION;
         $editable = $allowHistoricalEditing
             ? $this->isFinanceEditable($ticket)
             : $this->isEditable($ticket, $currentOperatingDate);
@@ -909,7 +931,9 @@ class TicketWeighingManagementController extends Controller
                 && $ticket->estado === TicketDespacho::STATUS_CLOSED,
             'edit_restriction' => $editable
                 ? null
-                : ($allowHistoricalEditing
+                : ($isLiveReception
+                    ? 'Las pesadas de este ticket se editan completas desde Recepción de pollo vivo.'
+                    : ($allowHistoricalEditing
                     ? ($ticket->estado !== TicketDespacho::STATUS_CLOSED
                         ? 'Solo se pueden corregir pesadas de tickets cerrados.'
                         : 'La edición histórica de pesadas está disponible únicamente para tickets mayoristas.')
@@ -917,7 +941,7 @@ class TicketWeighingManagementController extends Controller
                         ? ($deliveryEditable
                             ? 'Las pesadas minoristas son de solo consulta; el camión y el chofer se gestionan por separado.'
                             : 'Los tickets de despacho minorista solo pueden consultarse y reimprimirse en esta vista.')
-                        : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.')),
+                        : 'Este ticket pertenece a una jornada anterior y solo puede consultarse en esta vista.'))),
             'customer_type' => $this->customerType($ticket),
             'client' => $this->formatClient($ticket),
             'destination' => $this->formatDestination($ticket),
@@ -1074,6 +1098,7 @@ class TicketWeighingManagementController extends Controller
     private function isEditable(TicketDespacho $ticket, string $operatingDate): bool
     {
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $ticket->modulo_origen !== TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION
             && $ticket->estado !== TicketDespacho::STATUS_VOIDED
             && $this->isFromOperatingDate($ticket, $operatingDate);
     }
@@ -1081,6 +1106,7 @@ class TicketWeighingManagementController extends Controller
     private function isFinanceEditable(TicketDespacho $ticket): bool
     {
         return $ticket->canal === TicketDespacho::CHANNEL_WHOLESALE
+            && $ticket->modulo_origen !== TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION
             && $ticket->estado === TicketDespacho::STATUS_CLOSED;
     }
 
@@ -1232,6 +1258,15 @@ class TicketWeighingManagementController extends Controller
             $hasAppliedMovement,
             409,
             'No se puede modificar la pesada porque el ticket ya tiene cobros o pagos aplicados. Anula primero los movimientos financieros relacionados.'
+        );
+    }
+
+    private function assertNotLiveChickenReceptionTicket(TicketDespacho $ticket): void
+    {
+        abort_if(
+            $ticket->modulo_origen === TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION,
+            409,
+            'Las pesadas de este ticket se corrigen completas desde Recepción de pollo vivo.',
         );
     }
 

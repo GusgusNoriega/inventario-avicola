@@ -32,6 +32,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'comprobante_detalles',
         'comprobantes',
         'costos_compra_pesadas',
+        'recepcion_pollo_vivo_tickets',
         'movimiento_detalles',
         'movimientos_inventario',
         'ajustes_saldos_javas',

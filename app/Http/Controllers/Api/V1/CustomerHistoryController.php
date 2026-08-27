@@ -208,6 +208,7 @@ class CustomerHistoryController extends Controller
             'code' => $ticket->codigo,
             'operating_date' => $ticket->jornada->fecha_operativa?->format('Y-m-d'),
             'channel' => $ticket->canal,
+            'source_module' => $ticket->modulo_origen,
             'operation_type' => $ticket->tipo_operacion,
             'status' => $ticket->estado,
             'created_at' => $ticket->created_at?->toISOString(),

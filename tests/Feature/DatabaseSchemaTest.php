@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(108, $migrationFiles);
+        $this->assertCount(109, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -97,6 +97,7 @@ class DatabaseSchemaTest extends TestCase
             'configuraciones_recepcion_pollo_vivo',
             'recepciones_pollo_vivo',
             'pesadas_recepcion_pollo_vivo',
+            'recepcion_pollo_vivo_tickets',
             'movimientos_inventario',
             'movimiento_detalles',
             'existencias_almacen',
@@ -160,6 +161,7 @@ class DatabaseSchemaTest extends TestCase
             'configuraciones_recepcion_pollo_vivo' => ['sucursal_id', 'propietario_externo_predeterminado_id', 'almacen_columna_1_id', 'almacen_columna_2_id', 'almacen_columna_3_id', 'almacen_columna_4_id', 'cliente_columna_3_id', 'cliente_columna_4_id', 'updated_by'],
             'recepciones_pollo_vivo' => ['jornada_id', 'origen', 'estado', 'created_by'],
             'pesadas_recepcion_pollo_vivo' => ['recepcion_id', 'idempotency_key', 'numero', 'columna', 'propietario_tipo', 'propietario_externo_id', 'destino_tipo', 'almacen_destino_id', 'cliente_destino_id', 'sexo', 'tipo_pollo_id', 'tipo_java_id', 'lectura_balanza_id', 'origen_peso', 'aves_por_java', 'cantidad_javas', 'cantidad_aves', 'peso_java_kg_snapshot', 'peso_leido_kg', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg', 'pesada_at', 'estado', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_by'],
+            'recepcion_pollo_vivo_tickets' => ['recepcion_id', 'ticket_despacho_id', 'movimiento_inventario_id', 'columna', 'request_hash', 'cantidad_javas_aplicada', 'revision', 'created_by'],
             'movimientos_inventario' => ['tipo', 'almacen_origen_id', 'almacen_destino_id', 'estado', 'fecha_hora'],
             'movimiento_detalles' => ['movimiento_id', 'pesada_id', 'pesada_recepcion_pollo_vivo_id', 'tipo_pollo_id', 'cantidad_aves', 'peso_neto_kg'],
             'entidades_financieras' => ['empresa_id', 'tipo', 'proveedor_id', 'tipo_documento', 'numero_documento', 'razon_social', 'nombre_comercial', 'direccion', 'telefono', 'email', 'estado', 'created_by'],

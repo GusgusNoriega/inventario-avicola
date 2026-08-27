@@ -77,6 +77,11 @@ class PesadaRecepcionPolloVivo extends Model
         return $this->belongsTo(TipoJava::class, 'tipo_java_id');
     }
 
+    public function lecturaBalanza(): BelongsTo
+    {
+        return $this->belongsTo(LecturaBalanza::class, 'lectura_balanza_id');
+    }
+
     protected function casts(): array
     {
         return [

@@ -10,11 +10,14 @@ use App\Models\MovimientoJava;
 use App\Models\Pesada;
 use App\Models\PesadaRecepcionPolloVivo;
 use App\Models\RecepcionPolloVivo;
+use App\Models\RecepcionPolloVivoTicket;
 use App\Models\TerceroRole;
+use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -29,7 +32,11 @@ class LiveChickenReceptionService
         6 => ['destination_type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT, 'owner_type' => PesadaRecepcionPolloVivo::OWNER_OWN, 'sex' => null],
     ];
 
-    public function __construct(private readonly ScaleReadingService $scaleReadings) {}
+    public function __construct(
+        private readonly ScaleReadingService $scaleReadings,
+        private readonly FinancialAuditService $audit,
+        private readonly LiveChickenReceptionTicketInventoryService $receptionTicketInventory,
+    ) {}
 
     /** @return array<string, mixed> */
     public function overview(int $companyId, object $branch): array
@@ -55,7 +62,25 @@ class LiveChickenReceptionService
                 ->orderByDesc('numero')
                 ->get()
             : collect();
-        $catalog = $this->catalog($companyId, (int) $branch->id);
+        $formattedReceptionRecords = $records
+            ->map(fn (PesadaRecepcionPolloVivo $record): array => $this->formatRecord($record));
+        $dispatchTicketRecords = $this->dispatchTicketRecords($reception);
+        $displayRecords = $formattedReceptionRecords
+            ->concat($dispatchTicketRecords)
+            ->sortByDesc('weighed_at')
+            ->values();
+        $usedCageTypeIds = $records
+            ->pluck('tipo_java_id')
+            ->merge($dispatchTicketRecords->flatMap(
+                fn (array $record): Collection => collect($record['weighings'] ?? [])
+                    ->pluck('cage_type.id'),
+            ))
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+        $catalog = $this->catalog($companyId, (int) $branch->id, $usedCageTypeIds);
         $configuration = $this->effectiveConfiguration(
             (int) $branch->id,
             $catalog['warehouses'],
@@ -87,8 +112,9 @@ class LiveChickenReceptionService
             ] : null,
             'configuration' => $configuration,
             'catalog' => $catalog,
-            'records' => $records->map(fn (PesadaRecepcionPolloVivo $record): array => $this->formatRecord($record))->values(),
-            'totals' => $this->totals($records),
+            'records' => $displayRecords,
+            'dispatch_tickets' => $dispatchTicketRecords->values(),
+            'totals' => $this->totals($displayRecords),
         ];
     }
 
@@ -140,6 +166,7 @@ class LiveChickenReceptionService
         array $data,
     ): array {
         return DB::transaction(function () use ($companyId, $branch, $actor, $data): array {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $existing = PesadaRecepcionPolloVivo::query()
                 ->where('idempotency_key', $data['idempotency_key'])
                 ->lockForUpdate()
@@ -308,6 +335,7 @@ class LiveChickenReceptionService
         int $weighingId,
     ): void {
         DB::transaction(function () use ($companyId, $branch, $actor, $weighingId): void {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $weighing = PesadaRecepcionPolloVivo::query()
                 ->whereKey($weighingId)
                 ->whereHas('recepcion.jornada.sucursal', fn (Builder $query) => $query
@@ -348,8 +376,194 @@ class LiveChickenReceptionService
         }, 3);
     }
 
+    /** @param array<string, mixed> $data */
+    public function update(
+        int $companyId,
+        object $branch,
+        User $actor,
+        int $weighingId,
+        array $data,
+        ?string $ip = null,
+    ): void {
+        DB::transaction(function () use (
+            $companyId,
+            $branch,
+            $actor,
+            $weighingId,
+            $data,
+            $ip,
+        ): void {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
+            $record = PesadaRecepcionPolloVivo::query()
+                ->whereKey($weighingId)
+                ->whereHas('recepcion.jornada.sucursal', fn (Builder $query) => $query
+                    ->whereKey($branch->id)
+                    ->where('empresa_id', $companyId))
+                ->with(['recepcion.jornada', 'tipoJava', 'lecturaBalanza.balanza'])
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless($record->estado === PesadaRecepcionPolloVivo::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
+
+            if ($record->destino_tipo !== PesadaRecepcionPolloVivo::DESTINATION_WAREHOUSE) {
+                throw ValidationException::withMessages([
+                    'weighing' => 'Esta es una pesada histórica de despacho directo. Corrígela mediante un ticket registrado.',
+                ]);
+            }
+
+            $journey = $record->recepcion?->jornada;
+            $currentOperatingDate = $this->operatingDate($companyId, $branch->zona_horaria);
+            if (! $journey
+                || $journey->estado !== JornadaOperativa::STATUS_OPEN
+                || $journey->fecha_operativa?->toDateString() !== $currentOperatingDate->toDateString()) {
+                throw ValidationException::withMessages([
+                    'weighing' => 'Solo se pueden corregir pesadas de la jornada actual mientras esté abierta.',
+                ]);
+            }
+
+            if (filled($data['expected_updated_at'] ?? null)
+                && $record->updated_at
+                && CarbonImmutable::parse((string) $data['expected_updated_at'])->getTimestamp()
+                    !== $record->updated_at->getTimestamp()) {
+                abort(409, 'La pesada fue modificada por otro usuario. Vuelve a abrirla antes de guardar.');
+            }
+
+            $weighedAt = CarbonImmutable::parse((string) $data['weighed_at'])
+                ->setTimezone($branch->zona_horaria);
+            if ($weighedAt->greaterThan(CarbonImmutable::now($branch->zona_horaria)->addMinutes(5))) {
+                throw ValidationException::withMessages([
+                    'weighed_at' => 'La fecha de la pesada no puede estar en el futuro.',
+                ]);
+            }
+            if (! $this->operatingDate($companyId, $branch->zona_horaria, $weighedAt)
+                ->isSameDay($currentOperatingDate)) {
+                throw ValidationException::withMessages([
+                    'weighed_at' => 'La pesada corregida debe permanecer en la jornada operativa actual.',
+                ]);
+            }
+
+            $cageType = DB::table('tipos_java')
+                ->where('id', (int) $data['cage_type_id'])
+                ->lockForUpdate()
+                ->first(['id', 'peso_kg', 'estado']);
+            $keepsCurrentCageType = (int) $record->tipo_java_id === (int) ($cageType?->id ?? 0);
+            if (! $cageType || ($cageType->estado !== 'ACTIVO' && ! $keepsCurrentCageType)) {
+                throw ValidationException::withMessages([
+                    'cage_type_id' => 'El tipo de java seleccionado no está disponible.',
+                ]);
+            }
+
+            $catalog = $this->catalog($companyId, (int) $branch->id);
+            $configuration = $this->effectiveConfiguration(
+                (int) $branch->id,
+                $catalog['warehouses'],
+                $catalog['clients'],
+                $catalog['external_owners'],
+            );
+            $sex = (string) $data['sex'];
+            $newLane = $record->propietario_tipo === PesadaRecepcionPolloVivo::OWNER_OWN
+                ? ($sex === Pesada::SEX_MALE ? 1 : 2)
+                : ($sex === Pesada::SEX_MALE ? 3 : 4);
+            $newWarehouseId = (int) ($configuration['lanes'][(string) $newLane]['destination_id'] ?? 0);
+            if (! $newWarehouseId) {
+                throw ValidationException::withMessages([
+                    'sex' => 'Configura el almacén de la columna correspondiente antes de cambiar el sexo.',
+                ]);
+            }
+
+            $cages = (int) $data['cage_count'];
+            $birdsPerCage = (int) $data['birds_per_cage'];
+            $birds = $cages * $birdsPerCage;
+            $cageWeight = $keepsCurrentCageType
+                ? round((float) $record->peso_java_kg_snapshot, 3)
+                : round((float) $cageType->peso_kg, 3);
+            $grossWeight = round((float) $data['read_weight_kg'], 3);
+            $tareWeight = round($cages * $cageWeight, 3);
+            $netWeight = round($grossWeight - $tareWeight, 3);
+            if ($netWeight <= 0) {
+                throw ValidationException::withMessages([
+                    'read_weight_kg' => 'El peso leído debe ser mayor que la tara total de las javas.',
+                ]);
+            }
+
+            $weightChanged = abs($grossWeight - (float) $record->peso_leido_kg) > 0.0005;
+            $scaleReadingId = $record->lectura_balanza_id;
+            $storedWeightSource = (string) $record->origen_peso;
+            if ($weightChanged) {
+                $source = $this->changedWeightSource($record, $data, 'weight_source');
+                $scaleReading = $source === 'MANUAL'
+                    ? null
+                    : $this->recordChangedScaleReading(
+                        (int) $branch->id,
+                        $actor,
+                        $data,
+                        $source,
+                        $weighedAt,
+                        'weighing',
+                    );
+                $scaleReadingId = $scaleReading?->id;
+                $storedWeightSource = $source === 'MANUAL' ? 'MANUAL' : 'BALANZA';
+            }
+            $before = $record->attributesToArray();
+            $nextUpdatedAt = now();
+            if ($record->updated_at
+                && $nextUpdatedAt->getTimestamp() <= $record->updated_at->getTimestamp()) {
+                $nextUpdatedAt = $record->updated_at->copy()->addSecond();
+            }
+
+            if ($record->propietario_tipo === PesadaRecepcionPolloVivo::OWNER_OWN) {
+                $this->applyReceptionWeighingCorrection(
+                    $companyId,
+                    $actor,
+                    $record,
+                    $newWarehouseId,
+                    $cages,
+                    $birds,
+                    $netWeight,
+                    $weighedAt,
+                );
+            }
+
+            $record->fill([
+                'columna' => $newLane,
+                'almacen_destino_id' => $newWarehouseId,
+                'sexo' => $sex,
+                'tipo_java_id' => (int) $cageType->id,
+                'lectura_balanza_id' => $scaleReadingId,
+                'origen_peso' => $storedWeightSource,
+                'aves_por_java' => $birdsPerCage,
+                'cantidad_javas' => $cages,
+                'cantidad_aves' => $birds,
+                'peso_java_kg_snapshot' => $cageWeight,
+                'peso_leido_kg' => $grossWeight,
+                'peso_bruto_kg' => $grossWeight,
+                'tara_total_kg' => $tareWeight,
+                'peso_neto_kg' => $netWeight,
+                'pesada_at' => $weighedAt,
+            ]);
+            // `updated_at` no forma parte de los campos rellenables. Asignarlo
+            // explícitamente garantiza que cada corrección genere un token de
+            // concurrencia distinto, incluso dentro del mismo segundo.
+            $record->setUpdatedAt($nextUpdatedAt);
+            $record->save();
+            $this->audit->record(
+                $companyId,
+                (int) $actor->id,
+                'pesadas_recepcion_pollo_vivo',
+                (int) $record->id,
+                'ACTUALIZAR',
+                $before,
+                [
+                    ...$record->fresh()->attributesToArray(),
+                    'motivo_correccion' => trim((string) $data['correction_reason']),
+                ],
+                $ip,
+            );
+        }, 3);
+    }
+
     /** @return array<string, mixed> */
-    private function catalog(int $companyId, int $branchId): array
+    /** @param array<int, int> $usedCageTypeIds */
+    private function catalog(int $companyId, int $branchId, array $usedCageTypeIds = []): array
     {
         $warehouses = DB::table('almacenes')
             ->where('sucursal_id', $branchId)
@@ -391,15 +605,46 @@ class LiveChickenReceptionService
                 'document_number' => $row->numero_documento,
             ])->values();
         $cageTypes = DB::table('tipos_java')
-            ->where('estado', 'ACTIVO')
+            ->where(function ($query) use ($usedCageTypeIds): void {
+                $query->where('estado', 'ACTIVO');
+                if ($usedCageTypeIds !== []) {
+                    $query->orWhereIn('id', $usedCageTypeIds);
+                }
+            })
             ->orderByDesc('peso_kg')
             ->orderBy('id')
-            ->get(['id', 'codigo', 'nombre', 'peso_kg'])
+            ->get(['id', 'codigo', 'nombre', 'peso_kg', 'estado'])
             ->map(fn (object $row): array => [
                 'id' => (int) $row->id,
                 'code' => $row->codigo,
                 'name' => $row->nombre,
                 'weight_kg' => (float) $row->peso_kg,
+                'active' => $row->estado === 'ACTIVO',
+            ])->values();
+        $deliveryTrucks = DB::table('vehiculos')
+            ->where('empresa_id', $companyId)
+            ->where('estado', 'ACTIVO')
+            ->orderBy('placa')
+            ->get(['id', 'placa', 'marca', 'modelo', 'color', 'descripcion'])
+            ->map(fn (object $truck): array => [
+                'id' => (int) $truck->id,
+                'plate' => $truck->placa,
+                'brand' => $truck->marca,
+                'model' => $truck->modelo,
+                'color' => $truck->color,
+                'description' => $truck->descripcion,
+            ])->values();
+        $deliveryDrivers = DB::table('conductores')
+            ->where('empresa_id', $companyId)
+            ->where('estado', 'ACTIVO')
+            ->orderBy('nombre_completo')
+            ->get(['id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'telefono'])
+            ->map(fn (object $driver): array => [
+                'id' => (int) $driver->id,
+                'name' => $driver->nombre_completo,
+                'document_type' => $driver->tipo_documento,
+                'document_number' => $driver->numero_documento,
+                'phone' => $driver->telefono,
             ])->values();
 
         return [
@@ -407,6 +652,8 @@ class LiveChickenReceptionService
             'clients' => $clients,
             'external_owners' => $externalOwners,
             'cage_types' => $cageTypes,
+            'delivery_trucks' => $deliveryTrucks,
+            'delivery_drivers' => $deliveryDrivers,
             'scale' => [
                 'code' => Balanza::CODE_LIVE_CHICKEN_RECEPTION,
                 'name' => Balanza::logicalName(Balanza::CODE_LIVE_CHICKEN_RECEPTION),
@@ -658,6 +905,157 @@ class LiveChickenReceptionService
             'peso_neto_kg' => $weighing->peso_neto_kg,
             'updated_at' => now(),
         ]);
+    }
+
+    private function applyReceptionWeighingCorrection(
+        int $companyId,
+        User $actor,
+        PesadaRecepcionPolloVivo $record,
+        int $newWarehouseId,
+        int $newCages,
+        int $newBirds,
+        float $newNetWeight,
+        CarbonImmutable $weighedAt,
+    ): void {
+        $inventory = InventarioJava::query()
+            ->where('empresa_id', $companyId)
+            ->lockForUpdate()
+            ->first();
+        if (! $inventory) {
+            throw ValidationException::withMessages([
+                'weighing' => 'No existe el inventario general que respalda esta pesada.',
+            ]);
+        }
+
+        $nextCageTotal = (int) $inventory->cantidad_total
+            - (int) $record->cantidad_javas
+            + $newCages;
+        $assignedCages = $this->assignedCages($companyId);
+        if ($nextCageTotal < 0 || $nextCageTotal < $assignedCages) {
+            throw ValidationException::withMessages([
+                'cage_count' => "La corrección dejaría {$assignedCages} javas con clientes y solo {$nextCageTotal} en el inventario general.",
+            ]);
+        }
+
+        $oldWarehouseId = (int) $record->almacen_destino_id;
+        if ($oldWarehouseId === $newWarehouseId) {
+            $this->adjustWarehouseStock(
+                $oldWarehouseId,
+                (int) $record->tipo_pollo_id,
+                $newBirds - (int) $record->cantidad_aves,
+                $newNetWeight - (float) $record->peso_neto_kg,
+            );
+        } else {
+            $this->adjustWarehouseStock(
+                $oldWarehouseId,
+                (int) $record->tipo_pollo_id,
+                -(int) $record->cantidad_aves,
+                -(float) $record->peso_neto_kg,
+            );
+            $this->adjustWarehouseStock(
+                $newWarehouseId,
+                (int) $record->tipo_pollo_id,
+                $newBirds,
+                $newNetWeight,
+            );
+        }
+
+        $detail = DB::table('movimiento_detalles')
+            ->where('pesada_recepcion_pollo_vivo_id', $record->id)
+            ->lockForUpdate()
+            ->first();
+        if (! $detail) {
+            throw ValidationException::withMessages([
+                'weighing' => 'La pesada no tiene el movimiento de inventario requerido para corregirla.',
+            ]);
+        }
+
+        DB::table('movimiento_detalles')
+            ->where('id', $detail->id)
+            ->update([
+                'cantidad_aves' => $newBirds,
+                'peso_neto_kg' => round($newNetWeight, 3),
+            ]);
+        DB::table('movimientos_inventario')
+            ->where('id', $detail->movimiento_id)
+            ->update([
+                'almacen_destino_id' => $newWarehouseId,
+                'fecha_hora' => $weighedAt,
+                'updated_at' => now(),
+            ]);
+        $inventory->update([
+            'cantidad_total' => $nextCageTotal,
+            'updated_by' => $actor->id,
+        ]);
+    }
+
+    private function adjustWarehouseStock(
+        int $warehouseId,
+        int $chickenTypeId,
+        int $birdDelta,
+        float $weightDelta,
+    ): void {
+        $stock = DB::table('existencias_almacen')
+            ->where('almacen_id', $warehouseId)
+            ->where('tipo_pollo_id', $chickenTypeId)
+            ->lockForUpdate()
+            ->first();
+        $nextBirds = (int) ($stock?->cantidad_aves ?? 0) + $birdDelta;
+        $nextWeight = round((float) ($stock?->peso_neto_kg ?? 0) + $weightDelta, 3);
+
+        if ($nextBirds < 0 || $nextWeight < -0.0005) {
+            throw ValidationException::withMessages([
+                'weighing' => 'No se puede corregir porque parte de este ingreso ya salió del almacén.',
+            ]);
+        }
+
+        if ($stock) {
+            DB::table('existencias_almacen')
+                ->where('almacen_id', $warehouseId)
+                ->where('tipo_pollo_id', $chickenTypeId)
+                ->update([
+                    'cantidad_aves' => $nextBirds,
+                    'peso_neto_kg' => max(0, $nextWeight),
+                    'updated_at' => now(),
+                ]);
+
+            return;
+        }
+
+        DB::table('existencias_almacen')->insert([
+            'almacen_id' => $warehouseId,
+            'tipo_pollo_id' => $chickenTypeId,
+            'cantidad_aves' => $nextBirds,
+            'peso_neto_kg' => max(0, $nextWeight),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function assignedCages(int $companyId): int
+    {
+        $balances = [];
+        foreach (MovimientoJava::query()
+            ->where('empresa_id', $companyId)
+            ->lockForUpdate()
+            ->get(['cliente_id', 'tipo', 'cantidad']) as $movement) {
+            $clientId = (int) $movement->cliente_id;
+            $balances[$clientId] = ($balances[$clientId] ?? 0) + match ($movement->tipo) {
+                MovimientoJava::TYPE_DISPATCH => (int) $movement->cantidad,
+                MovimientoJava::TYPE_RECEIPT => -(int) $movement->cantidad,
+                default => 0,
+            };
+        }
+
+        foreach (DB::table('ajustes_saldos_javas')
+            ->where('empresa_id', $companyId)
+            ->lockForUpdate()
+            ->get(['cliente_id', 'diferencia_javas']) as $adjustment) {
+            $clientId = (int) $adjustment->cliente_id;
+            $balances[$clientId] = ($balances[$clientId] ?? 0)
+                + (int) $adjustment->diferencia_javas;
+        }
+
+        return (int) collect($balances)->filter(fn (int $balance): bool => $balance > 0)->sum();
     }
 
     private function reverseOwnInventory(int $companyId, User $actor, PesadaRecepcionPolloVivo $weighing): void
@@ -913,6 +1311,230 @@ class LiveChickenReceptionService
         }
     }
 
+    /** @return Collection<int, array<string, mixed>> */
+    private function dispatchTicketRecords(?RecepcionPolloVivo $reception): Collection
+    {
+        if (! $reception) {
+            return collect();
+        }
+
+        return RecepcionPolloVivoTicket::query()
+            ->where('recepcion_id', $reception->id)
+            ->whereHas('ticket', fn (Builder $query) => $query
+                ->where('modulo_origen', TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION)
+                ->where('estado', '!=', TicketDespacho::STATUS_VOIDED))
+            ->with([
+                'ticket.clienteDestino:id,nombre_razon_social,es_cliente_interno',
+                'ticket.vehiculoEntrega:id,placa',
+                'ticket.conductorEntrega:id,nombre_completo',
+                'ticket.pesadas' => fn ($query) => $query
+                    ->where('estado', Pesada::STATUS_ACTIVE)
+                    ->orderBy('numero'),
+                'ticket.pesadas.tipoJava:id,codigo,nombre,peso_kg',
+                'ticket.pesadas.lecturaBalanza.balanza:id,codigo,nombre',
+            ])
+            ->orderByDesc('id')
+            ->get()
+            ->flatMap(function (RecepcionPolloVivoTicket $link): Collection {
+                $ticket = $link->ticket;
+
+                if (! $ticket) {
+                    return collect();
+                }
+
+                return $ticket->pesadas
+                    ->groupBy('sexo')
+                    ->filter(fn (Collection $weighings, mixed $sex): bool => $weighings->isNotEmpty()
+                        && in_array($sex, [Pesada::SEX_MALE, Pesada::SEX_FEMALE], true))
+                    ->map(fn (Collection $weighings, string $sex): array => $this->formatDispatchTicketRecord(
+                        $link,
+                        $ticket,
+                        $sex,
+                        $weighings,
+                    ))
+                    ->values();
+            })
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, Pesada>  $weighings
+     * @return array<string, mixed>
+     */
+    private function formatDispatchTicketRecord(
+        RecepcionPolloVivoTicket $link,
+        TicketDespacho $ticket,
+        string $sex,
+        Collection $weighings,
+    ): array {
+        /** @var Pesada $first */
+        $first = $weighings->first();
+        $last = $weighings
+            ->sortByDesc(fn (Pesada $weighing): int => $weighing->pesada_at?->getTimestamp() ?? 0)
+            ->first();
+        $cageTypeIds = $weighings->pluck('tipo_java_id')->filter()->unique()->values();
+        $birdsPerCage = $weighings->pluck('aves_por_java')->unique()->values();
+        $weightSources = $weighings
+            ->map(fn (Pesada $weighing): string => $this->dispatchWeightSource($weighing))
+            ->unique()
+            ->values();
+        $singleCageType = $cageTypeIds->count() === 1;
+
+        return [
+            'record_kind' => 'dispatch_ticket',
+            'row_key' => "ticket:{$ticket->id}:{$sex}",
+            'id' => (int) $ticket->id,
+            'number' => $ticket->codigo,
+            'lane' => $sex === Pesada::SEX_MALE ? 1 : 2,
+            'source_lane' => (int) $link->columna,
+            'uses_previous_layout' => false,
+            'editable_mode' => 'ticket',
+            'dispatched' => true,
+            'ticket_id' => (int) $ticket->id,
+            'ticket_code' => $ticket->codigo,
+            'ticket_status' => $ticket->estado,
+            'ticket_source_module' => $ticket->modulo_origen,
+            'ticket_revision' => (int) $link->revision,
+            'ticket_registered_at' => $ticket->cerrado_at?->toISOString(),
+            'owner' => [
+                'type' => PesadaRecepcionPolloVivo::OWNER_OWN,
+                'id' => null,
+                'name' => 'Mi empresa',
+            ],
+            'destination' => [
+                'type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+                'id' => $ticket->cliente_destino_id ? (int) $ticket->cliente_destino_id : null,
+                'name' => $ticket->clienteDestino?->nombre_razon_social,
+            ],
+            'delivery' => $ticket->vehiculoEntrega && $ticket->conductorEntrega
+                ? [
+                    'vehicle' => [
+                        'id' => (int) $ticket->vehiculoEntrega->id,
+                        'plate' => $ticket->vehiculoEntrega->placa,
+                    ],
+                    'driver' => [
+                        'id' => (int) $ticket->conductorEntrega->id,
+                        'name' => $ticket->conductorEntrega->nombre_completo,
+                    ],
+                ]
+                : null,
+            'sex' => $sex,
+            'cage_type' => $singleCageType
+                ? [
+                    'id' => (int) $first->tipo_java_id,
+                    'code' => $first->tipoJava?->codigo,
+                    'name' => $first->tipoJava?->nombre,
+                    'weight_kg' => (float) $first->peso_java_kg_snapshot,
+                ]
+                : [
+                    'id' => null,
+                    'code' => 'MIXTO',
+                    'name' => 'Tipos de java mixtos',
+                    'weight_kg' => null,
+                ],
+            'birds_per_cage' => $birdsPerCage->count() === 1
+                ? (int) $birdsPerCage->first()
+                : null,
+            'cages' => (int) $weighings->sum('cantidad_javas'),
+            'birds' => (int) $weighings->sum('cantidad_aves'),
+            'read_weight_kg' => round((float) $weighings->sum('peso_leido_kg'), 3),
+            'gross_weight_kg' => round((float) $weighings->sum('peso_bruto_kg'), 3),
+            'tare_weight_kg' => round((float) $weighings->sum('tara_total_kg'), 3),
+            'net_weight_kg' => round((float) $weighings->sum('peso_neto_kg'), 3),
+            'weight_source' => $weightSources->count() === 1
+                ? $weightSources->first()
+                : 'MIXTO',
+            'weighed_at' => $last?->pesada_at?->toISOString(),
+            'weighing_count' => $weighings->count(),
+            'weighing_ids' => $weighings->pluck('id')->map(fn (mixed $id): int => (int) $id)->values(),
+            'weighings' => $weighings
+                ->map(fn (Pesada $weighing): array => $this->formatDispatchWeighing($weighing))
+                ->values(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function formatDispatchWeighing(Pesada $weighing): array
+    {
+        return [
+            'id' => (int) $weighing->id,
+            'number' => (int) $weighing->numero,
+            'sex' => $weighing->sexo,
+            'cage_type' => [
+                'id' => (int) $weighing->tipo_java_id,
+                'code' => $weighing->tipoJava?->codigo,
+                'name' => $weighing->tipoJava?->nombre,
+                'weight_kg' => (float) $weighing->peso_java_kg_snapshot,
+            ],
+            'birds_per_cage' => (int) $weighing->aves_por_java,
+            'cages' => (int) $weighing->cantidad_javas,
+            'birds' => (int) $weighing->cantidad_aves,
+            'read_weight_kg' => (float) $weighing->peso_leido_kg,
+            'gross_weight_kg' => (float) $weighing->peso_bruto_kg,
+            'tare_weight_kg' => (float) $weighing->tara_total_kg,
+            'net_weight_kg' => (float) $weighing->peso_neto_kg,
+            'weight_source' => $this->dispatchWeightSource($weighing),
+            'weighed_at' => $weighing->pesada_at?->toISOString(),
+            'updated_at' => $weighing->updated_at?->toISOString(),
+        ];
+    }
+
+    private function dispatchWeightSource(Pesada $weighing): string
+    {
+        if ($weighing->origen_peso === 'MANUAL') {
+            return 'MANUAL';
+        }
+
+        return (string) ($weighing->lecturaBalanza?->balanza?->codigo ?: $weighing->origen_peso);
+    }
+
+    /** @param array<string, mixed> $input */
+    private function changedWeightSource(
+        PesadaRecepcionPolloVivo $record,
+        array $input,
+        string $field,
+    ): string {
+        $source = (string) ($input['weight_source'] ?? '');
+
+        if ($source === '') {
+            throw ValidationException::withMessages([
+                $field => 'Indica MANUAL o adjunta una nueva lectura de balanza al cambiar el peso.',
+            ]);
+        }
+
+        if ($source === 'BALANZA') {
+            return (string) ($record->lecturaBalanza?->balanza?->codigo
+                ?: Balanza::CODE_LIVE_CHICKEN_RECEPTION);
+        }
+
+        return $source;
+    }
+
+    /** @param array<string, mixed> $input */
+    private function recordChangedScaleReading(
+        int $branchId,
+        User $actor,
+        array $input,
+        string $source,
+        CarbonImmutable $weighedAt,
+        string $field,
+    ): object {
+        $metadata = $input['scale_reading'] ?? null;
+        if (! is_array($metadata) || collect($metadata)->filter(fn (mixed $value): bool => filled($value))->isEmpty()) {
+            throw ValidationException::withMessages([
+                "{$field}.scale_reading" => 'Adjunta la nueva lectura de balanza o registra la corrección como MANUAL.',
+            ]);
+        }
+
+        return $this->scaleReadings->record(
+            $branchId,
+            $actor,
+            [...$input, 'weight_source' => $source],
+            $weighedAt,
+            $field,
+        );
+    }
+
     /** @return array<string, mixed> */
     private function formatRecord(PesadaRecepcionPolloVivo $record): array
     {
@@ -921,16 +1543,31 @@ class LiveChickenReceptionService
             : $record->clienteDestino?->nombre_razon_social;
         $displayLane = $this->displayLane($record);
         $displayProfile = $this->laneProfile($displayLane);
-        $usesPreviousLayout = $displayLane !== (int) $record->columna
+        $isLegacyDirect = $record->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_CLIENT;
+        $usesPreviousLayout = $isLegacyDirect
+            || $displayLane !== (int) $record->columna
             || $displayProfile['destination_type'] !== $record->destino_tipo
             || $displayProfile['owner_type'] !== $record->propietario_tipo
             || ($displayProfile['sex'] !== null && $displayProfile['sex'] !== $record->sexo);
 
         return [
+            'record_kind' => $isLegacyDirect
+                ? 'legacy_direct_weighing'
+                : 'reception_weighing',
+            'row_key' => "reception:{$record->id}",
             'id' => (int) $record->id,
             'number' => (int) $record->numero,
             'lane' => $displayLane,
+            'source_lane' => (int) $record->columna,
             'uses_previous_layout' => $usesPreviousLayout,
+            'editable_mode' => $isLegacyDirect ? 'readonly' : 'weighing',
+            'dispatched' => $record->destino_tipo === PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
+            'ticket_id' => null,
+            'ticket_code' => null,
+            'ticket_status' => null,
+            'ticket_source_module' => null,
+            'ticket_revision' => null,
+            'ticket_registered_at' => null,
             'owner' => [
                 'type' => $record->propietario_tipo,
                 'id' => $record->propietario_externo_id ? (int) $record->propietario_externo_id : null,
@@ -961,6 +1598,9 @@ class LiveChickenReceptionService
             'net_weight_kg' => (float) $record->peso_neto_kg,
             'weight_source' => $record->origen_peso,
             'weighed_at' => $record->pesada_at?->toISOString(),
+            'updated_at' => $record->updated_at?->toISOString(),
+            'weighing_count' => 1,
+            'weighing_ids' => [(int) $record->id],
         ];
     }
 
@@ -979,27 +1619,31 @@ class LiveChickenReceptionService
     }
 
     /** @return array<string, mixed> */
-    private function totals($records): array
+    private function totals(Collection $records): array
     {
         $summary = static function ($items): array {
             return [
-                'weighings' => $items->count(),
-                'cages' => (int) $items->sum('cantidad_javas'),
-                'birds' => (int) $items->sum('cantidad_aves'),
-                'gross_weight_kg' => round((float) $items->sum('peso_bruto_kg'), 3),
-                'tare_weight_kg' => round((float) $items->sum('tara_total_kg'), 3),
-                'net_weight_kg' => round((float) $items->sum('peso_neto_kg'), 3),
+                'weighings' => (int) $items->sum(fn (array $item): int => (int) ($item['weighing_count'] ?? 1)),
+                'cages' => (int) $items->sum('cages'),
+                'birds' => (int) $items->sum('birds'),
+                'gross_weight_kg' => round((float) $items->sum('gross_weight_kg'), 3),
+                'tare_weight_kg' => round((float) $items->sum('tare_weight_kg'), 3),
+                'net_weight_kg' => round((float) $items->sum('net_weight_kg'), 3),
             ];
         };
 
         return [
             'daily' => $summary($records),
-            'own' => $summary($records->where('propietario_tipo', PesadaRecepcionPolloVivo::OWNER_OWN)),
-            'external' => $summary($records->where('propietario_tipo', PesadaRecepcionPolloVivo::OWNER_EXTERNAL)),
+            'own' => $summary($records->filter(
+                fn (array $record): bool => data_get($record, 'owner.type') === PesadaRecepcionPolloVivo::OWNER_OWN,
+            )),
+            'external' => $summary($records->filter(
+                fn (array $record): bool => data_get($record, 'owner.type') === PesadaRecepcionPolloVivo::OWNER_EXTERNAL,
+            )),
             'lanes' => collect(range(1, 6))->mapWithKeys(
                 fn (int $lane): array => [
                     (string) $lane => $summary(
-                        $records->filter(fn (PesadaRecepcionPolloVivo $record): bool => $this->displayLane($record) === $lane),
+                        $records->filter(fn (array $record): bool => (int) $record['lane'] === $lane),
                     ),
                 ],
             )->all(),

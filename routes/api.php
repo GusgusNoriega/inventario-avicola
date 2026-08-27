@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JourneyPriceController;
 use App\Http\Controllers\Api\V1\LiveChickenReceptionController;
+use App\Http\Controllers\Api\V1\LiveChickenReceptionDispatchTicketController;
 use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
@@ -386,6 +387,13 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/', [LiveChickenReceptionController::class, 'index']);
             Route::put('/configuracion', [LiveChickenReceptionController::class, 'updateConfiguration']);
             Route::post('/pesadas', [LiveChickenReceptionController::class, 'store']);
+            Route::post('/tickets', [LiveChickenReceptionDispatchTicketController::class, 'store']);
+            Route::get('/tickets/{ticket}', [LiveChickenReceptionDispatchTicketController::class, 'show'])
+                ->whereNumber('ticket');
+            Route::put('/tickets/{ticket}', [LiveChickenReceptionDispatchTicketController::class, 'update'])
+                ->whereNumber('ticket');
+            Route::put('/pesadas/{weighing}', [LiveChickenReceptionController::class, 'update'])
+                ->whereNumber('weighing');
             Route::delete('/pesadas/{weighing}', [LiveChickenReceptionController::class, 'destroy'])
                 ->whereNumber('weighing');
         });
