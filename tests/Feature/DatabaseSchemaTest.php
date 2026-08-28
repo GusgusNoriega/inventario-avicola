@@ -380,6 +380,49 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue(Schema::hasColumn('compras', 'numero_documento_activo'));
     }
 
+    public function test_product_dispatch_migration_recovers_empty_tables_from_an_interrupted_attempt(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_08_28_000003_create_product_dispatch_operation.php'
+        );
+
+        $migration->down();
+
+        Schema::create('tickets_despacho_productos', function ($table): void {
+            $table->id();
+        });
+        Schema::create('pesadas_despacho_productos', function ($table): void {
+            $table->id();
+        });
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn('tickets_despacho_productos', 'referencia_externa'));
+        $this->assertTrue(Schema::hasColumn('pesadas_despacho_productos', 'variacion_producto_despacho_id'));
+        $this->assertTrue(Schema::hasColumn('comprobante_detalles', 'producto_despacho_id'));
+        $this->assertTrue(Schema::hasTable('comprobante_tickets_despacho_productos'));
+    }
+
+    public function test_product_dispatch_foreign_key_names_fit_the_mysql_identifier_limit(): void
+    {
+        $contents = file_get_contents(database_path(
+            'migrations/2026_08_28_000003_create_product_dispatch_operation.php'
+        ));
+
+        preg_match_all('/->constrained\(([^)]*)\)/', $contents, $constraints);
+        $this->assertNotEmpty($constraints[1]);
+
+        foreach ($constraints[1] as $arguments) {
+            preg_match_all("/'([^']+)'/", $arguments, $quotedArguments);
+            $this->assertGreaterThanOrEqual(
+                3,
+                count($quotedArguments[1]),
+                "La llave foránea constrained({$arguments}) debe tener un nombre explícito.",
+            );
+            $this->assertLessThanOrEqual(64, strlen($quotedArguments[1][2]));
+        }
+    }
+
     public function test_database_seeder_keeps_financial_catalogs_and_admin_permissions(): void
     {
         $this->seed();
