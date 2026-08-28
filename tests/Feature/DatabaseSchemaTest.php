@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(111, $migrationFiles);
+        $this->assertCount(112, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -44,6 +44,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_08_14_000003_create_wholesale_two_weight_adjustments.php' => 2,
                 '2026_08_22_000001_create_live_chicken_reception_module.php' => 5,
                 '2026_08_27_000001_allow_negative_java_inventory_balances.php' => 2,
+                '2026_08_28_000002_create_product_dispatch_catalog.php' => 2,
                 default => 1,
             };
 
@@ -130,6 +131,8 @@ class DatabaseSchemaTest extends TestCase
             'cobranza_detalles',
             'cobranza_pendientes',
             'cobranza_asignaciones',
+            'productos_despacho',
+            'variaciones_producto_despacho',
         ];
 
         foreach ($tables as $table) {
@@ -186,6 +189,8 @@ class DatabaseSchemaTest extends TestCase
             'cobranza_detalles' => ['cobranza_id', 'asignacion_id', 'pago_id', 'cliente_id', 'fecha_recepcion', 'medio_recepcion', 'importe', 'orden', 'created_at'],
             'cobranza_pendientes' => ['cobranza_id', 'pago_id', 'importe', 'created_at'],
             'cobranza_asignaciones' => ['empresa_id', 'cobranza_id', 'idempotency_key', 'payload_hash', 'importe_pendiente_antes', 'importe_asignado', 'importe_pendiente_despues', 'pago_pendiente_anterior_id', 'pago_reversa_id', 'pago_pendiente_nuevo_id', 'created_by', 'created_at'],
+            'productos_despacho' => ['empresa_id', 'nombre', 'nombre_normalizado', 'descripcion', 'modo_precio', 'precio_venta', 'merma_gramos_unidad', 'imagen_path', 'estado', 'created_by', 'updated_by'],
+            'variaciones_producto_despacho' => ['producto_despacho_id', 'nombre', 'nombre_normalizado', 'modo_precio', 'precio_venta', 'merma_gramos_unidad', 'imagen_path', 'orden', 'estado', 'created_by', 'updated_by'],
         ];
 
         foreach ($expectations as $table => $columns) {

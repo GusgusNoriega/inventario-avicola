@@ -65,6 +65,16 @@ return [
             ],
             'legacy_permissions' => ['DESPACHOS_VER', 'DESPACHOS_CREAR'],
         ],
+        'MODULO_DESPACHO_PRODUCTOS' => [
+            'name' => 'Despacho de productos',
+            'description' => 'Catálogo y despacho de productos avícolas sin javas ni bandejas.',
+            'path' => '/despacho-productos',
+            'technical_permissions' => [
+                'PRODUCTOS_DESPACHO_GESTIONAR',
+                'PRODUCTOS_DESPACHO_DESPACHAR',
+            ],
+            'legacy_permissions' => [],
+        ],
         'MODULO_PRECIOS_JORNADA' => [
             'name' => 'Precios de la jornada',
             'description' => 'Precios generales compartidos por los despachos minoristas 1 y 2.',

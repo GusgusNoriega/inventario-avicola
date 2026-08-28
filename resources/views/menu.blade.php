@@ -153,6 +153,25 @@
         </a>
         @endif
 
+        @if ($user->hasModule('MODULO_DESPACHO_PRODUCTOS'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('despacho-productos.menu') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 7l8-4 8 4-8 4z"></path>
+              <path d="M4 7v10l8 4 8-4V7"></path>
+              <path d="M12 11v10"></path>
+              <path d="M7 12l2 1"></path>
+              <path d="M15 13l2-1"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Despacho de productos</strong>
+            <small>Huevos, gallinas, pavos y otros productos avícolas</small>
+          </span>
+          <span class="menu-status">Abrir</span>
+        </a>
+        @endif
+
         @if ($moduleAvailability->isEnabled('MODULO_PRECIOS_JORNADA') && ($user->hasModule('MODULO_DESPACHO_MINORISTA_1') || $user->hasModule('MODULO_DESPACHO_MINORISTA_2')))
         <a class="menu-tile menu-tile-primary" href="{{ route('precios-jornada') }}">
           <span class="menu-tile-icon" aria-hidden="true">

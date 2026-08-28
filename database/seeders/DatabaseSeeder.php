@@ -241,6 +241,7 @@ class DatabaseSeeder extends Seeder
             'MODULO_RECEPCION_POLLO_VIVO',
             'MODULO_DESPACHO_MINORISTA_1',
             'MODULO_DESPACHO_MINORISTA_2',
+            'MODULO_DESPACHO_PRODUCTOS',
             'MODULO_RESUMEN_JORNADA',
             'MODULO_REPORTE_PROVEEDORES',
             'MODULO_GESTION_PESADAS',

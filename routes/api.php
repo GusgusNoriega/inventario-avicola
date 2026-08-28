@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\CustomerDiscountController;
 use App\Http\Controllers\Api\V1\CustomerHistoryController;
 use App\Http\Controllers\Api\V1\DailyDispatchTicketController;
 use App\Http\Controllers\Api\V1\DirectoryController;
+use App\Http\Controllers\Api\V1\DispatchProductController;
 use App\Http\Controllers\Api\V1\DispatchTicketController;
 use App\Http\Controllers\Api\V1\DispatchTicketVoidController;
 use App\Http\Controllers\Api\V1\DriverController;
@@ -247,6 +248,12 @@ Route::prefix('v1')->group(function (): void {
         'password.changed',
         'module:MODULO_DESPACHO_MAYORISTA_2',
     ];
+    $productDispatchMiddleware = [
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_DESPACHO_PRODUCTOS',
+    ];
     $weighingManagementMiddleware = config('directory.public_access')
         ? ['throttle:api', 'module.enabled:MODULO_GESTION_PESADAS']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_GESTION_PESADAS'];
@@ -340,6 +347,24 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/configuracion-mermas', [WholesaleTwoWeightAdjustmentController::class, 'show']);
             Route::put('/configuracion-mermas', [WholesaleTwoWeightAdjustmentController::class, 'update']);
             Route::post('/tickets', [WholesaleTwoDispatchTicketController::class, 'store']);
+        });
+    Route::prefix('productos-despacho')
+        ->middleware($productDispatchMiddleware)
+        ->group(function (): void {
+            Route::get('/', [DispatchProductController::class, 'index']);
+            Route::post('/', [DispatchProductController::class, 'store']);
+            Route::get('/{producto}/imagen', [DispatchProductController::class, 'image'])
+                ->whereNumber('producto');
+            Route::get(
+                '/{producto}/variaciones/{variacion}/imagen',
+                [DispatchProductController::class, 'variationImage'],
+            )->whereNumber(['producto', 'variacion']);
+            Route::get('/{producto}', [DispatchProductController::class, 'show'])
+                ->whereNumber('producto');
+            Route::put('/{producto}', [DispatchProductController::class, 'update'])
+                ->whereNumber('producto');
+            Route::delete('/{producto}', [DispatchProductController::class, 'destroy'])
+                ->whereNumber('producto');
         });
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
         ->middleware($retailOneMiddleware);

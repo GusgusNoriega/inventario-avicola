@@ -24,8 +24,8 @@ class SystemModuleAvailabilityTest extends TestCase
             ->filter(fn (array $module): bool => (bool) ($module['assignable'] ?? true))
             ->keys();
 
-        $this->assertCount(16, $moduleCodes);
-        $this->assertCount(14, $assignableCodes);
+        $this->assertCount(17, $moduleCodes);
+        $this->assertCount(15, $assignableCodes);
         $this->assertSame(count($moduleCodes), DB::table('modulos_sistema')->count());
         $this->assertSame(0, DB::table('modulos_sistema')->where('activo', false)->count());
 

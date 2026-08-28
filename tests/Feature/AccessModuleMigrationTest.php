@@ -18,7 +18,7 @@ class AccessModuleMigrationTest extends TestCase
     {
         $moduleCodes = $this->assignableModuleCodes();
 
-        $this->assertCount(14, $moduleCodes);
+        $this->assertCount(15, $moduleCodes);
         $this->assertEqualsCanonicalizing(
             $moduleCodes,
             Permission::query()

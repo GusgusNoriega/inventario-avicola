@@ -22,6 +22,8 @@ class ModuleAccessControlTest extends TestCase
             '/recepcion-pollo-vivo',
             '/recepcion-pollo-vivo/historial',
             '/despacho-mayorista-2',
+            '/despacho-productos',
+            '/despacho-productos/productos',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -50,6 +52,8 @@ class ModuleAccessControlTest extends TestCase
             '/recepcion-pollo-vivo',
             '/recepcion-pollo-vivo/historial',
             '/despacho-mayorista-2',
+            '/despacho-productos',
+            '/despacho-productos/productos',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -119,6 +123,20 @@ class ModuleAccessControlTest extends TestCase
         }
     }
 
+    public function test_product_dispatch_module_unlocks_its_menu_and_catalog_view(): void
+    {
+        $user = User::factory()->create();
+        $this->grantModules($user, ['MODULO_DESPACHO_PRODUCTOS']);
+
+        $this->actingAs($user);
+
+        $this->get('/despacho-productos')->assertOk();
+        $this->get('/despacho-productos/productos')->assertOk();
+        $this->get('/')
+            ->assertOk()
+            ->assertSee(route('despacho-productos.menu'), false);
+    }
+
     public function test_modules_from_multiple_roles_are_unioned_for_routes_and_menu(): void
     {
         $user = User::factory()->create();
@@ -148,6 +166,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertDontSee(route('control-javas'), false)
             ->assertDontSee(route('recepcion-pollo-vivo.menu'), false)
             ->assertDontSee(route('recepcion-pollo-vivo'), false)
+            ->assertDontSee(route('despacho-productos.menu'), false)
             ->assertDontSee(route('operacion'), false);
     }
 
@@ -165,6 +184,7 @@ class ModuleAccessControlTest extends TestCase
             ->assertDontSee(route('recepcion-pollo-vivo'), false)
             ->assertDontSee(route('despacho-mayorista-2'), false)
             ->assertDontSee(route('despacho-minorista'), false)
+            ->assertDontSee(route('despacho-productos.menu'), false)
             ->assertDontSee(route('precios-jornada'), false)
             ->assertDontSee(route('reporte-proveedores'), false)
             ->assertDontSee(route('directorio'), false)
@@ -205,6 +225,8 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-mayorista-2',
             '/despacho-minorista',
             '/despacho-minorista-2',
+            '/despacho-productos',
+            '/despacho-productos/productos',
             '/precios-jornada',
             '/tickets-dia',
             '/reporte-proveedores',

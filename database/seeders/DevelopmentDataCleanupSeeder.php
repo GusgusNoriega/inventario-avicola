@@ -91,6 +91,8 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'vehiculos',
         'proveedor_vehiculos',
         'tipos_bandeja',
+        'productos_despacho',
+        'variaciones_producto_despacho',
         'ajustes_peso_minorista',
         'ajustes_peso_mayorista_2',
         'configuraciones_despacho_minorista',

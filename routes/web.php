@@ -82,6 +82,14 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             'retailStation' => 2,
         ])->middleware('module:MODULO_DESPACHO_MINORISTA_2')
             ->name('despacho-minorista-2.pantalla-cliente');
+
+        Route::middleware('module:MODULO_DESPACHO_PRODUCTOS')->group(function (): void {
+            Route::view('/despacho-productos', 'despacho-productos-menu')
+                ->name('despacho-productos.menu');
+            Route::view('/despacho-productos/productos', 'despacho-productos-productos')
+                ->name('despacho-productos.productos');
+        });
+
         Route::view('/precios-jornada', 'precios-jornada')
             ->middleware([
                 'module.enabled:MODULO_PRECIOS_JORNADA',

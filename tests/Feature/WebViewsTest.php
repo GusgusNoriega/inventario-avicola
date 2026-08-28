@@ -38,6 +38,9 @@ class WebViewsTest extends TestCase
             ->assertSee('Despacho minorista')
             ->assertSee(route('despacho-minorista-2'), false)
             ->assertSee('Despacho minorista 2')
+            ->assertSee(route('despacho-productos.menu'), false)
+            ->assertSee('Despacho de productos')
+            ->assertSee('Huevos, gallinas, pavos y otros productos avícolas')
             ->assertDontSee('Registro de pesadas y balanzas')
             ->assertSee(route('tickets-dia'), false)
             ->assertSee('Resumen de la jornada')
@@ -84,6 +87,38 @@ class WebViewsTest extends TestCase
 
         $this->assertStringContainsString('touch-action: manipulation', $stylesheet);
         $this->assertStringContainsString('@media (max-width: 760px)', $stylesheet);
+    }
+
+    public function test_product_dispatch_menu_and_catalog_expose_the_new_workflow(): void
+    {
+        $menu = $this->get('/despacho-productos');
+
+        $menu
+            ->assertOk()
+            ->assertSee('Administrar productos')
+            ->assertSee('Despachar productos')
+            ->assertSee('Siguiente etapa')
+            ->assertSee('href="'.route('despacho-productos.productos').'"', false)
+            ->assertSee(route('menu'), false);
+
+        $this->assertSame(
+            2,
+            substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
+        );
+
+        $catalog = $this->get('/despacho-productos/productos');
+        $catalog
+            ->assertOk()
+            ->assertSee('Administrar productos')
+            ->assertSee('id="productEditorDialog"', false)
+            ->assertSee('Forma de cobro')
+            ->assertSee('Por kilogramo')
+            ->assertSee('Por unidad')
+            ->assertSee('Merma por unidad (g)')
+            ->assertSee('id="productImageInput"', false)
+            ->assertSee('id="addProductVariationBtn"', false)
+            ->assertSee(asset('js/despacho-productos.js'), false)
+            ->assertSee(asset('css/despacho-productos.css'), false);
     }
 
     public function test_install_application_view_exposes_the_direct_pwa_prompt(): void
