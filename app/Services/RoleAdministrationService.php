@@ -83,8 +83,19 @@ class RoleAdministrationService
             ], fn (mixed $value): bool => $value !== null))->save();
 
             if (array_key_exists('module_codes', $data)) {
+                $preservedDisabledPermissionIds = $role->permissions
+                    ->filter(fn ($permission): bool => in_array(
+                        $permission->codigo,
+                        $this->modules->disabledCodes(),
+                        true,
+                    ))
+                    ->modelKeys();
+
                 $role->permissions()->sync(
-                    $this->modules->permissionIdsForModules($data['module_codes'])
+                    array_values(array_unique([
+                        ...$this->modules->permissionIdsForModules($data['module_codes']),
+                        ...$preservedDisabledPermissionIds,
+                    ]))
                 );
             }
 

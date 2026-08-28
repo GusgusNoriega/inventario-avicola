@@ -16,7 +16,9 @@ return new class extends Migration
         }
 
         /** @var array<string, array<string, mixed>> $modules */
-        $modules = config('access_modules.modules', []);
+        $modules = collect(config('access_modules.modules', []))
+            ->filter(fn (array $module): bool => (bool) ($module['assignable'] ?? true))
+            ->all();
         $now = now();
 
         foreach ($modules as $moduleCode => $module) {
@@ -70,7 +72,10 @@ return new class extends Migration
 
     public function down(): void
     {
-        $moduleCodes = array_keys(config('access_modules.modules', []));
+        $moduleCodes = collect(config('access_modules.modules', []))
+            ->filter(fn (array $module): bool => (bool) ($module['assignable'] ?? true))
+            ->keys()
+            ->all();
         $permissionIds = DB::table('permisos')
             ->whereIn('codigo', $moduleCodes)
             ->pluck('id');

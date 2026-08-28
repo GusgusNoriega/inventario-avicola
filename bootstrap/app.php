@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureModuleIsEnabled;
 use App\Http\Middleware\EnsurePasswordWasChanged;
 use App\Http\Middleware\EnsureUserHasModule;
 use App\Http\Middleware\EnsureUserHasPermission;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'active' => EnsureUserIsActive::class,
             'module' => EnsureUserHasModule::class,
+            'module.enabled' => EnsureModuleIsEnabled::class,
             'password.changed' => EnsurePasswordWasChanged::class,
             'permission' => EnsureUserHasPermission::class,
         ]);

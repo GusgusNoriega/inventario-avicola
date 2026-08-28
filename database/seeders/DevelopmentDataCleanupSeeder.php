@@ -78,6 +78,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'usuarios',
         'roles',
         'permisos',
+        'modulos_sistema',
         'usuario_roles',
         'rol_permisos',
         'terceros',

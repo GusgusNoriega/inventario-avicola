@@ -72,7 +72,12 @@
               <select id="javaReceiptDriver" required><option value="">Seleccionar chofer</option></select>
             </label>
           </div>
-          <p class="java-resource-hint">Solo se muestran recursos propios activos. <a href="{{ route('flota') }}">Administrar flota</a>.</p>
+          <p class="java-resource-hint">
+            Solo se muestran recursos propios activos.
+            @if (auth()->user()->hasModule('MODULO_FLOTA'))
+              <a href="{{ route('flota') }}">Administrar flota</a>.
+            @endif
+          </p>
           <div class="java-form-row java-asset-quantity-fields">
             <label class="field">Javas recibidas
               <input id="javaReceiptQuantity" type="number" min="0" step="1" inputmode="numeric" value="0" required>

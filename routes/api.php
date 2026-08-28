@@ -212,25 +212,25 @@ Route::prefix('v1')->group(function (): void {
     });
 
     $directoryMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_DIRECTORIO']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DIRECTORIO'];
     $fleetMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_FLOTA']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_FLOTA'];
     $operationCatalogMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_DESPACHO_MAYORISTA']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA'];
     $journeyReadMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_DESPACHO_MAYORISTA,MODULO_JORNADA_PROVEEDORES']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA,MODULO_JORNADA_PROVEEDORES'];
     $retailOneMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_DESPACHO_MINORISTA_1']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MINORISTA_1'];
     $retailTwoMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_DESPACHO_MINORISTA_2']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MINORISTA_2'];
     $dailyTicketsMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_RESUMEN_JORNADA']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_RESUMEN_JORNADA'];
     $providerReportMiddleware = [
         'auth:sanctum',
@@ -239,7 +239,7 @@ Route::prefix('v1')->group(function (): void {
         'module:MODULO_REPORTE_PROVEEDORES',
     ];
     $operationWriteMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_DESPACHO_MAYORISTA']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MAYORISTA'];
     $wholesaleTwoMiddleware = [
         'auth:sanctum',
@@ -248,19 +248,29 @@ Route::prefix('v1')->group(function (): void {
         'module:MODULO_DESPACHO_MAYORISTA_2',
     ];
     $weighingManagementMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_GESTION_PESADAS']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_GESTION_PESADAS'];
     $journeyWriteMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_JORNADA_PROVEEDORES']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_JORNADA_PROVEEDORES'];
-    $journeyPriceMiddleware = config('directory.public_access')
-        ? ['throttle:api']
-        : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_DESPACHO_MINORISTA_1,MODULO_DESPACHO_MINORISTA_2'];
+    $journeyPriceManagementMiddleware = config('directory.public_access')
+        ? [
+            'throttle:api',
+            'module.enabled:MODULO_DESPACHO_MINORISTA_1,MODULO_DESPACHO_MINORISTA_2',
+            'module.enabled:MODULO_PRECIOS_JORNADA',
+        ]
+        : [
+            'auth:sanctum',
+            'active',
+            'password.changed',
+            'module:MODULO_DESPACHO_MINORISTA_1,MODULO_DESPACHO_MINORISTA_2',
+            'module.enabled:MODULO_PRECIOS_JORNADA',
+        ];
     $javaControlReadMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_CONTROL_JAVAS']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_CONTROL_JAVAS'];
     $javaControlWriteMiddleware = config('directory.public_access')
-        ? ['throttle:api']
+        ? ['throttle:api', 'module.enabled:MODULO_CONTROL_JAVAS']
         : ['auth:sanctum', 'active', 'password.changed', 'module:MODULO_CONTROL_JAVAS'];
     $javaBalanceAdjustmentMiddleware = [
         'auth:sanctum',
@@ -342,6 +352,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/catalogo', [RetailDispatchController::class, 'catalog'])
                 ->defaults('retail_station', 2)
                 ->middleware($retailTwoMiddleware);
+            Route::get('/precios-jornada', [JourneyPriceController::class, 'show'])
+                ->middleware($retailTwoMiddleware);
             Route::put('/configuracion', [RetailDispatchController::class, 'updateConfiguration'])
                 ->defaults('retail_station', 2)
                 ->middleware($retailTwoMiddleware);
@@ -363,13 +375,13 @@ Route::prefix('v1')->group(function (): void {
     Route::put('/operacion/jornada', [JourneyPlanController::class, 'update'])
         ->middleware($journeyWriteMiddleware);
     Route::get('/operacion/precios-jornada', [JourneyPriceController::class, 'show'])
-        ->middleware($journeyPriceMiddleware);
+        ->middleware($journeyPriceManagementMiddleware);
     Route::put('/operacion/precios-jornada', [JourneyPriceController::class, 'update'])
-        ->middleware($journeyPriceMiddleware);
+        ->middleware($journeyPriceManagementMiddleware);
     Route::put('/operacion/precios-jornada/mensaje-ticket', [JourneyPriceController::class, 'updateTicketMessage'])
-        ->middleware($journeyPriceMiddleware);
+        ->middleware($journeyPriceManagementMiddleware);
     Route::put('/operacion/precios-jornada/titulo-ticket', [JourneyPriceController::class, 'updateTicketTitle'])
-        ->middleware($journeyPriceMiddleware);
+        ->middleware($journeyPriceManagementMiddleware);
     Route::get('/control-javas', [JavaControlController::class, 'index'])
         ->middleware($javaControlReadMiddleware);
     Route::post('/control-javas/recepciones', [JavaControlController::class, 'store'])

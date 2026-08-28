@@ -5,6 +5,9 @@
   $retailCustomerDisplayRoute = (int) $retailStation === 2
     ? route('despacho-minorista-2.pantalla-cliente')
     : route('despacho-minorista.pantalla-cliente');
+  $moduleAvailability = app(\App\Services\ModuleAvailabilityService::class);
+  $journeyPriceManagementEnabled = $moduleAvailability->isEnabled('MODULO_PRECIOS_JORNADA');
+  $installApplicationEnabled = $moduleAvailability->isEnabled('MODULO_INSTALAR_APLICACION');
 @endphp
 <!doctype html>
 <html lang="es" class="retail-dispatch-root">
@@ -17,7 +20,13 @@
   <link rel="stylesheet" href="{{ asset('css/despacho-minorista.css') }}?v={{ filemtime(public_path('css/despacho-minorista.css')) }}">
 </head>
 <body class="retail-dispatch-page">
-  <main id="retailStation" class="rd-station" data-retail-station="{{ $retailStation }}" data-retail-api-base="{{ $retailApiBase }}">
+  <main
+    id="retailStation"
+    class="rd-station"
+    data-retail-station="{{ $retailStation }}"
+    data-retail-api-base="{{ $retailApiBase }}"
+    data-journey-price-management-enabled="{{ $journeyPriceManagementEnabled ? 'true' : 'false' }}"
+  >
     <header class="rd-topbar">
       <div class="rd-brand">
         <span class="rd-brand-mark" aria-hidden="true">PM</span>
@@ -126,10 +135,10 @@
 
         <article class="rd-values-panel rd-panel">
           @if($retailStation === 2)
-            <button id="retailPriceCard" class="rd-value-card is-price is-interactive" type="button" aria-haspopup="dialog" aria-controls="retailTouchKeyboard">
+            <button id="retailPriceCard" class="rd-value-card is-price {{ $journeyPriceManagementEnabled ? 'is-interactive' : '' }}" type="button" aria-haspopup="dialog" aria-controls="retailTouchKeyboard" @disabled(! $journeyPriceManagementEnabled)>
               <span>Precio asignado</span>
               <strong id="retailPricePreview">S/ -- por kg</strong>
-              <small id="retailPriceSource">Toca para cambiar el precio de la jornada</small>
+              <small id="retailPriceSource">{{ $journeyPriceManagementEnabled ? 'Toca para cambiar el precio de la jornada' : 'Consulta del precio vigente' }}</small>
             </button>
           @else
             <div class="rd-value-card is-price">
@@ -437,6 +446,7 @@
         <div id="retailSettingsAdjustments" class="rd-adjustment-settings-grid"></div>
       </section>
 
+      @if($installApplicationEnabled)
       <section class="rd-printer-settings">
         <div class="rd-settings-title">
           <div>
@@ -454,6 +464,7 @@
         </div>
         <p>Abre la guía para configurar la impresora térmica local sin cerrar ni modificar estos ajustes minoristas.</p>
       </section>
+      @endif
 
       <section class="rd-typography-settings">
         <div class="rd-settings-title">

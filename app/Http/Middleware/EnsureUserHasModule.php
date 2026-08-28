@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ModuleAvailabilityService;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -10,6 +11,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUserHasModule
 {
+    public function __construct(
+        private readonly ModuleAvailabilityService $availability,
+    ) {}
+
     /**
      * @param  Closure(Request): Response  $next
      */
@@ -37,6 +42,16 @@ class EnsureUserHasModule
                 ->with('warning', 'Debes cambiar tu contraseña antes de continuar.');
         }
 
+        if (! $this->availability->anyEnabled($modules)) {
+            return $this->denied(
+                $request,
+                'Este módulo está desactivado en el servidor.',
+                403,
+                implode(',', $modules),
+                'MODULE_DISABLED',
+            );
+        }
+
         $hasAccess = collect($modules)
             ->contains(fn (string $module): bool => $user->hasModule($module));
 
@@ -57,10 +72,12 @@ class EnsureUserHasModule
         string $message,
         int $status,
         ?string $module = null,
+        ?string $code = null,
     ): Response|JsonResponse|RedirectResponse {
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json(array_filter([
                 'message' => $message,
+                'code' => $code,
                 'required_module' => $module,
             ]), $status);
         }

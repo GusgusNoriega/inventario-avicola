@@ -9,6 +9,7 @@
 </head>
 <body class="menu-page">
   @php($user = auth()->user())
+  @php($moduleAvailability = app(\App\Services\ModuleAvailabilityService::class))
   <section id="menuView" class="main-menu-view" aria-labelledby="menuTitle">
     <div class="menu-shell">
       <header class="menu-hero card">
@@ -152,7 +153,7 @@
         </a>
         @endif
 
-        @if ($user->hasModule('MODULO_DESPACHO_MINORISTA_1') || $user->hasModule('MODULO_DESPACHO_MINORISTA_2'))
+        @if ($moduleAvailability->isEnabled('MODULO_PRECIOS_JORNADA') && ($user->hasModule('MODULO_DESPACHO_MINORISTA_1') || $user->hasModule('MODULO_DESPACHO_MINORISTA_2')))
         <a class="menu-tile menu-tile-primary" href="{{ route('precios-jornada') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -343,6 +344,7 @@
         </a>
         @endif
 
+        @if ($moduleAvailability->isEnabled('MODULO_INSTALAR_APLICACION'))
         <a class="menu-tile menu-tile-primary menu-tile-install" href="{{ route('install-app') }}">
           <span class="menu-tile-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -357,6 +359,7 @@
           </span>
           <span class="menu-status">Instalar</span>
         </a>
+        @endif
 
       </nav>
 

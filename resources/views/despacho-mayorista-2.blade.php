@@ -238,7 +238,9 @@
         <div class="daily-provider-head">
           <span class="daily-provider-title">Origen opcional</span>
           <div class="daily-provider-actions">
-            <a class="btn btn-ghost" href="{{ route('jornada') }}">Configurar jornada</a>
+            @if (auth()->user()->hasModule('MODULO_JORNADA_PROVEEDORES'))
+              <a class="btn btn-ghost" href="{{ route('jornada') }}">Configurar jornada</a>
+            @endif
             <strong id="dailyProviderCount" class="daily-provider-count">0</strong>
           </div>
         </div>
@@ -787,4 +789,3 @@
   <script type="module" src="{{ asset('js/despacho-mayorista-2.js') }}?v={{ filemtime(public_path('js/despacho-mayorista-2.js')) }}"></script>
 </body>
 </html>
-

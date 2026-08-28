@@ -16,6 +16,10 @@ class UserResource extends JsonResource
         $this->resource->loadMissing('roles.permissions:id,codigo');
         $registry = app(AccessModuleRegistry::class);
         $moduleCodes = $registry->moduleCodesForRoles($this->roles);
+        $permissionCodes = collect($this->permissionCodes())
+            ->filter(fn (string $code): bool => $registry->isPermissionAvailable($code))
+            ->values()
+            ->all();
 
         return [
             'id' => $this->id,
@@ -23,7 +27,7 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'status' => $this->estado,
             'roles' => $this->roleCodes(),
-            'permissions' => $this->permissionCodes(),
+            'permissions' => $permissionCodes,
             'module_codes' => $moduleCodes,
             'modules' => collect($registry->catalogue())
                 ->whereIn('code', $moduleCodes)

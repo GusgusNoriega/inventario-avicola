@@ -38,6 +38,7 @@ import { newestRecordsFirst } from "./record-order.js";
 const retailStationElement = document.querySelector("#retailStation");
 const RETAIL_STATION = String(retailStationElement?.dataset.retailStation || "1");
 const RETAIL_API_BASE = String(retailStationElement?.dataset.retailApiBase || "/despacho-minorista");
+const JOURNEY_PRICE_MANAGEMENT_ENABLED = retailStationElement?.dataset.journeyPriceManagementEnabled === "true";
 const RETAIL_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY = `sistema-pollos-pantalla-cliente-minorista-${RETAIL_STATION}-productor-v1`;
 const RETAIL_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY = `sistema-pollos-pantalla-cliente-minorista-${RETAIL_STATION}-instancia-v1`;
 const RETAIL_CUSTOMER_DISPLAY_CHANNEL_NAME = buildRetailCustomerDisplayChannelName(RETAIL_STATION);
@@ -1262,19 +1263,28 @@ function renderWeightPreview() {
     elements.pricePreview.textContent = price
       ? `S/ ${formatMoneyValue(price.value)} por kg`
       : "S/ -- por kg";
-    elements.priceSource.textContent = price
-      ? `${priceDescription} · toca aquí para cambiar la jornada`
-      : `${client
-        ? `Toca para configurar · ${client.name} no tiene precio de ${chickenName}`
-        : `Toca para configurar · precio de la jornada de ${chickenName} no configurado`}`;
-    elements.priceCard.disabled = state.loading
+    elements.priceSource.textContent = JOURNEY_PRICE_MANAGEMENT_ENABLED
+      ? (price
+        ? `${priceDescription} · toca aquí para cambiar la jornada`
+        : `${client
+          ? `Toca para configurar · ${client.name} no tiene precio de ${chickenName}`
+          : `Toca para configurar · precio de la jornada de ${chickenName} no configurado`}`)
+      : (price
+        ? `${priceDescription} · consulta del precio vigente`
+        : `Precio de la jornada de ${chickenName} no configurado`);
+    elements.priceCard.disabled = !JOURNEY_PRICE_MANAGEMENT_ENABLED
+      || state.loading
       || state.savingJourneyPrice
       || state.lists.some((list) => list.saving);
     elements.priceCard.setAttribute(
       "aria-label",
-      price
-        ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo, ${priceDescription}. Toca para cambiar únicamente el precio de la jornada`
-        : `Esta columna no tiene precio de ${chickenName}. Toca para configurar el precio de la jornada`
+      JOURNEY_PRICE_MANAGEMENT_ENABLED
+        ? (price
+          ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo, ${priceDescription}. Toca para cambiar únicamente el precio de la jornada`
+          : `Esta columna no tiene precio de ${chickenName}. Toca para configurar el precio de la jornada`)
+        : (price
+          ? `Precio asignado a esta columna: ${formatMoney(price.value)} por kilogramo, ${priceDescription}. La edición de precios de jornada está desactivada en el servidor`
+          : `Esta columna no tiene precio de ${chickenName}. La edición de precios de jornada está desactivada en el servidor`)
     );
     elements.weighingTotalPreview.textContent = liveAmount === null ? "S/ --" : formatMoney(liveAmount);
   } else {
@@ -2455,7 +2465,7 @@ async function refreshJourneyPrices(options = {}) {
   }
 
   const requestedRevision = journeyPriceRevision;
-  const request = apiRequest("/operacion/precios-jornada")
+  const request = apiRequest(`${RETAIL_API_BASE}/precios-jornada`)
     .then((response) => {
       if (requestedRevision !== journeyPriceRevision) return false;
       const changed = syncJourneyPriceSnapshot(response.data?.global_prices);
@@ -2602,6 +2612,11 @@ async function applyDirectJourneyPrice(
 }
 
 function openDirectPriceEditor() {
+  if (!JOURNEY_PRICE_MANAGEMENT_ENABLED) {
+    setMessage("La edición de precios de la jornada está desactivada en el servidor.", true);
+    return;
+  }
+
   const listIndex = state.activeList;
   const list = state.lists[listIndex];
   const chickenType = list ? priceChickenTypeForList(list) : null;

@@ -22,6 +22,9 @@ class DevelopmentDataCleanupSeederTest extends TestCase
     public function test_it_cleans_development_data_and_preserves_requested_master_records(): void
     {
         $records = $this->createDevelopmentScenario();
+        DB::table('modulos_sistema')
+            ->where('codigo', 'MODULO_FINANZAS')
+            ->update(['activo' => false]);
 
         foreach (DevelopmentDataCleanupSeeder::TABLES_TO_CLEAN as $table) {
             $this->assertGreaterThan(
@@ -63,6 +66,10 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'vehiculo_id' => $records['truck_id'],
         ]);
         $this->assertDatabaseHas('tipos_pollo', ['id' => $records['chicken_type_id']]);
+        $this->assertDatabaseHas('modulos_sistema', [
+            'codigo' => 'MODULO_FINANZAS',
+            'activo' => false,
+        ]);
 
         // A second run must be safe when every target table is already empty.
         $this->seed(DevelopmentDataCleanupSeeder::class);

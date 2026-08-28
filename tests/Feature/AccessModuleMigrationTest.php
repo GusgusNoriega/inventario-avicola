@@ -16,7 +16,7 @@ class AccessModuleMigrationTest extends TestCase
 
     public function test_module_markers_are_created_from_the_central_catalogue(): void
     {
-        $moduleCodes = array_keys(config('access_modules.modules'));
+        $moduleCodes = $this->assignableModuleCodes();
 
         $this->assertCount(14, $moduleCodes);
         $this->assertEqualsCanonicalizing(
@@ -61,7 +61,7 @@ class AccessModuleMigrationTest extends TestCase
                 ->all(),
         );
         $this->assertEqualsCanonicalizing(
-            array_keys(config('access_modules.modules')),
+            $this->assignableModuleCodes(),
             $administratorRole->fresh()->permissions()
                 ->where('codigo', 'like', 'MODULO_%')
                 ->pluck('codigo')
@@ -204,6 +204,15 @@ class AccessModuleMigrationTest extends TestCase
         return require database_path(
             'migrations/2026_07_16_000003_add_module_access_and_password_change_flag.php',
         );
+    }
+
+    /** @return list<string> */
+    private function assignableModuleCodes(): array
+    {
+        return collect(config('access_modules.modules'))
+            ->filter(fn (array $module): bool => (bool) ($module['assignable'] ?? true))
+            ->keys()
+            ->all();
     }
 
     private function providerReportMigration(): Migration

@@ -216,7 +216,10 @@ class DatabaseSeeder extends Seeder
             return [$code => $permission];
         });
 
-        foreach (config('access_modules.modules', []) as $moduleCode => $module) {
+        $assignableModules = collect(config('access_modules.modules', []))
+            ->filter(fn (array $module): bool => (bool) ($module['assignable'] ?? true));
+
+        foreach ($assignableModules as $moduleCode => $module) {
             $permissions->put($moduleCode, Permission::query()->updateOrCreate(
                 ['codigo' => $moduleCode],
                 ['descripcion' => (string) ($module['name'] ?? $moduleCode)]

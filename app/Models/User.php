@@ -90,6 +90,12 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
+        $modules = app(AccessModuleRegistry::class);
+
+        if (! $modules->isPermissionAvailable($permission)) {
+            return false;
+        }
+
         if ($this->isAdministrator()) {
             return true;
         }

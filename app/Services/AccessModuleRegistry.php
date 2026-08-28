@@ -13,12 +13,36 @@ class AccessModuleRegistry
 
     public const MANAGEMENT_MODULE_CODE = 'MODULO_USUARIOS_ROLES';
 
+    public function __construct(
+        private readonly ModuleAvailabilityService $availability,
+    ) {}
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function allModules(): array
+    {
+        return collect($this->availability->allModules())
+            ->filter(fn (array $module): bool => (bool) ($module['assignable'] ?? true))
+            ->all();
+    }
+
     /**
      * @return array<string, array<string, mixed>>
      */
     public function modules(): array
     {
-        return config('access_modules.modules', []);
+        return collect($this->allModules())
+            ->only($this->codes())
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allCodes(): array
+    {
+        return array_keys($this->allModules());
     }
 
     /**
@@ -26,7 +50,47 @@ class AccessModuleRegistry
      */
     public function codes(): array
     {
-        return array_keys($this->modules());
+        return collect($this->availability->enabledCodes())
+            ->intersect($this->allCodes())
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function disabledCodes(): array
+    {
+        return collect($this->availability->disabledCodes())
+            ->intersect($this->allCodes())
+            ->values()
+            ->all();
+    }
+
+    public function isEnabled(string $code): bool
+    {
+        return $this->availability->isEnabled($code);
+    }
+
+    public function isPermissionAvailable(string $permission): bool
+    {
+        if (in_array($permission, $this->allCodes(), true)) {
+            return in_array($permission, $this->codes(), true);
+        }
+
+        $ownerCodes = collect($this->allModules())
+            ->filter(function (array $module) use ($permission): bool {
+                $relatedPermissions = [
+                    ...($module['technical_permissions'] ?? []),
+                    ...($module['legacy_permissions'] ?? []),
+                ];
+
+                return in_array($permission, $relatedPermissions, true);
+            })
+            ->keys();
+
+        return $ownerCodes->isEmpty()
+            || $ownerCodes->intersect($this->codes())->isNotEmpty();
     }
 
     /**
@@ -56,11 +120,19 @@ class AccessModuleRegistry
             ->filter()
             ->unique()
             ->values();
-        $invalid = $normalized->diff($this->codes())->values();
+        $unknown = $normalized->diff($this->allCodes())->values();
 
-        if ($invalid->isNotEmpty()) {
+        if ($unknown->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'module_codes' => 'Uno o mas modulos no existen: '.$invalid->implode(', ').'.',
+                'module_codes' => 'Uno o más módulos no existen: '.$unknown->implode(', ').'.',
+            ]);
+        }
+
+        $disabled = $normalized->intersect($this->disabledCodes())->values();
+
+        if ($disabled->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'module_codes' => 'Uno o más módulos están desactivados en el servidor: '.$disabled->implode(', ').'.',
             ]);
         }
 
@@ -89,7 +161,7 @@ class AccessModuleRegistry
             ->map(function (string $code): int {
                 $permission = Permission::query()->firstOrCreate(
                     ['codigo' => $code],
-                    ['descripcion' => $this->permissionDescription($code, $this->modules())]
+                    ['descripcion' => $this->permissionDescription($code, $this->allModules())]
                 );
 
                 return (int) $permission->id;
@@ -110,15 +182,15 @@ class AccessModuleRegistry
             ->map(fn (mixed $code): string => (string) $code)
             ->unique()
             ->values();
-        $explicit = $permissions->intersect($this->codes());
+        $explicit = $permissions->intersect($this->allCodes());
 
         if ($explicit->isNotEmpty()) {
-            return collect($this->codes())->filter(
+            return collect($this->allCodes())->filter(
                 fn (string $code): bool => $explicit->containsStrict($code)
             )->values()->all();
         }
 
-        return collect($this->modules())
+        return collect($this->allModules())
             ->filter(function (array $module) use ($permissions): bool {
                 return $permissions->intersect($module['legacy_permissions'] ?? [])->isNotEmpty();
             })
@@ -138,7 +210,12 @@ class AccessModuleRegistry
 
         $role->loadMissing('permissions:id,codigo');
 
-        return $this->moduleCodesForPermissions($role->permissions->pluck('codigo'));
+        $assigned = $this->moduleCodesForPermissions($role->permissions->pluck('codigo'));
+
+        return collect($this->codes())
+            ->filter(fn (string $code): bool => in_array($code, $assigned, true))
+            ->values()
+            ->all();
     }
 
     /**

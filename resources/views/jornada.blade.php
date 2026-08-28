@@ -17,7 +17,9 @@
       </div>
       <div class="journey-header-actions">
         <a class="menu-return-btn" href="{{ route('menu') }}">Menú</a>
-        <a class="btn btn-primary" href="{{ route('operacion') }}#despacho">Ir a despacho</a>
+        @if (auth()->user()->hasModule('MODULO_DESPACHO_MAYORISTA'))
+          <a class="btn btn-primary" href="{{ route('operacion') }}#despacho">Ir a despacho</a>
+        @endif
       </div>
     </header>
 

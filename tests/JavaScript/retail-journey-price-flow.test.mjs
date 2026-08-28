@@ -222,6 +222,7 @@ function createRuntime(options = {}) {
 
   const runtimeFactory = new Function(
     "RETAIL_STATION",
+    "JOURNEY_PRICE_MANAGEMENT_ENABLED",
     "RETAIL_CHICKEN_TYPE_CODES",
     "RETAIL_API_BASE",
     "OPERATION_RETURN",
@@ -286,6 +287,7 @@ function createRuntime(options = {}) {
 
   const runtime = runtimeFactory(
     "2",
+    options.journeyPriceManagementEnabled ?? true,
     ["POLLO_BENEFICIADO", "POLLO_PELADO"],
     "/despacho-minorista-2",
     "DEVOLUCION",
@@ -382,6 +384,16 @@ test("la tarjeta y el botón Cambiar precio abren editores con responsabilidades
     priceEventSource,
     /elements\.priceCard\?\.addEventListener\("click", openDirectPriceEditor\)/
   );
+});
+
+test("la tarjeta no abre el editor global cuando la gestión de jornada está desactivada", () => {
+  const harness = createRuntime({ journeyPriceManagementEnabled: false });
+
+  harness.runtime.openDirectPriceEditor();
+
+  assert.equal(harness.openCalls, 0);
+  assert.equal(harness.requests.length, 0);
+  assert.match(harness.messages.at(-1), /desactivada en el servidor/i);
 });
 
 test("Minorista 2 descarta overrides de borradores anteriores incluso sin cliente", () => {
@@ -498,7 +510,7 @@ test("el ticket usa el override y al terminar libera cliente y columna para volv
   harness.list.items = [{ chickenTypeCode: "POLLO_PELADO" }];
 
   const save = harness.runtime.saveDispatch();
-  assert.equal(harness.requests[0].path, "/operacion/precios-jornada");
+  assert.equal(harness.requests[0].path, "/despacho-minorista-2/precios-jornada");
   harness.pendingResponses[0].resolve({
     data: { global_prices: { POLLO_PELADO: 9.6 } }
   });
@@ -550,7 +562,7 @@ test("el refresco remoto actualiza la jornada pero conserva override y tarifa CL
   const refresh = harness.runtime.refreshJourneyPrices();
 
   assert.equal(harness.requests.length, 1);
-  assert.equal(harness.requests[0].path, "/operacion/precios-jornada");
+  assert.equal(harness.requests[0].path, "/despacho-minorista-2/precios-jornada");
   assert.equal(harness.requests[0].options, undefined);
 
   harness.pendingResponses[0].resolve({
@@ -580,7 +592,7 @@ test("saveDispatch exige revisar un cambio remoto y solo publica tras un segundo
   const save = harness.runtime.saveDispatch();
 
   assert.equal(harness.requests.length, 1);
-  assert.equal(harness.requests[0].path, "/operacion/precios-jornada");
+  assert.equal(harness.requests[0].path, "/despacho-minorista-2/precios-jornada");
   harness.pendingResponses[0].resolve({
     data: {
       global_prices: { POLLO_PELADO: 9.8 }
@@ -606,7 +618,7 @@ test("saveDispatch exige revisar un cambio remoto y solo publica tras un segundo
 
   const confirmedSave = harness.runtime.saveDispatch();
   assert.equal(harness.requests.length, 2);
-  assert.equal(harness.requests[1].path, "/operacion/precios-jornada");
+  assert.equal(harness.requests[1].path, "/despacho-minorista-2/precios-jornada");
   harness.pendingResponses[1].resolve({
     data: {
       global_prices: { POLLO_PELADO: 9.8 }
@@ -640,7 +652,7 @@ test("un conflicto de tarifa CLIENTE recarga catálogo y el segundo intento env�
 
   const firstSave = harness.runtime.saveDispatch();
   assert.equal(harness.requests.length, 1);
-  assert.equal(harness.requests[0].path, "/operacion/precios-jornada");
+  assert.equal(harness.requests[0].path, "/despacho-minorista-2/precios-jornada");
   harness.pendingResponses[0].resolve({
     data: {
       global_prices: { POLLO_PELADO: 9 }
@@ -700,7 +712,7 @@ test("un conflicto de tarifa CLIENTE recarga catálogo y el segundo intento env�
 
   const secondSave = harness.runtime.saveDispatch();
   assert.equal(harness.requests.length, 4);
-  assert.equal(harness.requests[3].path, "/operacion/precios-jornada");
+  assert.equal(harness.requests[3].path, "/despacho-minorista-2/precios-jornada");
   harness.pendingResponses[3].resolve({
     data: {
       global_prices: { POLLO_PELADO: 9 }

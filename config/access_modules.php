@@ -6,9 +6,10 @@ return [
     | Modulos de acceso
     |--------------------------------------------------------------------------
     |
-    | Cada modulo representa una entrada del menu principal. La interfaz de
-    | administracion solo expone estos codigos; los permisos tecnicos se
-    | mantienen como un detalle de compatibilidad para los endpoints actuales.
+    | Cada modulo representa una entrada del menu principal. Los modulos que
+    | participan en roles se exponen en la administracion; las utilidades
+    | globales usan assignable=false y solo se controlan desde el servidor.
+    | Los permisos tecnicos se mantienen como detalle de compatibilidad.
     |
     */
     'modules' => [
@@ -63,6 +64,14 @@ return [
                 'DESPACHOS_CREAR',
             ],
             'legacy_permissions' => ['DESPACHOS_VER', 'DESPACHOS_CREAR'],
+        ],
+        'MODULO_PRECIOS_JORNADA' => [
+            'name' => 'Precios de la jornada',
+            'description' => 'Precios generales compartidos por los despachos minoristas 1 y 2.',
+            'path' => '/precios-jornada',
+            'assignable' => false,
+            'technical_permissions' => [],
+            'legacy_permissions' => [],
         ],
         'MODULO_RESUMEN_JORNADA' => [
             'name' => 'Resumen de la jornada',
@@ -164,6 +173,14 @@ return [
             'path' => '/administracion/accesos',
             'technical_permissions' => ['USUARIOS_GESTIONAR'],
             'legacy_permissions' => ['USUARIOS_GESTIONAR'],
+        ],
+        'MODULO_INSTALAR_APLICACION' => [
+            'name' => 'Instalar aplicación',
+            'description' => 'Instalación local y configuración de impresión de la aplicación.',
+            'path' => '/instalar',
+            'assignable' => false,
+            'technical_permissions' => [],
+            'legacy_permissions' => [],
         ],
     ],
 ];
