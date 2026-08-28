@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use App\Http\Middleware\EnsureModuleIsEnabled;
 use App\Http\Middleware\EnsurePasswordWasChanged;
 use App\Http\Middleware\EnsureUserHasModule;
@@ -19,6 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->api(replace: [
+            Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class => EnsureFrontendRequestsAreStateful::class,
+        ]);
 
         $middleware->alias([
             'active' => EnsureUserIsActive::class,

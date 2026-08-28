@@ -424,6 +424,60 @@ class RetailDispatchApiTest extends TestCase
         );
     }
 
+    public function test_web_session_on_an_unlisted_same_origin_alias_can_load_the_second_station_catalog(): void
+    {
+        config([
+            'sanctum.stateful' => ['otra-instalacion.example'],
+            'session.driver' => 'database',
+        ]);
+
+        $this->user->forceFill([
+            'password_hash' => 'Clave-web-123',
+        ])->save();
+
+        $this->resetResolvedWebSession();
+        $this->app['auth']->shouldUse('web');
+
+        $origin = 'https://www.instalacion-alterna.example';
+        $hostHeaders = ['Host' => 'www.instalacion-alterna.example'];
+        $this->withServerVariables([
+            'HTTPS' => 'on',
+            'SERVER_PORT' => 443,
+        ]);
+
+        $loginResponse = $this->withHeaders($hostHeaders)
+            ->post("{$origin}/login", [
+                'login' => $this->user->email,
+                'password' => 'Clave-web-123',
+            ])
+            ->assertRedirect('/');
+
+        $sessionCookie = collect($loginResponse->headers->getCookies())
+            ->first(fn ($cookie): bool => $cookie->getName() === config('session.cookie'));
+
+        $this->assertNotNull($sessionCookie);
+        $this->withCredentials()->withUnencryptedCookie(
+            $sessionCookie->getName(),
+            $sessionCookie->getValue(),
+        );
+
+        $this->resetResolvedWebSession();
+
+        $this->withHeaders($hostHeaders)
+            ->getJson("{$origin}/api/v1/despacho-minorista-2/catalogo")
+            ->assertUnauthorized();
+
+        $this->resetResolvedWebSession();
+
+        $this->withHeaders([
+            ...$hostHeaders,
+            'Sec-Fetch-Site' => 'same-origin',
+        ])->getJson("{$origin}/api/v1/despacho-minorista-2/catalogo")
+            ->assertOk()
+            ->assertJsonPath('data.clients.0.id', $this->clientId)
+            ->assertJsonPath('data.scale.code', 'BALANZA_MINORISTA_2');
+    }
+
     public function test_retail_payment_defaults_are_persisted_independently_for_both_stations(): void
     {
         $entityId = (int) DB::table('cuentas_financieras')
@@ -2252,5 +2306,13 @@ class RetailDispatchApiTest extends TestCase
             'moneda' => 'PEN',
             'importe' => $amount,
         ];
+    }
+
+    private function resetResolvedWebSession(): void
+    {
+        $this->app['auth']->guard('web')->forgetUser();
+        $this->app['auth']->forgetGuards();
+        $this->app['session']->forgetDrivers();
+        $this->app->forgetInstance('session.store');
     }
 }

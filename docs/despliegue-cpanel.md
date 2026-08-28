@@ -47,18 +47,39 @@ cd /home/USUARIO/repositorios/sistema-pollos
 composer install --no-dev --optimize-autoloader
 cp .env.example .env
 php artisan key:generate
-php artisan migrate --force
-php artisan storage:link
-php artisan optimize
 ```
 
-Después se deben configurar en `.env` la URL, la base de datos y el entorno de
-producción:
+Antes de migrar u optimizar, se deben configurar en `.env` la URL pública, la
+base de datos y el entorno de producción:
 
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://dominio.example
+SESSION_PATH=/
+SESSION_DOMAIN=null
+SESSION_SECURE_COOKIE=true
+```
+
+`APP_URL` es la URL canónica de esa instalación, incluido `https`. La página y
+su `/api/v1` deben permanecer en el mismo origen. Si el hosting también atiende
+un alias como `www`, ambos hosts deben apuntar al mismo directorio `public`; se
+recomienda redirigir el alias hacia `APP_URL` para no crear dos sesiones
+independientes. La API reconoce el host de una petición legítima del mismo
+origen, pero las cookies con `SESSION_DOMAIN=null` no se comparten entre hosts.
+
+`SANCTUM_STATEFUL_DOMAINS` solo es necesario para una arquitectura deliberada
+con frontend y API en orígenes diferentes. Esa arquitectura también exige
+configurar CORS, cookies y `credentials`; agregar únicamente la variable no es
+suficiente para este cliente web.
+
+Con `.env` ya configurado, se completa la instalación:
+
+```bash
+php artisan optimize:clear
+php artisan migrate --force
+php artisan storage:link
+php artisan optimize
 ```
 
 También hay que dar permisos de escritura al usuario de PHP sobre:
@@ -75,23 +96,21 @@ Cuando solo cambie código PHP, Blade, CSS o JavaScript ya versionado:
 ```bash
 cd /home/USUARIO/repositorios/sistema-pollos
 git pull --ff-only
+composer install --no-dev --optimize-autoloader
 php artisan optimize:clear
+php artisan migrate --force
 php artisan optimize
 ```
 
-No se ejecuta Node ni npm.
+Cada vez que se cambie `APP_URL`, el dominio de sesión o cualquier otra variable
+de `.env`, se deben ejecutar también `php artisan optimize:clear` y después
+`php artisan optimize`; de lo contrario, el servidor puede seguir usando la
+configuración anterior.
 
-Si hay migraciones nuevas:
-
-```bash
-php artisan migrate --force
-```
-
-Si cambió `composer.lock`:
-
-```bash
-composer install --no-dev --optimize-autoloader
-```
+`composer install` y `migrate --force` son seguros aunque no haya cambios
+pendientes. No se ejecuta Node ni npm. Si LiteSpeed continúa usando código
+anterior después de esta secuencia, se debe reiniciar PHP/LSAPI o vaciar OPcache
+desde cPanel.
 
 ## Si se empieza a usar Vite
 

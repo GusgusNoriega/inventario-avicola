@@ -41,7 +41,9 @@ export async function apiRequest(path, options = {}) {
 
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
-  } else if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+  }
+
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     await ensureCsrfCookie();
     const csrfToken = cookieValue("XSRF-TOKEN");
     if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken);

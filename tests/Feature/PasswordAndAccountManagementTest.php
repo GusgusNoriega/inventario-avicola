@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
@@ -34,6 +36,110 @@ class PasswordAndAccountManagementTest extends TestCase
             ->assertRedirect('/login');
 
         $this->assertGuest();
+    }
+
+    public function test_web_session_authenticates_same_origin_api_when_cached_domains_do_not_include_the_host(): void
+    {
+        $configuredRequest = Request::create(
+            'https://alias-configurado.example/api/v1/auth/me',
+            'GET',
+            server: ['HTTP_REFERER' => 'https://alias-configurado.example/operacion'],
+        );
+
+        config(['sanctum.stateful' => [Sanctum::$currentRequestHostPlaceholder]]);
+        $this->assertTrue(EnsureFrontendRequestsAreStateful::fromFrontend($configuredRequest));
+
+        config([
+            'sanctum.stateful' => ['otra-instalacion.example'],
+            'session.driver' => 'database',
+        ]);
+
+        $request = Request::create(
+            'https://instalacion-alterna.example/api/v1/auth/me',
+            'GET',
+            server: ['HTTP_SEC_FETCH_SITE' => 'same-origin'],
+        );
+
+        $this->assertTrue(EnsureFrontendRequestsAreStateful::fromFrontend($request));
+
+        $crossOriginRequest = Request::create(
+            'https://instalacion-alterna.example/api/v1/auth/me',
+            'GET',
+            server: [
+                'HTTP_REFERER' => 'https://sitio-externo.example/',
+                'HTTP_SEC_FETCH_SITE' => 'same-origin',
+            ],
+        );
+
+        $this->assertFalse(EnsureFrontendRequestsAreStateful::fromFrontend($crossOriginRequest));
+
+        $unprovenRequest = Request::create(
+            'https://instalacion-alterna.example/api/v1/auth/me',
+            'GET',
+        );
+
+        $this->assertFalse(EnsureFrontendRequestsAreStateful::fromFrontend($unprovenRequest));
+
+        $unsafeRequestWithoutOrigin = Request::create(
+            'https://instalacion-alterna.example/api/v1/auth/me',
+            'POST',
+            server: ['HTTP_SEC_FETCH_SITE' => 'same-origin'],
+        );
+
+        $this->assertFalse(EnsureFrontendRequestsAreStateful::fromFrontend($unsafeRequestWithoutOrigin));
+
+        $user = User::factory()->create([
+            'email' => 'dominio.alterno@example.com',
+            'password_hash' => 'Clave-web-123',
+        ]);
+
+        $origin = 'https://instalacion-alterna.example';
+        $hostHeaders = ['Host' => 'instalacion-alterna.example'];
+        $this->withServerVariables([
+            'HTTPS' => 'on',
+            'SERVER_PORT' => 443,
+        ]);
+
+        $loginResponse = $this->withHeaders($hostHeaders)
+            ->post("{$origin}/login", [
+                'login' => 'dominio.alterno@example.com',
+                'password' => 'Clave-web-123',
+            ])
+            ->assertRedirect('/');
+
+        $sessionCookie = collect($loginResponse->headers->getCookies())
+            ->first(fn ($cookie): bool => $cookie->getName() === config('session.cookie'));
+
+        $this->assertNotNull($sessionCookie);
+        $this->withCredentials()->withUnencryptedCookie(
+            $sessionCookie->getName(),
+            $sessionCookie->getValue(),
+        );
+
+        $this->resetResolvedWebSession();
+
+        $this->withHeaders($hostHeaders)
+            ->getJson("{$origin}/api/v1/auth/me")
+            ->assertUnauthorized();
+
+        $this->resetResolvedWebSession();
+
+        $this->withHeaders([
+            ...$hostHeaders,
+            'Sec-Fetch-Site' => 'same-origin',
+        ])->getJson("{$origin}/api/v1/auth/me")
+            ->assertOk()
+            ->assertJsonPath('data.email', $user->email);
+
+        $this->resetResolvedWebSession();
+        config(['sanctum.stateful' => [Sanctum::$currentRequestHostPlaceholder]]);
+
+        $this->withHeaders([
+            ...$hostHeaders,
+            'Referer' => 'https://instalacion-alterna.example/operacion',
+        ])->getJson("{$origin}/api/v1/auth/me")
+            ->assertOk()
+            ->assertJsonPath('data.email', $user->email);
     }
 
     public function test_inactive_user_cannot_create_a_web_session(): void
@@ -279,5 +385,13 @@ class PasswordAndAccountManagementTest extends TestCase
             'payload' => 'test-payload',
             'last_activity' => now()->timestamp,
         ]);
+    }
+
+    private function resetResolvedWebSession(): void
+    {
+        $this->app['auth']->guard('web')->forgetUser();
+        $this->app['auth']->forgetGuards();
+        $this->app['session']->forgetDrivers();
+        $this->app->forgetInstance('session.store');
     }
 }
