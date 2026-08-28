@@ -161,6 +161,18 @@ class DatabaseSeeder extends Seeder
                     'flowControl' => 'none',
                 ], JSON_THROW_ON_ERROR),
             ],
+            [
+                'codigo' => 'BALANZA_DESPACHO_PRODUCTOS',
+                'nombre' => 'Balanza despacho de productos',
+                'modo_conexion' => 'SERIAL',
+                'configuracion' => json_encode([
+                    'baudRate' => 9600,
+                    'dataBits' => 8,
+                    'stopBits' => 1,
+                    'parity' => 'none',
+                    'flowControl' => 'none',
+                ], JSON_THROW_ON_ERROR),
+            ],
         ])->each(fn (array $balanza) => DB::table('balanzas')->updateOrInsert(
             ['sucursal_id' => $sucursalId, 'codigo' => $balanza['codigo']],
             [
@@ -224,6 +236,13 @@ class DatabaseSeeder extends Seeder
                 ['codigo' => $moduleCode],
                 ['descripcion' => (string) ($module['name'] ?? $moduleCode)]
             ));
+
+            foreach ((array) ($module['technical_permissions'] ?? []) as $technicalPermissionCode) {
+                $permissions->put($technicalPermissionCode, Permission::query()->updateOrCreate(
+                    ['codigo' => $technicalPermissionCode],
+                    ['descripcion' => str($technicalPermissionCode)->replace('_', ' ')->lower()->ucfirst()]
+                ));
+            }
         }
 
         $administrator = Role::query()->updateOrCreate(

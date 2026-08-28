@@ -24,6 +24,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-mayorista-2',
             '/despacho-productos',
             '/despacho-productos/productos',
+            '/despacho-productos/despacho',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -54,6 +55,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-mayorista-2',
             '/despacho-productos',
             '/despacho-productos/productos',
+            '/despacho-productos/despacho',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -123,7 +125,7 @@ class ModuleAccessControlTest extends TestCase
         }
     }
 
-    public function test_product_dispatch_module_unlocks_its_menu_and_catalog_view(): void
+    public function test_product_dispatch_module_unlocks_its_menu_catalog_and_dispatch_views(): void
     {
         $user = User::factory()->create();
         $this->grantModules($user, ['MODULO_DESPACHO_PRODUCTOS']);
@@ -132,6 +134,7 @@ class ModuleAccessControlTest extends TestCase
 
         $this->get('/despacho-productos')->assertOk();
         $this->get('/despacho-productos/productos')->assertOk();
+        $this->get('/despacho-productos/despacho')->assertOk();
         $this->get('/')
             ->assertOk()
             ->assertSee(route('despacho-productos.menu'), false);
@@ -227,6 +230,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-minorista-2',
             '/despacho-productos',
             '/despacho-productos/productos',
+            '/despacho-productos/despacho',
             '/precios-jornada',
             '/tickets-dia',
             '/reporte-proveedores',

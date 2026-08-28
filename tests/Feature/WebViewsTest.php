@@ -97,8 +97,9 @@ class WebViewsTest extends TestCase
             ->assertOk()
             ->assertSee('Administrar productos')
             ->assertSee('Despachar productos')
-            ->assertSee('Siguiente etapa')
+            ->assertSee('Abrir despacho')
             ->assertSee('href="'.route('despacho-productos.productos').'"', false)
+            ->assertSee('href="'.route('despacho-productos.despacho').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
@@ -119,6 +120,30 @@ class WebViewsTest extends TestCase
             ->assertSee('id="addProductVariationBtn"', false)
             ->assertSee(asset('js/despacho-productos.js'), false)
             ->assertSee(asset('css/despacho-productos.css'), false);
+
+        $dispatch = $this->get('/despacho-productos/despacho');
+        $dispatch
+            ->assertOk()
+            ->assertSee('Despacho de productos')
+            ->assertSee('id="pddChooseProduct"', false)
+            ->assertSee('id="pddLiveWeight"', false)
+            ->assertSee('id="pddManualDialog"', false)
+            ->assertSee('id="pddClientDialog"', false)
+            ->assertSee('id="pddEditDialog"', false)
+            ->assertSee('id="pddPriceDialog"', false)
+            ->assertSee('id="pddScaleDialog"', false)
+            ->assertSee('id="pddSave"', false)
+            ->assertSee('id="pddSavePrint"', false)
+            ->assertSee(asset('js/despacho-productos-despacho.js'), false)
+            ->assertSee(asset('css/despacho-productos-despacho.css'), false);
+
+        $javascript = (string) file_get_contents(public_path('js/despacho-productos-despacho.js'));
+        $stylesheet = (string) file_get_contents(public_path('css/despacho-productos-despacho.css'));
+
+        $this->assertStringContainsString('RetailScaleController', $javascript);
+        $this->assertStringContainsString('buildTicketPayload', $javascript);
+        $this->assertStringContainsString('printProductDispatchTicket', $javascript);
+        $this->assertStringContainsString('touch-action: pan-x', $stylesheet);
     }
 
     public function test_install_application_view_exposes_the_direct_pwa_prompt(): void

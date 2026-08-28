@@ -1,0 +1,203 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  PRODUCT_DISPATCH_DRAFT_COUNT,
+  PRODUCT_DISPATCH_SCALE_CODE,
+  PRODUCT_PRICE_MODE_KG,
+  PRODUCT_PRICE_MODE_UNIT,
+  buildDraftCollection,
+  buildTicketPayload,
+  calculateDraft,
+  calculateLine,
+  effectiveProduct,
+  normalizeCatalog,
+  normalizeDraft
+} from "../../public/js/despacho-productos-despacho-utils.js";
+
+test("la estación siempre mantiene ocho listas independientes y recuperables", () => {
+  const drafts = buildDraftCollection();
+
+  assert.equal(drafts.length, PRODUCT_DISPATCH_DRAFT_COUNT);
+  assert.deepEqual(drafts.map((draft) => draft.number), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(new Set(drafts.map((draft) => draft.id)).size, PRODUCT_DISPATCH_DRAFT_COUNT);
+  drafts.forEach((draft) => {
+    assert.match(draft.id, /^[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+    assert.deepEqual(draft.items, []);
+    assert.equal(draft.client_id, null);
+  });
+});
+
+test("una variación reemplaza precio merma nombre e imagen y muestra su propio respaldo visual", () => {
+  const product = {
+    id: 7,
+    name: "Pavo",
+    image_url: "/pavo.jpg",
+    price: 18,
+    price_mode: PRODUCT_PRICE_MODE_KG,
+    waste_grams_per_unit: 25
+  };
+  const withImage = effectiveProduct(product, {
+    id: 71,
+    name: "Grande",
+    image_url: "/pavo-grande.jpg",
+    price: 20,
+    price_mode: PRODUCT_PRICE_MODE_UNIT,
+    waste_grams_per_unit: 30
+  });
+  const withoutImage = effectiveProduct(product, {
+    id: 72,
+    name: "Mediano",
+    image_url: null,
+    price: 19,
+    price_mode: PRODUCT_PRICE_MODE_KG,
+    waste_grams_per_unit: 28
+  });
+
+  assert.deepEqual(withImage, {
+    product_id: 7,
+    variation_id: 71,
+    product_name: "Pavo",
+    variation_name: "Grande",
+    display_name: "Pavo · Grande",
+    image_url: "/pavo-grande.jpg",
+    price: 20,
+    price_mode: PRODUCT_PRICE_MODE_UNIT,
+    waste_grams_per_unit: 30
+  });
+  assert.equal(withoutImage.image_url, null);
+});
+
+test("los importes por kg usan peso neto y los importes por unidad usan cantidad", () => {
+  const kgLine = calculateLine({
+    quantity: 2,
+    read_weight_kg: 10,
+    waste_total_grams: 100,
+    unit_price: 21,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+  const unitLine = calculateLine({
+    quantity: 12,
+    read_weight_kg: 2,
+    waste_total_grams: 24,
+    unit_price: 0.75,
+    price_mode: PRODUCT_PRICE_MODE_UNIT
+  });
+
+  assert.deepEqual(kgLine, {
+    quantity: 2,
+    read_weight_kg: 10,
+    waste_total_grams: 100,
+    waste_weight_kg: 0.1,
+    net_weight_kg: 9.9,
+    unit_price: 21,
+    price_mode: PRODUCT_PRICE_MODE_KG,
+    amount: 207.9
+  });
+  assert.equal(unitLine.net_weight_kg, 1.976);
+  assert.equal(unitLine.amount, 9);
+  assert.deepEqual(calculateDraft([kgLine, unitLine]), {
+    weighings: 2,
+    quantity: 14,
+    read_weight_kg: 12,
+    waste_total_grams: 124,
+    net_weight_kg: 11.876,
+    amount: 216.9
+  });
+});
+
+test("la recuperación limpia listas dañadas sin convertir una pesada manual en lectura física", () => {
+  const recovered = normalizeDraft({
+    id: "11111111-1111-4111-8111-111111111111",
+    client_id: "9",
+    price_overrides: { "7:base": "18.12346", bad: -2 },
+    items: [
+      {
+        local_id: "manual-1",
+        product_id: "7",
+        variation_id: "",
+        quantity: 2,
+        read_weight_kg: 4.5554,
+        waste_total_grams: 50,
+        unit_price: 18,
+        price_mode: PRODUCT_PRICE_MODE_KG,
+        weight_source: "MANUAL",
+        scale_reading: { raw_frame: "no debe sobrevivir" }
+      },
+      { product_id: 8, quantity: 0, read_weight_kg: 3, unit_price: 1 }
+    ]
+  }, 3);
+
+  assert.equal(recovered.number, 3);
+  assert.equal(recovered.client_id, 9);
+  assert.deepEqual(recovered.price_overrides, { "7:base": 18.1235 });
+  assert.equal(recovered.items.length, 1);
+  assert.equal(recovered.items[0].read_weight_kg, 4.555);
+  assert.equal(recovered.items[0].weight_source, "MANUAL");
+  assert.equal(recovered.items[0].scale_reading, null);
+});
+
+test("el payload conserva precisión y evidencia solo para la balanza de productos", () => {
+  const draft = normalizeDraft({
+    id: "22222222-2222-4222-8222-222222222222",
+    client_id: 5,
+    items: [{
+      product_id: 7,
+      variation_id: 71,
+      quantity: 2,
+      unit_price: 20.5,
+      read_weight_kg: 4.321,
+      waste_total_grams: 60,
+      price_mode: PRODUCT_PRICE_MODE_KG,
+      weight_source: PRODUCT_DISPATCH_SCALE_CODE,
+      weighed_at: "2026-08-28T10:00:00-05:00",
+      scale_reading: {
+        raw_frame: "ST,+004.321kg",
+        connection_mode: "serial",
+        device_name: "COM7"
+      }
+    }]
+  });
+
+  assert.deepEqual(buildTicketPayload(draft), {
+    draft_id: "22222222-2222-4222-8222-222222222222",
+    client_id: 5,
+    weighings: [{
+      product_id: 7,
+      variation_id: 71,
+      quantity: 2,
+      price_mode: PRODUCT_PRICE_MODE_KG,
+      unit_price: "20.5000",
+      waste_total_grams: 60,
+      weight_source: PRODUCT_DISPATCH_SCALE_CODE,
+      read_weight_kg: "4.321",
+      weighed_at: "2026-08-28T10:00:00-05:00",
+      scale_reading: {
+        raw_frame: "ST,+004.321kg",
+        connection_mode: "serial",
+        device_name: "COM7"
+      }
+    }]
+  });
+});
+
+test("el catálogo acepta el contrato del API y normaliza clientes para búsqueda por documento", () => {
+  const catalog = normalizeCatalog({ data: {
+    products: [{
+      id: 1,
+      name: "Huevo",
+      price: "0.7500",
+      price_mode: PRODUCT_PRICE_MODE_UNIT,
+      waste_grams_per_unit: 2,
+      variations: []
+    }],
+    clients: [{ id: 4, name: "Tienda Norte", document_number: "901234567" }],
+    currency: "S/",
+    ticket_title: "AVÍCOLA DE PRUEBA"
+  } });
+
+  assert.equal(catalog.products[0].price, 0.75);
+  assert.equal(catalog.products[0].price_mode, PRODUCT_PRICE_MODE_UNIT);
+  assert.equal(catalog.clients[0].document, "901234567");
+  assert.equal(catalog.ticket_title, "AVÍCOLA DE PRUEBA");
+});

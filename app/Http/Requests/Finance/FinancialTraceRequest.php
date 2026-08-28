@@ -9,7 +9,6 @@ class FinancialTraceRequest extends ListFinancialMovementsRequest
     {
         return array_merge(parent::rules(), [
             'entidad_financiera_id' => ['nullable', 'integer', 'min:1'],
-            'ticket_id' => ['nullable', 'integer', 'min:1'],
             'comprobante_id' => ['nullable', 'integer', 'min:1'],
         ]);
     }

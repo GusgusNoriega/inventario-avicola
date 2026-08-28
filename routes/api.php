@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\LiveChickenReceptionDispatchTicketController;
 use App\Http\Controllers\Api\V1\LiveChickenReceptionHistoryController;
 use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
+use App\Http\Controllers\Api\V1\ProductDispatchOperationController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderReportController;
 use App\Http\Controllers\Api\V1\ProviderVehicleController;
@@ -351,8 +352,10 @@ Route::prefix('v1')->group(function (): void {
     Route::prefix('productos-despacho')
         ->middleware($productDispatchMiddleware)
         ->group(function (): void {
-            Route::get('/', [DispatchProductController::class, 'index']);
-            Route::post('/', [DispatchProductController::class, 'store']);
+            Route::get('/', [DispatchProductController::class, 'index'])
+                ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR');
+            Route::post('/', [DispatchProductController::class, 'store'])
+                ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR');
             Route::get('/{producto}/imagen', [DispatchProductController::class, 'image'])
                 ->whereNumber('producto');
             Route::get(
@@ -360,11 +363,25 @@ Route::prefix('v1')->group(function (): void {
                 [DispatchProductController::class, 'variationImage'],
             )->whereNumber(['producto', 'variacion']);
             Route::get('/{producto}', [DispatchProductController::class, 'show'])
-                ->whereNumber('producto');
+                ->whereNumber('producto')
+                ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR');
             Route::put('/{producto}', [DispatchProductController::class, 'update'])
-                ->whereNumber('producto');
+                ->whereNumber('producto')
+                ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR');
             Route::delete('/{producto}', [DispatchProductController::class, 'destroy'])
-                ->whereNumber('producto');
+                ->whereNumber('producto')
+                ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR');
+        });
+    Route::prefix('despacho-productos')
+        ->middleware([
+            ...$productDispatchMiddleware,
+            'permission:PRODUCTOS_DESPACHO_DESPACHAR',
+        ])
+        ->group(function (): void {
+            Route::get('/catalogo', [ProductDispatchOperationController::class, 'catalog']);
+            Route::post('/tickets', [ProductDispatchOperationController::class, 'store']);
+            Route::get('/tickets/{ticket}', [ProductDispatchOperationController::class, 'show'])
+                ->whereNumber('ticket');
         });
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
         ->middleware($retailOneMiddleware);

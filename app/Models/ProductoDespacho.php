@@ -58,6 +58,12 @@ class ProductoDespacho extends Model
             ->orderBy('nombre');
     }
 
+    /** @return HasMany<PesadaDespachoProducto, $this> */
+    public function pesadasDespacho(): HasMany
+    {
+        return $this->hasMany(PesadaDespachoProducto::class, 'producto_despacho_id');
+    }
+
     protected function casts(): array
     {
         return [

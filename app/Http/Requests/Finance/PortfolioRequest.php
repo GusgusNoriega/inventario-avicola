@@ -15,6 +15,11 @@ class PortfolioRequest extends FinancialFormRequest
             'cliente_id' => ['nullable', 'integer', 'min:1'],
             'proveedor_id' => ['nullable', 'integer', 'min:1'],
             'ticket_id' => ['nullable', 'integer', 'min:1'],
+            'ticket_tipo' => [
+                'nullable',
+                Rule::prohibitedIf(fn (): bool => ! $this->filled('ticket_id')),
+                Rule::in(['DESPACHO_AVICOLA', 'DESPACHO_PRODUCTOS']),
+            ],
             'estado' => ['nullable', Rule::in(['BORRADOR', 'PENDIENTE', 'PARCIAL', 'PAGADO', 'ANULADO'])],
             'naturaleza' => ['nullable', Rule::in(['CARGO', 'ABONO'])],
             'moneda' => ['nullable', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'],
@@ -32,6 +37,9 @@ class PortfolioRequest extends FinancialFormRequest
             'lado' => strtoupper(trim((string) $this->input('lado'))),
             'moneda' => $this->filled('moneda')
                 ? strtoupper(trim((string) $this->input('moneda')))
+                : null,
+            'ticket_tipo' => $this->filled('ticket_tipo')
+                ? strtoupper(trim((string) $this->input('ticket_tipo')))
                 : null,
             'solo_pendientes' => $this->boolean('solo_pendientes', true),
         ]);

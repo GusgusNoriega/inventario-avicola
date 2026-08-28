@@ -54,7 +54,7 @@
           <span class="product-dispatch-menu-action">Administrar <span aria-hidden="true">→</span></span>
         </a>
 
-        <span class="product-dispatch-menu-card card is-dispatch is-disabled" aria-disabled="true">
+        <a class="product-dispatch-menu-card card is-dispatch" href="{{ route('despacho-productos.despacho') }}">
           <span class="product-dispatch-menu-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
               <path d="M4 6h16v12H4z"></path>
@@ -67,8 +67,8 @@
             <strong>Despachar productos</strong>
             <span>Selecciona productos, registra cantidades, captura el peso y genera la venta.</span>
           </span>
-          <span class="product-dispatch-menu-action">Siguiente etapa</span>
-        </span>
+          <span class="product-dispatch-menu-action">Abrir despacho <span aria-hidden="true">→</span></span>
+        </a>
       </nav>
     </section>
 

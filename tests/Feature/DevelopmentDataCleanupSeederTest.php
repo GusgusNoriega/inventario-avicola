@@ -191,6 +191,19 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        $dispatchProductId = DB::table('productos_despacho')->insertGetId([
+            'empresa_id' => $companyId,
+            'nombre' => 'Producto de prueba conservado',
+            'nombre_normalizado' => 'PRODUCTO DE PRUEBA CONSERVADO',
+            'modo_precio' => 'POR_KG',
+            'precio_venta' => 4,
+            'merma_gramos_unidad' => 100,
+            'estado' => 'ACTIVO',
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         $cageTypeId = DB::table('tipos_java')->insertGetId([
             'codigo' => 'JAVA_PRUEBA',
             'nombre' => 'Java de prueba',
@@ -294,6 +307,56 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'precio_kg' => 10,
             'subtotal' => 100,
             'created_at' => $now,
+        ]);
+        $productTicketId = DB::table('tickets_despacho_productos')->insertGetId([
+            'empresa_id' => $companyId,
+            'sucursal_id' => $branchId,
+            'referencia_externa' => (string) Str::uuid(),
+            'codigo' => 'PD-PRUEBA-001',
+            'fecha_operativa' => today(),
+            'cliente_id' => $client->id,
+            'tipo_cliente' => 'CLIENTE_REGISTRADO',
+            'cliente_tipo_documento_snapshot' => $client->tipo_documento,
+            'cliente_numero_documento_snapshot' => $client->numero_documento,
+            'cliente_nombre_snapshot' => $client->nombre_razon_social,
+            'moneda' => 'PEN',
+            'cantidad_total' => 1,
+            'peso_leido_total_kg' => 2,
+            'merma_total_gramos' => 100,
+            'peso_neto_total_kg' => 1.9,
+            'subtotal' => 7.6,
+            'total' => 7.6,
+            'estado' => 'REGISTRADO',
+            'registrado_at' => $now,
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('pesadas_despacho_productos')->insert([
+            'ticket_despacho_producto_id' => $productTicketId,
+            'numero' => 1,
+            'producto_despacho_id' => $dispatchProductId,
+            'producto_nombre_snapshot' => 'Producto de prueba conservado',
+            'modo_precio_snapshot' => 'POR_KG',
+            'precio_catalogo_snapshot' => 4,
+            'precio_venta_snapshot' => 4,
+            'origen_precio' => 'CATALOGO',
+            'cantidad' => 1,
+            'origen_peso' => 'MANUAL',
+            'peso_leido_kg' => 2,
+            'merma_catalogo_gramos_unidad' => 100,
+            'merma_total_gramos' => 100,
+            'peso_neto_kg' => 1.9,
+            'importe' => 7.6,
+            'pesada_at' => $now,
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('comprobante_tickets_despacho_productos')->insert([
+            'comprobante_id' => $documentId,
+            'ticket_despacho_producto_id' => $productTicketId,
+            'importe_aplicado' => 7.6,
         ]);
 
         $paymentId = DB::table('pagos')->insertGetId([

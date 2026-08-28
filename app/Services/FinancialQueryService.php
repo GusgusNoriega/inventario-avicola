@@ -106,12 +106,25 @@ class FinancialQueryService
                 ->where('comprobante.estado', '!=', 'ANULADO'))
             ->when($filters['desde'] ?? null, fn (Builder $query, string $date) => $query->whereDate('comprobante.fecha_emision', '>=', $date))
             ->when($filters['hasta'] ?? null, fn (Builder $query, string $date) => $query->whereDate('comprobante.fecha_emision', '<=', $date))
-            ->when($filters['ticket_id'] ?? null, fn (Builder $query, int|string $ticketId) => $query->whereExists(
-                fn (Builder $pivot) => $pivot->selectRaw('1')
-                    ->from('comprobante_tickets as ct')
-                    ->whereColumn('ct.comprobante_id', 'comprobante.id')
-                    ->where('ct.ticket_id', $ticketId)
-            ))
+            ->when($filters['ticket_id'] ?? null, function (Builder $query, int|string $ticketId) use ($filters): void {
+                if (($filters['ticket_tipo'] ?? 'DESPACHO_AVICOLA') === 'DESPACHO_PRODUCTOS') {
+                    $query->whereExists(
+                        fn (Builder $pivot) => $pivot->selectRaw('1')
+                            ->from('comprobante_tickets_despacho_productos as ctdp')
+                            ->whereColumn('ctdp.comprobante_id', 'comprobante.id')
+                            ->where('ctdp.ticket_despacho_producto_id', $ticketId)
+                    );
+
+                    return;
+                }
+
+                $query->whereExists(
+                    fn (Builder $pivot) => $pivot->selectRaw('1')
+                        ->from('comprobante_tickets as ct')
+                        ->whereColumn('ct.comprobante_id', 'comprobante.id')
+                        ->where('ct.ticket_id', $ticketId)
+                );
+            })
             ->when(trim((string) ($filters['buscar'] ?? '')) !== '', function (Builder $query) use ($filters): void {
                 $search = trim((string) $filters['buscar']);
                 $query->where(function (Builder $nested) use ($search): void {
@@ -361,13 +374,32 @@ class FinancialQueryService
                 fn (Builder $application) => $application->selectRaw('1')->from('pago_aplicaciones as pa')
                     ->whereColumn('pa.pago_id', 'pago.id')->where('pa.comprobante_id', $id)
             ))
-            ->when($filters['ticket_id'] ?? null, fn (Builder $query, int|string $id) => $query->whereExists(
-                fn (Builder $application) => $application->selectRaw('1')
-                    ->from('pago_aplicaciones as pa')
-                    ->join('comprobante_tickets as ct', 'ct.comprobante_id', '=', 'pa.comprobante_id')
-                    ->whereColumn('pa.pago_id', 'pago.id')
-                    ->where('ct.ticket_id', $id)
-            ))
+            ->when($filters['ticket_id'] ?? null, function (Builder $query, int|string $id) use ($filters): void {
+                if (($filters['ticket_tipo'] ?? 'DESPACHO_AVICOLA') === 'DESPACHO_PRODUCTOS') {
+                    $query->whereExists(
+                        fn (Builder $application) => $application->selectRaw('1')
+                            ->from('pago_aplicaciones as pa')
+                            ->join(
+                                'comprobante_tickets_despacho_productos as ctdp',
+                                'ctdp.comprobante_id',
+                                '=',
+                                'pa.comprobante_id',
+                            )
+                            ->whereColumn('pa.pago_id', 'pago.id')
+                            ->where('ctdp.ticket_despacho_producto_id', $id)
+                    );
+
+                    return;
+                }
+
+                $query->whereExists(
+                    fn (Builder $application) => $application->selectRaw('1')
+                        ->from('pago_aplicaciones as pa')
+                        ->join('comprobante_tickets as ct', 'ct.comprobante_id', '=', 'pa.comprobante_id')
+                        ->whereColumn('pa.pago_id', 'pago.id')
+                        ->where('ct.ticket_id', $id)
+                );
+            })
             ->when(trim((string) ($filters['buscar'] ?? '')) !== '', function (Builder $query) use ($filters): void {
                 $search = trim((string) $filters['buscar']);
                 $query->where(function (Builder $nested) use ($search): void {
@@ -665,17 +697,49 @@ class FinancialQueryService
             return [];
         }
 
-        return DB::table('comprobante_tickets as pivot')
+        $dispatchTickets = DB::table('comprobante_tickets as pivot')
             ->join('tickets_despacho as ticket', 'ticket.id', '=', 'pivot.ticket_id')
             ->whereIn('pivot.comprobante_id', $documentIds)
             ->get(['pivot.comprobante_id', 'ticket.id', 'ticket.codigo', 'ticket.canal', 'ticket.estado'])
-            ->groupBy('comprobante_id')
-            ->map(fn ($rows) => $rows->map(fn (object $row): array => [
+            ->map(fn (object $row): array => [
+                'comprobante_id' => (int) $row->comprobante_id,
                 'id' => (int) $row->id,
+                'tipo' => 'DESPACHO_AVICOLA',
                 'codigo' => $row->codigo,
                 'canal' => $row->canal,
                 'estado' => $row->estado,
-            ])->all())->all();
+            ]);
+
+        $productDispatchTickets = DB::table('comprobante_tickets_despacho_productos as pivot')
+            ->join(
+                'tickets_despacho_productos as ticket',
+                'ticket.id',
+                '=',
+                'pivot.ticket_despacho_producto_id',
+            )
+            ->whereIn('pivot.comprobante_id', $documentIds)
+            ->get(['pivot.comprobante_id', 'ticket.id', 'ticket.codigo', 'ticket.estado'])
+            ->map(fn (object $row): array => [
+                'comprobante_id' => (int) $row->comprobante_id,
+                'id' => (int) $row->id,
+                'tipo' => 'DESPACHO_PRODUCTOS',
+                'codigo' => $row->codigo,
+                'canal' => 'PRODUCTOS',
+                'estado' => $row->estado,
+            ]);
+
+        return $dispatchTickets
+            ->concat($productDispatchTickets)
+            ->groupBy('comprobante_id')
+            ->map(fn (Collection $rows): array => $rows
+                ->map(fn (array $row): array => [
+                    'id' => $row['id'],
+                    'tipo' => $row['tipo'],
+                    'codigo' => $row['codigo'],
+                    'canal' => $row['canal'],
+                    'estado' => $row['estado'],
+                ])->all())
+            ->all();
     }
 
     /** @param list<int> $documentIds @return array<int, string> */

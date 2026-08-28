@@ -21,6 +21,12 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
             'proveedor_id' => ['nullable', 'integer', 'min:1'],
             'cuenta_id' => ['nullable', 'integer', 'min:1'],
             'metodo_pago_id' => ['nullable', 'integer', 'min:1'],
+            'ticket_id' => ['nullable', 'integer', 'min:1'],
+            'ticket_tipo' => [
+                'nullable',
+                Rule::prohibitedIf(fn (): bool => ! $this->filled('ticket_id')),
+                Rule::in(['DESPACHO_AVICOLA', 'DESPACHO_PRODUCTOS']),
+            ],
             'moneda' => ['nullable', 'string', 'size:3', 'regex:/^[A-Z]{3}$/'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
@@ -39,6 +45,9 @@ class ListFinancialMovementsRequest extends FinancialFormRequest
                 : null,
             'aplicacion_estado' => $this->filled('aplicacion_estado')
                 ? strtoupper(trim((string) $this->input('aplicacion_estado')))
+                : null,
+            'ticket_tipo' => $this->filled('ticket_tipo')
+                ? strtoupper(trim((string) $this->input('ticket_tipo')))
                 : null,
             'moneda' => $this->filled('moneda')
                 ? strtoupper(trim((string) $this->input('moneda')))

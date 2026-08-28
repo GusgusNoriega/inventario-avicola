@@ -144,7 +144,7 @@ class ReportDataService
                         ? 'DEVOLUCION'
                         : mb_strtoupper($description),
                     'weight' => $line->peso_neto_kg,
-                    'price' => $line->precio_kg,
+                    'price' => $this->detailPrice($line),
                     'marker' => '',
                     'outflow' => $effect,
                     'inflow' => null,
@@ -761,7 +761,9 @@ class ReportDataService
                     ->unique()
                     ->implode(', '),
                 'weight' => (float) $lines->sum('peso_neto_kg'),
-                'price' => $lines->count() === 1 ? (float) ($lines->first()->precio_kg ?? 0) : null,
+                'price' => $lines->count() === 1
+                    ? (float) ($this->detailPrice($lines->first()) ?? 0)
+                    : null,
                 'debit' => $effect > 0 ? abs($effect) : 0,
                 'credit' => $effect < 0 ? abs($effect) : 0,
                 'effect' => $effect,
@@ -1121,6 +1123,13 @@ class ReportDataService
     {
         return (float) $document->total
             * ($document->naturaleza === Comprobante::NATURE_CREDIT ? -1 : 1);
+    }
+
+    private function detailPrice(object $line): mixed
+    {
+        return ($line->modo_precio ?? null) === 'POR_UNIDAD'
+            ? ($line->precio_unitario ?? null)
+            : ($line->precio_kg ?? null);
     }
 
     private function customerChickenTypeLabel(?string $code, string $description): string

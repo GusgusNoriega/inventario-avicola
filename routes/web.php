@@ -87,7 +87,11 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             Route::view('/despacho-productos', 'despacho-productos-menu')
                 ->name('despacho-productos.menu');
             Route::view('/despacho-productos/productos', 'despacho-productos-productos')
+                ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR')
                 ->name('despacho-productos.productos');
+            Route::view('/despacho-productos/despacho', 'despacho-productos-despacho')
+                ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR')
+                ->name('despacho-productos.despacho');
         });
 
         Route::view('/precios-jornada', 'precios-jornada')

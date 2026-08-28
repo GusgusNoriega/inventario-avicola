@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(112, $migrationFiles);
+        $this->assertCount(113, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -45,6 +45,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_08_22_000001_create_live_chicken_reception_module.php' => 5,
                 '2026_08_27_000001_allow_negative_java_inventory_balances.php' => 2,
                 '2026_08_28_000002_create_product_dispatch_catalog.php' => 2,
+                '2026_08_28_000003_create_product_dispatch_operation.php' => 4,
                 default => 1,
             };
 
@@ -133,6 +134,9 @@ class DatabaseSchemaTest extends TestCase
             'cobranza_asignaciones',
             'productos_despacho',
             'variaciones_producto_despacho',
+            'tickets_despacho_productos',
+            'pesadas_despacho_productos',
+            'comprobante_tickets_despacho_productos',
         ];
 
         foreach ($tables as $table) {
@@ -175,6 +179,9 @@ class DatabaseSchemaTest extends TestCase
             'metodos_pago' => ['codigo', 'nombre', 'requiere_referencia', 'estado'],
             'costos_compra_pesadas' => ['pesada_id', 'proveedor_id', 'precio_historial_id', 'precio_kg', 'peso_kg', 'importe', 'estado', 'origen', 'created_by'],
             'comprobantes' => ['operacion', 'naturaleza', 'codigo', 'origen_codigo', 'origen_clave', 'total', 'saldo_pendiente', 'contraparte_tipo_documento_snapshot', 'contraparte_numero_documento_snapshot', 'contraparte_nombre_snapshot', 'contraparte_direccion_snapshot', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
+            'comprobante_detalles' => ['comprobante_id', 'tipo_pollo_id', 'producto_despacho_id', 'variacion_producto_despacho_id', 'descripcion', 'cantidad_aves', 'cantidad_unidades', 'peso_neto_kg', 'modo_precio', 'precio_kg', 'precio_unitario', 'subtotal'],
+            'tickets_despacho_productos' => ['empresa_id', 'sucursal_id', 'referencia_externa', 'codigo', 'fecha_operativa', 'cliente_id', 'tipo_cliente', 'cliente_nombre_snapshot', 'cantidad_total', 'peso_leido_total_kg', 'merma_total_gramos', 'peso_neto_total_kg', 'subtotal', 'total', 'estado', 'registrado_at', 'created_by'],
+            'pesadas_despacho_productos' => ['ticket_despacho_producto_id', 'numero', 'producto_despacho_id', 'variacion_producto_despacho_id', 'lectura_balanza_id', 'producto_nombre_snapshot', 'variacion_nombre_snapshot', 'modo_precio_snapshot', 'precio_catalogo_snapshot', 'precio_venta_snapshot', 'origen_precio', 'cantidad', 'origen_peso', 'peso_leido_kg', 'merma_catalogo_gramos_unidad', 'merma_total_gramos', 'peso_neto_kg', 'importe', 'pesada_at', 'created_by'],
             'pagos' => ['empresa_id', 'codigo', 'tercero_id', 'tipo', 'cliente_id', 'proveedor_id', 'cuenta_origen_id', 'cuenta_destino_id', 'metodo_pago_id', 'direccion', 'fecha_hora', 'metodo', 'referencia', 'importe', 'estado', 'idempotency_key', 'reversa_de_pago_id', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'pago_aplicaciones' => ['pago_id', 'comprobante_id', 'lado', 'importe_aplicado', 'created_by', 'created_at'],
             'pago_aplicacion_operaciones' => ['empresa_id', 'pago_id', 'idempotency_key', 'payload_hash', 'importe_total', 'aplicaciones', 'observaciones', 'created_by', 'created_at'],
@@ -380,8 +387,12 @@ class DatabaseSchemaTest extends TestCase
         $administratorId = DB::table('roles')
             ->where('codigo', 'ADMINISTRADOR')
             ->value('id');
+        $operatorId = DB::table('roles')
+            ->where('codigo', 'OPERADOR')
+            ->value('id');
 
         $this->assertNotNull($administratorId);
+        $this->assertNotNull($operatorId);
         $this->assertSame(7, DB::table('metodos_pago')->count());
         $this->assertDatabaseCount('tipos_java', 3);
         $this->assertDatabaseHas('tipos_java', [
@@ -408,6 +419,21 @@ class DatabaseSchemaTest extends TestCase
                     ->select('id'))
                 ->count()
         );
+
+        foreach ([$administratorId, $operatorId] as $roleId) {
+            $this->assertSame(
+                2,
+                DB::table('rol_permisos')
+                    ->where('rol_id', $roleId)
+                    ->whereIn('permiso_id', DB::table('permisos')
+                        ->whereIn('codigo', [
+                            'PRODUCTOS_DESPACHO_GESTIONAR',
+                            'PRODUCTOS_DESPACHO_DESPACHAR',
+                        ])
+                        ->select('id'))
+                    ->count()
+            );
+        }
     }
 
     public function test_financial_schema_rolls_back_and_can_be_applied_again_on_sqlite(): void
