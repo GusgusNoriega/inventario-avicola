@@ -15,6 +15,7 @@
     data-user-id="{{ auth()->id() ?? 'anonymous' }}"
     data-api-base="/despacho-productos"
   >
+    <div id="pddZoomSurface" class="pdd-zoom-surface">
     <header class="pdd-topbar">
       <div class="pdd-brand">
         <span class="pdd-brand-mark" aria-hidden="true">DP</span>
@@ -35,6 +36,10 @@
         </span>
         <button id="pddOpenScaleSettings" class="pdd-icon-action" type="button" aria-haspopup="dialog" aria-controls="pddScaleDialog">
           <span aria-hidden="true">⚙</span><span> Balanza</span>
+        </button>
+        <button id="pddOpenViewSettings" class="pdd-icon-action pdd-view-settings-action" type="button" aria-haspopup="dialog" aria-controls="pddViewDialog">
+          <span aria-hidden="true">Aa</span>
+          <span class="pdd-action-label"><span>Configuración</span><span>Vista</span></span>
         </button>
         <a class="pdd-menu-action" href="{{ route('despacho-productos.menu') }}" aria-label="Volver al módulo Despacho de productos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h7v7H4zM13 5h7v7h-7zM4 14h7v5H4zM13 14h7v5h-7z"></path></svg>
@@ -156,6 +161,7 @@
         <span>Neto <strong id="pddFooterNet">0.000 kg</strong></span>
       </div>
     </footer>
+    </div>
 
     <section id="pddLastTicket" class="pdd-ticket-toast" hidden aria-live="polite">
       <div><strong id="pddLastTicketTitle">Ticket guardado</strong><span id="pddLastTicketDetail"></span></div>
@@ -283,6 +289,39 @@
         <button class="pdd-dialog-confirm" type="button" data-pdd-close="pddScaleDialog">Listo</button>
       </footer>
     </form>
+  </dialog>
+
+  <dialog id="pddViewDialog" class="pdd-dialog pdd-view-dialog" aria-labelledby="pddViewDialogTitle">
+    <section>
+      <header class="pdd-dialog-head">
+        <div><p>Preferencias de pantalla</p><h2 id="pddViewDialogTitle">Configuración de la vista</h2></div>
+        <button type="button" data-pdd-close="pddViewDialog" aria-label="Cerrar">×</button>
+      </header>
+
+      <div class="pdd-theme-setting">
+        <span class="pdd-theme-swatch" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span><strong>Tema oscuro</strong><small>Fondo negro con acentos de color para trabajar cómodamente.</small></span>
+        <b>Activo</b>
+      </div>
+
+      <div class="pdd-zoom-setting">
+        <div>
+          <span>Tamaño de la aplicación</span>
+          <small>Se guarda solamente para este usuario en este navegador.</small>
+        </div>
+        <div class="pdd-zoom-controls" role="group" aria-label="Cambiar tamaño de la aplicación">
+          <button id="pddZoomOut" type="button" aria-label="Disminuir tamaño">−</button>
+          <output id="pddZoomValue" aria-live="polite">100%</output>
+          <button id="pddZoomIn" type="button" aria-label="Aumentar tamaño">＋</button>
+        </div>
+        <div class="pdd-zoom-scale" aria-hidden="true"><span>67%</span><i></i><span>150%</span></div>
+      </div>
+
+      <footer class="pdd-dialog-actions is-spread">
+        <button id="pddZoomReset" class="pdd-dialog-cancel" type="button">Restablecer a 100%</button>
+        <button class="pdd-dialog-confirm" type="button" data-pdd-close="pddViewDialog">Listo</button>
+      </footer>
+    </section>
   </dialog>
 
   <script type="module" src="{{ asset('js/despacho-productos-despacho.js') }}?v={{ filemtime(public_path('js/despacho-productos-despacho.js')) }}"></script>

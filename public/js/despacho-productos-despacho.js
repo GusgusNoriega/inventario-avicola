@@ -25,12 +25,16 @@ import { printProductDispatchTicket } from "./despacho-productos-ticket-printer.
 const station = document.querySelector("#productDispatchStation");
 const apiBase = station?.dataset.apiBase || "/despacho-productos";
 const currentUserId = station?.dataset.userId || "anonymous";
+const APP_SCALE_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
+const viewStorageKey = `sistema-pollos-product-dispatch-view-v1-user-${currentUserId}`;
 
 const elements = {
+  zoomSurface: document.querySelector("#pddZoomSurface"),
   branchName: document.querySelector("#pddBranchName"),
   clock: document.querySelector("#pddClock"),
   scaleStatus: document.querySelector("#pddScaleStatus"),
   openScaleSettings: document.querySelector("#pddOpenScaleSettings"),
+  openViewSettings: document.querySelector("#pddOpenViewSettings"),
   selectedName: document.querySelector("#pddSelectedName"),
   chooseProduct: document.querySelector("#pddChooseProduct"),
   productMedia: document.querySelector("#pddProductMedia"),
@@ -106,7 +110,12 @@ const elements = {
   parity: document.querySelector("#pddParity"),
   rawReading: document.querySelector("#pddRawReading"),
   scaleMessage: document.querySelector("#pddScaleMessage"),
-  disconnectScale: document.querySelector("#pddDisconnectScale")
+  disconnectScale: document.querySelector("#pddDisconnectScale"),
+  viewDialog: document.querySelector("#pddViewDialog"),
+  zoomOut: document.querySelector("#pddZoomOut"),
+  zoomValue: document.querySelector("#pddZoomValue"),
+  zoomIn: document.querySelector("#pddZoomIn"),
+  zoomReset: document.querySelector("#pddZoomReset")
 };
 
 const state = {
@@ -124,6 +133,7 @@ const state = {
   lastRaw: "",
   pendingPrintTicket: null,
   lastFocus: null,
+  appScale: 100,
   scale: null
 };
 
@@ -185,6 +195,47 @@ function openDialog(dialog, focusTarget = null) {
 function closeDialog(dialog) {
   dialog?.querySelectorAll(".pdd-dialog-message").forEach((notice) => notice.remove());
   if (dialog?.open) dialog.close();
+}
+
+function normalizeAppScale(value) {
+  const numeric = Number(value);
+  return APP_SCALE_LEVELS.includes(numeric) ? numeric : 100;
+}
+
+function storedAppScale() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(viewStorageKey) || "null");
+    return normalizeAppScale(saved?.scale ?? saved);
+  } catch {
+    return 100;
+  }
+}
+
+function renderAppScale() {
+  elements.zoomValue.textContent = `${state.appScale}%`;
+  elements.zoomValue.value = `${state.appScale}%`;
+  elements.zoomOut.disabled = state.appScale === APP_SCALE_LEVELS[0];
+  elements.zoomIn.disabled = state.appScale === APP_SCALE_LEVELS.at(-1);
+  elements.zoomReset.disabled = state.appScale === 100;
+}
+
+function applyAppScale(value, persist = true) {
+  state.appScale = normalizeAppScale(value);
+  elements.zoomSurface.style.zoom = String(state.appScale / 100);
+  renderAppScale();
+
+  if (!persist) return;
+  try {
+    localStorage.setItem(viewStorageKey, JSON.stringify({ version: 1, scale: state.appScale }));
+  } catch {
+    // El ajuste sigue funcionando durante esta visita aunque el navegador bloquee el almacenamiento.
+  }
+}
+
+function stepAppScale(direction) {
+  const currentIndex = Math.max(0, APP_SCALE_LEVELS.indexOf(state.appScale));
+  const nextIndex = Math.max(0, Math.min(APP_SCALE_LEVELS.length - 1, currentIndex + direction));
+  applyAppScale(APP_SCALE_LEVELS[nextIndex]);
 }
 
 function storageRead() {
@@ -1088,6 +1139,13 @@ elements.openScaleSettings.addEventListener("click", () => {
   elements.scaleMessage.classList.remove("is-error");
   openDialog(elements.scaleDialog);
 });
+elements.openViewSettings.addEventListener("click", () => {
+  renderAppScale();
+  openDialog(elements.viewDialog, state.appScale === APP_SCALE_LEVELS.at(-1) ? elements.zoomOut : elements.zoomIn);
+});
+elements.zoomOut.addEventListener("click", () => stepAppScale(-1));
+elements.zoomIn.addEventListener("click", () => stepAppScale(1));
+elements.zoomReset.addEventListener("click", () => applyAppScale(100));
 elements.connectBle.addEventListener("click", () => void connectBle());
 elements.connectSerial.addEventListener("click", () => void connectSerial());
 elements.disconnectScale.addEventListener("click", () => void disconnectScale());
@@ -1100,6 +1158,9 @@ document.querySelectorAll(".pdd-dialog").forEach((dialog) => {
 });
 
 window.addEventListener("auth:expired", () => setMessage("Tu sesión venció. Inicia sesión nuevamente; los ocho borradores permanecen en este navegador.", "error"));
+window.addEventListener("storage", (event) => {
+  if (event.key === viewStorageKey) applyAppScale(storedAppScale(), false);
+});
 window.addEventListener("pagehide", () => { void state.scale.destroy(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && !state.loading && state.scale.getState().autoConnectMode) void restoreScale();
@@ -1116,5 +1177,6 @@ function updateClock() {
 
 updateClock();
 window.setInterval(updateClock, 1000);
+applyAppScale(storedAppScale(), false);
 renderAll();
 void loadCatalog();

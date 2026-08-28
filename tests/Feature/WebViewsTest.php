@@ -132,6 +132,13 @@ class WebViewsTest extends TestCase
             ->assertSee('id="pddEditDialog"', false)
             ->assertSee('id="pddPriceDialog"', false)
             ->assertSee('id="pddScaleDialog"', false)
+            ->assertSee('id="pddZoomSurface"', false)
+            ->assertSee('id="pddOpenViewSettings"', false)
+            ->assertSee('id="pddViewDialog"', false)
+            ->assertSee('id="pddZoomOut"', false)
+            ->assertSee('id="pddZoomValue"', false)
+            ->assertSee('id="pddZoomIn"', false)
+            ->assertSee('id="pddZoomReset"', false)
             ->assertSee('id="pddSave"', false)
             ->assertSee('id="pddSavePrint"', false)
             ->assertSee(asset('js/despacho-productos-despacho.js'), false)
@@ -143,6 +150,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('RetailScaleController', $javascript);
         $this->assertStringContainsString('buildTicketPayload', $javascript);
         $this->assertStringContainsString('printProductDispatchTicket', $javascript);
+        $this->assertStringContainsString('APP_SCALE_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150]', $javascript);
+        $this->assertStringContainsString('elements.zoomSurface.style.zoom', $javascript);
+        $this->assertStringContainsString('--pdd-bg: #030605', $stylesheet);
+        $this->assertStringContainsString('color-scheme: dark', $stylesheet);
         $this->assertStringContainsString('touch-action: pan-x', $stylesheet);
     }
 
