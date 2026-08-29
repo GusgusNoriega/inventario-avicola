@@ -139,6 +139,15 @@ class WebViewsTest extends TestCase
             ->assertSee('id="pddZoomValue"', false)
             ->assertSee('id="pddZoomIn"', false)
             ->assertSee('id="pddZoomReset"', false)
+            ->assertSee('id="pddOpenTypography"', false)
+            ->assertSee('aria-controls="pddTypographyPanel"', false)
+            ->assertSee('id="pddTypographyPanel"', false)
+            ->assertSee('aria-modal="false"', false)
+            ->assertSee('id="pddTypographySearch"', false)
+            ->assertSee('id="pddTypographyControls"', false)
+            ->assertSee('id="pddTypographySaveStatus"', false)
+            ->assertSee('data-pdd-typography-preset="accessible"', false)
+            ->assertSee('id="pddTypographyResetAll"', false)
             ->assertSee('id="pddSave"', false)
             ->assertSee('id="pddSavePrint"', false)
             ->assertSee(asset('js/despacho-productos-despacho.js'), false)
@@ -152,7 +161,14 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('printProductDispatchTicket', $javascript);
         $this->assertStringContainsString('APP_SCALE_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150]', $javascript);
         $this->assertStringContainsString('elements.zoomSurface.style.zoom', $javascript);
+        $this->assertStringContainsString('sistema-pollos-product-dispatch-typography-v1-user-', $javascript);
+        $this->assertStringContainsString('document.documentElement.style.setProperty', $javascript);
+        $this->assertStringContainsString('TYPOGRAPHY_GROUPS', $javascript);
         $this->assertStringContainsString('--pdd-bg: #030605', $stylesheet);
+        $this->assertStringContainsString('--pdd-fs-scale-weight: 70px', $stylesheet);
+        $this->assertStringContainsString('--pdd-fs-ticket-total: 18px', $stylesheet);
+        $this->assertStringContainsString('.pdd-typography-panel', $stylesheet);
+        $this->assertStringContainsString('height: 100dvh', $stylesheet);
         $this->assertStringContainsString('color-scheme: dark', $stylesheet);
         $this->assertStringContainsString('touch-action: pan-x', $stylesheet);
     }

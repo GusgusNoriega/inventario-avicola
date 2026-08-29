@@ -317,12 +317,82 @@
         <div class="pdd-zoom-scale" aria-hidden="true"><span>67%</span><i></i><span>150%</span></div>
       </div>
 
+      <div class="pdd-typography-setting">
+        <span class="pdd-typography-setting-icon" aria-hidden="true">Aa</span>
+        <span>
+          <strong>Tipografía detallada</strong>
+          <small id="pddTypographySummary">Tamaño estándar · ajustes independientes para toda la vista.</small>
+        </span>
+        <button
+          id="pddOpenTypography"
+          type="button"
+          aria-controls="pddTypographyPanel"
+          aria-expanded="false"
+        >Editar tamaños</button>
+      </div>
+
       <footer class="pdd-dialog-actions is-spread">
         <button id="pddZoomReset" class="pdd-dialog-cancel" type="button">Restablecer a 100%</button>
         <button class="pdd-dialog-confirm" type="button" data-pdd-close="pddViewDialog">Listo</button>
       </footer>
     </section>
   </dialog>
+
+  <aside
+    id="pddTypographyPanel"
+    class="pdd-typography-panel"
+    role="dialog"
+    aria-modal="false"
+    aria-hidden="true"
+    aria-labelledby="pddTypographyTitle"
+    hidden
+  >
+    <header class="pdd-typography-head">
+      <div>
+        <p>Vista previa en tiempo real</p>
+        <h2 id="pddTypographyTitle">Tipografía detallada</h2>
+      </div>
+      <button id="pddTypographyClose" type="button" aria-label="Cerrar configuración de tipografía">×</button>
+    </header>
+
+    <section class="pdd-typography-toolbar" aria-label="Herramientas de tipografía">
+      <div class="pdd-typography-state">
+        <span id="pddTypographyProfile">Perfil estándar</span>
+        <span id="pddTypographySaveStatus" role="status" aria-live="polite">Guardado automático activo</span>
+      </div>
+      <p>Modifica cada texto por separado. El resultado se aplica al instante y queda guardado para este usuario en este navegador.</p>
+
+      <div id="pddTypographyPreview" class="pdd-typography-preview" aria-live="polite">
+        <span>Vista del ajuste activo</span>
+        <strong>Aa 123.45 kg</strong>
+        <small>Producto avícola · S/ 98.70</small>
+      </div>
+
+      <label class="pdd-typography-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="pddTypographySearch" type="search" autocomplete="off" placeholder="Buscar: peso, lista, botón, ventana…" aria-label="Buscar un ajuste tipográfico">
+      </label>
+
+      <div class="pdd-typography-presets" role="group" aria-label="Perfiles rápidos de tipografía">
+        <button type="button" data-pdd-typography-preset="compact">Compacta</button>
+        <button type="button" data-pdd-typography-preset="standard">Estándar</button>
+        <button type="button" data-pdd-typography-preset="large">Grande</button>
+        <button type="button" data-pdd-typography-preset="accessible">Alta legibilidad</button>
+      </div>
+
+      <div class="pdd-typography-group-tools">
+        <button id="pddTypographyExpandAll" type="button">Abrir todos</button>
+        <button id="pddTypographyCollapseAll" type="button">Cerrar todos</button>
+      </div>
+    </section>
+
+    <div id="pddTypographyControls" class="pdd-typography-controls"></div>
+
+    <footer class="pdd-typography-footer">
+      <button id="pddTypographyResetAll" type="button">Restablecer todo</button>
+      <button id="pddTypographyDone" type="button">Cerrar</button>
+    </footer>
+  </aside>
 
   <script type="module" src="{{ asset('js/despacho-productos-despacho.js') }}?v={{ filemtime(public_path('js/despacho-productos-despacho.js')) }}"></script>
 </body>

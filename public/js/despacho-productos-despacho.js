@@ -21,12 +21,161 @@ import {
   searchClients
 } from "./despacho-productos-despacho-utils.js";
 import { printProductDispatchTicket } from "./despacho-productos-ticket-printer.js";
+import {
+  buildTypographyPresetValues,
+  defaultTypographyValues,
+  flattenTypographyControls,
+  normalizeTypographyValue,
+  parseTypographyPreferences,
+  sanitizeTypographyValues,
+  serializeTypographyPreferences,
+  typographyChangedCount,
+  typographyValuesEqual
+} from "./despacho-productos-typography.js";
 
 const station = document.querySelector("#productDispatchStation");
 const apiBase = station?.dataset.apiBase || "/despacho-productos";
 const currentUserId = station?.dataset.userId || "anonymous";
 const APP_SCALE_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
 const viewStorageKey = `sistema-pollos-product-dispatch-view-v1-user-${currentUserId}`;
+const typographyStorageKey = `sistema-pollos-product-dispatch-typography-v1-user-${currentUserId}`;
+const TYPOGRAPHY_GROUPS = [
+  {
+    id: "header",
+    label: "Encabezado",
+    description: "Marca, sucursal, reloj y accesos superiores.",
+    controls: [
+      { label: "Título principal", description: "Texto “Despacho de productos”.", variable: "--pdd-fs-header-title", defaultValue: 25, min: 18, max: 36, step: 1, target: ".pdd-brand h1" },
+      { label: "Subtítulo y sucursal", description: "Nombre de la estación y nombre de la sucursal.", variable: "--pdd-fs-header-meta", defaultValue: 12, min: 9, max: 18, step: 0.5, target: ".pdd-brand p, .pdd-branch-meta span" },
+      { label: "Reloj", description: "Hora mostrada en el encabezado.", variable: "--pdd-fs-header-clock", defaultValue: 18, min: 13, max: 30, step: 1, target: ".pdd-branch-meta strong" },
+      { label: "Botones superiores", description: "Balanza, Configuración, Módulo y estado de conexión.", variable: "--pdd-fs-header-actions", defaultValue: 13, min: 10, max: 22, step: 1, target: ".pdd-status-chip, .pdd-icon-action, .pdd-menu-action" }
+    ]
+  },
+  {
+    id: "sections",
+    label: "Títulos de secciones",
+    description: "Encabezados del producto y configuración de la pesada.",
+    controls: [
+      { label: "Etiquetas superiores", description: "Textos pequeños en mayúsculas sobre cada sección.", variable: "--pdd-fs-section-label", defaultValue: 11.5, min: 9, max: 18, step: 0.5, target: ".pdd-panel-heading span, .pdd-config-head span" },
+      { label: "Títulos y producto seleccionado", description: "Nombre del producto y título de configuración.", variable: "--pdd-fs-section-title", defaultValue: 16, min: 12, max: 26, step: 1, target: ".pdd-panel-heading strong, .pdd-config-head strong" },
+      { label: "Acciones de sección", description: "Elegir producto y cambiar precios del ticket.", variable: "--pdd-fs-section-action", defaultValue: 13, min: 10, max: 22, step: 1, target: ".pdd-choose-product, .pdd-link-button" }
+    ]
+  },
+  {
+    id: "scale",
+    label: "Producto y balanza",
+    description: "Imagen, lectura principal y captura del peso.",
+    open: true,
+    controls: [
+      { label: "Inicial del producto", description: "Letras grandes cuando el producto no tiene imagen.", variable: "--pdd-fs-product-initial", defaultValue: 37, min: 22, max: 54, step: 1, target: ".pdd-media-placeholder b" },
+      { label: "Nombre bajo la imagen", description: "Nombre mostrado dentro del cuadro del producto.", variable: "--pdd-fs-product-name", defaultValue: 12, min: 9, max: 20, step: 0.5, target: ".pdd-media-placeholder small" },
+      { label: "Estado de la lectura", description: "Origen de la lectura y estado de la balanza.", variable: "--pdd-fs-scale-meta", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-scale-reading-head" },
+      { label: "Peso principal", description: "Número grande de la balanza en tiempo real.", variable: "--pdd-fs-scale-weight", defaultValue: 70, min: 32, max: 96, step: 2, target: ".pdd-live-weight" },
+      { label: "Unidad kg", description: "Unidad que acompaña el peso principal.", variable: "--pdd-fs-scale-unit", defaultValue: 16, min: 10, max: 28, step: 1, target: ".pdd-live-weight small" },
+      { label: "Botones de captura", description: "Peso manual y Capturar peso.", variable: "--pdd-fs-scale-actions", defaultValue: 12, min: 10, max: 22, step: 1, target: ".pdd-secondary-touch, .pdd-capture-touch" }
+    ]
+  },
+  {
+    id: "fields",
+    label: "Campos y peso neto",
+    description: "Cantidad, precio, merma y total estimado.",
+    controls: [
+      { label: "Etiquetas de campos", description: "Cantidad, Precio de venta y Merma total.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid label > span:first-child" },
+      { label: "Valores de campos", description: "Cantidad, precio y valor de merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-stepper input, .pdd-suffix-input input" },
+      { label: "Ayudas de campos", description: "Forma de cobro y explicación de la merma.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small" },
+      { label: "Unidad de merma", description: "Letra g junto al valor de merma.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-suffix-input b" },
+      { label: "Etiqueta de peso neto", description: "Texto “Peso neto estimado”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-net-preview > span" },
+      { label: "Valor de peso neto", description: "Kilogramos netos estimados.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-net-preview strong" },
+      { label: "Total estimado", description: "Importe estimado debajo del peso neto.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-net-preview small" }
+    ]
+  },
+  {
+    id: "variations",
+    label: "Variaciones",
+    description: "Slider de presentaciones del producto.",
+    controls: [
+      { label: "Título Variaciones", description: "Encabezado de la sección de variaciones.", variable: "--pdd-fs-variation-heading", defaultValue: 12, min: 9, max: 20, step: 0.5, target: ".pdd-variations-heading span" },
+      { label: "Ayuda del slider", description: "Indicación para deslizar y estado sin producto.", variable: "--pdd-fs-variation-hint", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-variations-heading small, .pdd-variation-empty" },
+      { label: "Nombre de la variación", description: "Nombre principal de cada presentación.", variable: "--pdd-fs-variation-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-variation-option b" },
+      { label: "Precio y detalle", description: "Precio o información secundaria de la variación.", variable: "--pdd-fs-variation-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-variation-option small" }
+    ]
+  },
+  {
+    id: "lists",
+    label: "Listas de distribución",
+    description: "Encabezados, clientes y totales de las ocho listas.",
+    controls: [
+      { label: "Etiqueta Distribución", description: "Texto superior de distribución de tickets.", variable: "--pdd-fs-lists-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-lists-heading span" },
+      { label: "Título de las listas", description: "Instrucción principal sobre las ocho listas.", variable: "--pdd-fs-lists-title", defaultValue: 15, min: 11, max: 26, step: 1, target: ".pdd-lists-heading strong" },
+      { label: "Ayuda horizontal", description: "Indicación para deslizar entre las listas.", variable: "--pdd-fs-lists-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-lists-heading small" },
+      { label: "Número de lista", description: "Número grande en la cabecera de cada lista.", variable: "--pdd-fs-list-number", defaultValue: 18, min: 14, max: 32, step: 1, target: ".pdd-list-number" },
+      { label: "Cliente o nombre de lista", description: "Venta al público o cliente asignado.", variable: "--pdd-fs-list-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-list-card-head b, .pdd-list-empty b" },
+      { label: "Detalle y contador", description: "Cliente opcional, lista vacía y cantidad de pesadas.", variable: "--pdd-fs-list-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-list-card-head small, .pdd-list-count, .pdd-list-empty span" },
+      { label: "Etiquetas de totales", description: "Neto y Total al pie de cada lista.", variable: "--pdd-fs-list-total", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-list-totals" },
+      { label: "Importe de la lista", description: "Monto resaltado al pie de cada lista.", variable: "--pdd-fs-list-amount", defaultValue: 13, min: 10, max: 24, step: 1, target: ".pdd-list-total-amount" }
+    ]
+  },
+  {
+    id: "weighings",
+    label: "Pesadas registradas",
+    description: "Cada renglón agregado dentro de una lista.",
+    controls: [
+      { label: "Índice de la pesada", description: "Número pequeño al inicio del renglón.", variable: "--pdd-fs-weighing-index", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-weighing-row > i" },
+      { label: "Nombre del producto pesado", description: "Producto y variación dentro de la lista.", variable: "--pdd-fs-weighing-name", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-row b" },
+      { label: "Detalle de la pesada", description: "Cantidad, peso leído, merma y peso neto.", variable: "--pdd-fs-weighing-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-weighing-row small" },
+      { label: "Importe de la pesada", description: "Monto mostrado al lado derecho del renglón.", variable: "--pdd-fs-weighing-amount", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-row > strong" }
+    ]
+  },
+  {
+    id: "ticket",
+    label: "Ticket y acciones",
+    description: "Lista activa, botones laterales y total del ticket.",
+    controls: [
+      { label: "Títulos de acciones", description: "Asignar cliente, Cambiar precio, Guardar e imprimir.", variable: "--pdd-fs-action-title", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-rail-action b, .pdd-save-button b, .pdd-active-list-badge span" },
+      { label: "Detalle de acciones", description: "Explicación secundaria debajo de cada botón.", variable: "--pdd-fs-action-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-rail-action small, .pdd-save-button small" },
+      { label: "Número de lista activa", description: "Número superior de la barra lateral del ticket.", variable: "--pdd-fs-active-list", defaultValue: 22, min: 15, max: 36, step: 1, target: ".pdd-active-list-badge strong" },
+      { label: "Etiqueta Total de la lista", description: "Texto pequeño sobre el monto principal.", variable: "--pdd-fs-ticket-label", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-total span" },
+      { label: "Total principal del ticket", description: "Monto grande del ticket activo.", variable: "--pdd-fs-ticket-total", defaultValue: 18, min: 14, max: 38, step: 1, target: ".pdd-ticket-total strong" },
+      { label: "Resumen del ticket", description: "Cantidad de pesadas y kilogramos netos.", variable: "--pdd-fs-ticket-detail", defaultValue: 10, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-total small" }
+    ]
+  },
+  {
+    id: "footer",
+    label: "Estado y avisos",
+    description: "Mensajes inferiores y confirmación de tickets.",
+    controls: [
+      { label: "Mensaje de estado", description: "Mensaje operativo en la barra inferior.", variable: "--pdd-fs-footer-message", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-statusbar p" },
+      { label: "Resumen inferior", description: "Pesadas, unidades, merma y peso neto.", variable: "--pdd-fs-footer-summary", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-footer-summary" },
+      { label: "Título del aviso", description: "Título mostrado cuando se guarda un ticket.", variable: "--pdd-fs-toast-title", defaultValue: 13, min: 10, max: 24, step: 1, target: ".pdd-ticket-toast strong" },
+      { label: "Detalle del aviso", description: "Información y botón de reintento de impresión.", variable: "--pdd-fs-toast-detail", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-toast span, #pddRetryPrint" }
+    ]
+  },
+  {
+    id: "dialogs",
+    label: "Ventanas emergentes",
+    description: "Producto, cliente, precio, edición, balanza y peso manual.",
+    controls: [
+      { label: "Subtítulos de ventanas", description: "Texto pequeño superior de cada ventana.", variable: "--pdd-fs-dialog-eyebrow", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-dialog-head p" },
+      { label: "Títulos de ventanas", description: "Título principal de todos los popups.", variable: "--pdd-fs-dialog-title", defaultValue: 22, min: 16, max: 38, step: 1, target: ".pdd-dialog-head h2" },
+      { label: "Texto explicativo", description: "Instrucciones, mensajes y lectura técnica.", variable: "--pdd-fs-dialog-body", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-dialog-intro, .pdd-scale-message, .pdd-raw-reading" },
+      { label: "Buscadores", description: "Texto escrito para buscar productos o clientes.", variable: "--pdd-fs-dialog-search", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-dialog-search input" },
+      { label: "Etiquetas de campos", description: "Nombres de los datos editables en ventanas.", variable: "--pdd-fs-dialog-label", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-edit-grid label > span, .pdd-price-row label > span" },
+      { label: "Valores de campos", description: "Números, listas y precios editables.", variable: "--pdd-fs-dialog-field", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-edit-grid input, .pdd-edit-grid select, .pdd-price-row input" },
+      { label: "Nombres de tarjetas", description: "Productos, clientes, precios y dispositivos.", variable: "--pdd-fs-dialog-item-title", defaultValue: 13, min: 10, max: 24, step: 0.5, target: ".pdd-product-option b, .pdd-client-option b, .pdd-price-row b" },
+      { label: "Detalles de tarjetas", description: "Precio, documento y textos secundarios.", variable: "--pdd-fs-dialog-item-detail", defaultValue: 10, min: 9, max: 20, step: 0.5, target: ".pdd-product-option small, .pdd-client-option small, .pdd-price-row small" },
+      { label: "Botones de ventanas", description: "Cancelar, guardar, aplicar y confirmar.", variable: "--pdd-fs-dialog-actions", defaultValue: 14, min: 10, max: 24, step: 1, target: ".pdd-dialog-actions button" },
+      { label: "Peso manual grande", description: "Número principal al ingresar un peso manual.", variable: "--pdd-fs-manual-weight", defaultValue: 32, min: 22, max: 56, step: 2, target: ".pdd-big-number-input input" },
+      { label: "Resumen de edición", description: "Origen, peso neto y total al editar una pesada.", variable: "--pdd-fs-edit-summary", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-edit-summary" }
+    ]
+  }
+];
+const TYPOGRAPHY_CONTROLS = flattenTypographyControls(TYPOGRAPHY_GROUPS);
+const TYPOGRAPHY_PRESETS = {
+  compact: { label: "Compacta", factor: 0.9 },
+  standard: { label: "Estándar", factor: 1 },
+  large: { label: "Grande", factor: 1.15 },
+  accessible: { label: "Alta legibilidad", factor: 1.22, readableFloor: 13 }
+};
 
 const elements = {
   zoomSurface: document.querySelector("#pddZoomSurface"),
@@ -115,7 +264,20 @@ const elements = {
   zoomOut: document.querySelector("#pddZoomOut"),
   zoomValue: document.querySelector("#pddZoomValue"),
   zoomIn: document.querySelector("#pddZoomIn"),
-  zoomReset: document.querySelector("#pddZoomReset")
+  zoomReset: document.querySelector("#pddZoomReset"),
+  openTypography: document.querySelector("#pddOpenTypography"),
+  typographySummary: document.querySelector("#pddTypographySummary"),
+  typographyPanel: document.querySelector("#pddTypographyPanel"),
+  typographyClose: document.querySelector("#pddTypographyClose"),
+  typographyDone: document.querySelector("#pddTypographyDone"),
+  typographyProfile: document.querySelector("#pddTypographyProfile"),
+  typographySaveStatus: document.querySelector("#pddTypographySaveStatus"),
+  typographyPreview: document.querySelector("#pddTypographyPreview"),
+  typographySearch: document.querySelector("#pddTypographySearch"),
+  typographyControls: document.querySelector("#pddTypographyControls"),
+  typographyExpandAll: document.querySelector("#pddTypographyExpandAll"),
+  typographyCollapseAll: document.querySelector("#pddTypographyCollapseAll"),
+  typographyResetAll: document.querySelector("#pddTypographyResetAll")
 };
 
 const state = {
@@ -134,6 +296,12 @@ const state = {
   pendingPrintTicket: null,
   lastFocus: null,
   appScale: 100,
+  typography: defaultTypographyValues(TYPOGRAPHY_GROUPS),
+  typographyPreset: "standard",
+  typographySaveTimer: null,
+  typographyHideTimer: null,
+  typographyHighlightTimer: null,
+  typographyHighlighted: [],
   scale: null
 };
 
@@ -236,6 +404,302 @@ function stepAppScale(direction) {
   const currentIndex = Math.max(0, APP_SCALE_LEVELS.indexOf(state.appScale));
   const nextIndex = Math.max(0, Math.min(APP_SCALE_LEVELS.length - 1, currentIndex + direction));
   applyAppScale(APP_SCALE_LEVELS[nextIndex]);
+}
+
+function typographyControl(variable) {
+  return TYPOGRAPHY_CONTROLS.find((control) => control.variable === variable) || null;
+}
+
+function typographyPresetValues(preset) {
+  const options = TYPOGRAPHY_PRESETS[preset] || TYPOGRAPHY_PRESETS.standard;
+  return buildTypographyPresetValues(TYPOGRAPHY_GROUPS, options);
+}
+
+function detectTypographyPreset() {
+  return Object.keys(TYPOGRAPHY_PRESETS).find((preset) => (
+    typographyValuesEqual(TYPOGRAPHY_GROUPS, state.typography, typographyPresetValues(preset))
+  )) || "custom";
+}
+
+function setTypographySaveStatus(message, tone = "") {
+  if (!elements.typographySaveStatus) return;
+  elements.typographySaveStatus.textContent = message;
+  elements.typographySaveStatus.classList.toggle("is-saving", tone === "saving");
+  elements.typographySaveStatus.classList.toggle("is-session-only", tone === "session-only");
+}
+
+function storedTypographyPreferences(serialized = undefined) {
+  try {
+    const source = serialized === undefined ? localStorage.getItem(typographyStorageKey) : serialized;
+    return parseTypographyPreferences(TYPOGRAPHY_GROUPS, source);
+  } catch {
+    return {
+      valid: false,
+      preset: "standard",
+      values: defaultTypographyValues(TYPOGRAPHY_GROUPS)
+    };
+  }
+}
+
+function applyTypographyValue(variable, value) {
+  const control = typographyControl(variable);
+  if (!control) return;
+  const normalized = normalizeTypographyValue(control, value);
+  state.typography[variable] = normalized;
+  document.documentElement.style.setProperty(variable, `${normalized}px`);
+}
+
+function applyTypographyValues(values) {
+  state.typography = sanitizeTypographyValues(TYPOGRAPHY_GROUPS, values);
+  TYPOGRAPHY_CONTROLS.forEach((control) => {
+    document.documentElement.style.setProperty(control.variable, `${state.typography[control.variable]}px`);
+  });
+}
+
+function updateTypographyOverview() {
+  const preset = detectTypographyPreset();
+  const changed = typographyChangedCount(TYPOGRAPHY_GROUPS, state.typography);
+  state.typographyPreset = preset;
+
+  if (elements.typographyProfile) {
+    elements.typographyProfile.textContent = preset === "custom"
+      ? "Perfil personalizado"
+      : `Perfil ${TYPOGRAPHY_PRESETS[preset].label.toLocaleLowerCase("es")}`;
+  }
+  if (elements.typographySummary) {
+    elements.typographySummary.textContent = changed === 0
+      ? `Tamaño estándar · ${TYPOGRAPHY_CONTROLS.length} ajustes independientes disponibles.`
+      : `${changed} de ${TYPOGRAPHY_CONTROLS.length} tamaños personalizados · guardado automático.`;
+  }
+  document.querySelectorAll("[data-pdd-typography-preset]").forEach((button) => {
+    const active = button.dataset.pddTypographyPreset === preset;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function persistTypographyNow() {
+  if (state.typographySaveTimer) {
+    window.clearTimeout(state.typographySaveTimer);
+    state.typographySaveTimer = null;
+  }
+  state.typographyPreset = detectTypographyPreset();
+  try {
+    localStorage.setItem(
+      typographyStorageKey,
+      serializeTypographyPreferences(TYPOGRAPHY_GROUPS, state.typography, state.typographyPreset)
+    );
+    setTypographySaveStatus("Cambios guardados", "");
+    return true;
+  } catch {
+    setTypographySaveStatus("Activos sólo durante esta visita", "session-only");
+    return false;
+  }
+}
+
+function scheduleTypographyPersistence() {
+  if (state.typographySaveTimer) window.clearTimeout(state.typographySaveTimer);
+  setTypographySaveStatus("Guardando cambios…", "saving");
+  state.typographySaveTimer = window.setTimeout(persistTypographyNow, 180);
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es")
+    .trim();
+}
+
+function typographyControlMarkup(control, groupIndex, controlIndex) {
+  const value = state.typography[control.variable];
+  const inputId = `pddTypographyRange-${groupIndex}-${controlIndex}`;
+  const numberId = `pddTypographyNumber-${groupIndex}-${controlIndex}`;
+  const isSmall = value < 10;
+
+  return `
+    <article class="pdd-typography-control ${isSmall ? "is-small" : ""}" data-pdd-typography-row="${escapeHtml(control.variable)}">
+      <div class="pdd-typography-control-head">
+        <label for="${inputId}">${escapeHtml(control.label)}</label>
+        <output class="pdd-typography-current" data-pdd-typography-current="${escapeHtml(control.variable)}">${value}px</output>
+        <small>${escapeHtml(control.description)}</small>
+        <span class="pdd-typography-warning">Tamaño muy pequeño: comprueba que siga siendo legible.</span>
+      </div>
+      <div class="pdd-typography-inputs">
+        <button type="button" data-pdd-typography-step="-1" data-pdd-typography-variable="${escapeHtml(control.variable)}" aria-label="Disminuir ${escapeHtml(control.label)}">−</button>
+        <input id="${inputId}" type="range" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" data-pdd-typography-range="${escapeHtml(control.variable)}" aria-label="${escapeHtml(control.label)}" aria-valuetext="${value} píxeles">
+        <label class="pdd-typography-number" for="${numberId}">
+          <input id="${numberId}" type="number" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" inputmode="decimal" data-pdd-typography-number="${escapeHtml(control.variable)}" aria-label="Valor exacto de ${escapeHtml(control.label)} en píxeles">
+          <span>px</span>
+        </label>
+        <button type="button" data-pdd-typography-step="1" data-pdd-typography-variable="${escapeHtml(control.variable)}" aria-label="Aumentar ${escapeHtml(control.label)}">＋</button>
+        <button class="pdd-typography-reset-one" type="button" data-pdd-typography-reset="${escapeHtml(control.variable)}" aria-label="Restablecer ${escapeHtml(control.label)}" title="Restablecer este tamaño">↺</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderTypographyControls(search = elements.typographySearch?.value || "") {
+  if (!elements.typographyControls) return;
+  const query = normalizeSearchText(search);
+  const groups = TYPOGRAPHY_GROUPS.map((group, groupIndex) => {
+    const groupMatches = normalizeSearchText(`${group.label} ${group.description}`).includes(query);
+    const controls = query && !groupMatches
+      ? group.controls.filter((control) => normalizeSearchText(`${control.label} ${control.description}`).includes(query))
+      : group.controls;
+    if (!controls.length) return "";
+
+    return `
+      <details class="pdd-typography-group" data-pdd-typography-group="${escapeHtml(group.id)}" ${query || group.open ? "open" : ""}>
+        <summary>
+          <span><b>${escapeHtml(group.label)}</b><small>${escapeHtml(group.description)} · ${controls.length} ${controls.length === 1 ? "ajuste" : "ajustes"}</small></span>
+        </summary>
+        <div class="pdd-typography-group-body">
+          <button class="pdd-typography-reset-group" type="button" data-pdd-typography-reset-group="${escapeHtml(group.id)}">Restablecer este grupo</button>
+          ${controls.map((control) => typographyControlMarkup(control, groupIndex, group.controls.indexOf(control))).join("")}
+        </div>
+      </details>
+    `;
+  }).join("");
+
+  elements.typographyControls.innerHTML = groups || `
+    <div class="pdd-typography-empty">
+      <strong>No encontramos ese ajuste</strong>
+      <span>Prueba con peso, lista, título, botón, total o ventana.</span>
+    </div>
+  `;
+}
+
+function syncTypographyInputs(variable = null) {
+  const controls = variable ? [typographyControl(variable)].filter(Boolean) : TYPOGRAPHY_CONTROLS;
+  controls.forEach((control) => {
+    const value = state.typography[control.variable];
+    elements.typographyControls?.querySelectorAll(`[data-pdd-typography-range="${control.variable}"]`).forEach((input) => {
+      input.value = value;
+      input.setAttribute("aria-valuetext", `${value} píxeles`);
+    });
+    elements.typographyControls?.querySelectorAll(`[data-pdd-typography-number="${control.variable}"]`).forEach((input) => {
+      input.value = value;
+    });
+    elements.typographyControls?.querySelectorAll(`[data-pdd-typography-current="${control.variable}"]`).forEach((output) => {
+      output.textContent = `${value}px`;
+    });
+    elements.typographyControls?.querySelectorAll(`[data-pdd-typography-row="${control.variable}"]`).forEach((row) => {
+      row.classList.toggle("is-small", value < 10);
+    });
+  });
+}
+
+function updateTypographyPreview(control, value) {
+  if (!elements.typographyPreview || !control) return;
+  elements.typographyPreview.style.setProperty("--pdd-typography-preview-size", `${value}px`);
+  elements.typographyPreview.querySelector("span").textContent = `Vista: ${control.label}`;
+  elements.typographyPreview.querySelector("strong").textContent = control.variable.includes("ticket-total")
+    ? "S/ 98.70"
+    : control.variable.includes("weight") || control.variable.includes("net")
+      ? "12.450 kg"
+      : "Aa 123.45";
+  elements.typographyPreview.querySelector("small").textContent = control.description;
+}
+
+function highlightTypographyTarget(control) {
+  state.typographyHighlighted.forEach((element) => element.classList.remove("pdd-typography-target-highlight"));
+  state.typographyHighlighted = [];
+  if (state.typographyHighlightTimer) window.clearTimeout(state.typographyHighlightTimer);
+  if (!control?.target) return;
+
+  state.typographyHighlighted = Array.from(document.querySelectorAll(control.target))
+    .filter((element) => !elements.typographyPanel?.contains(element))
+    .slice(0, 24);
+  state.typographyHighlighted.forEach((element) => {
+    element.classList.remove("pdd-typography-target-highlight");
+    void element.offsetWidth;
+    element.classList.add("pdd-typography-target-highlight");
+  });
+  state.typographyHighlightTimer = window.setTimeout(() => {
+    state.typographyHighlighted.forEach((element) => element.classList.remove("pdd-typography-target-highlight"));
+    state.typographyHighlighted = [];
+  }, 840);
+}
+
+function updateTypography(variable, value, persist = true) {
+  const control = typographyControl(variable);
+  if (!control) return;
+  applyTypographyValue(variable, value);
+  syncTypographyInputs(variable);
+  updateTypographyPreview(control, state.typography[variable]);
+  updateTypographyOverview();
+  highlightTypographyTarget(control);
+  if (persist) scheduleTypographyPersistence();
+}
+
+function applyTypographyPreset(preset) {
+  if (!TYPOGRAPHY_PRESETS[preset]) return;
+  applyTypographyValues(typographyPresetValues(preset));
+  syncTypographyInputs();
+  updateTypographyOverview();
+  updateTypographyPreview(TYPOGRAPHY_GROUPS[2].controls[3], state.typography["--pdd-fs-scale-weight"]);
+  highlightTypographyTarget(TYPOGRAPHY_GROUPS[2].controls[3]);
+  persistTypographyNow();
+}
+
+function resetTypographyGroup(groupId) {
+  const group = TYPOGRAPHY_GROUPS.find((candidate) => candidate.id === groupId);
+  if (!group) return;
+  group.controls.forEach((control) => applyTypographyValue(control.variable, control.defaultValue));
+  syncTypographyInputs();
+  updateTypographyOverview();
+  updateTypographyPreview(group.controls[0], state.typography[group.controls[0].variable]);
+  highlightTypographyTarget(group.controls[0]);
+  persistTypographyNow();
+}
+
+function resetAllTypography() {
+  applyTypographyValues(defaultTypographyValues(TYPOGRAPHY_GROUPS));
+  syncTypographyInputs();
+  updateTypographyOverview();
+  updateTypographyPreview(TYPOGRAPHY_GROUPS[2].controls[3], state.typography["--pdd-fs-scale-weight"]);
+  try {
+    localStorage.removeItem(typographyStorageKey);
+    setTypographySaveStatus("Todos los tamaños fueron restablecidos", "");
+  } catch {
+    setTypographySaveStatus("Restablecidos sólo durante esta visita", "session-only");
+  }
+}
+
+function openTypographyPanel() {
+  if (!elements.typographyPanel) return;
+  closeDialog(elements.viewDialog);
+  if (state.typographyHideTimer) window.clearTimeout(state.typographyHideTimer);
+  elements.typographyPanel.hidden = false;
+  elements.typographyPanel.setAttribute("aria-hidden", "false");
+  elements.openTypography?.setAttribute("aria-expanded", "true");
+  renderTypographyControls();
+  updateTypographyOverview();
+  window.requestAnimationFrame(() => elements.typographyPanel.classList.add("is-open"));
+  window.setTimeout(() => elements.typographySearch?.focus(), 40);
+}
+
+function closeTypographyPanel() {
+  if (!elements.typographyPanel || elements.typographyPanel.hidden) return;
+  persistTypographyNow();
+  elements.typographyPanel.classList.remove("is-open");
+  elements.typographyPanel.setAttribute("aria-hidden", "true");
+  elements.openTypography?.setAttribute("aria-expanded", "false");
+  state.typographyHideTimer = window.setTimeout(() => {
+    elements.typographyPanel.hidden = true;
+    state.typographyHideTimer = null;
+  }, 250);
+  elements.openViewSettings?.focus();
+}
+
+function initializeTypography() {
+  const restored = storedTypographyPreferences();
+  applyTypographyValues(restored.values);
+  renderTypographyControls("");
+  updateTypographyOverview();
+  updateTypographyPreview(TYPOGRAPHY_GROUPS[2].controls[3], state.typography["--pdd-fs-scale-weight"]);
+  if (!restored.valid) setTypographySaveStatus("Se recuperaron los tamaños predeterminados", "session-only");
 }
 
 function storageRead() {
@@ -1140,12 +1604,83 @@ elements.openScaleSettings.addEventListener("click", () => {
   openDialog(elements.scaleDialog);
 });
 elements.openViewSettings.addEventListener("click", () => {
+  if (!elements.typographyPanel.hidden) closeTypographyPanel();
   renderAppScale();
   openDialog(elements.viewDialog, state.appScale === APP_SCALE_LEVELS.at(-1) ? elements.zoomOut : elements.zoomIn);
 });
 elements.zoomOut.addEventListener("click", () => stepAppScale(-1));
 elements.zoomIn.addEventListener("click", () => stepAppScale(1));
 elements.zoomReset.addEventListener("click", () => applyAppScale(100));
+elements.openTypography.addEventListener("click", openTypographyPanel);
+elements.typographyClose.addEventListener("click", closeTypographyPanel);
+elements.typographyDone.addEventListener("click", closeTypographyPanel);
+elements.typographySearch.addEventListener("input", () => renderTypographyControls(elements.typographySearch.value));
+elements.typographyExpandAll.addEventListener("click", () => {
+  elements.typographyControls.querySelectorAll("details").forEach((details) => { details.open = true; });
+});
+elements.typographyCollapseAll.addEventListener("click", () => {
+  elements.typographyControls.querySelectorAll("details").forEach((details) => { details.open = false; });
+});
+elements.typographyResetAll.addEventListener("click", resetAllTypography);
+document.querySelectorAll("[data-pdd-typography-preset]").forEach((button) => {
+  button.addEventListener("click", () => applyTypographyPreset(button.dataset.pddTypographyPreset));
+});
+elements.typographyControls.addEventListener("click", (event) => {
+  const step = event.target.closest("[data-pdd-typography-step]");
+  if (step) {
+    const control = typographyControl(step.dataset.pddTypographyVariable);
+    const direction = Number(step.dataset.pddTypographyStep);
+    if (control && (direction === -1 || direction === 1)) {
+      updateTypography(control.variable, state.typography[control.variable] + direction * control.step, false);
+      persistTypographyNow();
+    }
+    return;
+  }
+
+  const reset = event.target.closest("[data-pdd-typography-reset]");
+  if (reset) {
+    const control = typographyControl(reset.dataset.pddTypographyReset);
+    if (control) {
+      updateTypography(control.variable, control.defaultValue, false);
+      persistTypographyNow();
+    }
+    return;
+  }
+
+  const resetGroup = event.target.closest("[data-pdd-typography-reset-group]");
+  if (resetGroup) resetTypographyGroup(resetGroup.dataset.pddTypographyResetGroup);
+});
+elements.typographyControls.addEventListener("input", (event) => {
+  const rangeVariable = event.target.dataset.pddTypographyRange;
+  if (rangeVariable) {
+    updateTypography(rangeVariable, event.target.value);
+    return;
+  }
+
+  const numberVariable = event.target.dataset.pddTypographyNumber;
+  const control = typographyControl(numberVariable);
+  const numeric = Number(event.target.value);
+  if (control && event.target.value.trim() !== "" && Number.isFinite(numeric) && numeric >= control.min && numeric <= control.max) {
+    updateTypography(numberVariable, numeric);
+  }
+});
+elements.typographyControls.addEventListener("change", (event) => {
+  const variable = event.target.dataset.pddTypographyRange || event.target.dataset.pddTypographyNumber;
+  const control = typographyControl(variable);
+  if (!control) return;
+  const raw = String(event.target.value).trim();
+  if (!raw || !Number.isFinite(Number(raw))) {
+    syncTypographyInputs(variable);
+    return;
+  }
+  updateTypography(variable, raw, false);
+  persistTypographyNow();
+});
+elements.typographyControls.addEventListener("focusin", (event) => {
+  const row = event.target.closest("[data-pdd-typography-row]");
+  const control = typographyControl(row?.dataset.pddTypographyRow);
+  if (control) updateTypographyPreview(control, state.typography[control.variable]);
+});
 elements.connectBle.addEventListener("click", () => void connectBle());
 elements.connectSerial.addEventListener("click", () => void connectSerial());
 elements.disconnectScale.addEventListener("click", () => void disconnectScale());
@@ -1157,11 +1692,35 @@ document.querySelectorAll(".pdd-dialog").forEach((dialog) => {
   dialog.addEventListener("close", () => state.lastFocus?.focus?.());
 });
 
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.typographyPanel.hidden) {
+    event.preventDefault();
+    closeTypographyPanel();
+  }
+});
+
 window.addEventListener("auth:expired", () => setMessage("Tu sesión venció. Inicia sesión nuevamente; los ocho borradores permanecen en este navegador.", "error"));
 window.addEventListener("storage", (event) => {
   if (event.key === viewStorageKey) applyAppScale(storedAppScale(), false);
+  if (event.key === typographyStorageKey) {
+    const restored = storedTypographyPreferences(event.newValue);
+    applyTypographyValues(restored.values);
+    syncTypographyInputs();
+    updateTypographyOverview();
+    setTypographySaveStatus("Actualizado desde otra pestaña", restored.valid ? "" : "session-only");
+  }
 });
-window.addEventListener("pagehide", () => { void state.scale.destroy(); });
+window.addEventListener("pageshow", (event) => {
+  if (!event.persisted) return;
+  const restored = storedTypographyPreferences();
+  applyTypographyValues(restored.values);
+  syncTypographyInputs();
+  updateTypographyOverview();
+});
+window.addEventListener("pagehide", () => {
+  if (state.typographySaveTimer) persistTypographyNow();
+  void state.scale.destroy();
+});
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && !state.loading && state.scale.getState().autoConnectMode) void restoreScale();
 });
@@ -1178,5 +1737,6 @@ function updateClock() {
 updateClock();
 window.setInterval(updateClock, 1000);
 applyAppScale(storedAppScale(), false);
+initializeTypography();
 renderAll();
 void loadCatalog();
