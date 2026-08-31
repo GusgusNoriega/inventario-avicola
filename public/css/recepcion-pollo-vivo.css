@@ -150,6 +150,7 @@ button, select { touch-action: manipulation; }
 .lir-lane-select .lir-lane-identity-copy { min-width: 0; overflow: visible; white-space: normal; }
 .lir-lane-select .lir-lane-identity-copy strong { margin: 0; color: var(--lir-text); font-size: .85rem; line-height: 1.1; }
 .lir-lane-select .lir-lane-identity-copy b { display: block; margin-top: 3px; color: var(--lir-lane-sex-accent); font-size: .67rem; font-weight: 950; letter-spacing: .035em; line-height: 1; text-transform: uppercase; }
+.lir-lane-select .lir-lane-identity-copy .lir-lane-sex-birds { display: inline-block; margin-inline-start: .35em; padding: .2em .45em; border-radius: .4em; background: var(--lir-lane-sex-accent); color: var(--lir-bg); font-size: inherit; font-weight: inherit; font-variant-numeric: tabular-nums; letter-spacing: normal; line-height: 1.2; vertical-align: middle; overflow: visible; text-overflow: clip; white-space: nowrap; }
 .lir-lane.is-client .lir-lane-select strong { color: var(--lir-amber); }
 .lir-direct-lane-head { border-bottom: 1px solid var(--lir-border); background: var(--lir-panel-strong); }
 .lir-direct-lane-head .lir-lane-select { min-height: 92px; border-bottom: 0; }

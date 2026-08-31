@@ -113,7 +113,7 @@
               $sexLabel = $maleLane ? 'Macho' : 'Hembra';
             @endphp
             <article class="lir-lane is-warehouse {{ $ownLane ? 'is-own-lane' : 'is-external-lane' }} {{ $maleLane ? 'is-male-lane' : 'is-female-lane' }} {{ $lane === 1 ? 'is-active' : '' }}" data-live-lane="{{ $lane }}">
-              <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}" aria-label="Seleccionar columna {{ $lane }}: {{ $ownerLabel }}, {{ $sexLabel }}">
+              <button class="lir-lane-select" type="button" data-live-select-lane="{{ $lane }}" aria-pressed="{{ $lane === 1 ? 'true' : 'false' }}" aria-label="Seleccionar columna {{ $lane }}: {{ $ownerLabel }}, {{ $sexLabel }}" aria-describedby="liveIntakeLaneSexBirds{{ $lane }}">
                 <span class="lir-lane-profile-row">
                   <span class="lir-lane-number">Columna {{ $lane }}</span>
                   <em id="liveIntakeLaneProfile{{ $lane }}" class="lir-lane-owner-badge">{{ $ownerLabel }}</em>
@@ -124,7 +124,7 @@
                   </svg>
                   <span class="lir-lane-identity-copy">
                     <strong>Entrada a almacén</strong>
-                    <b>{{ $maleLane ? 'Gallo · Macho' : 'Gallina · Hembra' }}</b>
+                    <b>{{ $maleLane ? 'Gallo · Macho' : 'Gallina · Hembra' }} <span id="liveIntakeLaneSexBirds{{ $lane }}" class="lir-lane-sex-birds">0 aves</span></b>
                   </span>
                 </span>
                 <small id="liveIntakeLaneDestination{{ $lane }}">Sin configurar</small>

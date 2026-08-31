@@ -147,6 +147,7 @@ const elements = {
   },
   laneCages: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneCages${lane}`)),
   laneBirds: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneBirds${lane}`)),
+  laneSexBirds: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneSexBirds${lane}`)),
   laneNet: LANE_NUMBERS.map((lane) => document.getElementById(`liveIntakeLaneNet${lane}`)),
   selectedLaneLabel: document.getElementById("liveIntakeSelectedLaneLabel"),
   selectedWeighings: document.getElementById("liveIntakeSelectedWeighings"),
@@ -1792,6 +1793,9 @@ function renderTotals() {
       : (state.data?.totals?.lanes?.[String(lane)] || {});
     elements.laneCages[lane - 1].textContent = String(totals.cages || 0);
     elements.laneBirds[lane - 1].textContent = String(totals.birds || 0);
+    if (elements.laneSexBirds[lane - 1]) {
+      elements.laneSexBirds[lane - 1].textContent = `${totals.birds || 0} aves`;
+    }
     elements.laneNet[lane - 1].textContent = formatKg(totals.net_weight_kg);
   });
   renderSelectedTotals();
