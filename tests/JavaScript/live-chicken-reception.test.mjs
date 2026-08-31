@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeRetailClientSearch } from "../../public/js/retail-client-search.js";
 import {
   assignDispatchClientToPendingCapture,
   freezeDispatchClientCorrection,
@@ -95,6 +96,54 @@ test("cada borrador permite elegir un cliente distinto y lo bloquea al tener pes
   assert.match(source, /dispatchDraft\(lane\)\.weighings\.length > 0/);
   assert.match(source, /Cliente bloqueado/);
   assert.match(view, /data-live-register-ticket="\{\{ \$lane \}\}"/);
+});
+
+test("el selector muestra todo el catálogo y no recorta las búsquedas de más de cien clientes", () => {
+  const clients = [
+    ...Array.from({ length: 150 }, (_, index) => ({
+      id: index + 1,
+      name: `Agrogránja ${index + 1}`,
+      document_number: String(90000000 + index),
+    })),
+    { id: 151, name: "Gránja Principal", document_number: "90100000" },
+    { id: 152, name: "GRÁNJA Interna", document_number: "90200000", is_internal_client: true },
+  ];
+  const originalIds = clients.map(({ id }) => id);
+  const state = { data: { catalog: { clients } }, clientPickerLane: 5 };
+  const elements = { clientOptions: { innerHTML: "" } };
+  let message;
+  // Ejecuta las funciones de la página sin iniciar la balanza ni sus eventos del navegador.
+  const pickerSource = source.slice(
+    source.indexOf("function matchingDispatchClients("),
+    source.indexOf("function openClientPicker("),
+  );
+  const { matchingDispatchClients, renderClientOptions } = new Function(
+    "state", "elements", "normalizeRetailClientSearch", "laneDestination", "escapeHtml", "setClientMessage",
+    `${pickerSource}\nreturn { matchingDispatchClients, renderClientOptions };`,
+  )(state, elements, normalizeRetailClientSearch, () => clients.at(-1), String, (text) => { message = text; });
+
+  assert.deepEqual(matchingDispatchClients().map(({ id }) => id), originalIds);
+  assert.deepEqual(matchingDispatchClients("  ").map(({ id }) => id), originalIds);
+  assert.deepEqual(
+    matchingDispatchClients("GRANJA").map(({ id }) => id),
+    [151, 152, ...originalIds.slice(0, 150)],
+  );
+  assert.deepEqual(
+    matchingDispatchClients("900").map(({ id }) => id),
+    originalIds.slice(0, 150),
+  );
+  assert.deepEqual(matchingDispatchClients("90000149").map(({ id }) => id), [150]);
+  assert.deepEqual(clients.map(({ id }) => id), originalIds);
+
+  renderClientOptions();
+  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 152);
+  assert.match(elements.clientOptions.innerHTML, /data-live-client-option="152" aria-pressed="true"/);
+  assert.equal(message, "");
+
+  renderClientOptions("900");
+  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 150);
+  assert.match(elements.clientOptions.innerHTML, /data-live-client-option="150"/);
+  assert.equal(message, "");
 });
 
 test("las cuatro entradas se deslizan horizontalmente y los dos despachos permanecen aparte", () => {

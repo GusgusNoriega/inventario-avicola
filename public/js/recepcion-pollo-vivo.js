@@ -1162,7 +1162,7 @@ function populateConfiguration() {
 function matchingDispatchClients(search = "") {
   const query = normalizeRetailClientSearch(search);
   const clients = state.data?.catalog?.clients || [];
-  if (!query) return clients.slice(0, 100);
+  if (!query) return clients;
 
   return clients
     .map((client, index) => {
@@ -1176,7 +1176,6 @@ function matchingDispatchClients(search = "") {
     })
     .filter((entry) => Number.isFinite(entry.rank))
     .sort((left, right) => left.rank - right.rank || left.index - right.index)
-    .slice(0, 100)
     .map((entry) => entry.client);
 }
 
@@ -1197,8 +1196,6 @@ function renderClientOptions(search = "") {
 
   if (!(state.data?.catalog?.clients || []).length) {
     setClientMessage("No hay clientes activos disponibles. Registra o activa un cliente antes de continuar.", "error");
-  } else if ((state.data.catalog.clients || []).length > 100 && !String(search).trim()) {
-    setClientMessage("Se muestran los primeros 100 clientes. Escribe un nombre o documento para encontrar otro.");
   } else {
     setClientMessage("");
   }

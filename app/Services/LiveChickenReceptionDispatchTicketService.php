@@ -413,18 +413,21 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
             ->where('tercero.id', (int) $data['dispatch_client_id'])
             ->where('tercero.empresa_id', $companyId)
             ->where('tercero.estado', Tercero::STATUS_ACTIVE)
-            ->where('tercero.es_cliente_interno', false)
             ->where('rol.rol', TerceroRole::CLIENT)
             ->lockForUpdate()
-            ->first(['tercero.id']);
+            ->first(['tercero.id', 'tercero.es_cliente_interno']);
         if (! $client) {
             throw ValidationException::withMessages([
                 'dispatch_client_id' => 'El cliente seleccionado no está disponible.',
             ]);
         }
 
+        if ($client->es_cliente_interno) {
+            return;
+        }
+
         $vehicle = DB::table('vehiculos')
-            ->where('id', (int) $data['delivery_vehicle_id'])
+            ->where('id', (int) ($data['delivery_vehicle_id'] ?? 0))
             ->where('empresa_id', $companyId)
             ->where('estado', 'ACTIVO')
             ->lockForUpdate()
@@ -436,7 +439,7 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
         }
 
         $driver = DB::table('conductores')
-            ->where('id', (int) $data['delivery_driver_id'])
+            ->where('id', (int) ($data['delivery_driver_id'] ?? 0))
             ->where('empresa_id', $companyId)
             ->where('estado', 'ACTIVO')
             ->lockForUpdate()
@@ -455,8 +458,8 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
             'schema' => 1,
             'lane' => (int) $data['lane'],
             'dispatch_client_id' => (int) $data['dispatch_client_id'],
-            'delivery_vehicle_id' => (int) $data['delivery_vehicle_id'],
-            'delivery_driver_id' => (int) $data['delivery_driver_id'],
+            'delivery_vehicle_id' => (int) ($data['delivery_vehicle_id'] ?? 0),
+            'delivery_driver_id' => (int) ($data['delivery_driver_id'] ?? 0),
             'weighings' => collect($data['weighings'])
                 ->values()
                 ->map(function (array $weighing): array {
@@ -594,8 +597,8 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
                 'id' => (int) $data['dispatch_client_id'],
             ],
             'delivery' => [
-                'vehicle_id' => (int) $data['delivery_vehicle_id'],
-                'driver_id' => (int) $data['delivery_driver_id'],
+                'vehicle_id' => isset($data['delivery_vehicle_id']) ? (int) $data['delivery_vehicle_id'] : null,
+                'driver_id' => isset($data['delivery_driver_id']) ? (int) $data['delivery_driver_id'] : null,
             ],
             'weighings' => $normalizedWeighings,
         ];

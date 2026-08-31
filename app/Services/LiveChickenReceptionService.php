@@ -137,8 +137,8 @@ class LiveChickenReceptionService
         $this->assertWarehouse($branchId, (int) $data['lane_2_warehouse_id'], 'lane_2_warehouse_id');
         $this->assertWarehouse($branchId, (int) $data['lane_3_warehouse_id'], 'lane_3_warehouse_id');
         $this->assertWarehouse($branchId, (int) $data['lane_4_warehouse_id'], 'lane_4_warehouse_id');
-        $this->assertExternalClient($companyId, (int) $data['lane_5_client_id'], 'lane_5_client_id');
-        $this->assertExternalClient($companyId, (int) $data['lane_6_client_id'], 'lane_6_client_id');
+        $this->assertClient($companyId, (int) $data['lane_5_client_id'], 'lane_5_client_id');
+        $this->assertClient($companyId, (int) $data['lane_6_client_id'], 'lane_6_client_id');
 
         ConfiguracionRecepcionPolloVivo::query()->updateOrCreate(
             ['sucursal_id' => $branchId],
@@ -628,13 +628,13 @@ class LiveChickenReceptionService
             })
             ->where('terceros.empresa_id', $companyId)
             ->where('terceros.estado', 'ACTIVO')
-            ->where('terceros.es_cliente_interno', false)
             ->orderBy('terceros.nombre_razon_social')
-            ->get(['terceros.id', 'terceros.nombre_razon_social', 'terceros.numero_documento'])
+            ->get(['terceros.id', 'terceros.nombre_razon_social', 'terceros.numero_documento', 'terceros.es_cliente_interno'])
             ->map(fn (object $row): array => [
                 'id' => (int) $row->id,
                 'name' => $row->nombre_razon_social,
                 'document_number' => $row->numero_documento,
+                'is_internal_client' => (bool) $row->es_cliente_interno,
             ])->values();
         $externalOwners = DB::table('terceros')
             ->join('tercero_roles', function ($join): void {
@@ -836,7 +836,7 @@ class LiveChickenReceptionService
             ]);
         }
 
-        $this->assertExternalClient($companyId, $dispatchClientId, 'dispatch_client_id');
+        $this->assertClient($companyId, $dispatchClientId, 'dispatch_client_id');
 
         return [
             'type' => PesadaRecepcionPolloVivo::DESTINATION_CLIENT,
@@ -1345,14 +1345,13 @@ class LiveChickenReceptionService
         }
     }
 
-    private function assertExternalClient(int $companyId, int $clientId, string $field): void
+    private function assertClient(int $companyId, int $clientId, string $field): void
     {
         $valid = DB::table('terceros')
             ->join('tercero_roles', 'tercero_roles.tercero_id', '=', 'terceros.id')
             ->where('terceros.id', $clientId)
             ->where('terceros.empresa_id', $companyId)
             ->where('terceros.estado', 'ACTIVO')
-            ->where('terceros.es_cliente_interno', false)
             ->where('tercero_roles.rol', TerceroRole::CLIENT)
             ->exists();
 

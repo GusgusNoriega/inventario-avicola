@@ -33,13 +33,13 @@ class StoreLiveChickenReceptionDispatchTicketRequest extends FormRequest
                     ->where('empresa_id', $companyId)),
             ],
             'delivery_vehicle_id' => [
-                'required',
+                'nullable',
                 'integer',
                 Rule::exists('vehiculos', 'id')->where(fn ($query) => $query
                     ->where('empresa_id', $companyId)),
             ],
             'delivery_driver_id' => [
-                'required',
+                'nullable',
                 'integer',
                 Rule::exists('conductores', 'id')->where(fn ($query) => $query
                     ->where('empresa_id', $companyId)),

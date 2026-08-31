@@ -160,6 +160,52 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonPath('data.totals.daily.weighings', 0);
     }
 
+    public function test_catalog_includes_active_internal_and_external_clients_from_the_current_company(): void
+    {
+        $internalClientId = $this->createParty('20777777771', 'Cliente interno activo', TerceroRole::CLIENT);
+        Tercero::query()->whereKey($internalClientId)->update(['es_cliente_interno' => true]);
+        $inactiveClientId = $this->createParty('20777777772', 'Cliente inactivo', TerceroRole::CLIENT);
+        Tercero::query()->whereKey($inactiveClientId)->update(['estado' => 'INACTIVO']);
+        $otherClientId = $this->createParty('20777777773', 'Cliente de otra empresa', TerceroRole::CLIENT);
+        Tercero::query()->whereKey($otherClientId)->update([
+            'empresa_id' => User::factory()->create()->empresa_id,
+        ]);
+
+        $clients = collect($this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonCount(3, 'data.catalog.clients')
+            ->json('data.catalog.clients'))->keyBy('id');
+
+        $this->assertEqualsCanonicalizing(
+            [$this->clientFiveId, $this->clientSixId, $internalClientId],
+            $clients->keys()->all(),
+        );
+        $this->assertTrue($clients->get($internalClientId)['is_internal_client']);
+        $this->assertFalse($clients->get($this->clientFiveId)['is_internal_client']);
+        $this->assertFalse($clients->has($inactiveClientId));
+        $this->assertFalse($clients->has($otherClientId));
+        $this->assertFalse($clients->has($this->externalOwnerId));
+    }
+
+    public function test_configuration_accepts_active_internal_clients_for_both_dispatch_lanes(): void
+    {
+        $internalClientId = $this->createParty('20777777771', 'Cliente interno activo', TerceroRole::CLIENT);
+        Tercero::query()->whereKey($internalClientId)->update(['es_cliente_interno' => true]);
+
+        $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload([
+            'lane_5_client_id' => $internalClientId,
+            'lane_6_client_id' => $internalClientId,
+        ]))->assertOk()
+            ->assertJsonPath('data.configuration.saved', true)
+            ->assertJsonPath('data.configuration.lanes.5.destination_id', $internalClientId)
+            ->assertJsonPath('data.configuration.lanes.6.destination_id', $internalClientId);
+
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.configuration.lanes.5.destination_id', $internalClientId)
+            ->assertJsonPath('data.configuration.lanes.6.destination_id', $internalClientId);
+    }
+
     public function test_overview_orders_weighings_by_actual_time_descending_across_midnight(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-27 00:30:00', 'America/Lima'));
@@ -1071,6 +1117,96 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('comprobantes', 1);
     }
 
+    public function test_reception_ticket_accepts_an_internal_client_without_transport_and_retry_does_not_duplicate_inventory(): void
+    {
+        $this->saveConfiguration();
+        $internalClientId = $this->createParty('20777777771', 'Cliente interno activo', TerceroRole::CLIENT);
+        Tercero::query()->whereKey($internalClientId)->update(['es_cliente_interno' => true]);
+        $payload = $this->ticketPayload([
+            'lane' => 6,
+            'dispatch_client_id' => $internalClientId,
+        ]);
+        unset($payload['delivery_vehicle_id'], $payload['delivery_driver_id']);
+
+        $created = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('already_registered', false)
+            ->assertJsonPath('ticket.reception_lane', 6)
+            ->assertJsonPath('data.records.0.destination.id', $internalClientId)
+            ->assertJsonPath('data.records.0.owner.type', PesadaRecepcionPolloVivo::OWNER_OWN)
+            ->assertJsonPath('data.records.0.birds', 14)
+            ->assertJsonPath('data.records.0.net_weight_kg', 86);
+        $ticketId = (int) $created->json('ticket.id');
+
+        Tercero::query()->whereKey($internalClientId)->update(['estado' => 'INACTIVO']);
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true)
+            ->assertJsonPath('ticket.id', $ticketId);
+
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticketId,
+            'cliente_destino_id' => $internalClientId,
+            'vehiculo_entrega_id' => null,
+            'conductor_entrega_id' => null,
+            'estado' => 'CERRADO',
+        ]);
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
+            'ticket_despacho_id' => $ticketId,
+            'columna' => 6,
+            'cantidad_javas_aplicada' => 2,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', [
+            'empresa_id' => $this->user->empresa_id,
+            'cantidad_total' => 2,
+        ]);
+        $this->assertDatabaseHas('movimientos_inventario', [
+            'ticket_id' => $ticketId,
+            'tipo' => 'DESPACHO_DIRECTO',
+            'tercero_destino_id' => $internalClientId,
+            'estado' => 'CONFIRMADO',
+        ]);
+        $this->assertDatabaseHas('movimiento_detalles', [
+            'cantidad_aves' => 14,
+            'peso_neto_kg' => 86,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticketId,
+            'cliente_id' => $internalClientId,
+            'tipo' => 'DESPACHO',
+            'cantidad' => 2,
+        ]);
+        $this->assertDatabaseCount('tickets_despacho', 1);
+        $this->assertDatabaseCount('pesadas', 1);
+        $this->assertDatabaseCount('recepcion_pollo_vivo_tickets', 1);
+        $this->assertDatabaseCount('movimientos_inventario', 1);
+        $this->assertDatabaseCount('movimiento_detalles', 1);
+        $this->assertDatabaseCount('movimientos_javas', 1);
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseCount('pesadas_recepcion_pollo_vivo', 0);
+        $this->assertDatabaseCount('existencias_almacen', 0);
+    }
+
+    public function test_reception_ticket_still_requires_transport_for_external_clients(): void
+    {
+        $this->saveConfiguration();
+
+        foreach (['delivery_vehicle_id', 'delivery_driver_id'] as $requiredField) {
+            $payload = $this->ticketPayload();
+            unset($payload[$requiredField]);
+
+            $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($requiredField);
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pesadas', 0);
+        $this->assertDatabaseCount('inventarios_javas', 0);
+        $this->assertDatabaseCount('movimientos_inventario', 0);
+        $this->assertDatabaseCount('movimientos_javas', 0);
+    }
+
     public function test_reception_ticket_lane_is_always_own_and_rejects_owner_overrides(): void
     {
         $this->saveConfiguration();
@@ -1720,11 +1856,9 @@ class LiveChickenReceptionApiTest extends TestCase
         $otherClient->roles()->create(['rol' => TerceroRole::CLIENT]);
         $inactiveClientId = $this->createParty('20777777776', 'Cliente inactivo', TerceroRole::CLIENT);
         Tercero::query()->whereKey($inactiveClientId)->update(['estado' => 'INACTIVO']);
-        $internalClientId = $this->createParty('20777777775', 'Cliente interno', TerceroRole::CLIENT);
-        Tercero::query()->whereKey($internalClientId)->update(['es_cliente_interno' => true]);
         $providerOnlyId = $this->createParty('20777777774', 'Solo proveedor', TerceroRole::PROVIDER);
 
-        foreach ([$otherClient->id, $inactiveClientId, $internalClientId, $providerOnlyId] as $invalidClientId) {
+        foreach ([$otherClient->id, $inactiveClientId, $providerOnlyId] as $invalidClientId) {
             $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
                 'lane' => 6,
                 'dispatch_client_id' => $invalidClientId,
