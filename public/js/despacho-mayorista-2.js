@@ -414,11 +414,14 @@ const elements = {
   clientList: document.getElementById("clientList"),
   deliveryTruckModal: document.getElementById("deliveryTruckModal"),
   closeDeliveryTruckModalBtn: document.getElementById("closeDeliveryTruckModalBtn"),
+  skipDeliveryTruckBtn: document.getElementById("skipDeliveryTruckBtn"),
+  skipDeliverySelectionBtn: document.getElementById("skipDeliverySelectionBtn"),
   deliveryTruckTicketLabel: document.getElementById("deliveryTruckTicketLabel"),
   deliveryTruckSearch: document.getElementById("deliveryTruckSearch"),
   deliveryTruckList: document.getElementById("deliveryTruckList"),
   deliveryDriverModal: document.getElementById("deliveryDriverModal"),
   closeDeliveryDriverModalBtn: document.getElementById("closeDeliveryDriverModalBtn"),
+  skipDeliveryDriverBtn: document.getElementById("skipDeliveryDriverBtn"),
   deliveryDriverTicketLabel: document.getElementById("deliveryDriverTicketLabel"),
   deliveryDriverSearch: document.getElementById("deliveryDriverSearch"),
   deliveryDriverList: document.getElementById("deliveryDriverList"),
@@ -1497,7 +1500,7 @@ function isInternalClientDestination(destination) {
   return Boolean(destination?.destinationType !== "almacen" && destination?.isInternalClient);
 }
 
-function requiresDelivery(truck) {
+function offersDeliverySelection(truck) {
   return !isReturnTicket(truck) && !isInternalClientDestination(getTruckDestination(truck));
 }
 
@@ -7898,7 +7901,7 @@ function renderDeliveryTruckList() {
       }).join("")
     : `<div class="client-empty">${query
         ? "No hay camiones que coincidan con la búsqueda."
-        : "No hay camiones propios activos. Registra uno en Mi flota y choferes."}</div>`;
+        : "No hay camiones propios activos. Puedes continuar sin camión."}</div>`;
 }
 
 function renderDeliveryDriverList() {
@@ -7923,7 +7926,7 @@ function renderDeliveryDriverList() {
       }).join("")
     : `<div class="client-empty">${query
         ? "No hay choferes que coincidan con la búsqueda."
-        : "No hay choferes activos. Registra uno en Mi flota y choferes."}</div>`;
+        : "No hay choferes activos. Puedes registrar el ticket sin chofer."}</div>`;
 }
 
 function openDeliveryTruckModal(truck) {
@@ -7936,8 +7939,9 @@ function openDeliveryTruckModal(truck) {
   renderDeliveryTruckList();
   elements.deliveryTruckModal.hidden = false;
   window.setTimeout(() => {
-    elements.deliveryTruckSearch.focus({ preventScroll: true });
-    openTextTouchKeyboard(elements.deliveryTruckSearch);
+    if (!elements.deliveryTruckModal.hidden) {
+      elements.deliveryTruckSearch.focus({ preventScroll: true });
+    }
   }, 0);
 }
 
@@ -7949,9 +7953,9 @@ function closeDeliverySelection() {
 }
 
 function selectDeliveryTruck(vehicleId) {
-  const normalizedVehicleId = Number(vehicleId);
+  const normalizedVehicleId = vehicleId === null ? null : Number(vehicleId);
   const truck = getDeliveryTrucks().find((item) => Number(item.id) === normalizedVehicleId);
-  if (!deliverySelectionContext || !truck) {
+  if (!deliverySelectionContext || (vehicleId !== null && !truck)) {
     setFormMessage("El camión seleccionado ya no está disponible.", true);
     return;
   }
@@ -7960,19 +7964,20 @@ function selectDeliveryTruck(vehicleId) {
   closeTextTouchKeyboard(true, false);
   elements.deliveryTruckModal.hidden = true;
   elements.deliveryDriverSearch.value = "";
-  elements.deliveryDriverTicketLabel.textContent = `Camión ${truck.plate} · Selecciona el chofer`;
+  elements.deliveryDriverTicketLabel.textContent = `${truck ? `Camión ${truck.plate}` : "Sin camión"} · Chofer opcional`;
   renderDeliveryDriverList();
   elements.deliveryDriverModal.hidden = false;
   window.setTimeout(() => {
-    elements.deliveryDriverSearch.focus({ preventScroll: true });
-    openTextTouchKeyboard(elements.deliveryDriverSearch);
+    if (!elements.deliveryDriverModal.hidden) {
+      elements.deliveryDriverSearch.focus({ preventScroll: true });
+    }
   }, 0);
 }
 
 function selectDeliveryDriver(driverId) {
-  const normalizedDriverId = Number(driverId);
+  const normalizedDriverId = driverId === null ? null : Number(driverId);
   const driver = getDeliveryDrivers().find((item) => Number(item.id) === normalizedDriverId);
-  if (!deliverySelectionContext || !driver) {
+  if (!deliverySelectionContext || (driverId !== null && !driver)) {
     setFormMessage("El chofer seleccionado ya no está disponible.", true);
     return;
   }
@@ -8122,10 +8127,11 @@ function buildDispatchTicketPayload(truck, deliverySelection = null) {
     }
   }
 
-  if (!isReturn && !isInternalClientDestination(destination)) {
+  if (!isReturn && !isInternalClientDestination(destination)
+    && (deliverySelection?.vehicleId || deliverySelection?.driverId)) {
     ticketPayload.delivery = {
-      vehicle_id: Number(deliverySelection?.vehicleId),
-      driver_id: Number(deliverySelection?.driverId)
+      vehicle_id: Number(deliverySelection?.vehicleId) || null,
+      driver_id: Number(deliverySelection?.driverId) || null
     };
   }
 
@@ -8204,7 +8210,7 @@ async function registerDispatchTicket(truckId, deliverySelection = null, options
     return;
   }
 
-  if (requiresDelivery(truck) && !deliverySelection) {
+  if (offersDeliverySelection(truck) && !deliverySelection) {
     openDeliveryTruckModal(truck);
     return;
   }
@@ -10075,6 +10081,14 @@ function bindEvents() {
 
   elements.closeDeliveryTruckModalBtn?.addEventListener("click", closeDeliverySelection);
   elements.closeDeliveryDriverModalBtn?.addEventListener("click", closeDeliverySelection);
+  elements.skipDeliveryTruckBtn?.addEventListener("click", () => selectDeliveryTruck(null));
+  elements.skipDeliveryDriverBtn?.addEventListener("click", () => selectDeliveryDriver(null));
+  elements.skipDeliverySelectionBtn?.addEventListener("click", () => {
+    if (deliverySelectionContext) {
+      deliverySelectionContext.vehicleId = null;
+      selectDeliveryDriver(null);
+    }
+  });
   elements.deliveryTruckSearch?.addEventListener("input", renderDeliveryTruckList);
   elements.deliveryDriverSearch?.addEventListener("input", renderDeliveryDriverList);
   elements.deliveryTruckList?.addEventListener("click", (event) => {

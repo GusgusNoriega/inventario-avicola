@@ -282,7 +282,7 @@ class StoreDispatchTicketRequest extends FormRequest
             ?? DB::table('empresas')->where('estado', 'ACTIVO')->orderBy('id')->value('id'));
     }
 
-    private function requiresDelivery(): bool
+    protected function requiresDelivery(): bool
     {
         if ($this->input('operation_type') !== TicketDespacho::OPERATION_DISPATCH) {
             return false;

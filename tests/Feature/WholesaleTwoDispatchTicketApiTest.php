@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\Conductor;
 use App\Models\Pesada;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Models\Vehiculo;
 use App\Services\TerceroDirectoryService;
 use App\Support\WholesaleTwoChickenVariant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -548,6 +550,157 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
         ]);
     }
 
+    public function test_external_dispatch_accepts_missing_or_empty_delivery_without_losing_javas_or_receivable(): void
+    {
+        DB::table('terceros')->where('id', $this->clientId)->update(['es_cliente_interno' => false]);
+        $deliveryCases = [
+            [],
+            ['delivery' => null],
+            ['delivery' => []],
+            ['delivery' => ['vehicle_id' => null, 'driver_id' => null]],
+        ];
+
+        foreach ($deliveryCases as $delivery) {
+            $payload = [...$this->ticketPayload(), ...$delivery];
+            $payload['weighings'][0]['cage_count'] = 2;
+            $payload['weighings'][0]['birds_per_cage'] = 10;
+            $payload['weighings'][0]['read_weight_kg'] = 30;
+
+            $response = $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+                ->assertCreated()
+                ->assertJsonPath('data.destination.internal_client', false)
+                ->assertJsonPath('data.delivery', null)
+                ->assertJsonPath('data.totals.cages', 2)
+                ->assertJsonPath('data.totals.birds', 20)
+                ->assertJsonPath('data.totals.net_weight_kg', 16)
+                ->assertJsonPath('data.totals.amount', 80);
+            $ticketId = (int) $response->json('data.id');
+
+            $this->assertDatabaseHas('tickets_despacho', [
+                'id' => $ticketId,
+                'modulo_origen' => TicketDespacho::SOURCE_WHOLESALE_TWO,
+                'vehiculo_entrega_id' => null,
+                'conductor_entrega_id' => null,
+            ]);
+            $this->assertDatabaseHas('movimientos_javas', [
+                'ticket_despacho_id' => $ticketId,
+                'cliente_id' => $this->clientId,
+                'tipo' => 'DESPACHO',
+                'cantidad' => 2,
+                'vehiculo_id' => null,
+                'conductor_id' => null,
+            ]);
+            $this->assertDatabaseHas('comprobantes', [
+                'origen_clave' => "VENTA:TICKET:{$ticketId}",
+                'total' => 80,
+                'saldo_pendiente' => 80,
+            ]);
+
+            $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+                ->assertOk()
+                ->assertJsonPath('already_registered', true)
+                ->assertJsonPath('data.id', $ticketId)
+                ->assertJsonPath('data.delivery', null);
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', count($deliveryCases));
+        $this->assertDatabaseCount('movimientos_javas', count($deliveryCases));
+    }
+
+    public function test_external_dispatch_stores_each_optional_delivery_selection_independently(): void
+    {
+        DB::table('terceros')->where('id', $this->clientId)->update(['es_cliente_interno' => false]);
+        $fleet = $this->createDeliveryFleet();
+        $deliveryCases = [
+            ['vehicle_id' => $fleet['vehicle_id']],
+            ['driver_id' => $fleet['driver_id']],
+            ['vehicle_id' => $fleet['vehicle_id'], 'driver_id' => null],
+            ['vehicle_id' => null, 'driver_id' => $fleet['driver_id']],
+            $fleet,
+        ];
+
+        foreach ($deliveryCases as $delivery) {
+            $payload = $this->ticketPayload();
+            $payload['delivery'] = $delivery;
+            $payload['weighings'][0]['cage_count'] = 1;
+            $vehicleId = $delivery['vehicle_id'] ?? null;
+            $driverId = $delivery['driver_id'] ?? null;
+
+            $response = $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+                ->assertCreated();
+            $expectedDelivery = [
+                'vehicle' => $vehicleId ? ['id' => $vehicleId, 'plate' => 'M2-001'] : null,
+                'driver' => $driverId ? ['id' => $driverId, 'name' => 'Chofer Mayorista 2'] : null,
+            ];
+            $response->assertJsonPath('data.delivery', $expectedDelivery);
+            $ticketId = (int) $response->json('data.id');
+
+            $this->assertDatabaseHas('tickets_despacho', [
+                'id' => $ticketId,
+                'vehiculo_entrega_id' => $vehicleId,
+                'conductor_entrega_id' => $driverId,
+            ]);
+            $this->assertDatabaseHas('movimientos_javas', [
+                'ticket_despacho_id' => $ticketId,
+                'cantidad' => 1,
+                'vehiculo_id' => $vehicleId,
+                'conductor_id' => $driverId,
+            ]);
+            $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+                ->assertOk()
+                ->assertJsonPath('already_registered', true)
+                ->assertJsonPath('data.delivery', $expectedDelivery);
+        }
+    }
+
+    public function test_optional_delivery_rejects_invalid_inactive_or_other_company_ids(): void
+    {
+        DB::table('terceros')->where('id', $this->clientId)->update(['es_cliente_interno' => false]);
+        $inactiveFleet = $this->createDeliveryFleet(status: 'INACTIVO');
+        $otherCompanyUser = User::factory()->create();
+        $otherCompanyFleet = $this->createDeliveryFleet(companyId: $otherCompanyUser->empresa_id);
+
+        foreach ([$inactiveFleet, $otherCompanyFleet, ['vehicle_id' => 999999, 'driver_id' => 999999]] as $fleet) {
+            foreach ($fleet as $field => $id) {
+                $payload = $this->ticketPayload();
+                $payload['delivery'] = [$field => $id];
+
+                $this->postJson('/api/v1/despacho-mayorista-2/tickets', $payload)
+                    ->assertUnprocessable()
+                    ->assertJsonValidationErrors("delivery.{$field}");
+            }
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+        $this->assertDatabaseCount('pesadas', 0);
+        $this->assertDatabaseCount('movimientos_javas', 0);
+        $this->assertDatabaseCount('comprobantes', 0);
+    }
+
+    public function test_original_wholesale_still_requires_both_external_delivery_selections(): void
+    {
+        DB::table('terceros')->where('id', $this->clientId)->update(['es_cliente_interno' => false]);
+        $fleet = $this->createDeliveryFleet();
+        $origin = $this->createProviderOrigin();
+        $this->configureJourney($origin['provider_vehicle_id']);
+        $deliveryCases = [
+            [[], ['delivery.vehicle_id', 'delivery.driver_id']],
+            [['vehicle_id' => $fleet['vehicle_id']], ['delivery.driver_id']],
+            [['driver_id' => $fleet['driver_id']], ['delivery.vehicle_id']],
+        ];
+
+        foreach ($deliveryCases as [$delivery, $errors]) {
+            $payload = $this->originalWholesalePayload($this->ticketPayload(origin: $origin['payload']));
+            $payload['delivery'] = $delivery;
+
+            $this->postJson('/api/v1/operacion/tickets', $payload)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($errors);
+        }
+
+        $this->assertDatabaseCount('tickets_despacho', 0);
+    }
+
     public function test_partial_origin_is_rejected_instead_of_being_silently_ignored(): void
     {
         $payload = $this->ticketPayload();
@@ -887,6 +1040,26 @@ class WholesaleTwoDispatchTicketApiTest extends TestCase
             'ajuste_peso_mayorista_2_gramos' => null,
         ]);
         $this->assertDatabaseCount('ajustes_peso_mayorista_2', 0);
+    }
+
+    /** @return array{vehicle_id: int, driver_id: int} */
+    private function createDeliveryFleet(?int $companyId = null, string $status = 'ACTIVO'): array
+    {
+        $companyId ??= $this->user->empresa_id;
+        $vehicle = Vehiculo::query()->create([
+            'empresa_id' => $companyId,
+            'placa' => 'M2-001',
+            'estado' => $status,
+        ]);
+        $driver = Conductor::query()->create([
+            'empresa_id' => $companyId,
+            'nombre_completo' => 'Chofer Mayorista 2',
+            'tipo_documento' => 'CC',
+            'numero_documento' => '10990001',
+            'estado' => $status,
+        ]);
+
+        return ['vehicle_id' => $vehicle->id, 'driver_id' => $driver->id];
     }
 
     /** @return array<string, mixed> */

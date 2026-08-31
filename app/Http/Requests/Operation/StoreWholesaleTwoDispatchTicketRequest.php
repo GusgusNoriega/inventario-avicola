@@ -15,6 +15,11 @@ class StoreWholesaleTwoDispatchTicketRequest extends StoreDispatchTicketRequest
     /** @var list<string>|null */
     private ?array $clientHenPriceCodes = null;
 
+    protected function requiresDelivery(): bool
+    {
+        return false;
+    }
+
     /**
      * @return array<string, array<int, mixed>>
      */

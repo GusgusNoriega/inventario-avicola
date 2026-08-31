@@ -94,16 +94,20 @@ class WholesaleTwoDispatchTicketController extends Controller
                     'id' => $ticket->almacenDestino?->id,
                     'name' => $ticket->almacenDestino?->nombre,
                 ],
-            'delivery' => $ticket->vehiculoEntrega && $ticket->conductorEntrega
+            'delivery' => $ticket->vehiculoEntrega || $ticket->conductorEntrega
                 ? [
-                    'vehicle' => [
-                        'id' => $ticket->vehiculoEntrega->id,
-                        'plate' => $ticket->vehiculoEntrega->placa,
-                    ],
-                    'driver' => [
-                        'id' => $ticket->conductorEntrega->id,
-                        'name' => $ticket->conductorEntrega->nombre_completo,
-                    ],
+                    'vehicle' => $ticket->vehiculoEntrega
+                        ? [
+                            'id' => $ticket->vehiculoEntrega->id,
+                            'plate' => $ticket->vehiculoEntrega->placa,
+                        ]
+                        : null,
+                    'driver' => $ticket->conductorEntrega
+                        ? [
+                            'id' => $ticket->conductorEntrega->id,
+                            'name' => $ticket->conductorEntrega->nombre_completo,
+                        ]
+                        : null,
                 ]
                 : null,
             'prices' => $ticket->precios->mapWithKeys(fn ($price): array => [

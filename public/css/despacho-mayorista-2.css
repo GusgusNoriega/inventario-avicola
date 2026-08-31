@@ -5320,7 +5320,7 @@ body.daily-ticket-modal-open {
   padding: 16px;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 10px;
 }
 
@@ -5330,6 +5330,18 @@ body.daily-ticket-modal-open {
   font-size: 0.74rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.delivery-fleet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.delivery-fleet-actions .btn {
+  flex: 1 1 190px;
+  min-height: 48px;
+  white-space: normal;
 }
 
 .delivery-fleet-list {

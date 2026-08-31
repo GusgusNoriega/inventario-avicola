@@ -131,11 +131,11 @@ class DispatchTicketService
                 'almacen_destino_id' => $destination['warehouse_id'],
                 'vehiculo_entrega_id' => $operationType === TicketDespacho::OPERATION_DISPATCH
                     && ! $destination['internal_client']
-                    ? $data['delivery']['vehicle_id']
+                    ? ($data['delivery']['vehicle_id'] ?? null)
                     : null,
                 'conductor_entrega_id' => $operationType === TicketDespacho::OPERATION_DISPATCH
                     && ! $destination['internal_client']
-                    ? $data['delivery']['driver_id']
+                    ? ($data['delivery']['driver_id'] ?? null)
                     : null,
                 'estado' => TicketDespacho::STATUS_CLOSED,
                 'cerrado_por' => $actor->id,

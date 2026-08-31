@@ -499,7 +499,7 @@
       <div class="section-head">
         <div>
           <p class="delivery-fleet-caption">Paso 1 de 2 · Entrega</p>
-          <h2 id="deliveryTruckModalTitle">Seleccionar camión</h2>
+          <h2 id="deliveryTruckModalTitle">Seleccionar camión (opcional)</h2>
         </div>
         <button id="closeDeliveryTruckModalBtn" class="btn btn-primary" type="button">Cerrar</button>
       </div>
@@ -509,6 +509,10 @@
         <input id="deliveryTruckSearch" type="search" placeholder="Placa, marca o modelo..." autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar camión de entrega">
       </label>
       <div id="deliveryTruckList" class="delivery-fleet-list" role="listbox" aria-label="Camiones propios disponibles"></div>
+      <div class="delivery-fleet-actions">
+        <button id="skipDeliveryTruckBtn" class="btn btn-ghost" type="button">Continuar sin camión</button>
+        <button id="skipDeliverySelectionBtn" class="btn btn-primary" type="button">Registrar sin camión ni chofer</button>
+      </div>
     </div>
   </div>
 
@@ -517,7 +521,7 @@
       <div class="section-head">
         <div>
           <p class="delivery-fleet-caption">Paso 2 de 2 · Entrega</p>
-          <h2 id="deliveryDriverModalTitle">Seleccionar chofer</h2>
+          <h2 id="deliveryDriverModalTitle">Seleccionar chofer (opcional)</h2>
         </div>
         <button id="closeDeliveryDriverModalBtn" class="btn btn-primary" type="button">Cerrar</button>
       </div>
@@ -527,6 +531,9 @@
         <input id="deliveryDriverSearch" type="search" placeholder="Nombre o documento..." autocomplete="off" maxlength="120" readonly inputmode="none" data-touch-keyboard="text" data-touch-keyboard-label="Buscar chofer de entrega">
       </label>
       <div id="deliveryDriverList" class="delivery-fleet-list" role="listbox" aria-label="Choferes disponibles"></div>
+      <div class="delivery-fleet-actions">
+        <button id="skipDeliveryDriverBtn" class="btn btn-primary" type="button">Registrar sin chofer</button>
+      </div>
     </div>
   </div>
 
