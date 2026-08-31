@@ -98,7 +98,7 @@ test("cada borrador permite elegir un cliente distinto y lo bloquea al tener pes
   assert.match(view, /data-live-register-ticket="\{\{ \$lane \}\}"/);
 });
 
-test("el selector muestra todo el catálogo y no recorta las búsquedas de más de cien clientes", () => {
+test("el selector muestra cinco resultados y busca en todo el catálogo, incluidos clientes internos", () => {
   const clients = [
     ...Array.from({ length: 150 }, (_, index) => ({
       id: index + 1,
@@ -136,13 +136,32 @@ test("el selector muestra todo el catálogo y no recorta las búsquedas de más 
   assert.deepEqual(clients.map(({ id }) => id), originalIds);
 
   renderClientOptions();
-  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 152);
-  assert.match(elements.clientOptions.innerHTML, /data-live-client-option="152" aria-pressed="true"/);
-  assert.equal(message, "");
+  assert.deepEqual(
+    [...elements.clientOptions.innerHTML.matchAll(/data-live-client-option="(\d+)"/g)].map(([, id]) => Number(id)),
+    [1, 2, 3, 4, 5],
+  );
+  assert.match(message, /Se muestran 5 de 152 clientes/);
+  assert.match(message, /afinar la búsqueda/);
 
   renderClientOptions("900");
-  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 150);
+  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 5);
+  assert.match(message, /Se muestran 5 de 150 clientes/);
+
+  renderClientOptions("GRANJA");
+  assert.deepEqual(
+    [...elements.clientOptions.innerHTML.matchAll(/data-live-client-option="(\d+)"/g)].map(([, id]) => Number(id)),
+    [151, 152, 1, 2, 3],
+  );
+  assert.match(elements.clientOptions.innerHTML, /data-live-client-option="152" aria-pressed="true"/);
+
+  renderClientOptions("90000149");
+  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 1);
   assert.match(elements.clientOptions.innerHTML, /data-live-client-option="150"/);
+  assert.equal(message, "");
+
+  renderClientOptions("interna");
+  assert.equal([...elements.clientOptions.innerHTML.matchAll(/data-live-client-option=/g)].length, 1);
+  assert.match(elements.clientOptions.innerHTML, /data-live-client-option="152" aria-pressed="true"/);
   assert.equal(message, "");
 });
 
@@ -511,7 +530,6 @@ test("el peso manual se abre desde la lectura y no desde la configuración gener
   assert.match(manualForm, /id="liveIntakeManualWeight"/);
   assert.match(manualForm, /id="liveIntakeApplyManualWeight"[\s\S]*?type="submit"/);
   assert.match(source, /elements\.manualWeightForm\.addEventListener\("submit", applyManualWeight\)/);
-  assert.match(source, /state\.scale\.setManualReading\(elements\.manualWeight\.value\)/);
   assert.match(source, /setMessage\(`Peso manual de \$\{appliedWeight\} kg listo para registrar\.`/);
 });
 

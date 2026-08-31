@@ -395,7 +395,7 @@
           <span>Peso leído en kilogramos</span>
           <input id="liveIntakeManualWeight" type="number" min="0.001" step="0.001" inputmode="decimal" placeholder="0.000" autocomplete="off">
         </label>
-        <p class="lir-modal-help">Este valor reemplaza temporalmente la lectura física para la siguiente pesada.</p>
+        <p class="lir-modal-help">Este peso se mantendrá aunque la balanza esté conectada. Al agregarlo a una columna, volverá a mostrarse la lectura de la balanza.</p>
       </section>
 
       <p id="liveIntakeManualWeightMessage" class="lir-message" role="status" aria-live="polite"></p>

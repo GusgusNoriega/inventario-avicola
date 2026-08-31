@@ -228,6 +228,7 @@ const state = {
   summaryEditorReturn: null,
   zoom: readZoom(),
   scale: null,
+  manualWeightOverride: null,
 };
 
 function createUuid() {
@@ -1182,7 +1183,8 @@ function matchingDispatchClients(search = "") {
 function renderClientOptions(search = "") {
   const lane = Number(state.clientPickerLane);
   const selectedId = laneDestination(lane)?.id;
-  const clients = matchingDispatchClients(search);
+  const matches = matchingDispatchClients(search);
+  const clients = matches.slice(0, 5);
   elements.clientOptions.innerHTML = clients.length
     ? clients.map((client) => {
       const selected = Number(client.id) === Number(selectedId);
@@ -1196,6 +1198,8 @@ function renderClientOptions(search = "") {
 
   if (!(state.data?.catalog?.clients || []).length) {
     setClientMessage("No hay clientes activos disponibles. Registra o activa un cliente antes de continuar.", "error");
+  } else if (matches.length > clients.length) {
+    setClientMessage(`Se muestran ${clients.length} de ${matches.length} clientes. Escribe un nombre o documento más específico para afinar la búsqueda.`);
   } else {
     setClientMessage("");
   }
@@ -1851,8 +1855,32 @@ function selectSex(sex) {
   }
 }
 
-function updateScaleUi(payload = state.scale?.getState()) {
+function captureScaleState(payload = state.scale?.getState()) {
   const scaleState = payload?.state || payload;
+  const manual = state.manualWeightOverride;
+  if (!manual) return scaleState;
+  return {
+    ...scaleState,
+    currentWeightKg: manual.weightKg,
+    readingSource: "manual",
+    readingRaw: `MANUAL ${manual.weightKg.toFixed(3)} kg`,
+    readingAt: manual.appliedAt,
+    isCaptureReady: true,
+  };
+}
+
+function consumeCaptureReading(payload) {
+  if (payload.weight_source === "MANUAL") {
+    if (state.manualWeightOverride?.id === payload.idempotency_key) {
+      state.manualWeightOverride = null;
+    }
+    return;
+  }
+  state.scale.clearReading();
+}
+
+function updateScaleUi(payload = state.scale?.getState()) {
+  const scaleState = captureScaleState(payload);
   if (!scaleState) return;
   const captureLocked = state.busy || Boolean(state.pendingCapture);
   const displayedWeight = state.pendingCapture?.read_weight_kg ?? scaleState.currentWeightKg;
@@ -1866,6 +1894,8 @@ function updateScaleUi(payload = state.scale?.getState()) {
     : '--- <small>kg</small>';
   if (state.pendingCapture) {
     elements.scaleRaw.textContent = `Peso congelado para reintento · ${state.pendingCapture.weight_source === "MANUAL" ? "Manual" : "Balanza"}`;
+  } else if (state.manualWeightOverride) {
+    elements.scaleRaw.textContent = "Peso manual pendiente · Se usará al agregar a una columna";
   } else {
     elements.scaleRaw.textContent = `Trama: ${scaleState.readingRaw || scaleState.lastRaw || "--"}`;
   }
@@ -1881,7 +1911,7 @@ function updateScaleUi(payload = state.scale?.getState()) {
 }
 
 function updateCaptureAvailability() {
-  const scaleState = state.scale?.getState();
+  const scaleState = captureScaleState();
   const pendingCapture = state.pendingCapture;
   const controlsLocked = state.busy || Boolean(pendingCapture);
   const profile = laneProfile(state.activeLane);
@@ -1957,12 +1987,12 @@ function scalePayload(scaleState) {
 function capturePayload() {
   if (state.pendingCapture) return state.pendingCapture;
 
-  const scaleState = state.scale.getState();
+  const scaleState = captureScaleState();
   const profile = laneProfile(state.activeLane);
   const dispatchClient = profile.type === "CLIENTE" ? laneDestination(state.activeLane) : null;
   return {
     layout_version: LAYOUT_VERSION,
-    idempotency_key: createUuid(),
+    idempotency_key: state.manualWeightOverride?.id || createUuid(),
     lane: state.activeLane,
     ...(profile.sex ? {} : { sex: state.sex }),
     ...(dispatchClient ? {
@@ -2049,7 +2079,7 @@ function addCaptureToDispatchDraft(payload) {
     draft.weighings.pop();
     throw new Error("No se pudo guardar el borrador en esta tablet. Libera espacio del navegador e inténtalo nuevamente.");
   }
-  state.scale.clearReading();
+  consumeCaptureReading(payload);
   elements.cageCount.value = "1";
   renderLaneAssignments();
   renderRecords();
@@ -2096,7 +2126,7 @@ async function performCaptureWeighing() {
       : null;
     renderData(response.data);
     clearPendingCapture();
-    state.scale.clearReading();
+    consumeCaptureReading(payload);
     elements.cageCount.value = "1";
     setMessage(confirmedClientName
       ? `Recepción para mi empresa y despacho a ${confirmedClientName} registrados al mismo tiempo.`
@@ -2115,6 +2145,13 @@ async function performCaptureWeighing() {
           firstValidationMessage(error),
         );
       } else {
+        if (payload.weight_source === "MANUAL" && !state.manualWeightOverride) {
+          state.manualWeightOverride = {
+            id: payload.idempotency_key,
+            weightKg: Number(payload.read_weight_kg),
+            appliedAt: payload.weighed_at,
+          };
+        }
         clearPendingCapture();
         setMessage(firstValidationMessage(error), "error");
       }
@@ -3190,9 +3227,19 @@ function closeManualWeight() {
 
 function applyManualWeight(event) {
   event.preventDefault();
+  if (state.busy || state.pendingCapture) return;
   try {
-    state.scale.setManualReading(elements.manualWeight.value);
-    const appliedWeight = Number(elements.manualWeight.value).toFixed(3);
+    const inputWeight = Number(String(elements.manualWeight.value).trim().replace(",", "."));
+    const weightKg = Math.round((inputWeight + Number.EPSILON) * 1000) / 1000;
+    if (!Number.isFinite(weightKg) || weightKg <= 0) {
+      throw new Error("La lectura manual debe ser un peso válido mayor que cero.");
+    }
+    state.manualWeightOverride = {
+      id: createUuid(),
+      weightKg,
+      appliedAt: new Date().toISOString(),
+    };
+    const appliedWeight = weightKg.toFixed(3);
     elements.manualWeight.value = "";
     updateScaleUi();
     closeManualWeight();
@@ -3284,7 +3331,7 @@ state.scale = new RetailScaleController({
   onReading: updateScaleUi,
   onStatus: updateScaleUi,
   onRaw(payload) {
-    if (state.pendingCapture) return;
+    if (state.pendingCapture || state.manualWeightOverride) return;
     elements.scaleRaw.textContent = `Trama: ${payload?.raw || payload?.rawText || state.scale.getState().lastRaw || "--"}`;
   },
 });
