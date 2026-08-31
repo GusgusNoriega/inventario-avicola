@@ -359,7 +359,16 @@
       </header>
       <section id="liveIntakeTicketEditorSummary" class="lir-ticket-editor-summary"></section>
       <section class="lir-ticket-editor-content">
-        <p id="liveIntakeTicketEditorHelp" class="lir-modal-help">Puedes corregir todas las pesadas y guardarlas juntas. El cliente se conserva para mantener la trazabilidad del despacho.</p>
+        <p id="liveIntakeTicketEditorHelp" class="lir-modal-help">Puedes corregir todas las pesadas y guardarlas juntas, o anular una pesada por separado. El cliente se conserva para mantener la trazabilidad del despacho.</p>
+        <div id="liveIntakeTicketVoidConfirmation" class="lir-ticket-void-confirmation" role="group" aria-labelledby="liveIntakeTicketVoidTitle" hidden>
+          <h3 id="liveIntakeTicketVoidTitle">Anular pesada</h3>
+          <p id="liveIntakeTicketVoidHelp" class="lir-modal-help"></p>
+          <label><span>Motivo de la anulación</span><input id="liveIntakeTicketVoidReason" type="text" minlength="3" maxlength="250" autocomplete="off" placeholder="Ej. Pesada registrada por duplicado"></label>
+          <div class="lir-ticket-void-actions">
+            <button id="liveIntakeCancelTicketVoid" type="button">Conservar pesada</button>
+            <button id="liveIntakeConfirmTicketVoid" class="is-danger" type="button">Confirmar anulación</button>
+          </div>
+        </div>
         <div id="liveIntakeTicketEditorRows" class="lir-ticket-editor-rows"><p class="lir-client-empty">Cargando pesadas…</p></div>
         <label class="lir-ticket-correction-reason"><span>Motivo de la corrección</span><input id="liveIntakeTicketEditReason" type="text" minlength="3" maxlength="250" required placeholder="Ej. Corrección del ticket completo"></label>
       </section>

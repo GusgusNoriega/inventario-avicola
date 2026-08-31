@@ -27,6 +27,7 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
         private readonly ScaleReadingService $scaleReadings,
         private readonly LiveChickenReceptionTicketInventoryService $receptionInventory,
         private readonly FinancialAuditService $audit,
+        private readonly DispatchTicketVoidService $ticketVoids,
     ) {
         parent::__construct($javaControl, $financialObligations, $scaleReadings);
     }
@@ -65,48 +66,12 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
             $data,
             $ip,
         ): array {
-            $this->receptionInventory->lockCompanyScope($companyId);
-            $ticket = TicketDespacho::query()
-                ->whereKey($ticketId)
-                ->where('modulo_origen', TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION)
-                ->whereHas('jornada.sucursal', fn (Builder $query) => $query
-                    ->whereKey((int) $branch->id)
-                    ->where('empresa_id', $companyId))
-                ->lockForUpdate()
-                ->firstOrFail();
-            $link = $this->receptionLink(
+            ['ticket' => $ticket, 'link' => $link] = $this->lockedEditableReceptionTicket(
                 $companyId,
-                (int) $branch->id,
+                $branch,
                 $ticketId,
-                true,
+                $data,
             );
-
-            if ($ticket->estado !== TicketDespacho::STATUS_CLOSED) {
-                throw ValidationException::withMessages([
-                    'ticket' => 'Solo se puede corregir un ticket de recepción cerrado y vigente.',
-                ]);
-            }
-
-            $ticket->loadMissing('jornada:id,sucursal_id,fecha_operativa,estado');
-            $currentOperatingDate = $this->currentOperatingDate(
-                $companyId,
-                (string) $branch->zona_horaria,
-            );
-            if ($ticket->jornada?->estado !== JornadaOperativa::STATUS_OPEN
-                || $ticket->jornada?->fecha_operativa?->format('Y-m-d')
-                    !== $currentOperatingDate->format('Y-m-d')) {
-                throw ValidationException::withMessages([
-                    'ticket' => 'Solo se pueden corregir tickets de la jornada operativa actual mientras esté abierta.',
-                ]);
-            }
-
-            $this->assertFinancialDocumentsAreEditable((int) $ticket->id);
-
-            if (array_key_exists('expected_revision', $data)
-                && $data['expected_revision'] !== null
-                && (int) $data['expected_revision'] !== (int) $link->revision) {
-                abort(409, 'El ticket fue modificado por otro usuario. Vuelve a abrirlo antes de guardar.');
-            }
 
             $records = Pesada::query()
                 ->where('ticket_id', $ticket->id)
@@ -233,6 +198,104 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
             );
             $link = $this->receptionInventory->sync($companyId, $actor, $ticket, true) ?: $link;
             $this->financialObligations->syncTicket($companyId, $ticket, $actor);
+
+            return [
+                'ticket' => $this->loadReceptionTicket((int) $ticket->id),
+                'link' => $link,
+            ];
+        }, 3);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{ticket: TicketDespacho, link: RecepcionPolloVivoTicket}
+     */
+    public function voidReceptionTicketWeighing(
+        int $companyId,
+        object $branch,
+        User $actor,
+        int $ticketId,
+        int $weighingId,
+        array $data,
+        ?string $ip = null,
+    ): array {
+        return DB::transaction(function () use (
+            $companyId,
+            $branch,
+            $actor,
+            $ticketId,
+            $weighingId,
+            $data,
+            $ip,
+        ): array {
+            ['ticket' => $ticket, 'link' => $link] = $this->lockedEditableReceptionTicket(
+                $companyId,
+                $branch,
+                $ticketId,
+                $data,
+            );
+            $record = Pesada::query()
+                ->where('ticket_id', $ticket->id)
+                ->whereKey($weighingId)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless($record->estado === Pesada::STATUS_ACTIVE, 409, 'La pesada ya fue anulada.');
+
+            if (filled($data['expected_updated_at'] ?? null)
+                && $record->updated_at
+                && CarbonImmutable::parse((string) $data['expected_updated_at'])->getTimestamp()
+                    !== $record->updated_at->getTimestamp()) {
+                abort(409, 'La pesada fue modificada por otro usuario. Vuelve a abrir el ticket antes de anularla.');
+            }
+
+            $activeRecords = Pesada::query()
+                ->where('ticket_id', $ticket->id)
+                ->where('estado', Pesada::STATUS_ACTIVE)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+            $reason = trim((string) $data['reason']);
+
+            if ($activeRecords->count() === 1) {
+                // The last row also voids the ticket, retaining the existing
+                // administrator permission and ticket-restoration audit cycle.
+                abort_unless(
+                    $actor->isAdministrator(),
+                    403,
+                    'Solo un administrador puede anular la última pesada, porque también se anula el ticket.',
+                );
+                $this->ticketVoids->void(
+                    $companyId,
+                    (int) $branch->id,
+                    $actor,
+                    (int) $ticket->id,
+                    $reason,
+                    $ip,
+                );
+                $link = $link->fresh();
+            } else {
+                $before = $record->attributesToArray();
+                $record->update([
+                    'estado' => Pesada::STATUS_VOIDED,
+                    'anulada_por' => $actor->id,
+                    'anulada_at' => now(),
+                    'motivo_anulacion' => $reason,
+                ]);
+
+                $this->javaControl->syncDispatchMovement($ticket, $companyId, (int) $branch->id);
+                $link = $this->receptionInventory->sync($companyId, $actor, $ticket, true) ?: $link;
+                $this->financialObligations->syncTicket($companyId, $ticket, $actor);
+                $this->audit->record(
+                    $companyId,
+                    (int) $actor->id,
+                    'pesadas',
+                    (int) $record->id,
+                    'ANULAR_PESADA_RECEPCION',
+                    $before,
+                    $record->fresh()->attributesToArray(),
+                    $ip,
+                );
+            }
 
             return [
                 'ticket' => $this->loadReceptionTicket((int) $ticket->id),
@@ -602,6 +665,54 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
             ],
             'weighings' => $normalizedWeighings,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{ticket: TicketDespacho, link: RecepcionPolloVivoTicket}
+     */
+    private function lockedEditableReceptionTicket(
+        int $companyId,
+        object $branch,
+        int $ticketId,
+        array $data,
+    ): array {
+        $this->receptionInventory->lockCompanyScope($companyId);
+        $ticket = TicketDespacho::query()
+            ->whereKey($ticketId)
+            ->where('modulo_origen', TicketDespacho::SOURCE_LIVE_CHICKEN_RECEPTION)
+            ->whereHas('jornada.sucursal', fn (Builder $query) => $query
+                ->whereKey((int) $branch->id)
+                ->where('empresa_id', $companyId))
+            ->lockForUpdate()
+            ->firstOrFail();
+        $link = $this->receptionLink($companyId, (int) $branch->id, $ticketId, true);
+
+        if ($ticket->estado !== TicketDespacho::STATUS_CLOSED) {
+            throw ValidationException::withMessages([
+                'ticket' => 'Solo se puede corregir un ticket de recepción cerrado y vigente.',
+            ]);
+        }
+
+        $ticket->loadMissing('jornada:id,sucursal_id,fecha_operativa,estado');
+        $currentOperatingDate = $this->currentOperatingDate($companyId, (string) $branch->zona_horaria);
+        if ($ticket->jornada?->estado !== JornadaOperativa::STATUS_OPEN
+            || $ticket->jornada?->fecha_operativa?->format('Y-m-d')
+                !== $currentOperatingDate->format('Y-m-d')) {
+            throw ValidationException::withMessages([
+                'ticket' => 'Solo se pueden corregir tickets de la jornada operativa actual mientras esté abierta.',
+            ]);
+        }
+
+        $this->assertFinancialDocumentsAreEditable((int) $ticket->id);
+
+        if (array_key_exists('expected_revision', $data)
+            && $data['expected_revision'] !== null
+            && (int) $data['expected_revision'] !== (int) $link->revision) {
+            abort(409, 'El ticket fue modificado por otro usuario. Vuelve a abrirlo antes de guardar.');
+        }
+
+        return ['ticket' => $ticket, 'link' => $link];
     }
 
     private function receptionLink(

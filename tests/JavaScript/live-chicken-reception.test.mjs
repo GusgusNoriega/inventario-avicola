@@ -404,12 +404,12 @@ test("cada fila del resumen abre su detalle desde cualquier celda con un botón 
 
 test("el resumen enruta pesadas nativas, tickets e históricos sin ofrecer acciones indebidas", () => {
   const rowRenderer = source.match(/function renderSummaryRow\(row\)[\s\S]*?(?=\nfunction renderSummaryTable)/)?.[0] || "";
-  const opener = source.match(/function openSummaryRow\(row\)[\s\S]*?(?=\nfunction renderTotals)/)?.[0] || "";
+  const opener = source.match(/function openSummaryRow\(row, options = \{\}\)[\s\S]*?(?=\nfunction renderTotals)/)?.[0] || "";
   const weighingEditor = source.match(/function openWeighingEditor\(record, context = \{\}\)[\s\S]*?(?=\nfunction closeWeighingEditor)/)?.[0] || "";
   const saveWeighing = source.match(/async function saveWeighingEditor\(event\)[\s\S]*?(?=\nasync function deleteDraftWeighing)/)?.[0] || "";
 
   assert.ok(opener.indexOf("if (ticketWeighing)") < opener.indexOf("state.data?.records?.find"));
-  assert.match(opener, /openTicketEditor\(ticketId, trigger, \{ focusWeighingId: weighingId \}\)/);
+  assert.match(opener, /openTicketEditor\(ticketId, trigger, \{\s*focusWeighingId: weighingId,/);
   assert.match(opener, /!isDispatchTicketRecord\(item\) && Number\(item\.id\) === weighingId/);
   assert.match(opener, /kind: readonly \? "readonly" : "weighing"/);
   assert.match(weighingEditor, /readonly \? `Detalle de pesada/);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LiveChickenReception\StoreLiveChickenReceptionDispatchTicketRequest;
 use App\Http\Requests\LiveChickenReception\UpdateLiveChickenReceptionDispatchTicketRequest;
+use App\Http\Requests\LiveChickenReception\VoidLiveChickenReceptionDispatchTicketWeighingRequest;
 use App\Models\JornadaOperativa;
 use App\Models\TicketDespacho;
 use App\Services\LiveChickenReceptionDispatchTicketService;
@@ -135,6 +136,43 @@ class LiveChickenReceptionDispatchTicketController extends Controller
         ]);
     }
 
+    public function destroyWeighing(
+        VoidLiveChickenReceptionDispatchTicketWeighingRequest $request,
+        int $ticket,
+        int $weighing,
+    ): JsonResponse {
+        $branch = $this->context->branch($request);
+        $companyId = $this->context->companyId($request);
+        $result = $this->tickets->voidReceptionTicketWeighing(
+            $companyId,
+            $branch,
+            $this->context->actor($request, (int) $branch->id),
+            $ticket,
+            $weighing,
+            $request->validated(),
+            $request->ip(),
+        );
+        $ticketVoided = $result['ticket']->estado === TicketDespacho::STATUS_VOIDED;
+
+        return response()->json([
+            'message' => $ticketVoided
+                ? 'Última pesada anulada. El ticket quedó anulado y sus totales fueron actualizados.'
+                : 'Pesada anulada. Los totales de recepción, despacho y saldo del cliente fueron actualizados.',
+            'voided_weighing_id' => $weighing,
+            'ticket_voided' => $ticketVoided,
+            'data' => $this->reception->overview($companyId, $branch),
+            'ticket' => $this->formatTicket(
+                $result['ticket'],
+                (int) $result['link']->columna,
+                (int) $result['link']->revision,
+                $companyId,
+                $branch,
+                $this->ticketTitles->current($companyId),
+                $this->ticketMessages->current($companyId),
+            ),
+        ]);
+    }
+
     /** @return array<string, mixed> */
     private function formatTicket(
         TicketDespacho $ticket,
@@ -157,6 +195,8 @@ class LiveChickenReceptionDispatchTicketController extends Controller
             'reception_lane' => $receptionLane,
             'link_revision' => $linkRevision,
             'editable' => $editability['editable'],
+            'can_void_last_weighing' => $editability['editable']
+                && auth()->user()?->isAdministrator() === true,
             'edit_restriction' => $editability['edit_restriction'],
             'operating_date' => $ticket->jornada?->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->cerrado_at?->toISOString(),

@@ -189,6 +189,12 @@ const elements = {
   ticketEditorRows: document.getElementById("liveIntakeTicketEditorRows"),
   ticketEditorMessage: document.getElementById("liveIntakeTicketEditorMessage"),
   ticketEditReason: document.getElementById("liveIntakeTicketEditReason"),
+  ticketVoidConfirmation: document.getElementById("liveIntakeTicketVoidConfirmation"),
+  ticketVoidTitle: document.getElementById("liveIntakeTicketVoidTitle"),
+  ticketVoidHelp: document.getElementById("liveIntakeTicketVoidHelp"),
+  ticketVoidReason: document.getElementById("liveIntakeTicketVoidReason"),
+  confirmTicketVoid: document.getElementById("liveIntakeConfirmTicketVoid"),
+  cancelTicketVoid: document.getElementById("liveIntakeCancelTicketVoid"),
   printTicket: document.getElementById("liveIntakePrintTicket"),
   cancelTicket: document.getElementById("liveIntakeCancelTicket"),
   saveTicket: document.getElementById("liveIntakeSaveTicket"),
@@ -226,6 +232,7 @@ const state = {
   editingTicket: null,
   ticketEditorTrigger: null,
   ticketEditorFocusWeighingId: null,
+  ticketVoidWeighingId: null,
   ticketEditorRequestId: 0,
   lastRegisteredTicket: null,
   summaryScope: null,
@@ -1610,7 +1617,7 @@ function renderSummaryRow(row) {
       <td class="lir-summary-weight">${formatKg(row?.tare_weight_kg)}</td>
       <td class="lir-summary-weight lir-summary-net">${formatKg(row?.net_weight_kg)}</td>
       <td><span class="lir-summary-source ${weightSource.manual ? "is-manual" : ""}" title="${escapeHtml(row?.weight_source || "Sin dato")}">${escapeHtml(weightSource.label)}</span></td>
-      <td class="lir-summary-record"><strong>Pesada #${escapeHtml(recordNumber)}</strong><small>${escapeHtml(recordContext)}</small></td>
+      <td class="lir-summary-record"><strong>Pesada #${escapeHtml(recordNumber)}</strong><small>${escapeHtml(recordContext)}</small>${ticketWeighing ? `<button class="is-danger lir-summary-void-weighing" type="button" data-live-summary-void-weighing aria-haspopup="dialog" aria-controls="liveIntakeTicketEditorModal" aria-label="Anular pesada #${escapeHtml(recordNumber)} del ticket ${escapeHtml(row.ticket_code || row.ticket_id)}">Anular pesada</button>` : ""}</td>
     </tr>`;
 }
 
@@ -1728,7 +1735,7 @@ function restoreSummaryDetailAfterEditor(message = "", tone = "") {
   return true;
 }
 
-function openSummaryRow(row) {
+function openSummaryRow(row, options = {}) {
   if (!row || state.busy) return;
   const ticketWeighing = row.dataset.liveSummaryRecordKind === "dispatch_ticket_weighing";
   const weighingId = Number(row.dataset.liveSummaryWeighingId || row.dataset.liveSummaryRecordId);
@@ -1741,7 +1748,10 @@ function openSummaryRow(row) {
       return;
     }
     const trigger = suspendSummaryDetailForEditor(row);
-    void openTicketEditor(ticketId, trigger, { focusWeighingId: weighingId });
+    void openTicketEditor(ticketId, trigger, {
+      focusWeighingId: weighingId,
+      ...(options.voidWeighing ? { voidWeighingId: weighingId } : {}),
+    });
     return;
   }
 
@@ -2681,6 +2691,135 @@ function setTicketEditorMessage(message, tone = "") {
   elements.ticketEditorMessage.classList.toggle("is-success", tone === "success");
 }
 
+function ticketEditorHasUnsavedChanges() {
+  const ticket = state.editingTicket;
+  if (!ticket) return false;
+  const rows = Array.from(elements.ticketEditorRows.querySelectorAll("[data-live-ticket-weighing]"));
+  if (rows.length !== ticket.weighings.length) return true;
+  return rows.some((row) => {
+    const original = ticket.weighings.find((weighing) => Number(weighing.id) === Number(row.dataset.liveTicketWeighing));
+    if (!original) return true;
+    const value = (field) => row.querySelector(`[data-ticket-field="${field}"]`)?.value;
+    return value("sex") !== original.sex
+      || Number(value("cage_type_id")) !== Number(original.cage_type_id)
+      || Number(value("birds_per_cage")) !== Number(original.birds_per_cage)
+      || Number(value("cage_count")) !== Number(original.cage_count)
+      || Number(value("read_weight_kg")) !== Number(original.read_weight_kg ?? original.gross_weight_kg)
+      // Browsers may omit :00 seconds from an unchanged datetime-local value.
+      || Date.parse(value("weighed_at")) !== Date.parse(toDateTimeLocal(original.weighed_at));
+  });
+}
+
+function syncTicketEditorControls() {
+  const ticket = state.editingTicket;
+  const readonly = !ticket || ticket.editable === false;
+  const confirming = Boolean(state.ticketVoidWeighingId);
+  const locked = readonly || confirming || state.busy;
+  elements.ticketEditorRows.querySelectorAll("input, select").forEach((control) => { control.disabled = locked; });
+  elements.ticketEditorRows.querySelectorAll("[data-live-void-ticket-weighing]").forEach((button) => {
+    button.disabled = locked || (ticket.weighings.length === 1 && ticket.can_void_last_weighing === false);
+  });
+  elements.ticketEditReason.disabled = locked;
+  elements.ticketEditReason.required = !locked;
+  elements.printTicket.disabled = !ticket?.weighings.length || confirming || state.busy;
+  elements.saveTicket.disabled = !ticket?.weighings.length || locked;
+  elements.confirmTicketVoid.disabled = !confirming || state.busy || readonly;
+  elements.cancelTicketVoid.disabled = state.busy;
+  elements.ticketVoidReason.disabled = state.busy;
+  elements.ticketEditorModal.querySelectorAll("[data-live-close-ticket-editor]").forEach((button) => { button.disabled = state.busy; });
+}
+
+function beginTicketWeighingVoid(weighingId) {
+  const ticket = state.editingTicket;
+  if (!ticket || ticket.editable === false || state.busy) return;
+  const weighing = ticket.weighings.find((item) => Number(item.id) === Number(weighingId));
+  if (!weighing) {
+    setTicketEditorMessage("Esta pesada ya no está disponible. Cierra y vuelve a abrir el ticket para actualizarlo.", "error");
+    return;
+  }
+  if (ticket.weighings.length === 1 && ticket.can_void_last_weighing === false) {
+    setTicketEditorMessage("Solo un administrador puede anular la última pesada, porque también se anula el ticket.", "error");
+    return;
+  }
+  if (ticketEditorHasUnsavedChanges()) {
+    setTicketEditorMessage("Hay cambios sin guardar. Actualiza el ticket completo o ciérralo y vuelve a abrirlo antes de anular una pesada.", "error");
+    return;
+  }
+  state.ticketVoidWeighingId = Number(weighing.id);
+  elements.ticketVoidTitle.textContent = `Anular pesada #${weighing.number} · ${ticket.code}`;
+  elements.ticketVoidHelp.textContent = `${weighing.sex === "HEMBRA" ? "Hembra" : "Macho"} · ${weighing.cage_count} javas · ${weighing.birds} pollos · ${formatKg(weighing.net_weight_kg)} netos. Se descontará de los totales de recepción y despacho, conservando el registro de la anulación.${ticket.weighings.length === 1 ? " Es la última pesada: también se anulará este ticket." : " Las demás pesadas se conservarán."}`;
+  elements.ticketVoidReason.value = elements.ticketEditReason.value.trim();
+  elements.ticketVoidConfirmation.hidden = false;
+  syncTicketEditorControls();
+  setTicketEditorMessage("Revisa la pesada y escribe el motivo antes de confirmar la anulación.");
+  elements.ticketVoidConfirmation.scrollIntoView({ block: "center", inline: "nearest" });
+  elements.ticketVoidReason.focus({ preventScroll: true });
+}
+
+function cancelTicketWeighingVoid() {
+  if (state.busy) return;
+  const weighingId = state.ticketVoidWeighingId;
+  state.ticketVoidWeighingId = null;
+  elements.ticketVoidConfirmation.hidden = true;
+  elements.ticketVoidReason.value = "";
+  syncTicketEditorControls();
+  setTicketEditorMessage("La pesada se conservó sin cambios.");
+  elements.ticketEditorRows.querySelector(`[data-live-void-ticket-weighing="${Number(weighingId)}"]`)?.focus({ preventScroll: true });
+}
+
+async function submitTicketWeighingVoid() {
+  const ticket = state.editingTicket;
+  const weighingId = Number(state.ticketVoidWeighingId);
+  const weighing = ticket?.weighings.find((item) => Number(item.id) === weighingId);
+  if (!weighing || ticket.editable === false || state.busy || elements.confirmTicketVoid.disabled) return;
+  if (ticket.weighings.length === 1 && ticket.can_void_last_weighing === false) return;
+  if (ticketEditorHasUnsavedChanges()) {
+    setTicketEditorMessage("Hay cambios sin guardar. Cancela la anulación y guarda las correcciones del ticket primero.", "error");
+    return;
+  }
+  const reason = elements.ticketVoidReason.value.trim();
+  if (reason.length < 3 || reason.length > 250) {
+    setTicketEditorMessage("Escribe un motivo de anulación de entre 3 y 250 caracteres.", "error");
+    elements.ticketVoidReason.focus({ preventScroll: true });
+    return;
+  }
+  state.busy = true;
+  syncTicketEditorControls();
+  updateScaleUi();
+  setTicketEditorMessage("Anulando la pesada y actualizando los totales…");
+  try {
+    const response = await apiRequest(`/recepcion-pollo-vivo/tickets/${ticket.id}/pesadas/${weighingId}`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        layout_version: LAYOUT_VERSION,
+        expected_revision: ticket.link_revision,
+        ...(weighing.updated_at ? { expected_updated_at: weighing.updated_at } : {}),
+        reason,
+      }),
+    });
+    renderData(response.data);
+    state.editingTicket = normalizeFullTicket(response.ticket);
+    state.ticketVoidWeighingId = null;
+    elements.ticketVoidConfirmation.hidden = true;
+    elements.ticketVoidReason.value = "";
+    state.ticketEditorFocusWeighingId = state.editingTicket.weighings[0]?.id || null;
+    const successMessage = response.message || "Pesada anulada y totales actualizados.";
+    if (state.summaryEditorReturn) {
+      finishTicketEditor(successMessage, "success");
+      return;
+    }
+    renderTicketEditor();
+    setTicketEditorMessage(successMessage, "success");
+    setMessage(successMessage, "success");
+  } catch (error) {
+    setTicketEditorMessage(firstValidationMessage(error), "error");
+  } finally {
+    state.busy = false;
+    syncTicketEditorControls();
+    updateScaleUi();
+  }
+}
+
 function renderTicketEditor() {
   const ticket = state.editingTicket;
   if (!ticket) return;
@@ -2691,7 +2830,7 @@ function renderTicketEditor() {
   elements.ticketEditorClient.textContent = `${ticket.client.name} · Cliente conservado`;
   elements.ticketEditorHelp.textContent = readonly
     ? "Consulta todas las pesadas del ticket. El propietario y el cliente se conservan para mantener su trazabilidad."
-    : "Puedes corregir todas las pesadas y guardarlas juntas. El propietario permanece fijo como Mi empresa y el cliente se conserva para mantener la trazabilidad del despacho.";
+    : "Puedes corregir todas las pesadas y guardarlas juntas, o anular una pesada por separado. Guarda las correcciones pendientes antes de anular. El propietario y el cliente se conservan para mantener la trazabilidad del despacho.";
   elements.ticketEditorSummary.innerHTML = `
     <span><small>Pesadas</small><strong>${totals.weighings}</strong></span>
     <span><small>Javas</small><strong>${totals.cages}</strong></span>
@@ -2709,6 +2848,7 @@ function renderTicketEditor() {
         <label><span>Javas</span><input data-ticket-field="cage_count" type="number" min="1" max="10000" step="1" value="${weighing.cage_count}"></label>
         <label><span>Peso leído (kg)</span><input data-ticket-field="read_weight_kg" type="number" min="0.001" step="0.001" value="${Number(weighing.read_weight_kg || weighing.gross_weight_kg).toFixed(3)}"></label>
         <label><span>Fecha y hora</span><input data-ticket-field="weighed_at" type="datetime-local" step="1" value="${toDateTimeLocal(weighing.weighed_at)}"></label>
+        ${readonly ? "" : `<div class="lir-ticket-weighing-actions"><button type="button" class="is-danger" data-live-void-ticket-weighing="${weighing.id}" aria-label="Anular pesada #${weighing.number || index + 1}">Anular pesada</button>${ticket.weighings.length === 1 && ticket.can_void_last_weighing === false ? '<small>Solo un administrador puede anular la última pesada del ticket.</small>' : ""}</div>`}
       </fieldset>`).join("")
     : '<p class="lir-client-empty">Este ticket no tiene pesadas disponibles.</p>';
   elements.ticketEditReason.value = "";
@@ -2719,6 +2859,7 @@ function renderTicketEditor() {
   elements.printTicket.disabled = ticket.weighings.length === 0;
   elements.saveTicket.hidden = readonly;
   elements.saveTicket.disabled = ticket.weighings.length === 0 || readonly;
+  syncTicketEditorControls();
   elements.cancelTicket.textContent = readonly ? "Cerrar" : "Cancelar";
   elements.ticketEditorModal.querySelector("header [data-live-close-ticket-editor]")?.setAttribute(
     "aria-label",
@@ -2729,8 +2870,9 @@ function renderTicketEditor() {
     : "Al guardar, todas las pesadas se validarán y actualizarán en una sola operación.", readonly ? "error" : "");
 
   const focusTarget = elements.ticketEditorRows.querySelector(".is-summary-target");
-  if (focusTarget) {
+  if (focusTarget && !state.ticketVoidWeighingId) {
     (globalThis.requestAnimationFrame || globalThis.setTimeout)(() => {
+      if (state.ticketVoidWeighingId || elements.ticketEditorModal.hidden) return;
       focusTarget.focus({ preventScroll: true });
       focusTarget.scrollIntoView({ block: "center", inline: "nearest" });
     });
@@ -2743,6 +2885,9 @@ async function openTicketEditor(ticketId, trigger, options = {}) {
   const requestId = ++state.ticketEditorRequestId;
   state.ticketEditorTrigger = trigger || elements.capture;
   state.ticketEditorFocusWeighingId = Number(options.focusWeighingId) || null;
+  state.ticketVoidWeighingId = null;
+  elements.ticketVoidConfirmation.hidden = true;
+  elements.ticketVoidReason.value = "";
   state.editingTicket = null;
   elements.ticketEditorTitle.textContent = `Ticket #${id}`;
   elements.ticketEditorOwner.textContent = "Propietario: Mi empresa · fijo";
@@ -2759,6 +2904,12 @@ async function openTicketEditor(ticketId, trigger, options = {}) {
     state.ticketEditorCatalog = response.data?.catalog || response.catalog || {};
     state.editingTicket = normalizeFullTicket(response.data?.ticket || response.ticket || response.data);
     renderTicketEditor();
+    if (options.voidWeighingId) {
+      globalThis.setTimeout(() => {
+        if (requestId !== state.ticketEditorRequestId || elements.ticketEditorModal.hidden) return;
+        beginTicketWeighingVoid(options.voidWeighingId);
+      }, 0);
+    }
   } catch (error) {
     if (requestId !== state.ticketEditorRequestId || elements.ticketEditorModal.hidden) return;
     elements.ticketEditorRows.innerHTML = '<p class="lir-client-empty">No se pudo cargar el ticket.</p>';
@@ -2774,6 +2925,8 @@ function closeTicketEditor() {
   state.ticketEditorCatalog = null;
   state.ticketEditorTrigger = null;
   state.ticketEditorFocusWeighingId = null;
+  state.ticketVoidWeighingId = null;
+  elements.ticketVoidConfirmation.hidden = true;
   if (state.summaryEditorReturn) {
     trigger?.setAttribute("aria-expanded", "false");
     elements.ticketEditorModal.hidden = true;
@@ -2791,6 +2944,8 @@ function finishTicketEditor(message = "", tone = "") {
   state.ticketEditorCatalog = null;
   state.ticketEditorTrigger = null;
   state.ticketEditorFocusWeighingId = null;
+  state.ticketVoidWeighingId = null;
+  elements.ticketVoidConfirmation.hidden = true;
   elements.ticketEditorModal.hidden = true;
   if (restoreSummaryDetailAfterEditor(message, tone)) {
     if (message) setMessage(message, tone);
@@ -2842,6 +2997,10 @@ function ticketEditorWeighings() {
 
 async function saveTicketEditor(event) {
   event.preventDefault();
+  if (state.ticketVoidWeighingId) {
+    await submitTicketWeighingVoid();
+    return;
+  }
   if (!state.editingTicket || state.busy || elements.saveTicket.disabled) return;
   const reason = elements.ticketEditReason.value.trim();
   if (reason.length < 3) {
@@ -2857,6 +3016,7 @@ async function saveTicketEditor(event) {
   }
   state.busy = true;
   elements.saveTicket.disabled = true;
+  syncTicketEditorControls();
   setTicketEditorMessage("Actualizando el ticket completo…");
   try {
     const response = await apiRequest(`/recepcion-pollo-vivo/tickets/${state.editingTicket.id}`, {
@@ -2878,6 +3038,7 @@ async function saveTicketEditor(event) {
   } finally {
     state.busy = false;
     if (state.editingTicket) elements.saveTicket.disabled = state.editingTicket.editable === false;
+    syncTicketEditorControls();
     updateScaleUi();
   }
 }
@@ -3437,6 +3598,12 @@ elements.editOwner.addEventListener("change", updateWeighingEditorAssignment);
 elements.editSex.addEventListener("change", updateWeighingEditorAssignment);
 document.querySelectorAll("[data-live-close-weighing-editor]").forEach((button) => button.addEventListener("click", closeWeighingEditor));
 elements.ticketEditorForm.addEventListener("submit", saveTicketEditor);
+elements.ticketEditorRows.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-live-void-ticket-weighing]");
+  if (button) beginTicketWeighingVoid(button.dataset.liveVoidTicketWeighing);
+});
+elements.confirmTicketVoid.addEventListener("click", () => { void submitTicketWeighingVoid(); });
+elements.cancelTicketVoid.addEventListener("click", cancelTicketWeighingVoid);
 elements.printTicket.addEventListener("click", () => printRegisteredTicket());
 document.querySelectorAll("[data-live-close-ticket-editor]").forEach((button) => button.addEventListener("click", closeTicketEditor));
 elements.connectBle.addEventListener("click", () => connectScale("ble"));
@@ -3458,6 +3625,12 @@ elements.zoomOut.addEventListener("click", () => stepZoom(-1));
 elements.zoomIn.addEventListener("click", () => stepZoom(1));
 elements.zoomReset.addEventListener("click", () => applyZoom(100));
 document.addEventListener("click", (event) => {
+  const summaryVoidButton = event.target.closest("[data-live-summary-void-weighing]");
+  if (summaryVoidButton) {
+    event.preventDefault();
+    openSummaryRow(summaryVoidButton.closest("[data-live-summary-row]"), { voidWeighing: true });
+    return;
+  }
   const summaryRow = event.target.closest("[data-live-summary-row]");
   if (summaryRow) {
     event.preventDefault();
@@ -3519,7 +3692,10 @@ document.addEventListener("keydown", (event) => {
   if (!openModal) return;
   if (event.key === "Escape") {
     if (openModal === elements.summaryModal) closeSummaryDetail();
-    else if (openModal === elements.ticketEditorModal) closeTicketEditor();
+    else if (openModal === elements.ticketEditorModal) {
+      if (state.ticketVoidWeighingId) cancelTicketWeighingVoid();
+      else closeTicketEditor();
+    }
     else if (openModal === elements.weighingEditorModal) closeWeighingEditor();
     else if ([elements.deliveryTruckModal, elements.deliveryDriverModal].includes(openModal)) closeDeliverySelection();
     else if (openModal === elements.clientModal) closeClientPicker();

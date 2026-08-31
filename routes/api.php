@@ -448,6 +448,8 @@ Route::prefix('v1')->group(function (): void {
                 ->whereNumber('ticket');
             Route::put('/tickets/{ticket}', [LiveChickenReceptionDispatchTicketController::class, 'update'])
                 ->whereNumber('ticket');
+            Route::delete('/tickets/{ticket}/pesadas/{weighing}', [LiveChickenReceptionDispatchTicketController::class, 'destroyWeighing'])
+                ->whereNumber(['ticket', 'weighing']);
             Route::put('/pesadas/{weighing}', [LiveChickenReceptionController::class, 'update'])
                 ->whereNumber('weighing');
             Route::delete('/pesadas/{weighing}', [LiveChickenReceptionController::class, 'destroy'])

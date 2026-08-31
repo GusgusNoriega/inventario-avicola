@@ -310,3 +310,13 @@ html[style*="--lir-fs-ticket-total-tare-weight-kg:"] :is(#liveIntakeTicketEditor
 html[style*="--lir-fs-ticket-total-net-weight-kg:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(6) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 html[style*="--lir-fs-scale-weight:"] #liveIntakeScaleWeight,
 html[style*="--lir-fs-scale-unit:"] #liveIntakeScaleWeight { max-width: 100%; overflow-x: auto; padding-block: .06em; }
+
+.lir-ticket-weighing-actions button { font-size: var(--lir-fs-ticket-void-row-action, .8rem); }
+.lir-modal-card .lir-summary-void-weighing { font-size: var(--lir-fs-ticket-void-summary-action, .75rem); }
+#liveIntakeTicketEditorForm #liveIntakeTicketVoidTitle { font-size: var(--lir-fs-ticket-void-title, var(--lir-fs-modal-section-title, .95rem)); }
+#liveIntakeTicketEditorForm #liveIntakeTicketVoidHelp { font-size: var(--lir-fs-ticket-void-help, var(--lir-fs-modal-help, .75rem)); }
+#liveIntakeTicketVoidConfirmation label > span { font-size: var(--lir-fs-ticket-void-reason-label, .72rem); }
+#liveIntakeTicketVoidReason { font-size: var(--lir-fs-ticket-void-reason, 1rem); }
+#liveIntakeConfirmTicketVoid { font-size: var(--lir-fs-ticket-void-confirm, 1rem); }
+#liveIntakeCancelTicketVoid { font-size: var(--lir-fs-ticket-void-cancel, 1rem); }
+.lir-ticket-weighing-actions small { font-size: var(--lir-fs-ticket-void-restriction, .75rem); }

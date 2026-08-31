@@ -310,6 +310,10 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
                 'message',
                 'No se puede corregir el ticket porque ya tiene cobros o pagos aplicados. Anula primero los movimientos financieros relacionados.',
             );
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertConflict();
 
         $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
             'ticket_despacho_id' => $ticket['id'],
@@ -646,6 +650,10 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             $this->ticketUpdatePayload($ticket),
         )->assertUnprocessable()
             ->assertJsonValidationErrors('ticket');
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertUnprocessable()->assertJsonValidationErrors('ticket');
 
         $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
             'ticket_despacho_id' => $ticket['id'],
@@ -680,11 +688,307 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}",
             $this->ticketUpdatePayload($ticket),
         )->assertNotFound();
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertNotFound();
 
         $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
             'ticket_despacho_id' => $ticket['id'],
             'revision' => $ticket['link_revision'],
         ]);
+    }
+
+    public function test_individual_void_updates_reception_dispatch_inventory_and_customer_debt_once(): void
+    {
+        $registration = $this->ticketPayload();
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $registration)
+            ->assertCreated()->json('ticket');
+        $weighingId = $ticket['weighings'][0]['id'];
+        $endpoint = "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$weighingId}";
+        $payload = $this->weighingVoidPayload($ticket);
+
+        $updated = $this->deleteJson($endpoint, $payload)->assertOk()
+            ->assertJsonPath('voided_weighing_id', $weighingId)
+            ->assertJsonPath('ticket_voided', false)
+            ->assertJsonPath('ticket.status', TicketDespacho::STATUS_CLOSED)
+            ->assertJsonPath('ticket.link_revision', 2)
+            ->assertJsonPath('ticket.weighing_count', 1)
+            ->assertJsonPath('ticket.weighings.0.id', $ticket['weighings'][1]['id'])
+            ->assertJsonCount(1, 'data.records')
+            ->assertJsonPath('data.totals.daily.weighings', 1)
+            ->assertJsonPath('data.totals.daily.cages', 1)
+            ->assertJsonPath('data.totals.daily.birds', 7)
+            ->assertJsonPath('data.totals.own.birds', 7)
+            ->assertJsonPath('data.totals.lanes.1.birds', 0)
+            ->assertJsonPath('data.totals.lanes.2.birds', 7);
+        $this->assertEquals(43, $updated->json('data.totals.daily.net_weight_kg'));
+        $this->assertDatabaseHas('pesadas', [
+            'id' => $weighingId,
+            'estado' => Pesada::STATUS_VOIDED,
+            'anulada_por' => $this->user->id,
+            'motivo_anulacion' => $payload['reason'],
+        ]);
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', [
+            'ticket_despacho_id' => $ticket['id'], 'cantidad_javas_aplicada' => 1, 'revision' => 2,
+        ]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 1]);
+        $this->assertDatabaseHas('movimientos_javas', ['ticket_despacho_id' => $ticket['id'], 'cantidad' => 1]);
+        $this->assertDatabaseHas('movimientos_inventario', ['ticket_id' => $ticket['id'], 'estado' => 'CONFIRMADO']);
+        $this->assertDatabaseMissing('movimiento_detalles', ['pesada_id' => $weighingId]);
+        $this->assertDatabaseCount('movimiento_detalles', 1);
+        $this->assertDatabaseHas('comprobantes', [
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'total' => 376.25, 'saldo_pendiente' => 376.25, 'estado' => 'PENDIENTE',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'pesadas', 'entidad_id' => (string) $weighingId,
+            'accion' => 'ANULAR_PESADA_RECEPCION', 'usuario_id' => $this->user->id,
+        ]);
+        $this->getJson('/api/v1/recepcion-pollo-vivo/historial?status=ANULADA&source=TICKET')
+            ->assertOk()->assertJsonCount(1, 'data.records')
+            ->assertJsonPath('data.records.0.status', Pesada::STATUS_VOIDED)
+            ->assertJsonPath('data.records.0.void_reason', $payload['reason'])
+            ->assertJsonPath('data.summary.active.weighings', 1)
+            ->assertJsonPath('data.summary.active.birds', 7)
+            ->assertJsonPath('data.summary.voided.weighings', 1)
+            ->assertJsonPath('data.summary.voided.birds', 14);
+
+        $this->deleteJson($endpoint, $payload)->assertConflict();
+        $this->deleteJson($endpoint, [...$payload, 'expected_revision' => 2])->assertConflict();
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $registration)
+            ->assertOk()->assertJsonPath('already_registered', true)
+            ->assertJsonPath('ticket.weighing_count', 1);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 1]);
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', ['revision' => 2]);
+        $this->assertDatabaseCount('pesadas', 2);
+    }
+
+    public function test_remaining_rows_can_be_edited_only_with_the_revision_returned_after_voiding(): void
+    {
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->json('ticket');
+        $updatedTicket = $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertOk()->json('ticket');
+        $this->putJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}",
+            $this->ticketUpdatePayload($ticket),
+        )->assertConflict();
+        $payload = $this->ticketUpdatePayload($updatedTicket);
+        $payload['weighings'][0]['cage_count'] = 2;
+        $payload['weighings'][0]['birds_per_cage'] = 9;
+        $payload['weighings'][0]['read_weight_kg'] = 60;
+        $this->putJson("/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}", $payload)
+            ->assertOk()->assertJsonPath('ticket.link_revision', 3)
+            ->assertJsonPath('data.totals.daily.cages', 2)
+            ->assertJsonPath('data.totals.daily.birds', 18);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+        $this->assertDatabaseHas('comprobantes', ['total' => 402.5, 'saldo_pendiente' => 402.5]);
+    }
+
+    public function test_last_weighing_voids_ticket_and_clears_all_operational_totals(): void
+    {
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->assertJsonPath('ticket.can_void_last_weighing', true)->json('ticket');
+        $firstId = $ticket['weighings'][0]['id'];
+        $ticket = $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$firstId}",
+            $this->weighingVoidPayload($ticket),
+        )->assertOk()->json('ticket');
+        $lastId = $ticket['weighings'][0]['id'];
+        $endpoint = "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$lastId}";
+        $payload = $this->weighingVoidPayload($ticket);
+        $this->deleteJson($endpoint, $payload)->assertOk()
+            ->assertJsonPath('ticket_voided', true)
+            ->assertJsonPath('ticket.status', TicketDespacho::STATUS_VOIDED)
+            ->assertJsonPath('ticket.editable', false)
+            ->assertJsonPath('ticket.weighing_count', 0)
+            ->assertJsonPath('ticket.link_revision', 3)
+            ->assertJsonCount(0, 'data.records')
+            ->assertJsonPath('data.totals.daily.weighings', 0)
+            ->assertJsonPath('data.totals.daily.cages', 0)
+            ->assertJsonPath('data.totals.daily.birds', 0);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 0]);
+        $this->assertDatabaseMissing('movimientos_javas', ['ticket_despacho_id' => $ticket['id']]);
+        $this->assertDatabaseHas('movimientos_inventario', ['ticket_id' => $ticket['id'], 'estado' => 'ANULADO']);
+        $this->assertDatabaseHas('comprobantes', ['origen_clave' => "VENTA:TICKET:{$ticket['id']}", 'estado' => 'ANULADO']);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'pesadas', 'entidad_id' => (string) $lastId, 'accion' => 'ANULAR_POR_TICKET',
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'pesadas', 'entidad_id' => (string) $firstId, 'accion' => 'ANULAR_PESADA_RECEPCION',
+        ]);
+        $this->deleteJson($endpoint, $payload)->assertUnprocessable();
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 0]);
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', ['revision' => 3, 'cantidad_javas_aplicada' => 0]);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")
+            ->assertOk()->assertJsonCount(1, 'data.restored_weighing_ids')
+            ->assertJsonPath('data.restored_weighing_ids.0', $lastId);
+        $this->assertDatabaseHas('pesadas', ['id' => $firstId, 'estado' => Pesada::STATUS_VOIDED]);
+        $this->assertDatabaseHas('pesadas', ['id' => $lastId, 'estado' => Pesada::STATUS_ACTIVE]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 1]);
+        $this->assertDatabaseHas('movimientos_javas', ['ticket_despacho_id' => $ticket['id'], 'cantidad' => 1]);
+        $this->assertDatabaseCount('movimiento_detalles', 1);
+        $this->assertDatabaseHas('movimiento_detalles', ['pesada_id' => $lastId]);
+        $this->assertDatabaseHas('comprobantes', ['total' => 376.25, 'saldo_pendiente' => 376.25, 'estado' => 'PENDIENTE']);
+        $this->getJson('/api/v1/recepcion-pollo-vivo')->assertOk()
+            ->assertJsonPath('data.totals.daily.weighings', 1)
+            ->assertJsonPath('data.totals.daily.cages', 1)
+            ->assertJsonPath('data.totals.daily.birds', 7);
+    }
+
+    public function test_operator_can_void_individual_rows_but_cannot_void_the_last_row_without_administrator_permission(): void
+    {
+        $operator = $this->createUserForCompany($this->user, ['sucursal_id' => $this->branchId]);
+        $this->grantModules($operator, ['MODULO_RECEPCION_POLLO_VIVO'], 'RECEPCION_OPERADOR');
+        Sanctum::actingAs($operator, ['api']);
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->assertJsonPath('ticket.can_void_last_weighing', false)->json('ticket');
+        $ticket = $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertOk()->json('ticket');
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertForbidden();
+        $this->assertDatabaseHas('tickets_despacho', ['id' => $ticket['id'], 'estado' => TicketDespacho::STATUS_CLOSED]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 1]);
+        $this->assertDatabaseHas('pesadas', ['id' => $ticket['weighings'][0]['id'], 'estado' => Pesada::STATUS_ACTIVE]);
+    }
+
+    public function test_weighing_void_rejects_other_ticket_rows_and_stale_versions_without_side_effects(): void
+    {
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->json('ticket');
+        $other = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->json('ticket');
+        $endpoint = "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}";
+        $payload = $this->weighingVoidPayload($ticket);
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$other['weighings'][0]['id']}",
+            $payload,
+        )->assertNotFound();
+        $this->deleteJson($endpoint, [...$payload, 'expected_revision' => 0])->assertConflict();
+        $this->deleteJson($endpoint, [...$payload, 'expected_updated_at' => now()->subDay()->toISOString()])
+            ->assertConflict();
+        $this->deleteJson($endpoint, ['layout_version' => 3, 'reason' => '  '])
+            ->assertUnprocessable()->assertJsonValidationErrors(['layout_version', 'reason', 'expected_revision']);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 6]);
+        $this->assertSame(4, Pesada::query()->where('estado', Pesada::STATUS_ACTIVE)->count());
+        $this->assertSame(2, DB::table('recepcion_pollo_vivo_tickets')->where('revision', 1)->count());
+        $this->assertDatabaseCount('movimiento_detalles', 4);
+    }
+
+    public function test_individual_void_is_atomic_when_cage_returns_would_leave_a_negative_customer_balance(): void
+    {
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->json('ticket');
+        DB::table('movimientos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => DB::table('tickets_despacho')->where('id', $ticket['id'])->value('jornada_id'),
+            'cliente_id' => $this->clientId,
+            'tipo' => 'RECEPCION', 'cantidad' => 3, 'cantidad_bandejas' => 0,
+            'fecha_movimiento' => now(), 'created_by' => $this->user->id,
+        ]);
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertUnprocessable()->assertJsonValidationErrors('cages');
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 3]);
+        $this->assertDatabaseHas('movimientos_javas', ['ticket_despacho_id' => $ticket['id'], 'cantidad' => 3]);
+        $this->assertDatabaseHas('comprobantes', ['total' => 1128.75, 'saldo_pendiente' => 1128.75]);
+        $this->assertSame(2, Pesada::query()->where('estado', Pesada::STATUS_ACTIVE)->count());
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', ['revision' => 1]);
+        $this->assertDatabaseCount('movimiento_detalles', 2);
+    }
+
+    public function test_last_weighing_void_rolls_back_ticket_and_all_movements_when_cages_were_returned(): void
+    {
+        $registration = $this->ticketPayload();
+        $registration['weighings'] = [$registration['weighings'][0]];
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $registration)
+            ->assertCreated()->json('ticket');
+        DB::table('movimientos_javas')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => DB::table('tickets_despacho')->where('id', $ticket['id'])->value('jornada_id'),
+            'cliente_id' => $this->clientId,
+            'tipo' => 'RECEPCION', 'cantidad' => 2, 'cantidad_bandejas' => 0,
+            'fecha_movimiento' => now(), 'created_by' => $this->user->id,
+        ]);
+        $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertUnprocessable()->assertJsonValidationErrors('ticket');
+        $this->assertDatabaseHas('tickets_despacho', ['id' => $ticket['id'], 'estado' => TicketDespacho::STATUS_CLOSED]);
+        $this->assertDatabaseHas('pesadas', ['id' => $ticket['weighings'][0]['id'], 'estado' => Pesada::STATUS_ACTIVE]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', ['revision' => 1, 'cantidad_javas_aplicada' => 2]);
+        $this->assertDatabaseHas('comprobantes', ['total' => 752.5, 'saldo_pendiente' => 752.5, 'estado' => 'PENDIENTE']);
+        $this->assertDatabaseHas('movimientos_inventario', ['ticket_id' => $ticket['id'], 'estado' => 'CONFIRMADO']);
+        $this->assertDatabaseCount('movimientos_javas', 2);
+    }
+
+    public function test_same_company_other_branch_and_user_without_module_cannot_void_ticket_rows(): void
+    {
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload())
+            ->assertCreated()->json('ticket');
+        $endpoint = "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}";
+        $payload = $this->weighingVoidPayload($ticket);
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id, 'codigo' => 'SEGUNDA', 'nombre' => 'Otra sucursal',
+            'zona_horaria' => 'America/Lima', 'estado' => 'ACTIVO', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+        Sanctum::actingAs($this->user->fresh(), ['api']);
+        $this->deleteJson($endpoint, $payload)->assertNotFound();
+
+        $unprivileged = $this->createUserForCompany($this->user, ['sucursal_id' => $this->branchId]);
+        Sanctum::actingAs($unprivileged, ['api']);
+        $this->deleteJson($endpoint, $payload)->assertForbidden();
+        $this->assertSame(2, Pesada::query()->where('estado', Pesada::STATUS_ACTIVE)->count());
+        $this->assertDatabaseHas('recepcion_pollo_vivo_tickets', ['revision' => 1, 'cantidad_javas_aplicada' => 3]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 3]);
+    }
+
+    public function test_removing_one_of_several_same_sex_rows_preserves_the_remaining_ticket_group(): void
+    {
+        $payload = $this->ticketPayload();
+        $payload['weighings'][] = [
+            ...$payload['weighings'][0],
+            'idempotency_key' => (string) Str::uuid(), 'cage_count' => 1, 'read_weight_kg' => 40,
+        ];
+        $ticket = $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $payload)
+            ->assertCreated()->json('ticket');
+        $response = $this->deleteJson(
+            "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}/pesadas/{$ticket['weighings'][0]['id']}",
+            $this->weighingVoidPayload($ticket),
+        )->assertOk()->assertJsonPath('ticket.weighing_count', 2)
+            ->assertJsonCount(2, 'data.records')
+            ->assertJsonPath('data.totals.daily.weighings', 2)
+            ->assertJsonPath('data.totals.daily.cages', 2)
+            ->assertJsonPath('data.totals.daily.birds', 14)
+            ->assertJsonPath('data.totals.lanes.1.birds', 7)
+            ->assertJsonPath('data.totals.lanes.2.birds', 7);
+        $this->assertEquals(76, $response->json('data.totals.daily.net_weight_kg'));
+        $this->assertDatabaseHas('comprobantes', ['total' => 665, 'saldo_pendiente' => 665]);
+        $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 2]);
+    }
+
+    /** @param array<string, mixed> $ticket @return array<string, mixed> */
+    private function weighingVoidPayload(array $ticket): array
+    {
+        return [
+            'layout_version' => 4,
+            'expected_revision' => $ticket['link_revision'],
+            'expected_updated_at' => $ticket['weighings'][0]['updated_at'],
+            'reason' => 'Pesada duplicada en recepción',
+        ];
     }
 
     /** @return array<string, mixed> */

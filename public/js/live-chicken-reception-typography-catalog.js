@@ -345,4 +345,19 @@ export const RECEPTION_TYPOGRAPHY_GROUPS = [
       {"variable":"--lir-fs-manual-weight-value","label":"Valor numérico del peso manual","defaultValue":29,"min":12,"max":96,"step":0.5,"selector":"#liveIntakeManualWeight","preview":"128.500"},
     ],
   },
+  {
+    id: "ticket-void",
+    title: "Anulación de pesadas del ticket",
+    controls: [
+      { variable: "--lir-fs-ticket-void-row-action", label: "Botón Anular pesada del editor", defaultValue: 13, min: 8, max: 48, step: 0.5, selector: ".lir-ticket-weighing-actions button" },
+      { variable: "--lir-fs-ticket-void-summary-action", label: "Botón Anular pesada del resumen", defaultValue: 12, min: 8, max: 48, step: 0.5, selector: ".lir-modal-card .lir-summary-void-weighing" },
+      { variable: "--lir-fs-ticket-void-title", label: "Título de confirmación", defaultValue: 15, min: 8, max: 48, step: 0.5, selector: "#liveIntakeTicketVoidTitle" },
+      { variable: "--lir-fs-ticket-void-help", label: "Datos y advertencia de la pesada", defaultValue: 12, min: 8, max: 48, step: 0.5, selector: "#liveIntakeTicketVoidHelp" },
+      { variable: "--lir-fs-ticket-void-reason-label", label: "Etiqueta del motivo de anulación", defaultValue: 11.5, min: 8, max: 48, step: 0.5, selector: "#liveIntakeTicketVoidConfirmation label > span" },
+      { variable: "--lir-fs-ticket-void-reason", label: "Motivo de anulación escrito", defaultValue: 16, min: 8, max: 48, step: 0.5, selector: "#liveIntakeTicketVoidReason" },
+      { variable: "--lir-fs-ticket-void-confirm", label: "Botón Confirmar anulación", defaultValue: 16, min: 8, max: 48, step: 0.5, selector: "#liveIntakeConfirmTicketVoid" },
+      { variable: "--lir-fs-ticket-void-cancel", label: "Botón Conservar pesada", defaultValue: 16, min: 8, max: 48, step: 0.5, selector: "#liveIntakeCancelTicketVoid" },
+      { variable: "--lir-fs-ticket-void-restriction", label: "Aviso de permiso para la última pesada", defaultValue: 12, min: 8, max: 48, step: 0.5, selector: ".lir-ticket-weighing-actions small" },
+    ],
+  },
 ];

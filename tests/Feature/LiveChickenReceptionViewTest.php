@@ -148,7 +148,7 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('data-live-open-summary-row', $javascript);
         $this->assertStringContainsString('owner_type: values.owner_type', $javascript);
         $this->assertStringContainsString('kind: readonly ? "readonly" : "weighing"', $javascript);
-        $this->assertStringContainsString('openTicketEditor(ticketId, trigger, { focusWeighingId: weighingId })', $javascript);
+        $this->assertMatchesRegularExpression('/openTicketEditor\(ticketId, trigger, \{\s*focusWeighingId: weighingId,/u', $javascript);
         $this->assertStringContainsString('receptionSummaryRows', $javascript);
         $this->assertStringContainsString('data-live-select-lane', $javascript);
         $this->assertStringContainsString('const LANE_NUMBERS = [1, 2, 3, 4, 5, 6]', $javascript);

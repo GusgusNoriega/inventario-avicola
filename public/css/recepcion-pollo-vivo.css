@@ -268,6 +268,7 @@ button, select { touch-action: manipulation; }
 .lir-editor-assignment output.is-missing { border-color: rgba(247, 189, 89, .45); background: rgba(247, 189, 89, .08); color: var(--lir-amber); }
 .lir-editor-reason { grid-column: 1 / -1; }
 .lir-modal-card.is-ticket-editor { width: min(1120px, 100%); }
+.lir-modal-card.is-ticket-editor button:disabled { opacity: .45; cursor: not-allowed; }
 .lir-modal-card.is-ticket-editor > header small { display: block; margin-top: 4px; color: var(--lir-muted); }
 .lir-ticket-editor-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; background: #0b1724; }
 .lir-ticket-editor-summary span { min-width: 0; padding: 8px; border: 1px solid var(--lir-border); border-radius: 9px; }
@@ -277,6 +278,15 @@ button, select { touch-action: manipulation; }
 .lir-ticket-editor-summary .is-net strong { color: var(--lir-green); }
 .lir-ticket-editor-content { display: grid; gap: 12px; }
 .lir-ticket-editor-rows { display: grid; gap: 10px; }
+.lir-ticket-weighing-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.lir-ticket-weighing-actions button { padding: 6px 12px; font-size: .8rem; }
+.lir-ticket-weighing-actions small { color: var(--lir-muted); font-size: .75rem; }
+.lir-ticket-void-confirmation[hidden] { display: none; }
+.lir-ticket-void-confirmation { padding: 14px; border: 1px solid rgba(255, 127, 129, .5); border-radius: 12px; background: #27191f; scroll-margin-block: 90px; }
+.lir-ticket-void-confirmation h3 { color: var(--lir-red); }
+.lir-ticket-void-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.lir-ticket-void-actions button { padding: 6px 12px; }
+.lir-modal-card .lir-summary-void-weighing { display: block; margin-top: 8px; padding: 6px 10px; font-size: .75rem; }
 .lir-ticket-weighing-editor { margin: 0; padding: 10px; display: grid; grid-template-columns: repeat(6, minmax(105px, 1fr)); gap: 8px; border: 1px solid #36516a; border-radius: 11px; background: #0a1623; }
 .lir-ticket-weighing-editor.is-summary-target { border-color: var(--lir-blue); outline: 3px solid rgba(77, 174, 255, .22); outline-offset: 2px; scroll-margin-block: 80px; }
 .lir-ticket-weighing-editor.is-summary-target:focus { outline-color: rgba(84, 216, 139, .65); }
