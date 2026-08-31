@@ -6,6 +6,8 @@
   @include('partials.pwa')
   <title>Recepción de pollo vivo | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/recepcion-pollo-vivo.css') }}?v={{ filemtime(public_path('css/recepcion-pollo-vivo.css')) }}">
+  <link rel="stylesheet" href="{{ asset('css/live-chicken-reception-typography.css') }}?v={{ filemtime(public_path('css/live-chicken-reception-typography.css')) }}">
+  <link rel="stylesheet" href="{{ asset('css/live-chicken-reception-typography-panel.css') }}?v={{ filemtime(public_path('css/live-chicken-reception-typography-panel.css')) }}">
 </head>
 <body class="live-intake-page">
   <svg class="lir-icon-sprite" aria-hidden="true" focusable="false">
@@ -267,6 +269,15 @@
         </div>
       </section>
 
+      <section class="lir-typography-setting">
+        <div>
+          <h3>Tipografía detallada</h3>
+          <p id="liveIntakeTypographySummary">Tamaños originales</p>
+          <p class="lir-modal-help">Ajusta cada texto por separado. Los cambios se guardan automáticamente para tu usuario en este navegador.</p>
+        </div>
+        <button id="liveIntakeOpenTypography" type="button" aria-haspopup="dialog" aria-controls="liveIntakeTypographyPanel" aria-expanded="false">Editar tamaños</button>
+      </section>
+
       <p id="liveIntakeSettingsMessage" class="lir-message" role="status" aria-live="polite"></p>
       <footer><button type="button" data-live-close-settings>Cancelar</button><button class="is-primary" type="submit">Guardar configuración</button></footer>
     </form>
@@ -413,6 +424,44 @@
       <footer><button type="button" data-live-close-manual-weight>Cancelar</button><button id="liveIntakeApplyManualWeight" class="is-primary" type="submit">Aplicar peso</button></footer>
     </form>
   </div>
+
+  <aside id="liveIntakeTypographyPanel" class="lir-typography-panel" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="liveIntakeTypographyTitle" hidden>
+    <header class="lir-typography-head">
+      <div><p>Recepción de pollo vivo</p><h2 id="liveIntakeTypographyTitle">Tamaños de texto</h2></div>
+      <button type="button" data-font-close aria-label="Cerrar tamaños de texto">×</button>
+    </header>
+    <section class="lir-typography-toolbar">
+      <div class="lir-typography-state">
+        <span id="liveIntakeTypographyProfile">Original</span>
+        <span id="liveIntakeTypographySaveStatus" role="status" aria-live="polite">Guardado en este navegador</span>
+      </div>
+      <p>Arrastra una barra o escribe el tamaño en píxeles. Verás el cambio al instante. El zoom y los datos de las pesadas se conservan.</p>
+      <div class="lir-typography-preview">
+        <span id="liveIntakeTypographyPreviewLabel">Vista previa</span>
+        <small id="liveIntakeTypographyPreviewSize"></small>
+        <div><strong id="liveIntakeTypographyPreviewValue">Aa 123,45</strong></div>
+      </div>
+      <label class="lir-typography-search" for="liveIntakeTypographySearch">
+        Buscar texto o sección
+        <input id="liveIntakeTypographySearch" type="search" placeholder="Ej.: balanza, columna 1, javas…" autocomplete="off">
+      </label>
+      <div class="lir-typography-presets" aria-label="Tamaños para toda la vista">
+        <button type="button" data-font-preset="compact" aria-pressed="false">Compacta</button>
+        <button type="button" data-font-preset="standard" aria-pressed="true">Original</button>
+        <button type="button" data-font-preset="large" aria-pressed="false">Grande</button>
+        <button type="button" data-font-preset="accessible" aria-pressed="false">Muy grande</button>
+      </div>
+      <div class="lir-typography-group-tools">
+        <button type="button" data-font-expand="all">Abrir grupos</button>
+        <button type="button" data-font-expand="none">Cerrar grupos</button>
+      </div>
+    </section>
+    <div id="liveIntakeTypographyControls" class="lir-typography-controls"></div>
+    <footer class="lir-typography-foot">
+      <button type="button" data-font-reset-all>Restablecer todos los tamaños</button>
+      <button type="button" data-font-close>Listo</button>
+    </footer>
+  </aside>
 
   <script type="module" src="{{ asset('js/recepcion-pollo-vivo.js') }}?v={{ filemtime(public_path('js/recepcion-pollo-vivo.js')) }}"></script>
 </body>

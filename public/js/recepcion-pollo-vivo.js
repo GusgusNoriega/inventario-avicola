@@ -1,4 +1,5 @@
 import { apiRequest } from "./api-client.js";
+import { initializeReceptionTypography } from "./live-chicken-reception-typography.js";
 import {
   RetailScaleController,
   RETAIL_SCALE_SERIAL_DEFAULTS,
@@ -3616,6 +3617,7 @@ window.addEventListener("auth:expired", () => {
   setMessage("La sesión venció. Vuelve al menú e inicia sesión nuevamente.", "error");
 });
 
+initializeReceptionTypography({ beforeOpen: closeSettings });
 applyZoom(state.zoom, false);
 selectLane(1);
 selectSex("MACHO");

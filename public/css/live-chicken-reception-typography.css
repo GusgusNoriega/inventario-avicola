@@ -1,0 +1,312 @@
+/* Load after recepcion-pollo-vivo.css. No root defaults: unchanged views retain their original sizes. */
+/* Values are scoped to reception content; the typography panel is intentionally excluded. */
+
+/* Encabezado y navegación */
+.lir-topbar p { font-size: var(--lir-fs-header-caption, .72rem); }
+.lir-topbar h1 { font-size: var(--lir-fs-header-title, clamp(1.15rem, 2.4vw, 1.8rem)); }
+#liveIntakeOperatingDate { font-size: var(--lir-fs-header-date, 1rem); }
+.lir-menu-link { font-size: var(--lir-fs-header-menu, 1rem); }
+#liveIntakeOpenSettings { font-size: var(--lir-fs-header-settings, 1.2rem); }
+
+/* Balanza y lectura principal */
+#liveIntakeScaleStatus { font-size: var(--lir-fs-scale-status, .75rem); }
+#liveIntakeScaleTitle { font-size: var(--lir-fs-scale-title, 1rem); }
+#liveIntakeScaleRaw { font-size: var(--lir-fs-scale-raw, .833333em); }
+#liveIntakeScaleWeight { font-size: var(--lir-fs-scale-weight, clamp(2.6rem, 7vw, 5.4rem)); }
+/* Equivalent to the original .24em while keeping kg independent of a customized weight number. */
+#liveIntakeScaleWeight small { font-size: var(--lir-fs-scale-unit, clamp(.624rem, 1.68vw, 1.296rem)); }
+#liveIntakeOpenManualWeight { font-size: var(--lir-fs-scale-manual-action, .72rem); }
+#liveIntakeOpenScaleSettings { font-size: var(--lir-fs-scale-settings-action, 1rem); }
+
+/* Datos de la siguiente pesada */
+.lir-assignment-summary > span { font-size: var(--lir-fs-capture-assignment-caption, .66rem); }
+#liveIntakeAssignmentTitle { font-size: var(--lir-fs-capture-assignment-title, 1rem); }
+#liveIntakeAssignmentHelp { font-size: var(--lir-fs-capture-assignment-help, .65rem); }
+#liveIntakeSexChoice legend { font-size: var(--lir-fs-capture-sex-label, .68rem); }
+#liveIntakeSexChoice button { font-size: var(--lir-fs-capture-sex-value, 1rem); }
+.lir-capture-panel label:has(> #liveIntakeBirdsPerCage) > span { font-size: var(--lir-fs-capture-birds-label, .68rem); }
+#liveIntakeBirdsPerCage { font-size: var(--lir-fs-capture-birds-value, 1.25rem); }
+.lir-capture-panel label:has(> #liveIntakeCageCount) > span { font-size: var(--lir-fs-capture-cages-label, .68rem); }
+#liveIntakeCageCount { font-size: var(--lir-fs-capture-cages-value, 1.25rem); }
+.lir-capture-panel label:has(> #liveIntakeCageType) > span { font-size: var(--lir-fs-capture-cage-type-label, .68rem); }
+#liveIntakeCageType { font-size: var(--lir-fs-capture-cage-type-value, 1rem); }
+#liveIntakeCaptureLabel { font-size: var(--lir-fs-capture-action, 1rem); }
+#liveIntakeActiveLaneNumber { font-size: var(--lir-fs-capture-lane-number, 1rem); }
+#liveIntakeMessage { font-size: var(--lir-fs-capture-message, .75rem); }
+
+/* Totales del camión del día */
+.lir-daily-summary .lir-summary-trigger > span { font-size: var(--lir-fs-daily-labels, .68rem); }
+#liveIntakeDailyWeighings { font-size: var(--lir-fs-daily-weighings, 1rem); }
+#liveIntakeDailyCages { font-size: var(--lir-fs-daily-cages, 1rem); }
+#liveIntakeDailyBirds { font-size: var(--lir-fs-daily-birds, 1rem); }
+#liveIntakeDailyNet { font-size: var(--lir-fs-daily-net, 1rem); }
+#liveIntakeOwnBirds { font-size: var(--lir-fs-daily-own, 1rem); }
+#liveIntakeExternalBirds { font-size: var(--lir-fs-daily-external, 1rem); }
+
+/* Columnas: encabezados y datos descriptivos */
+.lir-lane-group-head span { font-size: var(--lir-fs-lane-group-caption, .68rem); }
+.lir-lane-group-head strong { font-size: var(--lir-fs-lane-group-title, .85rem); }
+.lir-lane-group-head small { font-size: var(--lir-fs-lane-group-help, .7rem); }
+.lir-lane-select .lir-lane-number, .lir-direct-lane-head .lir-lane-select > span { font-size: var(--lir-fs-lane-number, .68rem); }
+.lir-lane-select .lir-lane-owner-badge { font-size: var(--lir-fs-lane-owner-badge, .62rem); }
+.lir-lane-select .lir-lane-identity-copy b { font-size: var(--lir-fs-lane-sex-heading, .67rem); }
+.lir-direct-lane-head .lir-lane-select > em { font-size: var(--lir-fs-lane-dispatch-profile, .68rem); }
+.lir-lane-select small { font-size: var(--lir-fs-lane-destination-heading, .68rem); }
+.lir-record-table thead th { font-size: var(--lir-fs-lane-table-headings, .68rem); }
+.lir-record-table .lir-sex-chip { font-size: var(--lir-fs-lane-row-sex, .66rem); }
+.lir-record-table .lir-record-destination { font-size: var(--lir-fs-lane-row-destination, .86rem); }
+.lir-record-table .lir-record-time { font-size: var(--lir-fs-lane-row-time, .86rem); }
+.lir-record-table .lir-record-owner { font-size: var(--lir-fs-lane-row-owner, .86rem); }
+.lir-record-table .lir-record-cage-type { font-size: var(--lir-fs-lane-row-cage-type, .86rem); }
+.lir-record-table .lir-record-identity strong { font-size: var(--lir-fs-lane-row-identity, .96rem); }
+.lir-record-table .lir-draft-chip, .lir-record-table .lir-ticket-status, .lir-record-table .lir-readonly-chip { font-size: var(--lir-fs-lane-row-status, .66rem); }
+.lir-record-table .lir-record-legacy { font-size: var(--lir-fs-lane-row-legacy, .65rem); }
+.lir-record-table .lir-row-action { font-size: var(--lir-fs-lane-row-actions, .72rem); }
+.lir-lane-rows .lir-empty-lane { font-size: var(--lir-fs-lane-empty, .9rem); }
+.lir-client-picker-trigger { font-size: var(--lir-fs-lane-choose-client, .74rem); }
+.lir-register-ticket { font-size: var(--lir-fs-lane-register-ticket, .7rem); }
+.lir-expired-draft strong { font-size: var(--lir-fs-lane-expired-title, .86rem); }
+.lir-expired-draft span { font-size: var(--lir-fs-lane-expired-help, .72rem); }
+.lir-expired-draft button { font-size: var(--lir-fs-lane-expired-actions, .86rem); }
+
+/* Columna 1 · Propia · Macho */
+.lir-lane[data-live-lane="1"] .lir-lane-select .lir-lane-identity-copy strong { font-size: var(--lir-fs-lane-1-title, .85rem); }
+.lir-lane[data-live-lane="1"] .lir-record-table .lir-weight-cell.is-gross { font-size: var(--lir-fs-lane-1-gross, 1rem); }
+.lir-lane[data-live-lane="1"] .lir-record-table .lir-weight-cell:not(.is-gross):not(.is-net) { font-size: var(--lir-fs-lane-1-tare, .9rem); }
+.lir-lane[data-live-lane="1"] .lir-record-table .lir-weight-cell.is-net { font-size: var(--lir-fs-lane-1-net, 1rem); }
+.lir-lane[data-live-lane="1"] .lir-record-table td.lir-number-cell:nth-child(7) { font-size: var(--lir-fs-lane-1-cages, .92rem); }
+.lir-lane[data-live-lane="1"] .lir-record-table td.lir-number-cell:nth-child(8) { font-size: var(--lir-fs-lane-1-birds-per-cage, .92rem); }
+.lir-lane[data-live-lane="1"] .lir-record-table .lir-number-cell.is-birds { font-size: var(--lir-fs-lane-1-birds, .92rem); }
+.lir-lane[data-live-lane="1"] footer span:has(> #liveIntakeLaneCages1) { font-size: var(--lir-fs-lane-1-total-cages, .7rem); }
+.lir-lane[data-live-lane="1"] footer span:has(> #liveIntakeLaneBirds1) { font-size: var(--lir-fs-lane-1-total-birds, .7rem); }
+#liveIntakeLaneNet1 { font-size: var(--lir-fs-lane-1-total-net, .88rem); }
+
+/* Columna 2 · Propia · Hembra */
+.lir-lane[data-live-lane="2"] .lir-lane-select .lir-lane-identity-copy strong { font-size: var(--lir-fs-lane-2-title, .85rem); }
+.lir-lane[data-live-lane="2"] .lir-record-table .lir-weight-cell.is-gross { font-size: var(--lir-fs-lane-2-gross, 1rem); }
+.lir-lane[data-live-lane="2"] .lir-record-table .lir-weight-cell:not(.is-gross):not(.is-net) { font-size: var(--lir-fs-lane-2-tare, .9rem); }
+.lir-lane[data-live-lane="2"] .lir-record-table .lir-weight-cell.is-net { font-size: var(--lir-fs-lane-2-net, 1rem); }
+.lir-lane[data-live-lane="2"] .lir-record-table td.lir-number-cell:nth-child(7) { font-size: var(--lir-fs-lane-2-cages, .92rem); }
+.lir-lane[data-live-lane="2"] .lir-record-table td.lir-number-cell:nth-child(8) { font-size: var(--lir-fs-lane-2-birds-per-cage, .92rem); }
+.lir-lane[data-live-lane="2"] .lir-record-table .lir-number-cell.is-birds { font-size: var(--lir-fs-lane-2-birds, .92rem); }
+.lir-lane[data-live-lane="2"] footer span:has(> #liveIntakeLaneCages2) { font-size: var(--lir-fs-lane-2-total-cages, .7rem); }
+.lir-lane[data-live-lane="2"] footer span:has(> #liveIntakeLaneBirds2) { font-size: var(--lir-fs-lane-2-total-birds, .7rem); }
+#liveIntakeLaneNet2 { font-size: var(--lir-fs-lane-2-total-net, .88rem); }
+
+/* Columna 3 · Externa · Macho */
+.lir-lane[data-live-lane="3"] .lir-lane-select .lir-lane-identity-copy strong { font-size: var(--lir-fs-lane-3-title, .85rem); }
+.lir-lane[data-live-lane="3"] .lir-record-table .lir-weight-cell.is-gross { font-size: var(--lir-fs-lane-3-gross, 1rem); }
+.lir-lane[data-live-lane="3"] .lir-record-table .lir-weight-cell:not(.is-gross):not(.is-net) { font-size: var(--lir-fs-lane-3-tare, .9rem); }
+.lir-lane[data-live-lane="3"] .lir-record-table .lir-weight-cell.is-net { font-size: var(--lir-fs-lane-3-net, 1rem); }
+.lir-lane[data-live-lane="3"] .lir-record-table td.lir-number-cell:nth-child(7) { font-size: var(--lir-fs-lane-3-cages, .92rem); }
+.lir-lane[data-live-lane="3"] .lir-record-table td.lir-number-cell:nth-child(8) { font-size: var(--lir-fs-lane-3-birds-per-cage, .92rem); }
+.lir-lane[data-live-lane="3"] .lir-record-table .lir-number-cell.is-birds { font-size: var(--lir-fs-lane-3-birds, .92rem); }
+.lir-lane[data-live-lane="3"] footer span:has(> #liveIntakeLaneCages3) { font-size: var(--lir-fs-lane-3-total-cages, .7rem); }
+.lir-lane[data-live-lane="3"] footer span:has(> #liveIntakeLaneBirds3) { font-size: var(--lir-fs-lane-3-total-birds, .7rem); }
+#liveIntakeLaneNet3 { font-size: var(--lir-fs-lane-3-total-net, .88rem); }
+
+/* Columna 4 · Externa · Hembra */
+.lir-lane[data-live-lane="4"] .lir-lane-select .lir-lane-identity-copy strong { font-size: var(--lir-fs-lane-4-title, .85rem); }
+.lir-lane[data-live-lane="4"] .lir-record-table .lir-weight-cell.is-gross { font-size: var(--lir-fs-lane-4-gross, 1rem); }
+.lir-lane[data-live-lane="4"] .lir-record-table .lir-weight-cell:not(.is-gross):not(.is-net) { font-size: var(--lir-fs-lane-4-tare, .9rem); }
+.lir-lane[data-live-lane="4"] .lir-record-table .lir-weight-cell.is-net { font-size: var(--lir-fs-lane-4-net, 1rem); }
+.lir-lane[data-live-lane="4"] .lir-record-table td.lir-number-cell:nth-child(7) { font-size: var(--lir-fs-lane-4-cages, .92rem); }
+.lir-lane[data-live-lane="4"] .lir-record-table td.lir-number-cell:nth-child(8) { font-size: var(--lir-fs-lane-4-birds-per-cage, .92rem); }
+.lir-lane[data-live-lane="4"] .lir-record-table .lir-number-cell.is-birds { font-size: var(--lir-fs-lane-4-birds, .92rem); }
+.lir-lane[data-live-lane="4"] footer span:has(> #liveIntakeLaneCages4) { font-size: var(--lir-fs-lane-4-total-cages, .7rem); }
+.lir-lane[data-live-lane="4"] footer span:has(> #liveIntakeLaneBirds4) { font-size: var(--lir-fs-lane-4-total-birds, .7rem); }
+#liveIntakeLaneNet4 { font-size: var(--lir-fs-lane-4-total-net, .88rem); }
+
+/* Columna 5 · Despacho 1 */
+.lir-lane[data-live-lane="5"] .lir-lane-select > strong { font-size: var(--lir-fs-lane-5-title, .9rem); }
+.lir-lane[data-live-lane="5"] .lir-record-table .lir-weight-cell.is-gross { font-size: var(--lir-fs-lane-5-gross, 1rem); }
+.lir-lane[data-live-lane="5"] .lir-record-table .lir-weight-cell:not(.is-gross):not(.is-net) { font-size: var(--lir-fs-lane-5-tare, .9rem); }
+.lir-lane[data-live-lane="5"] .lir-record-table .lir-weight-cell.is-net { font-size: var(--lir-fs-lane-5-net, 1rem); }
+.lir-lane[data-live-lane="5"] .lir-record-table td.lir-number-cell:nth-child(7) { font-size: var(--lir-fs-lane-5-cages, .92rem); }
+.lir-lane[data-live-lane="5"] .lir-record-table td.lir-number-cell:nth-child(8) { font-size: var(--lir-fs-lane-5-birds-per-cage, .92rem); }
+.lir-lane[data-live-lane="5"] .lir-record-table .lir-number-cell.is-birds { font-size: var(--lir-fs-lane-5-birds, .92rem); }
+.lir-lane[data-live-lane="5"] footer span:has(> #liveIntakeLaneCages5) { font-size: var(--lir-fs-lane-5-total-cages, .7rem); }
+.lir-lane[data-live-lane="5"] footer span:has(> #liveIntakeLaneBirds5) { font-size: var(--lir-fs-lane-5-total-birds, .7rem); }
+#liveIntakeLaneNet5 { font-size: var(--lir-fs-lane-5-total-net, .88rem); }
+
+/* Columna 6 · Despacho 2 */
+.lir-lane[data-live-lane="6"] .lir-lane-select > strong { font-size: var(--lir-fs-lane-6-title, .9rem); }
+.lir-lane[data-live-lane="6"] .lir-record-table .lir-weight-cell.is-gross { font-size: var(--lir-fs-lane-6-gross, 1rem); }
+.lir-lane[data-live-lane="6"] .lir-record-table .lir-weight-cell:not(.is-gross):not(.is-net) { font-size: var(--lir-fs-lane-6-tare, .9rem); }
+.lir-lane[data-live-lane="6"] .lir-record-table .lir-weight-cell.is-net { font-size: var(--lir-fs-lane-6-net, 1rem); }
+.lir-lane[data-live-lane="6"] .lir-record-table td.lir-number-cell:nth-child(7) { font-size: var(--lir-fs-lane-6-cages, .92rem); }
+.lir-lane[data-live-lane="6"] .lir-record-table td.lir-number-cell:nth-child(8) { font-size: var(--lir-fs-lane-6-birds-per-cage, .92rem); }
+.lir-lane[data-live-lane="6"] .lir-record-table .lir-number-cell.is-birds { font-size: var(--lir-fs-lane-6-birds, .92rem); }
+.lir-lane[data-live-lane="6"] footer span:has(> #liveIntakeLaneCages6) { font-size: var(--lir-fs-lane-6-total-cages, .7rem); }
+.lir-lane[data-live-lane="6"] footer span:has(> #liveIntakeLaneBirds6) { font-size: var(--lir-fs-lane-6-total-birds, .7rem); }
+#liveIntakeLaneNet6 { font-size: var(--lir-fs-lane-6-total-net, .88rem); }
+
+/* Totales de la columna seleccionada */
+.lir-selected-total > div > span { font-size: var(--lir-fs-selected-labels, .68rem); }
+#liveIntakeSelectedLaneLabel { font-size: var(--lir-fs-selected-lane, 0.9rem); }
+#liveIntakeSelectedWeighings { font-size: var(--lir-fs-selected-weighings, 0.9rem); }
+#liveIntakeSelectedCages { font-size: var(--lir-fs-selected-cages, 0.9rem); }
+#liveIntakeSelectedBirds { font-size: var(--lir-fs-selected-birds, 0.9rem); }
+#liveIntakeSelectedGross { font-size: var(--lir-fs-selected-gross, 0.9rem); }
+#liveIntakeSelectedNet { font-size: var(--lir-fs-selected-net, 1.1rem); }
+
+/* Diálogos: títulos, ayudas y acciones */
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card > header p { font-size: var(--lir-fs-modal-caption, .72rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card h2 { font-size: var(--lir-fs-modal-title, clamp(1.15rem, 2.4vw, 1.8rem)); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card > header button { font-size: var(--lir-fs-modal-close, 1.5rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card h3 { font-size: var(--lir-fs-modal-section-title, .95rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal) .lir-modal-card label > span { font-size: var(--lir-fs-modal-field-labels, .72rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal) .lir-modal-card input:not(#liveIntakeManualWeight), :is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal) .lir-modal-card select { font-size: var(--lir-fs-modal-field-values, 1rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-help { font-size: var(--lir-fs-modal-help, .75rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card:not(.is-weighing-editor) > footer button { font-size: var(--lir-fs-modal-actions, 1rem); }
+#liveIntakeWeighingEditorForm > footer button { font-size: var(--lir-fs-modal-actions, .9rem); }
+:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeTicketEditorModal) .lir-message { font-size: var(--lir-fs-modal-messages, .75rem); }
+#liveIntakeSummaryMessage { font-size: var(--lir-fs-modal-messages, .76rem); }
+#liveIntakeWeighingEditorMessage { font-size: var(--lir-fs-modal-messages, .8rem); }
+
+/* Configuración: zoom y conexión */
+#liveIntakeZoomValue { font-size: var(--lir-fs-settings-zoom-value, 1rem); }
+.lir-zoom-control button { font-size: var(--lir-fs-settings-zoom-actions, 1rem); }
+#liveIntakeScaleSettingsModal .lir-scale-actions button { font-size: var(--lir-fs-settings-connect-actions, 1rem); }
+
+/* Selector de clientes */
+#liveIntakeClientOptions .lir-client-option strong { font-size: var(--lir-fs-client-name, 1rem); }
+#liveIntakeClientOptions .lir-client-option small { font-size: var(--lir-fs-client-document, .68rem); }
+#liveIntakeClientOptions .lir-client-option b { font-size: var(--lir-fs-client-action, .7rem); }
+#liveIntakeClientOptions .lir-client-empty { font-size: var(--lir-fs-client-empty, .8rem); }
+
+/* Selección de camión y chofer */
+#liveIntakeDeliveryTruckOptions .lir-fleet-option strong { font-size: var(--lir-fs-delivery-truck-name, 1rem); }
+#liveIntakeDeliveryTruckOptions .lir-fleet-option small { font-size: var(--lir-fs-delivery-truck-detail, .7rem); }
+#liveIntakeDeliveryDriverOptions .lir-fleet-option strong { font-size: var(--lir-fs-delivery-driver-name, 1rem); }
+#liveIntakeDeliveryDriverOptions .lir-fleet-option small { font-size: var(--lir-fs-delivery-driver-detail, .7rem); }
+#liveIntakeDeliveryTruckOptions .lir-client-empty, #liveIntakeDeliveryDriverOptions .lir-client-empty { font-size: var(--lir-fs-delivery-empty, .8rem); }
+
+/* Resumen de pesadas: totales */
+#liveIntakeSummaryTotals small { font-size: var(--lir-fs-summary-total-labels, .64rem); }
+#liveIntakeSummaryTotals [data-live-summary-total="weighings"] { font-size: var(--lir-fs-summary-total-weighings, .88rem); }
+#liveIntakeSummaryTotals [data-live-summary-total="cages"] { font-size: var(--lir-fs-summary-total-cages, .88rem); }
+#liveIntakeSummaryTotals [data-live-summary-total="birds"] { font-size: var(--lir-fs-summary-total-birds, .88rem); }
+#liveIntakeSummaryTotals [data-live-summary-total="gross_weight_kg"] { font-size: var(--lir-fs-summary-total-gross-weight-kg, .88rem); }
+#liveIntakeSummaryTotals [data-live-summary-total="tare_weight_kg"] { font-size: var(--lir-fs-summary-total-tare-weight-kg, .88rem); }
+#liveIntakeSummaryTotals [data-live-summary-total="net_weight_kg"] { font-size: var(--lir-fs-summary-total-net-weight-kg, .88rem); }
+
+/* Resumen de pesadas: tabla */
+.lir-summary-table thead th { font-size: var(--lir-fs-summary-table-headings, .68rem); }
+.lir-summary-row-open strong { font-size: var(--lir-fs-summary-gross, .9rem); }
+.lir-summary-row-open small { font-size: var(--lir-fs-summary-action-hint, .62rem); }
+.lir-summary-table .lir-summary-time { font-size: var(--lir-fs-summary-time, .82rem); }
+.lir-summary-table .lir-sex-chip { font-size: var(--lir-fs-summary-sex, .66rem); }
+.lir-summary-table .lir-summary-owner { font-size: var(--lir-fs-summary-owner, .82rem); }
+.lir-summary-table .lir-summary-destination { font-size: var(--lir-fs-summary-destination, .82rem); }
+.lir-summary-table .lir-summary-cage-type { font-size: var(--lir-fs-summary-cage-type, .82rem); }
+.lir-summary-table td.lir-summary-number:nth-child(7) { font-size: var(--lir-fs-summary-cages, .82rem); }
+.lir-summary-table td.lir-summary-number:nth-child(8) { font-size: var(--lir-fs-summary-birds-per-cage, .82rem); }
+.lir-summary-table .lir-summary-birds { font-size: var(--lir-fs-summary-birds, .82rem); }
+.lir-summary-table .lir-summary-weight:not(.lir-summary-gross):not(.lir-summary-net) { font-size: var(--lir-fs-summary-tare, .82rem); }
+.lir-summary-table .lir-summary-net { font-size: var(--lir-fs-summary-net, .94rem); }
+.lir-summary-table .lir-summary-source { font-size: var(--lir-fs-summary-source, .65rem); }
+.lir-summary-record strong { font-size: var(--lir-fs-summary-record-number, .82rem); }
+.lir-summary-record small { font-size: var(--lir-fs-summary-record-detail, .65rem); }
+.lir-summary-empty { font-size: var(--lir-fs-summary-empty, .86rem); }
+
+/* Editor de una pesada */
+#liveIntakeWeighingEditorForm label > span { font-size: var(--lir-fs-edit-field-labels, .78rem); }
+#liveIntakeEditOwner { font-size: var(--lir-fs-edit-owner, .96rem); }
+#liveIntakeEditSex { font-size: var(--lir-fs-edit-sex, .96rem); }
+#liveIntakeEditCageType { font-size: var(--lir-fs-edit-cage-type, .96rem); }
+#liveIntakeEditBirdsPerCage { font-size: var(--lir-fs-edit-birds-per-cage, .96rem); }
+#liveIntakeEditCageCount { font-size: var(--lir-fs-edit-cages, .96rem); }
+#liveIntakeEditWeight { font-size: var(--lir-fs-edit-weight, .96rem); }
+#liveIntakeEditWeighedAt { font-size: var(--lir-fs-edit-time, .96rem); }
+#liveIntakeEditReason { font-size: var(--lir-fs-edit-reason, .96rem); }
+#liveIntakeEditAssignment { font-size: var(--lir-fs-edit-assignment, .9rem); }
+
+/* Editor del ticket: cliente y totales */
+#liveIntakeTicketEditorOwner { font-size: var(--lir-fs-ticket-editor-owner, .833333em); }
+#liveIntakeTicketEditorClient { font-size: var(--lir-fs-ticket-editor-client, .833333em); }
+#liveIntakeTicketEditorSummary small { font-size: var(--lir-fs-ticket-total-labels, .62rem); }
+#liveIntakeTicketEditorSummary > span:nth-child(1) > strong { font-size: var(--lir-fs-ticket-total-weighings, .78rem); }
+#liveIntakeTicketEditorSummary > span:nth-child(2) > strong { font-size: var(--lir-fs-ticket-total-cages, .78rem); }
+#liveIntakeTicketEditorSummary > span:nth-child(3) > strong { font-size: var(--lir-fs-ticket-total-birds, .78rem); }
+#liveIntakeTicketEditorSummary > span:nth-child(4) > strong { font-size: var(--lir-fs-ticket-total-gross-weight-kg, .78rem); }
+#liveIntakeTicketEditorSummary > span:nth-child(5) > strong { font-size: var(--lir-fs-ticket-total-tare-weight-kg, .78rem); }
+#liveIntakeTicketEditorSummary > span:nth-child(6) > strong { font-size: var(--lir-fs-ticket-total-net-weight-kg, .78rem); }
+
+/* Editor del ticket: campos de cada pesada */
+#liveIntakeTicketEditorRows .lir-ticket-weighing-editor legend > span { font-size: var(--lir-fs-ticket-weighing-number, .75rem); }
+#liveIntakeTicketEditorRows .lir-ticket-weighing-editor legend > b { font-size: var(--lir-fs-ticket-weighing-sex, .75rem); }
+#liveIntakeTicketEditorForm .lir-ticket-weighing-editor label > span, #liveIntakeTicketEditorForm .lir-ticket-correction-reason > span { font-size: var(--lir-fs-ticket-field-labels, .72rem); }
+#liveIntakeTicketEditorRows [data-ticket-field="sex"] { font-size: var(--lir-fs-ticket-field-sex, 1rem); }
+#liveIntakeTicketEditorRows [data-ticket-field="cage_type_id"] { font-size: var(--lir-fs-ticket-field-cage-type, 1rem); }
+#liveIntakeTicketEditorRows [data-ticket-field="birds_per_cage"] { font-size: var(--lir-fs-ticket-field-birds-per-cage, 1rem); }
+#liveIntakeTicketEditorRows [data-ticket-field="cage_count"] { font-size: var(--lir-fs-ticket-field-cages, 1rem); }
+#liveIntakeTicketEditorRows [data-ticket-field="read_weight_kg"] { font-size: var(--lir-fs-ticket-field-weight, 1rem); }
+#liveIntakeTicketEditorRows [data-ticket-field="weighed_at"] { font-size: var(--lir-fs-ticket-field-time, 1rem); }
+#liveIntakeTicketEditReason { font-size: var(--lir-fs-ticket-reason, 1rem); }
+#liveIntakeTicketEditorRows .lir-client-empty { font-size: var(--lir-fs-ticket-empty, .8rem); }
+
+/* Diálogo de peso manual */
+#liveIntakeManualWeight { font-size: var(--lir-fs-manual-weight-value, 1.8rem); }
+
+/* Only customized, previously ellipsized text may wrap. Tables keep their horizontal scroll. */
+html[style*="--lir-fs-header-caption:"] :is(.lir-topbar p) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-header-title:"] :is(.lir-topbar h1) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-header-date:"] :is(#liveIntakeOperatingDate) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-scale-raw:"] :is(#liveIntakeScaleRaw) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-capture-assignment-title:"] :is(#liveIntakeAssignmentTitle) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-daily-weighings:"] :is(#liveIntakeDailyWeighings) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-daily-cages:"] :is(#liveIntakeDailyCages) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-daily-birds:"] :is(#liveIntakeDailyBirds) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-daily-net:"] :is(#liveIntakeDailyNet) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-daily-own:"] :is(#liveIntakeOwnBirds) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-daily-external:"] :is(#liveIntakeExternalBirds) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-owner-badge:"] :is(.lir-lane-select .lir-lane-owner-badge) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-sex-heading:"] :is(.lir-lane-select .lir-lane-identity-copy b) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-dispatch-profile:"] :is(.lir-direct-lane-head .lir-lane-select > em) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-destination-heading:"] :is(.lir-lane-select small) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-1-title:"] :is(.lir-lane[data-live-lane="1"] .lir-lane-select .lir-lane-identity-copy strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-1-total-net:"] :is(#liveIntakeLaneNet1) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-2-title:"] :is(.lir-lane[data-live-lane="2"] .lir-lane-select .lir-lane-identity-copy strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-2-total-net:"] :is(#liveIntakeLaneNet2) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-3-title:"] :is(.lir-lane[data-live-lane="3"] .lir-lane-select .lir-lane-identity-copy strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-3-total-net:"] :is(#liveIntakeLaneNet3) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-4-title:"] :is(.lir-lane[data-live-lane="4"] .lir-lane-select .lir-lane-identity-copy strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-4-total-net:"] :is(#liveIntakeLaneNet4) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-5-title:"] :is(.lir-lane[data-live-lane="5"] .lir-lane-select > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-5-total-net:"] :is(#liveIntakeLaneNet5) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-6-title:"] :is(.lir-lane[data-live-lane="6"] .lir-lane-select > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-lane-6-total-net:"] :is(#liveIntakeLaneNet6) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-selected-lane:"] :is(#liveIntakeSelectedLaneLabel) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-selected-weighings:"] :is(#liveIntakeSelectedWeighings) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-selected-cages:"] :is(#liveIntakeSelectedCages) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-selected-birds:"] :is(#liveIntakeSelectedBirds) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-selected-gross:"] :is(#liveIntakeSelectedGross) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-selected-net:"] :is(#liveIntakeSelectedNet) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-modal-caption:"] :is(:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card > header p) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-modal-title:"] :is(:is(#liveIntakeSettingsModal, #liveIntakeScaleSettingsModal, #liveIntakeManualWeightModal, #liveIntakeClientModal, #liveIntakeDeliveryTruckModal, #liveIntakeDeliveryDriverModal, #liveIntakeSummaryModal, #liveIntakeWeighingEditorModal, #liveIntakeTicketEditorModal) .lir-modal-card h2) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-client-name:"] :is(#liveIntakeClientOptions .lir-client-option strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-client-document:"] :is(#liveIntakeClientOptions .lir-client-option small) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-delivery-truck-name:"] :is(#liveIntakeDeliveryTruckOptions .lir-fleet-option strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-delivery-truck-detail:"] :is(#liveIntakeDeliveryTruckOptions .lir-fleet-option small) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-delivery-driver-name:"] :is(#liveIntakeDeliveryDriverOptions .lir-fleet-option strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-delivery-driver-detail:"] :is(#liveIntakeDeliveryDriverOptions .lir-fleet-option small) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-labels:"] :is(#liveIntakeSummaryTotals small) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-weighings:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="weighings"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-cages:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="cages"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-birds:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="birds"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-gross-weight-kg:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="gross_weight_kg"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-tare-weight-kg:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="tare_weight_kg"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-net-weight-kg:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="net_weight_kg"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-edit-assignment:"] :is(#liveIntakeEditAssignment) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-editor-owner:"] :is(#liveIntakeTicketEditorOwner) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-editor-client:"] :is(#liveIntakeTicketEditorClient) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-labels:"] :is(#liveIntakeTicketEditorSummary small) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-weighings:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(1) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-cages:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(2) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-birds:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(3) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-gross-weight-kg:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(4) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-tare-weight-kg:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(5) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-ticket-total-net-weight-kg:"] :is(#liveIntakeTicketEditorSummary > span:nth-child(6) > strong) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-scale-weight:"] #liveIntakeScaleWeight,
+html[style*="--lir-fs-scale-unit:"] #liveIntakeScaleWeight { max-width: 100%; overflow-x: auto; padding-block: .06em; }
