@@ -181,8 +181,14 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.totals.daily.weighings', 2)
             ->assertJsonPath('data.totals.daily.cages', 3)
             ->assertJsonPath('data.totals.daily.birds', 21)
+            ->assertJsonPath('data.totals.daily.male_birds', 14)
+            ->assertJsonPath('data.totals.daily.female_birds', 7)
             ->assertJsonPath('data.totals.own.birds', 21)
+            ->assertJsonPath('data.totals.own.male_birds', 14)
+            ->assertJsonPath('data.totals.own.female_birds', 7)
             ->assertJsonPath('data.totals.external.birds', 0)
+            ->assertJsonPath('data.totals.external.male_birds', 0)
+            ->assertJsonPath('data.totals.external.female_birds', 0)
             ->assertJsonPath('data.totals.lanes.1.birds', 14)
             ->assertJsonPath('data.totals.lanes.2.birds', 7)
             ->assertJsonPath('data.totals.lanes.5.birds', 0);
@@ -462,7 +468,11 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
         $preserved = $this->putJson(
             "/api/v1/recepcion-pollo-vivo/tickets/{$ticket['id']}",
             $update,
-        )->assertOk();
+        )->assertOk()
+            ->assertJsonPath('data.totals.daily.male_birds', 0)
+            ->assertJsonPath('data.totals.daily.female_birds', 23)
+            ->assertJsonPath('data.totals.own.male_birds', 0)
+            ->assertJsonPath('data.totals.own.female_birds', 23);
 
         $this->assertDatabaseHas('pesadas', [
             'id' => $scaleWeighingId,
@@ -720,6 +730,10 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             ->assertJsonPath('data.totals.daily.cages', 1)
             ->assertJsonPath('data.totals.daily.birds', 7)
             ->assertJsonPath('data.totals.own.birds', 7)
+            ->assertJsonPath('data.totals.daily.male_birds', 0)
+            ->assertJsonPath('data.totals.daily.female_birds', 7)
+            ->assertJsonPath('data.totals.own.male_birds', 0)
+            ->assertJsonPath('data.totals.own.female_birds', 7)
             ->assertJsonPath('data.totals.lanes.1.birds', 0)
             ->assertJsonPath('data.totals.lanes.2.birds', 7);
         $this->assertEquals(43, $updated->json('data.totals.daily.net_weight_kg'));
@@ -809,7 +823,11 @@ class LiveChickenReceptionDispatchTicketApiTest extends TestCase
             ->assertJsonCount(0, 'data.records')
             ->assertJsonPath('data.totals.daily.weighings', 0)
             ->assertJsonPath('data.totals.daily.cages', 0)
-            ->assertJsonPath('data.totals.daily.birds', 0);
+            ->assertJsonPath('data.totals.daily.birds', 0)
+            ->assertJsonPath('data.totals.daily.male_birds', 0)
+            ->assertJsonPath('data.totals.daily.female_birds', 0)
+            ->assertJsonPath('data.totals.own.male_birds', 0)
+            ->assertJsonPath('data.totals.own.female_birds', 0);
         $this->assertDatabaseHas('inventarios_javas', ['cantidad_total' => 0]);
         $this->assertDatabaseMissing('movimientos_javas', ['ticket_despacho_id' => $ticket['id']]);
         $this->assertDatabaseHas('movimientos_inventario', ['ticket_id' => $ticket['id'], 'estado' => 'ANULADO']);

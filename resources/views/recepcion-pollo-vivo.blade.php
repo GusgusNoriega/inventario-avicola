@@ -212,6 +212,8 @@
           <span><small>Pesadas</small><strong data-live-summary-total="weighings">0</strong></span>
           <span><small>Javas</small><strong data-live-summary-total="cages">0</strong></span>
           <span><small>Pollos</small><strong data-live-summary-total="birds">0</strong></span>
+          <span class="is-male"><small>Machos</small><strong data-live-summary-total="male_birds">0</strong></span>
+          <span class="is-female"><small>Hembras</small><strong data-live-summary-total="female_birds">0</strong></span>
           <span><small>Peso bruto</small><strong data-live-summary-total="gross_weight_kg">0.000 kg</strong></span>
           <span><small>Tara</small><strong data-live-summary-total="tare_weight_kg">0.000 kg</strong></span>
           <span class="is-net"><small>Peso neto</small><strong data-live-summary-total="net_weight_kg">0.000 kg</strong></span>

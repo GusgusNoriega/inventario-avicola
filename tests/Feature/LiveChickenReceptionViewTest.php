@@ -108,6 +108,8 @@ class LiveChickenReceptionViewTest extends TestCase
         $this->assertStringContainsString('id="liveIntakeSummaryMessage" class="lir-message lir-summary-message" role="status" aria-live="polite"', $view);
         $this->assertStringContainsString('data-live-summary-total="gross_weight_kg"', $view);
         $this->assertStringContainsString('data-live-summary-total="net_weight_kg"', $view);
+        $this->assertStringContainsString('data-live-summary-total="male_birds"', $view);
+        $this->assertStringContainsString('data-live-summary-total="female_birds"', $view);
         $this->assertStringContainsString('id="liveIntakeEditOwner"', $view);
         $this->assertStringContainsString('id="liveIntakeEditAssignment"', $view);
         $this->assertStringContainsString('Destino y columna automáticos', $view);

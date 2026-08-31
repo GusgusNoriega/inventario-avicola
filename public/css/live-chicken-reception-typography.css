@@ -187,6 +187,10 @@
 #liveIntakeSummaryTotals [data-live-summary-total="weighings"] { font-size: var(--lir-fs-summary-total-weighings, .88rem); }
 #liveIntakeSummaryTotals [data-live-summary-total="cages"] { font-size: var(--lir-fs-summary-total-cages, .88rem); }
 #liveIntakeSummaryTotals [data-live-summary-total="birds"] { font-size: var(--lir-fs-summary-total-birds, .88rem); }
+#liveIntakeSummaryTotals .is-male small { font-size: var(--lir-fs-summary-male-label, var(--lir-fs-summary-total-labels, .64rem)); }
+#liveIntakeSummaryTotals [data-live-summary-total="male_birds"] { font-size: var(--lir-fs-summary-total-male-birds, .88rem); }
+#liveIntakeSummaryTotals .is-female small { font-size: var(--lir-fs-summary-female-label, var(--lir-fs-summary-total-labels, .64rem)); }
+#liveIntakeSummaryTotals [data-live-summary-total="female_birds"] { font-size: var(--lir-fs-summary-total-female-birds, .88rem); }
 #liveIntakeSummaryTotals [data-live-summary-total="gross_weight_kg"] { font-size: var(--lir-fs-summary-total-gross-weight-kg, .88rem); }
 #liveIntakeSummaryTotals [data-live-summary-total="tare_weight_kg"] { font-size: var(--lir-fs-summary-total-tare-weight-kg, .88rem); }
 #liveIntakeSummaryTotals [data-live-summary-total="net_weight_kg"] { font-size: var(--lir-fs-summary-total-net-weight-kg, .88rem); }
@@ -295,6 +299,10 @@ html[style*="--lir-fs-summary-total-labels:"] :is(#liveIntakeSummaryTotals small
 html[style*="--lir-fs-summary-total-weighings:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="weighings"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 html[style*="--lir-fs-summary-total-cages:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="cages"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 html[style*="--lir-fs-summary-total-birds:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="birds"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[style*="--lir-fs-summary-total-male-birds:"] #liveIntakeSummaryTotals [data-live-summary-total="male_birds"],
+html[style*="--lir-fs-summary-total-female-birds:"] #liveIntakeSummaryTotals [data-live-summary-total="female_birds"],
+html[style*="--lir-fs-summary-male-label:"] #liveIntakeSummaryTotals .is-male small,
+html[style*="--lir-fs-summary-female-label:"] #liveIntakeSummaryTotals .is-female small { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 html[style*="--lir-fs-summary-total-gross-weight-kg:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="gross_weight_kg"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 html[style*="--lir-fs-summary-total-tare-weight-kg:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="tare_weight_kg"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 html[style*="--lir-fs-summary-total-net-weight-kg:"] :is(#liveIntakeSummaryTotals [data-live-summary-total="net_weight_kg"]) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

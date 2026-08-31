@@ -157,7 +157,13 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonCount(1, 'data.catalog.external_owners')
             ->assertJsonPath('data.catalog.delivery_trucks.0.id', $this->deliveryVehicleId)
             ->assertJsonPath('data.catalog.delivery_drivers.0.id', $this->deliveryDriverId)
-            ->assertJsonPath('data.totals.daily.weighings', 0);
+            ->assertJsonPath('data.totals.daily.weighings', 0)
+            ->assertJsonPath('data.totals.daily.male_birds', 0)
+            ->assertJsonPath('data.totals.daily.female_birds', 0)
+            ->assertJsonPath('data.totals.own.male_birds', 0)
+            ->assertJsonPath('data.totals.own.female_birds', 0)
+            ->assertJsonPath('data.totals.external.male_birds', 0)
+            ->assertJsonPath('data.totals.external.female_birds', 0);
     }
 
     public function test_catalog_includes_active_internal_and_external_clients_from_the_current_company(): void
@@ -464,6 +470,66 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->assertDatabaseCount('comprobantes', 0);
     }
 
+    public function test_summary_sex_totals_combine_warehouse_and_ticket_birds_by_owner_and_exclude_voided_weighings(): void
+    {
+        $this->saveConfiguration();
+        $externalMaleWeighingId = null;
+
+        foreach ([
+            ['lane' => 1, 'birds_per_cage' => 7, 'cage_count' => 2],
+            ['lane' => 2, 'birds_per_cage' => 9, 'cage_count' => 2],
+            ['lane' => 3, 'birds_per_cage' => 7, 'cage_count' => 3],
+            ['lane' => 4, 'birds_per_cage' => 9, 'cage_count' => 4],
+        ] as $capture) {
+            $created = $this->postJson(
+                '/api/v1/recepcion-pollo-vivo/pesadas',
+                $this->payload($capture),
+            )->assertCreated();
+
+            if ($capture['lane'] === 3) {
+                $externalMaleWeighingId = (int) $created->json('weighing_id');
+            }
+        }
+
+        $this->postJson('/api/v1/recepcion-pollo-vivo/tickets', $this->ticketPayload([
+            'weighings' => [
+                $this->ticketWeighing(['sex' => Pesada::SEX_MALE]),
+                $this->ticketWeighing([
+                    'sex' => Pesada::SEX_FEMALE,
+                    'birds_per_cage' => 9,
+                    'cage_count' => 1,
+                ]),
+            ],
+        ]))->assertCreated();
+
+        $overview = $this->getJson('/api/v1/recepcion-pollo-vivo')->assertOk();
+
+        foreach ([
+            'daily' => [49, 63],
+            'own' => [28, 27],
+            'external' => [21, 36],
+            'lanes.1' => [28, 0],
+            'lanes.2' => [0, 27],
+            'lanes.3' => [21, 0],
+            'lanes.4' => [0, 36],
+        ] as $scope => [$maleBirds, $femaleBirds]) {
+            $overview->assertJsonPath("data.totals.{$scope}.male_birds", $maleBirds)
+                ->assertJsonPath("data.totals.{$scope}.female_birds", $femaleBirds)
+                ->assertJsonPath("data.totals.{$scope}.birds", $maleBirds + $femaleBirds);
+        }
+
+        $this->deleteJson("/api/v1/recepcion-pollo-vivo/pesadas/{$externalMaleWeighingId}")
+            ->assertOk()
+            ->assertJsonPath('data.totals.daily.male_birds', 28)
+            ->assertJsonPath('data.totals.daily.female_birds', 63)
+            ->assertJsonPath('data.totals.daily.birds', 91)
+            ->assertJsonPath('data.totals.own.male_birds', 28)
+            ->assertJsonPath('data.totals.own.female_birds', 27)
+            ->assertJsonPath('data.totals.external.male_birds', 0)
+            ->assertJsonPath('data.totals.external.female_birds', 36)
+            ->assertJsonPath('data.totals.external.birds', 36);
+    }
+
     public function test_native_reception_weighing_can_be_updated_as_one_entry(): void
     {
         $this->saveConfiguration();
@@ -491,7 +557,11 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonPath('data.records.0.sex', Pesada::SEX_FEMALE)
             ->assertJsonPath('data.records.0.cages', 3)
             ->assertJsonPath('data.records.0.birds', 24)
-            ->assertJsonPath('data.records.0.net_weight_kg', 99);
+            ->assertJsonPath('data.records.0.net_weight_kg', 99)
+            ->assertJsonPath('data.totals.daily.male_birds', 0)
+            ->assertJsonPath('data.totals.daily.female_birds', 24)
+            ->assertJsonPath('data.totals.own.male_birds', 0)
+            ->assertJsonPath('data.totals.own.female_birds', 24);
 
         $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
             'id' => $weighingId,
@@ -1643,7 +1713,11 @@ class LiveChickenReceptionApiTest extends TestCase
         $this->deleteJson("/api/v1/recepcion-pollo-vivo/pesadas/{$weighingId}")
             ->assertOk()
             ->assertJsonPath('data.totals.daily.weighings', 0)
-            ->assertJsonPath('data.totals.own.birds', 0);
+            ->assertJsonPath('data.totals.own.birds', 0)
+            ->assertJsonPath('data.totals.daily.male_birds', 0)
+            ->assertJsonPath('data.totals.daily.female_birds', 0)
+            ->assertJsonPath('data.totals.own.male_birds', 0)
+            ->assertJsonPath('data.totals.own.female_birds', 0);
 
         $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
             'id' => $weighingId,

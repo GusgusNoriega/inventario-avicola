@@ -1729,6 +1729,8 @@ class LiveChickenReceptionService
                 'weighings' => (int) $items->sum(fn (array $item): int => (int) ($item['weighing_count'] ?? 1)),
                 'cages' => (int) $items->sum('cages'),
                 'birds' => (int) $items->sum('birds'),
+                'male_birds' => (int) $items->where('sex', Pesada::SEX_MALE)->sum('birds'),
+                'female_birds' => (int) $items->where('sex', Pesada::SEX_FEMALE)->sum('birds'),
                 'gross_weight_kg' => round((float) $items->sum('gross_weight_kg'), 3),
                 'tare_weight_kg' => round((float) $items->sum('tare_weight_kg'), 3),
                 'net_weight_kg' => round((float) $items->sum('net_weight_kg'), 3),

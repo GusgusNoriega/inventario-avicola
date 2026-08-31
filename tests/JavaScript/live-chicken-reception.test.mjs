@@ -356,7 +356,7 @@ test("los tres grupos del resumen abren el mismo popup accesible y adaptable", (
   assert.match(summaryModal, /role="dialog" aria-modal="true" aria-labelledby="liveIntakeSummaryTitle"/);
   assert.match(summaryModal, /id="liveIntakeSummaryRows"[^>]*role="region" tabindex="0"/);
   assert.match(summaryModal, /class="lir-summary-intro"[\s\S]*?id="liveIntakeSummaryHelp"[\s\S]*?id="liveIntakeSummaryMessage"/);
-  ["weighings", "cages", "birds", "gross_weight_kg", "tare_weight_kg", "net_weight_kg"].forEach((key) => {
+  ["weighings", "cages", "birds", "male_birds", "female_birds", "gross_weight_kg", "tare_weight_kg", "net_weight_kg"].forEach((key) => {
     assert.match(summaryModal, new RegExp(`data-live-summary-total="${key}"`));
   });
   assert.match(source, /elements\.summaryTriggers\.forEach\(\(button\) => button\.addEventListener\("click", \(\) => \{[\s\S]*?openSummaryDetail\(button\.dataset\.liveSummaryScope, button\)/);
@@ -379,7 +379,7 @@ test("los tres grupos del resumen abren el mismo popup accesible y adaptable", (
   assert.match(stylesheet, /\.lir-modal-card\.is-summary-detail \{[^}]*height: min\(860px, calc\(100dvh - 32px\)\);[^}]*grid-template-rows: auto minmax\(0, 1fr\) auto;[^}]*overflow: hidden;/);
   assert.match(stylesheet, /\.lir-summary-detail-body \{[^}]*grid-template-rows: auto auto minmax\(0, 1fr\);/);
   assert.match(stylesheet, /\.lir-summary-table-scroll \{[^}]*min-height: 0;[^}]*overflow: auto;[^}]*overscroll-behavior: contain;[^}]*touch-action: pan-x pan-y pinch-zoom;/);
-  assert.match(tabletStyles, /\.lir-summary-totals \{ grid-template-columns: repeat\(3,/);
+  assert.match(stylesheet, /@media \(max-width: 1100px\) \{\s*\.lir-summary-totals \{ grid-template-columns: repeat\(4,/);
 });
 
 test("cada fila del resumen abre su detalle desde cualquier celda con un botón real en peso bruto", () => {
