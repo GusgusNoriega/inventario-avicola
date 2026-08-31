@@ -83,7 +83,7 @@
       </label>
       <label class="lir-number-field">
         <span>Cantidad de javas</span>
-        <input id="liveIntakeCageCount" type="number" min="1" max="10000" step="1" value="1" inputmode="numeric">
+        <input id="liveIntakeCageCount" type="number" min="1" max="10000" step="1" value="5" inputmode="numeric">
       </label>
       <label class="lir-select-field">
         <span>Tipo de java</span>
@@ -244,6 +244,17 @@
           <label><span>Columna 5 · Cliente predeterminado</span><select id="liveIntakeLane5Destination"></select></label>
           <label><span>Columna 6 · Cliente predeterminado</span><select id="liveIntakeLane6Destination"></select></label>
         </div>
+      </section>
+
+      <section>
+        <h3>Valores predeterminados de las pesadas</h3>
+        <div class="lir-settings-grid">
+          <label><span>Machos · Aves por java</span><input id="liveIntakeDefaultMaleBirdsPerCage" type="number" min="1" max="1000" step="1" value="7" inputmode="numeric" required></label>
+          <label><span>Hembras · Aves por java</span><input id="liveIntakeDefaultFemaleBirdsPerCage" type="number" min="1" max="1000" step="1" value="9" inputmode="numeric" required></label>
+          <label><span>Cantidad de javas · Ambos sexos</span><input id="liveIntakeDefaultCageCount" type="number" min="1" max="10000" step="1" value="5" inputmode="numeric" required></label>
+          <label><span>Java predeterminada · Inicial: 6,80 kg</span><select id="liveIntakeDefaultCageType"></select></label>
+        </div>
+        <p class="lir-modal-help">Se aplican al seleccionar otra columna y después de guardar una pesada. Puedes ajustar los valores de la siguiente pesada sin cambiar estos predeterminados. Si la java de 6,80 kg no está disponible, selecciona otra java activa.</p>
       </section>
 
       <section>

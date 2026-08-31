@@ -74,6 +74,10 @@ const elements = {
   clientPickerButtons: Array.from(document.querySelectorAll("[data-live-choose-client]")),
   registerTicketButtons: Array.from(document.querySelectorAll("[data-live-register-ticket]")),
   defaultExternalOwner: document.getElementById("liveIntakeDefaultExternalOwner"),
+  defaultMaleBirdsPerCage: document.getElementById("liveIntakeDefaultMaleBirdsPerCage"),
+  defaultFemaleBirdsPerCage: document.getElementById("liveIntakeDefaultFemaleBirdsPerCage"),
+  defaultCageCount: document.getElementById("liveIntakeDefaultCageCount"),
+  defaultCageType: document.getElementById("liveIntakeDefaultCageType"),
   laneDestinations: [
     document.getElementById("liveIntakeLane1Destination"),
     document.getElementById("liveIntakeLane2Destination"),
@@ -1129,6 +1133,29 @@ function renderLaneAssignments() {
   });
 }
 
+function captureDefaults() {
+  const configuration = state.data?.configuration || {};
+  const activeCageTypes = (state.data?.catalog?.cage_types || []).filter((item) => item.active !== false);
+  const cageType = activeCageTypes.find((item) => Number(item.id) === Number(configuration.default_cage_type_id))
+    || activeCageTypes.find((item) => Math.abs(Number(item.weight_kg) - 6.8) < 0.0005);
+  return {
+    maleBirdsPerCage: Number(configuration.default_male_birds_per_cage) || 7,
+    femaleBirdsPerCage: Number(configuration.default_female_birds_per_cage) || 9,
+    cageCount: Number(configuration.default_cage_count) || 5,
+    cageTypeId: cageType ? Number(cageType.id) : null,
+  };
+}
+
+function applyCaptureDefaults() {
+  if (!state.data || state.pendingCapture || state.pendingUpgradeBlocked) return;
+  const defaults = captureDefaults();
+  const sex = laneProfile(state.activeLane).sex || state.sex;
+  elements.birdsPerCage.value = String(sex === "HEMBRA" ? defaults.femaleBirdsPerCage : defaults.maleBirdsPerCage);
+  elements.cageCount.value = String(defaults.cageCount);
+  elements.cageType.value = defaults.cageTypeId ? String(defaults.cageTypeId) : "";
+  updateCaptureAvailability();
+}
+
 function populateConfiguration() {
   if (!state.data) return;
   const { catalog, configuration } = state.data;
@@ -1145,13 +1172,24 @@ function populateConfiguration() {
   setSelectOptions(elements.laneDestinations[4], catalog.clients || [], "Seleccionar cliente", laneConfiguration(5)?.destination_id);
   setSelectOptions(elements.laneDestinations[5], catalog.clients || [], "Seleccionar cliente", laneConfiguration(6)?.destination_id);
 
-  const cageTypeId = elements.cageType.value;
+  const defaults = captureDefaults();
+  elements.defaultMaleBirdsPerCage.value = String(defaults.maleBirdsPerCage);
+  elements.defaultFemaleBirdsPerCage.value = String(defaults.femaleBirdsPerCage);
+  elements.defaultCageCount.value = String(defaults.cageCount);
+  const cageTypeId = state.pendingCapture?.cage_type_id || elements.cageType.value;
   const activeCageTypes = (catalog.cage_types || []).filter((item) => item.active !== false);
-  elements.cageType.innerHTML = optionMarkup(activeCageTypes, "Seleccionar tipo de java");
-  const preferredCage = activeCageTypes.some((item) => String(item.id) === cageTypeId)
+  setSelectOptions(elements.defaultCageType, activeCageTypes, "Seleccionar java predeterminada", defaults.cageTypeId);
+  const captureCageTypes = [...activeCageTypes];
+  if (state.pendingCapture && !captureCageTypes.some((item) => Number(item.id) === Number(cageTypeId))) {
+    captureCageTypes.push(catalogItem("cage_types", cageTypeId) || {
+      id: Number(cageTypeId),
+      name: `Tipo de java #${cageTypeId} · captura pendiente`,
+    });
+  }
+  const preferredCage = captureCageTypes.some((item) => Number(item.id) === Number(cageTypeId))
     ? cageTypeId
-    : String(activeCageTypes[0]?.id || "");
-  elements.cageType.value = preferredCage;
+    : defaults.cageTypeId;
+  setSelectOptions(elements.cageType, captureCageTypes, "Seleccionar tipo de java", preferredCage);
 
   elements.externalSummaryLabel.textContent = "Empresa externa";
 
@@ -1779,6 +1817,7 @@ function renderData(data, { resetDirectClients = false } = {}) {
   reconcileDirectClientSelections(firstLoad || resetDirectClients);
   elements.operatingDate.textContent = formatOperatingDate(state.data.operating_date);
   populateConfiguration();
+  if (firstLoad) applyCaptureDefaults();
   renderRecords();
   renderTotals();
   if (state.summaryScope && !elements.summaryModal.hidden) {
@@ -1793,7 +1832,9 @@ function selectLane(laneNumber) {
     setMessage(`Reintenta primero la pesada pendiente de la columna ${state.pendingCapture.lane}.`, "error");
     return;
   }
+  const laneChanged = state.activeLane !== requestedLane;
   state.activeLane = requestedLane;
+  if (laneChanged) applyCaptureDefaults();
   const profile = laneProfile(state.activeLane);
   const externalOwner = catalogItem("external_owners", state.data?.configuration?.default_external_owner_id);
   const ownerLabel = profile.ownerType === "EXTERNA"
@@ -1844,6 +1885,7 @@ function selectSex(sex) {
     setMessage(`Reintenta primero la pesada pendiente de la columna ${state.pendingCapture.lane}.`, "error");
     return;
   }
+  const sexChanged = state.sex !== sex;
   state.sex = sex;
   elements.sexButtons.forEach((button) => {
     const selected = button.dataset.liveSex === sex;
@@ -1852,6 +1894,11 @@ function selectSex(sex) {
   });
   if (!laneProfile(state.activeLane).sex) {
     elements.assignmentTitle.textContent = `Mi empresa · ${sex === "HEMBRA" ? "Hembra" : "Macho"}`;
+    if (sexChanged && !state.pendingCapture && !state.pendingUpgradeBlocked) {
+      const defaults = captureDefaults();
+      elements.birdsPerCage.value = String(sex === "HEMBRA" ? defaults.femaleBirdsPerCage : defaults.maleBirdsPerCage);
+      updateCaptureAvailability();
+    }
   }
 }
 
@@ -2080,7 +2127,7 @@ function addCaptureToDispatchDraft(payload) {
     throw new Error("No se pudo guardar el borrador en esta tablet. Libera espacio del navegador e inténtalo nuevamente.");
   }
   consumeCaptureReading(payload);
-  elements.cageCount.value = "1";
+  applyCaptureDefaults();
   renderLaneAssignments();
   renderRecords();
   renderTotals();
@@ -2127,7 +2174,7 @@ async function performCaptureWeighing() {
     renderData(response.data);
     clearPendingCapture();
     consumeCaptureReading(payload);
-    elements.cageCount.value = "1";
+    applyCaptureDefaults();
     setMessage(confirmedClientName
       ? `Recepción para mi empresa y despacho a ${confirmedClientName} registrados al mismo tiempo.`
       : (response.message || "Pesada registrada correctamente."), "success");
@@ -3261,6 +3308,10 @@ async function saveSettings(event) {
     lane_4_warehouse_id: Number(elements.laneDestinations[3].value),
     lane_5_client_id: Number(elements.laneDestinations[4].value),
     lane_6_client_id: Number(elements.laneDestinations[5].value),
+    default_male_birds_per_cage: Number(elements.defaultMaleBirdsPerCage.value),
+    default_female_birds_per_cage: Number(elements.defaultFemaleBirdsPerCage.value),
+    default_cage_count: Number(elements.defaultCageCount.value),
+    default_cage_type_id: elements.defaultCageType.value ? Number(elements.defaultCageType.value) : null,
   };
   state.busy = true;
   setSettingsMessage("Guardando configuración…");
@@ -3274,6 +3325,7 @@ async function saveSettings(event) {
     const restoredPendingCapture = recoverLegacyPending
       ? await restorePendingCapture(response.data.company.id, response.data.branch.id)
       : false;
+    applyCaptureDefaults();
 
     if (restoredPendingCapture) {
       updateScaleUi();

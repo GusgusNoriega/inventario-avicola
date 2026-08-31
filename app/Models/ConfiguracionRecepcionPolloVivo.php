@@ -15,6 +15,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'almacen_columna_4_id',
     'cliente_columna_3_id',
     'cliente_columna_4_id',
+    'aves_por_java_macho',
+    'aves_por_java_hembra',
+    'cantidad_javas_predeterminada',
+    'tipo_java_predeterminado_id',
     'updated_by',
 ])]
 class ConfiguracionRecepcionPolloVivo extends Model
@@ -24,5 +28,15 @@ class ConfiguracionRecepcionPolloVivo extends Model
     public function sucursal(): BelongsTo
     {
         return $this->belongsTo(Sucursal::class);
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'aves_por_java_macho' => 'integer',
+            'aves_por_java_hembra' => 'integer',
+            'cantidad_javas_predeterminada' => 'integer',
+            'tipo_java_predeterminado_id' => 'integer',
+        ];
     }
 }

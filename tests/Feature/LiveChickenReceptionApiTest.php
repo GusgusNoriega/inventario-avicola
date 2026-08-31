@@ -206,6 +206,173 @@ class LiveChickenReceptionApiTest extends TestCase
             ->assertJsonPath('data.configuration.lanes.6.destination_id', $internalClientId);
     }
 
+    public function test_capture_defaults_are_available_without_saved_configuration(): void
+    {
+        $defaultCageTypeId = (int) DB::table('tipos_java')->where('codigo', 'JAVA_680')->value('id');
+
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.configuration.saved', false)
+            ->assertJsonPath('data.configuration.default_male_birds_per_cage', 7)
+            ->assertJsonPath('data.configuration.default_female_birds_per_cage', 9)
+            ->assertJsonPath('data.configuration.default_cage_count', 5)
+            ->assertJsonPath('data.configuration.default_cage_type_id', $defaultCageTypeId);
+
+        $this->assertGreaterThan(0, $defaultCageTypeId);
+        $this->assertDatabaseCount('configuraciones_recepcion_pollo_vivo', 0);
+
+        DB::table('tipos_java')->where('id', $defaultCageTypeId)->update(['estado' => 'INACTIVO']);
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.configuration.default_cage_type_id', null);
+        $this->assertDatabaseHas('tipos_java', ['id' => $this->cageTypeId, 'estado' => 'ACTIVO', 'peso_kg' => 7]);
+    }
+
+    public function test_capture_defaults_persist_and_older_configuration_requests_preserve_them(): void
+    {
+        $defaults = [
+            'default_male_birds_per_cage' => 8,
+            'default_female_birds_per_cage' => 10,
+            'default_cage_count' => 4,
+            'default_cage_type_id' => $this->cageTypeId,
+        ];
+        $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload($defaults))
+            ->assertOk();
+
+        // Una tablet con la vista anterior todavía envía solo destinos y propietario.
+        $this->saveConfiguration();
+
+        $response = $this->getJson('/api/v1/recepcion-pollo-vivo')->assertOk();
+        foreach ($defaults as $field => $value) {
+            $response->assertJsonPath("data.configuration.{$field}", $value);
+        }
+        $this->assertDatabaseHas('configuraciones_recepcion_pollo_vivo', [
+            'sucursal_id' => $this->branchId,
+            'aves_por_java_macho' => 8,
+            'aves_por_java_hembra' => 10,
+            'cantidad_javas_predeterminada' => 4,
+            'tipo_java_predeterminado_id' => $this->cageTypeId,
+        ]);
+
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'SEGUNDA',
+            'nombre' => 'Segunda sucursal',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.configuration.saved', false)
+            ->assertJsonPath('data.configuration.default_male_birds_per_cage', 7)
+            ->assertJsonPath('data.configuration.default_female_birds_per_cage', 9)
+            ->assertJsonPath('data.configuration.default_cage_count', 5);
+    }
+
+    public function test_capture_defaults_reject_invalid_quantities_and_unavailable_cage_types(): void
+    {
+        $this->saveConfiguration();
+        DB::table('tipos_java')->where('id', $this->cageTypeId)->update(['estado' => 'INACTIVO']);
+
+        foreach ([
+            ['default_male_birds_per_cage', 0],
+            ['default_male_birds_per_cage', 1001],
+            ['default_male_birds_per_cage', null],
+            ['default_female_birds_per_cage', 0],
+            ['default_female_birds_per_cage', 1001],
+            ['default_cage_count', 0],
+            ['default_cage_count', 10001],
+            ['default_cage_count', 1.5],
+            ['default_cage_type_id', $this->cageTypeId],
+            ['default_cage_type_id', 999999],
+        ] as [$field, $value]) {
+            $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload([
+                $field => $value,
+            ]))->assertUnprocessable()->assertJsonValidationErrors($field);
+        }
+
+        $this->assertDatabaseHas('configuraciones_recepcion_pollo_vivo', [
+            'sucursal_id' => $this->branchId,
+            'aves_por_java_macho' => 7,
+            'aves_por_java_hembra' => 9,
+            'cantidad_javas_predeterminada' => 5,
+            'tipo_java_predeterminado_id' => null,
+        ]);
+    }
+
+    public function test_default_cage_type_uses_only_active_types_even_when_history_includes_inactive_types(): void
+    {
+        $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload([
+            'default_cage_type_id' => $this->cageTypeId,
+        ]))->assertOk();
+        $this->postJson('/api/v1/recepcion-pollo-vivo/pesadas', $this->payload())->assertCreated();
+        DB::table('tipos_java')->where('id', $this->cageTypeId)->update(['estado' => 'INACTIVO']);
+        $fallbackId = (int) DB::table('tipos_java')->where('codigo', 'JAVA_680')->value('id');
+
+        $response = $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.configuration.default_cage_type_id', $fallbackId);
+        $historicalType = collect($response->json('data.catalog.cage_types'))->firstWhere('id', $this->cageTypeId);
+        $this->assertNotNull($historicalType);
+        $this->assertFalse($historicalType['active']);
+
+        DB::table('tipos_java')->where('id', $fallbackId)->update(['estado' => 'INACTIVO']);
+        $this->getJson('/api/v1/recepcion-pollo-vivo')
+            ->assertOk()
+            ->assertJsonPath('data.configuration.default_cage_type_id', null);
+        $this->assertDatabaseHas('pesadas_recepcion_pollo_vivo', [
+            'tipo_java_id' => $this->cageTypeId,
+            'peso_java_kg_snapshot' => 7,
+        ]);
+        $this->assertDatabaseMissing('tipos_java', ['estado' => 'ACTIVO', 'peso_kg' => 6.8]);
+    }
+
+    public function test_null_default_cage_type_restores_the_active_six_point_eight_fallback(): void
+    {
+        $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload([
+            'default_cage_type_id' => $this->cageTypeId,
+        ]))->assertOk()->assertJsonPath('data.configuration.default_cage_type_id', $this->cageTypeId);
+
+        $fallbackId = (int) DB::table('tipos_java')->where('codigo', 'JAVA_680')->value('id');
+        $this->putJson('/api/v1/recepcion-pollo-vivo/configuracion', $this->configurationPayload([
+            'default_cage_type_id' => null,
+        ]))->assertOk()->assertJsonPath('data.configuration.default_cage_type_id', $fallbackId);
+        $this->assertDatabaseHas('configuraciones_recepcion_pollo_vivo', [
+            'sucursal_id' => $this->branchId,
+            'tipo_java_predeterminado_id' => null,
+        ]);
+    }
+
+    public function test_capture_defaults_migration_is_reversible_and_preserves_existing_destinations(): void
+    {
+        $this->saveConfiguration();
+        $migration = require database_path(
+            'migrations/2026_08_31_000001_add_capture_defaults_to_live_chicken_reception_configuration.php',
+        );
+
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('configuraciones_recepcion_pollo_vivo', 'tipo_java_predeterminado_id'));
+        $this->assertDatabaseHas('configuraciones_recepcion_pollo_vivo', [
+            'sucursal_id' => $this->branchId,
+            'almacen_columna_1_id' => $this->warehouseOneId,
+            'cliente_columna_3_id' => $this->clientFiveId,
+        ]);
+
+        $migration->up();
+        $this->assertDatabaseHas('configuraciones_recepcion_pollo_vivo', [
+            'sucursal_id' => $this->branchId,
+            'almacen_columna_1_id' => $this->warehouseOneId,
+            'cliente_columna_3_id' => $this->clientFiveId,
+            'aves_por_java_macho' => 7,
+            'aves_por_java_hembra' => 9,
+            'cantidad_javas_predeterminada' => 5,
+            'tipo_java_predeterminado_id' => null,
+        ]);
+    }
+
     public function test_overview_orders_weighings_by_actual_time_descending_across_midnight(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-27 00:30:00', 'America/Lima'));

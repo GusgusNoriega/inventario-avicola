@@ -86,6 +86,7 @@ class LiveChickenReceptionService
             $catalog['warehouses'],
             $catalog['clients'],
             $catalog['external_owners'],
+            $catalog['cage_types'],
         );
 
         return [
@@ -140,6 +141,26 @@ class LiveChickenReceptionService
         $this->assertClient($companyId, (int) $data['lane_5_client_id'], 'lane_5_client_id');
         $this->assertClient($companyId, (int) $data['lane_6_client_id'], 'lane_6_client_id');
 
+        $captureDefaults = [];
+        foreach ([
+            'default_male_birds_per_cage' => 'aves_por_java_macho',
+            'default_female_birds_per_cage' => 'aves_por_java_hembra',
+            'default_cage_count' => 'cantidad_javas_predeterminada',
+            'default_cage_type_id' => 'tipo_java_predeterminado_id',
+        ] as $field => $column) {
+            if (array_key_exists($field, $data)) {
+                $captureDefaults[$column] = $data[$field] === null ? null : (int) $data[$field];
+            }
+        }
+        if (isset($data['default_cage_type_id']) && ! DB::table('tipos_java')
+            ->where('id', (int) $data['default_cage_type_id'])
+            ->where('estado', 'ACTIVO')
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'default_cage_type_id' => 'Selecciona un tipo de java activo como predeterminado.',
+            ]);
+        }
+
         ConfiguracionRecepcionPolloVivo::query()->updateOrCreate(
             ['sucursal_id' => $branchId],
             [
@@ -150,6 +171,7 @@ class LiveChickenReceptionService
                 'almacen_columna_4_id' => (int) $data['lane_4_warehouse_id'],
                 'cliente_columna_3_id' => (int) $data['lane_5_client_id'],
                 'cliente_columna_4_id' => (int) $data['lane_6_client_id'],
+                ...$captureDefaults,
                 'updated_by' => $actor->id,
             ],
         );
@@ -213,6 +235,7 @@ class LiveChickenReceptionService
                 $catalog['warehouses'],
                 $catalog['clients'],
                 $catalog['external_owners'],
+                $catalog['cage_types'],
             );
             $lane = (int) $data['lane'];
             $profile = $this->laneProfile($lane);
@@ -466,6 +489,7 @@ class LiveChickenReceptionService
                 $catalog['warehouses'],
                 $catalog['clients'],
                 $catalog['external_owners'],
+                $catalog['cage_types'],
             );
             $sex = (string) $data['sex'];
             $previousOwnerType = (string) $record->propietario_tipo;
@@ -708,7 +732,7 @@ class LiveChickenReceptionService
     }
 
     /** @return array<string, mixed> */
-    private function effectiveConfiguration(int $branchId, $warehouses, $clients, $externalOwners): array
+    private function effectiveConfiguration(int $branchId, $warehouses, $clients, $externalOwners, Collection $cageTypes): array
     {
         $saved = ConfiguracionRecepcionPolloVivo::query()->where('sucursal_id', $branchId)->first();
         $warehouseIds = $warehouses->pluck('id');
@@ -722,10 +746,17 @@ class LiveChickenReceptionService
             && $ownerIds->contains((int) $saved->propietario_externo_predeterminado_id)
                 ? (int) $saved->propietario_externo_predeterminado_id
                 : null;
+        $activeCageTypes = $cageTypes->filter(fn (array $type): bool => $type['active']);
+        $defaultCageType = $activeCageTypes->firstWhere('id', (int) ($saved?->tipo_java_predeterminado_id ?? 0))
+            ?? $activeCageTypes->first(fn (array $type): bool => abs($type['weight_kg'] - 6.8) < 0.0005);
 
         return [
             'saved' => $saved !== null,
             'default_external_owner_id' => $externalOwnerId,
+            'default_male_birds_per_cage' => (int) ($saved?->aves_por_java_macho ?? 7),
+            'default_female_birds_per_cage' => (int) ($saved?->aves_por_java_hembra ?? 9),
+            'default_cage_count' => (int) ($saved?->cantidad_javas_predeterminada ?? 5),
+            'default_cage_type_id' => $defaultCageType['id'] ?? null,
             'lanes' => [
                 '1' => $this->configuredLane(
                     1,

@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(113, $migrationFiles);
+        $this->assertCount(114, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -168,7 +168,7 @@ class DatabaseSchemaTest extends TestCase
             'configuraciones_despacho_minorista' => ['empresa_id', 'sucursal_id', 'estacion', 'metodo_pago_id', 'cuenta_destino_id'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'ajuste_peso_mayorista_2_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'ajuste_peso_mayorista_2_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
-            'configuraciones_recepcion_pollo_vivo' => ['sucursal_id', 'propietario_externo_predeterminado_id', 'almacen_columna_1_id', 'almacen_columna_2_id', 'almacen_columna_3_id', 'almacen_columna_4_id', 'cliente_columna_3_id', 'cliente_columna_4_id', 'updated_by'],
+            'configuraciones_recepcion_pollo_vivo' => ['sucursal_id', 'propietario_externo_predeterminado_id', 'almacen_columna_1_id', 'almacen_columna_2_id', 'almacen_columna_3_id', 'almacen_columna_4_id', 'cliente_columna_3_id', 'cliente_columna_4_id', 'aves_por_java_macho', 'aves_por_java_hembra', 'cantidad_javas_predeterminada', 'tipo_java_predeterminado_id', 'updated_by'],
             'recepciones_pollo_vivo' => ['jornada_id', 'origen', 'estado', 'created_by'],
             'pesadas_recepcion_pollo_vivo' => ['recepcion_id', 'idempotency_key', 'numero', 'columna', 'propietario_tipo', 'propietario_externo_id', 'destino_tipo', 'almacen_destino_id', 'cliente_destino_id', 'sexo', 'tipo_pollo_id', 'tipo_java_id', 'lectura_balanza_id', 'origen_peso', 'aves_por_java', 'cantidad_javas', 'cantidad_aves', 'peso_java_kg_snapshot', 'peso_leido_kg', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg', 'pesada_at', 'estado', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_by'],
             'recepcion_pollo_vivo_tickets' => ['recepcion_id', 'ticket_despacho_id', 'movimiento_inventario_id', 'columna', 'request_hash', 'cantidad_javas_aplicada', 'revision', 'created_by'],

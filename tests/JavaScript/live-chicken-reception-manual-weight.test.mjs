@@ -62,8 +62,13 @@ function createHarness(context, lane = 1) {
       branch: { id: 1 },
       operating_date: "2026-08-31",
       configuration: {
+        default_male_birds_per_cage: 7,
+        default_female_birds_per_cage: 9,
+        default_cage_count: 5,
+        default_cage_type_id: 2,
         lanes: {
           1: { destination_id: 20 },
+          2: { destination_id: 20 },
           5: { destination_id: 10 },
           6: { destination_id: 10 },
         },
@@ -71,7 +76,10 @@ function createHarness(context, lane = 1) {
       catalog: {
         clients: [{ id: 10, name: "Cliente actual" }],
         warehouses: [{ id: 20, name: "Almacén actual" }],
-        cage_types: [{ id: 1, name: "Java 7 kg", weight_kg: 7, active: true }],
+        cage_types: [
+          { id: 1, name: "Java 7 kg", weight_kg: 7, active: true },
+          { id: 2, name: "Java 6.8 kg", weight_kg: 6.8, active: true },
+        ],
       },
     },
   };
@@ -84,7 +92,7 @@ function createHarness(context, lane = 1) {
     main: { dataset: { liveUserId: "1" } },
     birdsPerCage: { value: "7" },
     cageCount: { value: "2" },
-    cageType: { value: "1", options: [{ value: "1" }] },
+    cageType: { value: "1", options: [{ value: "1" }, { value: "2" }] },
     laneButtons: [],
     clientPickerButtons: [],
     registerTicketButtons: [],
@@ -124,7 +132,8 @@ function createHarness(context, lane = 1) {
     "dispatchDraftHasPendingRegistration", "persistDispatchDrafts", "hydrateDispatchDrafts",
     "migrateLegacyPendingCapture", "validatePendingCapturePayload", "restorePendingCapture",
     "catalogItem", "laneConfiguration", "laneProfile", "laneDestination", "reconcileDirectClientSelections",
-    "firstValidationMessage", "hasValidationError", "captureScaleState", "consumeCaptureReading",
+    "firstValidationMessage", "hasValidationError", "captureDefaults", "applyCaptureDefaults",
+    "captureScaleState", "consumeCaptureReading",
     "updateScaleUi", "updateCaptureAvailability", "scalePayload", "capturePayload", "captureRequestPayload",
     "freezePendingCaptureForClientCorrection", "refreshAfterInvalidDispatchClient",
     "addCaptureToDispatchDraft", "performCaptureWeighing", "applyManualWeight",
@@ -161,9 +170,40 @@ function assertManualPayload(payload, manual) {
   assert.equal(payload.scale_reading ?? null, null);
 }
 
-for (const mode of ["serial", "ble"]) {
-  test(`peso manual prevalece sobre nuevas tramas ${mode} y se libera al guardar el borrador`, async (context) => {
+function captureInputs(h) {
+  return {
+    birdsPerCage: Number(h.elements.birdsPerCage.value),
+    cageCount: Number(h.elements.cageCount.value),
+    cageTypeId: Number(h.elements.cageType.value),
+  };
+}
+
+function editCaptureInputs(h) {
+  h.elements.birdsPerCage.value = "11";
+  h.elements.cageCount.value = "3";
+  h.elements.cageType.value = "1";
+  return captureInputs(h);
+}
+
+function assertCaptureDefaults(h, sex = "MACHO") {
+  assert.deepEqual(captureInputs(h), {
+    birdsPerCage: sex === "HEMBRA" ? 9 : 7,
+    cageCount: 5,
+    cageTypeId: 2,
+  });
+}
+
+function assertCaptureInputPayload(payload, inputs) {
+  assert.equal(payload.birds_per_cage, inputs.birdsPerCage);
+  assert.equal(payload.cage_count, inputs.cageCount);
+  assert.equal(payload.cage_type_id, inputs.cageTypeId);
+}
+
+for (const [mode, sex] of [["serial", "MACHO"], ["ble", "HEMBRA"]]) {
+  test(`peso manual prevalece sobre nuevas tramas ${mode}; guardar el borrador ${sex} restablece los valores configurados`, async (context) => {
     const h = createHarness(context, 5);
+    h.state.sex = sex;
+    const submittedInputs = editCaptureInputs(h);
     h.physical(45, mode);
     const manual = h.applyManual();
     h.physical(72, mode);
@@ -182,6 +222,8 @@ for (const mode of ["serial", "ble"]) {
     const saved = JSON.parse(h.storage.getItem(h.state.dispatchDraftStorageKey));
     assert.equal(saved.drafts[5].weighings.length, 1);
     assertManualPayload(saved.drafts[5].weighings[0], manual);
+    assertCaptureInputPayload(saved.drafts[5].weighings[0], submittedInputs);
+    assertCaptureDefaults(h, sex);
     assert.equal(h.state.manualWeightOverride, null);
     assert.equal(h.calls.clearedPhysical, 0);
     assert.equal(h.elements.scaleWeight.innerHTML, "72.000 <small>kg</small>");
@@ -194,45 +236,55 @@ for (const mode of ["serial", "ble"]) {
   });
 }
 
-test("una entrada manual queda fija durante HTTP y vuelve al último peso físico al confirmarse", async (context) => {
-  const h = createHarness(context);
-  h.physical(45);
-  const manual = h.applyManual("100");
-  let confirm;
-  h.respondWith(() => new Promise((resolve) => { confirm = resolve; }));
-  const capture = h.api.performCaptureWeighing();
+for (const [lane, sex] of [[1, "MACHO"], [2, "HEMBRA"]]) {
+  test(`entrada manual ${sex} queda fija durante HTTP y restablece los valores configurados al confirmarse`, async (context) => {
+    const h = createHarness(context, lane);
+    const submittedInputs = editCaptureInputs(h);
+    h.physical(45);
+    const manual = h.applyManual("100");
+    let confirm;
+    h.respondWith(() => new Promise((resolve) => { confirm = resolve; }));
+    const capture = h.api.performCaptureWeighing();
 
-  assertManualPayload(h.calls.requests[0].payload, manual);
-  assert.equal(Object.hasOwn(h.calls.requests[0].payload, "scale_reading"), false);
-  assertManualPayload(JSON.parse(h.storage.getItem(h.state.pendingCaptureStorageKey)), manual);
-  h.physical(91, "ble");
-  assert.equal(h.elements.scaleWeight.innerHTML, "100.000 <small>kg</small>");
-  assert.match(h.elements.scaleRaw.textContent, /Peso congelado para reintento · Manual/);
-  assert.equal(h.state.manualWeightOverride, manual);
-  confirm({ weighing_id: 50, data: h.state.data });
-  await capture;
+    assertManualPayload(h.calls.requests[0].payload, manual);
+    assertCaptureInputPayload(h.calls.requests[0].payload, submittedInputs);
+    assert.deepEqual(captureInputs(h), submittedInputs);
+    assert.equal(Object.hasOwn(h.calls.requests[0].payload, "scale_reading"), false);
+    assertManualPayload(JSON.parse(h.storage.getItem(h.state.pendingCaptureStorageKey)), manual);
+    h.physical(91, "ble");
+    assert.equal(h.elements.scaleWeight.innerHTML, "100.000 <small>kg</small>");
+    assert.match(h.elements.scaleRaw.textContent, /Peso congelado para reintento · Manual/);
+    assert.equal(h.state.manualWeightOverride, manual);
+    confirm({ weighing_id: 50, data: h.state.data });
+    await capture;
 
-  assert.equal(h.state.manualWeightOverride, null);
-  assert.equal(h.state.pendingCapture, null);
-  assert.equal(h.storage.getItem(h.state.pendingCaptureStorageKey), null);
-  assert.equal(h.calls.clearedPhysical, 0);
-  assert.equal(h.elements.scaleWeight.innerHTML, "91.000 <small>kg</small>");
-  assert.equal(h.api.capturePayload().scale_reading.connection_mode, "BLE");
-});
+    assert.equal(h.state.manualWeightOverride, null);
+    assert.equal(h.state.pendingCapture, null);
+    assertCaptureDefaults(h, sex);
+    assert.equal(h.storage.getItem(h.state.pendingCaptureStorageKey), null);
+    assert.equal(h.calls.clearedPhysical, 0);
+    assert.equal(h.elements.scaleWeight.innerHTML, "91.000 <small>kg</small>");
+    assert.equal(h.api.capturePayload().scale_reading.connection_mode, "BLE");
+  });
+}
 
 for (const failure of ["tara inválida", "almacenamiento lleno"]) {
   test(`fallo de borrador por ${failure} conserva el manual y su UUID para corregir y reintentar`, async (context) => {
     const h = createHarness(context, 6);
+    editCaptureInputs(h);
     const manual = h.applyManual("100");
     if (failure === "tara inválida") h.elements.cageCount.value = "20";
     else h.storage.failWrites = true;
+    const submittedInputs = captureInputs(h);
 
     await h.api.performCaptureWeighing();
     h.physical(84);
 
     assert.equal(h.state.dispatchDrafts[6].weighings.length, 0);
     assert.equal(h.state.manualWeightOverride, manual);
+    assert.deepEqual(captureInputs(h), submittedInputs);
     assertManualPayload(h.api.capturePayload(), manual);
+    assertCaptureInputPayload(h.api.capturePayload(), submittedInputs);
     assert.equal(h.elements.scaleWeight.innerHTML, "100.000 <small>kg</small>");
     assert.equal(h.calls.messages.at(-1)[1], "error");
     h.elements.cageCount.value = "2";
@@ -242,12 +294,14 @@ for (const failure of ["tara inválida", "almacenamiento lleno"]) {
     assert.equal(h.state.dispatchDrafts[6].weighings.length, 1);
     assertManualPayload(h.state.dispatchDrafts[6].weighings[0], manual);
     assert.equal(h.state.manualWeightOverride, null);
+    assertCaptureDefaults(h);
     assert.equal(h.elements.scaleWeight.innerHTML, "84.000 <small>kg</small>");
   });
 }
 
 test("rechazo 422 de entrada conserva peso manual, origen y UUID para corregir la captura", async (context) => {
   const h = createHarness(context);
+  const submittedInputs = editCaptureInputs(h);
   const manual = h.applyManual("100");
   h.respondWith(async () => {
     throw Object.assign(new Error("La tara es mayor al peso"), { status: 422 });
@@ -258,13 +312,16 @@ test("rechazo 422 de entrada conserva peso manual, origen y UUID para corregir l
 
   assert.equal(h.state.pendingCapture, null);
   assert.equal(h.state.manualWeightOverride, manual);
+  assert.deepEqual(captureInputs(h), submittedInputs);
   assertManualPayload(h.api.capturePayload(), manual);
+  assertCaptureInputPayload(h.api.capturePayload(), submittedInputs);
   assert.equal(h.elements.scaleWeight.innerHTML, "100.000 <small>kg</small>");
   assert.equal(h.calls.clearedPhysical, 0);
 });
 
 test("fallo de red congela el manual y reintenta exactamente el payload original", async (context) => {
   const h = createHarness(context);
+  const submittedInputs = editCaptureInputs(h);
   const manual = h.applyManual("100");
   h.respondWith(async () => { throw new Error("Sin red"); });
   await h.api.performCaptureWeighing();
@@ -273,6 +330,7 @@ test("fallo de red congela el manual y reintenta exactamente el payload original
   h.applyManual("200");
 
   assert.equal(h.state.manualWeightOverride, manual);
+  assert.deepEqual(captureInputs(h), submittedInputs);
   assert.deepEqual(h.api.capturePayload(), original);
   assert.equal(h.elements.scaleWeight.innerHTML, "100.000 <small>kg</small>");
   h.respondWith(async () => ({ weighing_id: 50, data: h.state.data }));
@@ -281,6 +339,7 @@ test("fallo de red congela el manual y reintenta exactamente el payload original
   assert.deepEqual(h.calls.requests[1].payload, original);
   assert.equal(h.state.manualWeightOverride, null);
   assert.equal(h.state.pendingCapture, null);
+  assertCaptureDefaults(h);
   assert.equal(h.elements.scaleWeight.innerHTML, "65.000 <small>kg</small>");
 });
 
