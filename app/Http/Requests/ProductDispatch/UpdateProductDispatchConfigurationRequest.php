@@ -34,7 +34,18 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
                         ->where('estado', ProductoDespacho::STATUS_ACTIVE),
                 ),
             ],
+            'customer_display_title' => ['sometimes', 'required', 'string', 'max:120'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->exists('customer_display_title')
+            && is_string($this->input('customer_display_title'))) {
+            $this->merge([
+                'customer_display_title' => trim($this->input('customer_display_title')),
+            ]);
+        }
     }
 
     /** @return array<int, callable(Validator): void> */
@@ -45,10 +56,11 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
                 $input = $this->all();
 
                 if (! array_key_exists('waste_presets', $input)
-                    && ! array_key_exists('quick_product_ids', $input)) {
+                    && ! array_key_exists('quick_product_ids', $input)
+                    && ! array_key_exists('customer_display_title', $input)) {
                     $validator->errors()->add(
                         'configuration',
-                        'Indica la configuración de mermas o de productos rápidos que deseas guardar.',
+                        'Indica la configuración de mermas, productos rápidos o pantalla cliente que deseas guardar.',
                     );
                 }
             },
@@ -72,6 +84,9 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
             'quick_product_ids.*.integer' => 'Cada producto rápido debe tener un identificador válido.',
             'quick_product_ids.*.distinct' => 'No puedes repetir un producto en la selección rápida.',
             'quick_product_ids.*.exists' => 'El producto rápido debe estar activo y pertenecer a tu empresa.',
+            'customer_display_title.required' => 'Indica el título de la pantalla cliente.',
+            'customer_display_title.string' => 'El título de la pantalla cliente debe ser texto.',
+            'customer_display_title.max' => 'El título de la pantalla cliente puede tener hasta 120 caracteres.',
         ];
     }
 }

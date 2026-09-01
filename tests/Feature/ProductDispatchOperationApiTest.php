@@ -184,6 +184,92 @@ class ProductDispatchOperationApiTest extends TestCase
             ]);
     }
 
+    public function test_customer_display_title_uses_company_fallback_and_is_configurable_per_branch(): void
+    {
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update([
+                'nombre_comercial' => '  Avícola Central  ',
+                'razon_social' => 'Avícola Central S.A.C.',
+            ]);
+
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'Avícola Central');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'customer_display_title' => '  La Central de los Pollos  ',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'La Central de los Pollos')
+            ->assertJsonPath('data.waste_presets', [0, 50, 100]);
+
+        $this->assertDatabaseHas('configuraciones_despacho_productos', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'titulo_pantalla_cliente' => 'La Central de los Pollos',
+        ]);
+
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'PANTALLA-SECUNDARIA',
+            'nombre' => 'Sucursal pantalla secundaria',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'Avícola Central');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'customer_display_title' => 'Sucursal Dos',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'Sucursal Dos');
+
+        $this->user->update(['sucursal_id' => $this->branchId]);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'La Central de los Pollos');
+    }
+
+    public function test_customer_display_title_fallbacks_and_validation_are_enforced(): void
+    {
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update([
+                'nombre_comercial' => '   ',
+                'razon_social' => '  Razón Avícola Legal  ',
+            ]);
+
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'Razón Avícola Legal');
+
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update(['razon_social' => '   ']);
+
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.customer_display_title', 'Despacho de productos');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'customer_display_title' => '   ',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_display_title');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'customer_display_title' => str_repeat('T', 121),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('customer_display_title');
+    }
+
     public function test_quick_products_are_ordered_configurable_and_scoped_by_company_and_branch(): void
     {
         $hen = $this->createProduct(

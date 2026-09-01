@@ -37,6 +37,15 @@
         <button id="pddOpenScaleSettings" class="pdd-icon-action" type="button" aria-haspopup="dialog" aria-controls="pddScaleDialog">
           <span aria-hidden="true">⚙</span><span> Balanza</span>
         </button>
+        <a
+          id="pddOpenCustomerDisplay"
+          class="pdd-icon-action pdd-customer-display-action"
+          href="{{ route('despacho-productos.pantalla-cliente') }}"
+          target="pantalla-cliente-productos"
+          aria-label="Abrir pantalla del cliente"
+        >
+          <span aria-hidden="true">▣</span><span>Pantalla</span>
+        </a>
         <button id="pddOpenViewSettings" class="pdd-icon-action pdd-view-settings-action" type="button" aria-haspopup="dialog" aria-controls="pddViewDialog">
           <span aria-hidden="true">Aa</span>
           <span class="pdd-action-label"><span>Configuración</span><span>Ajustes</span></span>
@@ -357,6 +366,23 @@
         </label>
         <div id="pddQuickProductResults" class="pdd-quick-product-results" aria-live="polite"></div>
         <small id="pddQuickProductStatus" class="pdd-quick-product-status" role="status" aria-live="polite"></small>
+      </form>
+
+      <form id="pddCustomerDisplayTitleForm" class="pdd-customer-display-setting">
+        <span class="pdd-customer-display-setting-icon" aria-hidden="true">▣</span>
+        <label for="pddCustomerDisplayTitle">
+          <strong>Pantalla cliente</strong>
+          <input
+            id="pddCustomerDisplayTitle"
+            type="text"
+            maxlength="120"
+            autocomplete="organization"
+            placeholder="Título de la empresa"
+            required
+          >
+        </label>
+        <button id="pddSaveCustomerDisplayTitle" type="submit">Guardar</button>
+        <small id="pddCustomerDisplayTitleStatus" role="status" aria-live="polite"></small>
       </form>
 
       <div class="pdd-theme-setting">

@@ -105,6 +105,7 @@ class ProductDispatchOperationController extends Controller
                 'quick_product_ids' => $dispatchConfiguration['quick_product_ids'],
                 'quick_products' => $quickProducts,
                 'quick_products_configured' => $dispatchConfiguration['quick_products_configured'],
+                'customer_display_title' => $dispatchConfiguration['customer_display_title'],
                 'branch' => [
                     'id' => (int) $branch->id,
                     'name' => $branch->nombre,

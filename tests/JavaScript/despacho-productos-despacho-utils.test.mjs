@@ -201,14 +201,24 @@ test("el catálogo acepta el contrato del API y normaliza clientes para búsqued
     }],
     clients: [{ id: 4, name: "Tienda Norte", document_number: "901234567" }],
     currency: "S/",
-    ticket_title: "AVÍCOLA DE PRUEBA"
+    ticket_title: "AVÍCOLA DE PRUEBA",
+    customer_display_title: "LA CENTRAL DE LOS POLLOS"
   } });
 
   assert.equal(catalog.products[0].price, 0.75);
   assert.equal(catalog.products[0].price_mode, PRODUCT_PRICE_MODE_UNIT);
   assert.equal(catalog.clients[0].document, "901234567");
   assert.equal(catalog.ticket_title, "AVÍCOLA DE PRUEBA");
+  assert.equal(catalog.customer_display_title, "LA CENTRAL DE LOS POLLOS");
   assert.deepEqual(catalog.waste_presets, [0, 50, 100]);
+});
+
+test("el título de pantalla cliente se limita y tiene un valor seguro por defecto", () => {
+  assert.equal(normalizeCatalog().customer_display_title, "Despacho de productos");
+  assert.equal(
+    normalizeCatalog({ customer_display_title: `  ${"A".repeat(140)}  ` }).customer_display_title,
+    "A".repeat(120)
+  );
 });
 
 test("los productos rápidos conservan cuatro ids activos únicos y su orden configurado", () => {

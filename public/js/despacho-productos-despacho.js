@@ -27,6 +27,14 @@ import {
 } from "./despacho-productos-despacho-utils.js";
 import { printProductDispatchTicket } from "./despacho-productos-ticket-printer.js";
 import {
+  buildProductDispatchCustomerDisplayChannelName,
+  buildProductDispatchCustomerDisplayPayload,
+  buildProductDispatchCustomerDisplayStorageKey,
+  resolveProductDispatchCustomerDisplayPreview,
+  PRODUCT_DISPATCH_CUSTOMER_DISPLAY_REQUEST_TYPE,
+  PRODUCT_DISPATCH_CUSTOMER_DISPLAY_RESET_TYPE
+} from "./product-dispatch-customer-display.js";
+import {
   buildTypographyPresetValues,
   defaultTypographyValues,
   flattenTypographyControls,
@@ -41,6 +49,10 @@ import {
 const station = document.querySelector("#productDispatchStation");
 const apiBase = station?.dataset.apiBase || "/despacho-productos";
 const currentUserId = station?.dataset.userId || "anonymous";
+const PRODUCT_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY =
+  `sistema-pollos-pantalla-cliente-productos-productor-v1-user-${currentUserId}`;
+const PRODUCT_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY =
+  `sistema-pollos-pantalla-cliente-productos-instancia-v1-user-${currentUserId}`;
 const APP_SCALE_LEVELS = [67, 75, 80, 90, 100, 110, 125, 150];
 const viewStorageKey = `sistema-pollos-product-dispatch-view-v1-user-${currentUserId}`;
 const typographyStorageKey = `sistema-pollos-product-dispatch-typography-v1-user-${currentUserId}`;
@@ -178,12 +190,46 @@ const TYPOGRAPHY_PRESETS = {
   accessible: { label: "Alta legibilidad", factor: 1.22, readableFloor: 13 }
 };
 
+function getProductCustomerDisplayProducerId() {
+  try {
+    const existingId = sessionStorage.getItem(PRODUCT_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY);
+    if (existingId) return existingId;
+    const generatedId = globalThis.crypto?.randomUUID?.()
+      || `productos-${currentUserId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sessionStorage.setItem(PRODUCT_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY, generatedId);
+    return generatedId;
+  } catch {
+    return globalThis.crypto?.randomUUID?.()
+      || `productos-${currentUserId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+function getProductCustomerDisplayProducerInstance() {
+  const now = Date.now();
+  try {
+    const previous = Number(sessionStorage.getItem(PRODUCT_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY));
+    const next = Number.isSafeInteger(previous) && previous > 0
+      ? Math.max(now, previous + 1)
+      : now;
+    sessionStorage.setItem(PRODUCT_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY, String(next));
+    return next;
+  } catch {
+    return now;
+  }
+}
+
+const PRODUCT_CUSTOMER_DISPLAY_PRODUCER_BASE_ID = getProductCustomerDisplayProducerId();
+const PRODUCT_CUSTOMER_DISPLAY_PRODUCER_INSTANCE = getProductCustomerDisplayProducerInstance();
+const PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID =
+  `${PRODUCT_CUSTOMER_DISPLAY_PRODUCER_BASE_ID}-${PRODUCT_CUSTOMER_DISPLAY_PRODUCER_INSTANCE}`;
+
 const elements = {
   zoomSurface: document.querySelector("#pddZoomSurface"),
   branchName: document.querySelector("#pddBranchName"),
   clock: document.querySelector("#pddClock"),
   scaleStatus: document.querySelector("#pddScaleStatus"),
   openScaleSettings: document.querySelector("#pddOpenScaleSettings"),
+  openCustomerDisplay: document.querySelector("#pddOpenCustomerDisplay"),
   openViewSettings: document.querySelector("#pddOpenViewSettings"),
   selectedName: document.querySelector("#pddSelectedName"),
   chooseProduct: document.querySelector("#pddChooseProduct"),
@@ -276,6 +322,10 @@ const elements = {
   quickProductResults: document.querySelector("#pddQuickProductResults"),
   saveQuickProducts: document.querySelector("#pddSaveQuickProducts"),
   quickProductStatus: document.querySelector("#pddQuickProductStatus"),
+  customerDisplayTitleForm: document.querySelector("#pddCustomerDisplayTitleForm"),
+  customerDisplayTitle: document.querySelector("#pddCustomerDisplayTitle"),
+  saveCustomerDisplayTitle: document.querySelector("#pddSaveCustomerDisplayTitle"),
+  customerDisplayTitleStatus: document.querySelector("#pddCustomerDisplayTitleStatus"),
   zoomOut: document.querySelector("#pddZoomOut"),
   zoomValue: document.querySelector("#pddZoomValue"),
   zoomIn: document.querySelector("#pddZoomIn"),
@@ -311,6 +361,7 @@ const state = {
   selectedVariationId: null,
   wastePresetSaving: false,
   quickProductSaving: false,
+  customerDisplayTitleSaving: false,
   quickProductSelection: [],
   storageKey: null,
   loading: true,
@@ -332,6 +383,15 @@ const state = {
   scale: null,
   numericKeypad: null
 };
+
+let productCustomerDisplayChannel = null;
+let productCustomerDisplayStorageKey = "";
+let productCustomerDisplayBranchId = "";
+let productCustomerDisplayRevision = 0;
+let lastProductCustomerDisplayStorageWrite = 0;
+let pendingProductCustomerDisplayStoragePayload = null;
+let productCustomerDisplayStorageTimer = null;
+let productCustomerDisplayHeartbeatTimer = null;
 
 function activeDraft() {
   return state.drafts[state.activeIndex];
@@ -377,6 +437,210 @@ function effectiveCaptureReading(scaleState = state.scale?.getState?.() || state
   return state.pendingManualReading
     ? { ...physicalState, ...state.pendingManualReading }
     : physicalState;
+}
+
+function buildCurrentProductCustomerDisplayState() {
+  const draft = activeDraft();
+  const totals = calculateDraft(draft.items);
+  const selection = currentSelection();
+  const scaleWeight = Number(state.liveScale.currentWeightKg);
+  const hasReading = Number.isFinite(scaleWeight) && scaleWeight > 0;
+  const values = captureValues();
+  const netValidation = captureNetValidation(hasReading ? scaleWeight : 0, values);
+  const validation = captureValidation(hasReading ? scaleWeight : 0, selection, values);
+  const line = calculateLine({
+    ...values,
+    read_weight_kg: hasReading ? scaleWeight : 0,
+    price_mode: selection?.price_mode
+  });
+  const isManual = Boolean(state.pendingManualReading)
+    || state.liveScale.readingSource === "manual";
+  const isPhysical = !isManual && (
+    state.liveScale.connectionMode === "ble"
+    || state.liveScale.connectionMode === "serial"
+    || state.liveScale.readingSource === "ble"
+    || state.liveScale.readingSource === "serial"
+  );
+  const preview = resolveProductDispatchCustomerDisplayPreview({
+    hasReading,
+    netWeightKg: line.net_weight_kg,
+    amount: line.amount,
+    calculationAvailable: Boolean(!netValidation.message && line.net_weight_kg > 0),
+    amountAvailable: Boolean(selection && !validation.message && line.amount >= 0.01),
+    isPhysical,
+    isFresh: isManual || Boolean(state.liveScale.isFresh),
+    connectionMatches: isManual || state.liveScale.status === "connected",
+    isExpired: isPhysical && !state.liveScale.isFresh,
+    status: isManual
+      ? "manual"
+      : (state.liveScale.isCaptureReady ? "stable" : "live")
+  });
+  const client = clientById(draft.client_id);
+
+  return buildProductDispatchCustomerDisplayPayload({
+    branchId: productCustomerDisplayBranchId,
+    userId: currentUserId,
+    producerId: PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID,
+    producerInstance: PRODUCT_CUSTOMER_DISPLAY_PRODUCER_INSTANCE,
+    revision: ++productCustomerDisplayRevision,
+    updatedAt: new Date().toISOString(),
+    companyTitle: state.catalog.customer_display_title,
+    activeList: {
+      number: state.activeIndex + 1,
+      customer: client?.name || "Venta al público",
+      rows: draft.items.map((item) => {
+        const calculated = calculateLine(item);
+        return {
+          name: itemDisplayName(item),
+          quantity: calculated.quantity,
+          netWeightKg: calculated.net_weight_kg,
+          amount: calculated.amount
+        };
+      }),
+      totals: {
+        quantity: totals.quantity,
+        netWeightKg: totals.net_weight_kg,
+        amount: totals.amount
+      }
+    },
+    preview,
+    currency: state.catalog.currency
+  });
+}
+
+function flushProductCustomerDisplayStorage() {
+  if (!productCustomerDisplayStorageKey || !pendingProductCustomerDisplayStoragePayload) return;
+  try {
+    localStorage.setItem(
+      productCustomerDisplayStorageKey,
+      JSON.stringify(pendingProductCustomerDisplayStoragePayload)
+    );
+    lastProductCustomerDisplayStorageWrite = Date.now();
+    pendingProductCustomerDisplayStoragePayload = null;
+  } catch {
+    // BroadcastChannel mantiene la pantalla en vivo si localStorage no está disponible.
+  }
+}
+
+function persistProductCustomerDisplayState(payload, forceStorage = false) {
+  if (!productCustomerDisplayStorageKey) return;
+  pendingProductCustomerDisplayStoragePayload = payload;
+  const remainingDelay = Math.max(
+    100 - (Date.now() - lastProductCustomerDisplayStorageWrite),
+    0
+  );
+  if (forceStorage || remainingDelay === 0) {
+    if (productCustomerDisplayStorageTimer) {
+      globalThis.clearTimeout(productCustomerDisplayStorageTimer);
+      productCustomerDisplayStorageTimer = null;
+    }
+    flushProductCustomerDisplayStorage();
+    return;
+  }
+  if (!productCustomerDisplayStorageTimer) {
+    productCustomerDisplayStorageTimer = globalThis.setTimeout(() => {
+      productCustomerDisplayStorageTimer = null;
+      flushProductCustomerDisplayStorage();
+    }, remainingDelay);
+  }
+}
+
+function publishProductCustomerDisplayState(forceStorage = false) {
+  if (!productCustomerDisplayBranchId || state.loading) return;
+  const payload = buildCurrentProductCustomerDisplayState();
+  productCustomerDisplayChannel?.postMessage(payload);
+  persistProductCustomerDisplayState(payload, forceStorage);
+}
+
+function productCustomerDisplayRequestMatches(payload) {
+  return Boolean(
+    payload?.type === PRODUCT_DISPATCH_CUSTOMER_DISPLAY_REQUEST_TYPE
+    && String(payload.branchId || "") === productCustomerDisplayBranchId
+    && String(payload.userId || "") === String(currentUserId)
+    && payload.producerId === PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID
+  );
+}
+
+function initializeProductCustomerDisplaySync() {
+  const branchId = String(state.catalog.branch?.id || "").trim();
+  if (!branchId) return;
+
+  if (productCustomerDisplayBranchId && productCustomerDisplayBranchId !== branchId) {
+    resetProductCustomerDisplay();
+  }
+  productCustomerDisplayChannel?.close();
+  productCustomerDisplayChannel = null;
+  productCustomerDisplayBranchId = branchId;
+  productCustomerDisplayStorageKey = buildProductDispatchCustomerDisplayStorageKey(
+    branchId,
+    currentUserId,
+    PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID
+  );
+
+  if ("BroadcastChannel" in globalThis) {
+    productCustomerDisplayChannel = new BroadcastChannel(
+      buildProductDispatchCustomerDisplayChannelName(
+        branchId,
+        currentUserId,
+        PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID
+      )
+    );
+    productCustomerDisplayChannel.addEventListener("message", (event) => {
+      if (productCustomerDisplayRequestMatches(event.data)) {
+        publishProductCustomerDisplayState(true);
+      }
+    });
+  }
+
+  if (productCustomerDisplayHeartbeatTimer) {
+    globalThis.clearInterval(productCustomerDisplayHeartbeatTimer);
+  }
+  productCustomerDisplayHeartbeatTimer = globalThis.setInterval(
+    () => publishProductCustomerDisplayState(),
+    2000
+  );
+  publishProductCustomerDisplayState(true);
+}
+
+function resetProductCustomerDisplay() {
+  if (!productCustomerDisplayBranchId) return;
+  productCustomerDisplayChannel?.postMessage({
+    type: PRODUCT_DISPATCH_CUSTOMER_DISPLAY_RESET_TYPE,
+    branchId: productCustomerDisplayBranchId,
+    userId: String(currentUserId),
+    producerId: PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID
+  });
+  try {
+    if (productCustomerDisplayStorageKey) {
+      localStorage.removeItem(productCustomerDisplayStorageKey);
+    }
+  } catch {
+    // El receptor también elimina información vencida por tiempo.
+  }
+}
+
+function openProductCustomerDisplay(event) {
+  event.preventDefault();
+  if (!elements.openCustomerDisplay?.href || !productCustomerDisplayBranchId || state.loading) {
+    setMessage("Espera a que termine de cargar la estación.", "error");
+    return;
+  }
+
+  publishProductCustomerDisplayState(true);
+  const displayUrl = new URL(elements.openCustomerDisplay.href, globalThis.location.href);
+  displayUrl.searchParams.set("source", PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID);
+  displayUrl.searchParams.set("branch", productCustomerDisplayBranchId);
+  displayUrl.searchParams.set("user", String(currentUserId));
+  const displayWindow = globalThis.open(
+    displayUrl.toString(),
+    `pantalla-cliente-productos-${PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID}`,
+    "popup=yes,width=1366,height=768,resizable=yes,scrollbars=no"
+  );
+  if (displayWindow) {
+    displayWindow.focus();
+    return;
+  }
+  setMessage("El navegador bloqueó la pantalla del cliente. Permite ventanas emergentes.", "error");
 }
 
 function blockCaptureBriefly(durationMs = 650) {
@@ -941,8 +1205,10 @@ function useCatalogWaste() {
   if (selection) setWastePerUnit(selection.waste_grams_per_unit);
 }
 
-function captureValidation(weightKg = Number(state.liveScale.currentWeightKg), selection = currentSelection()) {
-  const values = captureValues();
+function captureNetValidation(
+  weightKg = Number(state.liveScale.currentWeightKg),
+  values = captureValues()
+) {
   if (!Number.isSafeInteger(values.waste_grams_per_unit)
     || values.waste_grams_per_unit < 0
     || values.waste_grams_per_unit > Number(elements.wastePerUnit.max)) {
@@ -960,6 +1226,17 @@ function captureValidation(weightKg = Number(state.liveScale.currentWeightKg), s
     && values.tare_grams >= Math.round(weightKg * 1000) + values.waste_total_grams) {
     return { message: "Peso + merma deben superar la tara.", target: elements.tare };
   }
+
+  return { message: "", target: null };
+}
+
+function captureValidation(
+  weightKg = Number(state.liveScale.currentWeightKg),
+  selection = currentSelection(),
+  values = captureValues()
+) {
+  const netValidation = captureNetValidation(weightKg, values);
+  if (netValidation.message) return netValidation;
   if (selection) {
     const priceError = validateUnitPrice(elements.unitPrice.value, PRODUCT_DISPATCH_MAX_UNIT_PRICE);
     if (priceError) return { message: priceError, target: elements.unitPrice };
@@ -1012,6 +1289,7 @@ function renderCapturePreview() {
     && Date.now() >= state.captureBlockedUntil
   );
   elements.captureWeight.disabled = !captureReady;
+  publishProductCustomerDisplayState();
 }
 
 function renderScale(scaleState = state.scale?.getState?.() || state.liveScale) {
@@ -1133,6 +1411,7 @@ function renderActiveSummary() {
   elements.manualWeight.disabled = state.saving;
   elements.save.disabled = state.saving || !draft.items.length;
   elements.savePrint.disabled = state.saving || !draft.items.length;
+  publishProductCustomerDisplayState();
 }
 
 function renderAll() {
@@ -1762,6 +2041,47 @@ async function saveWastePresets(event) {
   }
 }
 
+function renderCustomerDisplayTitleSetting() {
+  elements.customerDisplayTitle.value = state.catalog.customer_display_title;
+}
+
+async function saveCustomerDisplayTitle(event) {
+  event.preventDefault();
+  if (
+    state.customerDisplayTitleSaving
+    || !elements.customerDisplayTitleForm.reportValidity()
+  ) return;
+
+  const proposed = elements.customerDisplayTitle.value.trim();
+  if (!proposed || proposed.length > 120) {
+    elements.customerDisplayTitleStatus.textContent = "Revisa el título.";
+    return;
+  }
+
+  state.customerDisplayTitleSaving = true;
+  elements.saveCustomerDisplayTitle.disabled = true;
+  elements.customerDisplayTitleStatus.textContent = "Guardando…";
+  try {
+    const response = await apiRequest(`${apiBase}/configuracion`, {
+      method: "PUT",
+      body: JSON.stringify({ customer_display_title: proposed })
+    });
+    state.catalog.customer_display_title = String(
+      response?.data?.customer_display_title
+      ?? response?.customer_display_title
+      ?? proposed
+    ).trim().slice(0, 120) || "Despacho de productos";
+    renderCustomerDisplayTitleSetting();
+    publishProductCustomerDisplayState(true);
+    elements.customerDisplayTitleStatus.textContent = "Guardado";
+  } catch (error) {
+    elements.customerDisplayTitleStatus.textContent = errorMessage(error);
+  } finally {
+    state.customerDisplayTitleSaving = false;
+    elements.saveCustomerDisplayTitle.disabled = false;
+  }
+}
+
 async function loadCatalog() {
   state.loading = true;
   setMessage("Cargando productos, clientes y configuración de la sucursal…");
@@ -1771,17 +2091,9 @@ async function loadCatalog() {
     renderWastePresetSettings();
     initializeDraftStorage();
     elements.branchName.textContent = state.catalog.branch?.name || state.catalog.branch?.nombre || "Sucursal actual";
-    const branchId = state.catalog.branch?.id || "default";
-    state.scale.setStorageKey(`sistema-pollos-product-dispatch-scale-v1-branch-${branchId}`, {
-      reload: true,
-      persistCurrent: false
-    });
-    const scaleState = state.scale.getState();
-    if (!scaleState.autoConnectMode && state.catalog.scale?.configuration) {
-      state.scale.configureSerial(state.catalog.scale.configuration);
-    }
-    fillSerialOptions();
+    configureProductScaleForCurrentBranch();
     state.loading = false;
+    initializeProductCustomerDisplaySync();
     renderAll();
     setMessage("Estación lista. Elige un producto y captura el peso; cada lista se conserva automáticamente.", "success");
     void restoreScale();
@@ -1792,19 +2104,36 @@ async function loadCatalog() {
   }
 }
 
-state.scale = new RetailScaleController({
-  storageKey: "sistema-pollos-product-dispatch-scale-v1-pending",
-  onReading(payload) {
-    renderScale(payload?.state || payload || state.scale.getState());
-  },
-  onStatus(payload) {
-    renderScale(payload?.state || payload || state.scale.getState());
-  },
-  onRaw(payload) {
-    state.lastRaw = String(payload?.raw || "");
-    elements.rawReading.textContent = `Trama: ${state.lastRaw || "--"}`;
+function createProductScaleController() {
+  return new RetailScaleController({
+    storageKey: "sistema-pollos-product-dispatch-scale-v1-pending",
+    onReading(payload) {
+      renderScale(payload?.state || payload || state.scale.getState());
+    },
+    onStatus(payload) {
+      renderScale(payload?.state || payload || state.scale.getState());
+    },
+    onRaw(payload) {
+      state.lastRaw = String(payload?.raw || "");
+      elements.rawReading.textContent = `Trama: ${state.lastRaw || "--"}`;
+    }
+  });
+}
+
+function configureProductScaleForCurrentBranch() {
+  const branchId = state.catalog.branch?.id || "default";
+  state.scale.setStorageKey(`sistema-pollos-product-dispatch-scale-v1-branch-${branchId}`, {
+    reload: true,
+    persistCurrent: false
+  });
+  const scaleState = state.scale.getState();
+  if (!scaleState.autoConnectMode && state.catalog.scale?.configuration) {
+    state.scale.configureSerial(state.catalog.scale.configuration);
   }
-});
+  fillSerialOptions();
+}
+
+state.scale = createProductScaleController();
 
 state.numericKeypad = bindIntegerKeypad({
   inputs: [
@@ -2000,12 +2329,15 @@ elements.openScaleSettings.addEventListener("click", () => {
   elements.scaleMessage.classList.remove("is-error");
   openDialog(elements.scaleDialog);
 });
+elements.openCustomerDisplay?.addEventListener("click", openProductCustomerDisplay);
 elements.openViewSettings.addEventListener("click", () => {
   if (!elements.typographyPanel.hidden) closeTypographyPanel();
   renderAppScale();
   resetQuickProductSettings();
   renderWastePresetSettings();
+  renderCustomerDisplayTitleSetting();
   elements.wastePresetStatus.textContent = "";
+  elements.customerDisplayTitleStatus.textContent = "";
   openDialog(elements.viewDialog, state.appScale === APP_SCALE_LEVELS.at(-1) ? elements.zoomOut : elements.zoomIn);
 });
 elements.quickProductForm.addEventListener("submit", saveQuickProducts);
@@ -2019,6 +2351,7 @@ elements.quickProductResults.addEventListener("click", (event) => {
   if (product) toggleQuickProductSetting(product.dataset.pddQuickSettingProduct);
 });
 elements.wastePresetForm.addEventListener("submit", saveWastePresets);
+elements.customerDisplayTitleForm.addEventListener("submit", saveCustomerDisplayTitle);
 elements.zoomOut.addEventListener("click", () => stepAppScale(-1));
 elements.zoomIn.addEventListener("click", () => stepAppScale(1));
 elements.zoomReset.addEventListener("click", () => applyAppScale(100));
@@ -2131,9 +2464,27 @@ window.addEventListener("pageshow", (event) => {
   applyTypographyValues(restored.values);
   syncTypographyInputs();
   updateTypographyOverview();
+  state.scale = createProductScaleController();
+  if (!state.loading && state.catalog.branch) {
+    configureProductScaleForCurrentBranch();
+    renderScale(state.scale.getState());
+    if (state.scale.getState().autoConnectMode) void restoreScale();
+  }
+  initializeProductCustomerDisplaySync();
 });
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (event) => {
   if (state.typographySaveTimer) persistTypographyNow();
+  if (!event.persisted) resetProductCustomerDisplay();
+  if (productCustomerDisplayStorageTimer) {
+    globalThis.clearTimeout(productCustomerDisplayStorageTimer);
+    productCustomerDisplayStorageTimer = null;
+  }
+  if (productCustomerDisplayHeartbeatTimer) {
+    globalThis.clearInterval(productCustomerDisplayHeartbeatTimer);
+    productCustomerDisplayHeartbeatTimer = null;
+  }
+  productCustomerDisplayChannel?.close();
+  productCustomerDisplayChannel = null;
   void state.scale.destroy();
 });
 document.addEventListener("visibilitychange", () => {

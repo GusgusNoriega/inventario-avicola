@@ -16,7 +16,8 @@ class ProductDispatchConfigurationService
      * @return array{
      *     waste_presets: list<int>,
      *     quick_product_ids: list<int>,
-     *     quick_products_configured: bool
+     *     quick_products_configured: bool,
+     *     customer_display_title: string
      * }
      */
     public function configuration(int $companyId, int $branchId): array
@@ -32,17 +33,19 @@ class ProductDispatchConfigurationService
     }
 
     /**
-     * @param  array{waste_presets?: list<int>, quick_product_ids?: list<int>}  $changes
+     * @param  array{waste_presets?: list<int>, quick_product_ids?: list<int>, customer_display_title?: string}  $changes
      * @return array{
      *     waste_presets: list<int>,
      *     quick_product_ids: list<int>,
-     *     quick_products_configured: bool
+     *     quick_products_configured: bool,
+     *     customer_display_title: string
      * }
      */
     public function update(int $companyId, int $branchId, array $changes): array
     {
         if (! array_key_exists('waste_presets', $changes)
-            && ! array_key_exists('quick_product_ids', $changes)) {
+            && ! array_key_exists('quick_product_ids', $changes)
+            && ! array_key_exists('customer_display_title', $changes)) {
             throw ValidationException::withMessages([
                 'configuration' => 'No se indicó ninguna configuración para guardar.',
             ]);
@@ -112,6 +115,10 @@ class ProductDispatchConfigurationService
             ];
         }
 
+        if (array_key_exists('customer_display_title', $changes)) {
+            $updates['titulo_pantalla_cliente'] = trim((string) $changes['customer_display_title']);
+        }
+
         $this->ensureDefaults($companyId, $branchId);
 
         DB::transaction(function () use ($companyId, $branchId, $updates): void {
@@ -163,7 +170,8 @@ class ProductDispatchConfigurationService
      * @return array{
      *     waste_presets: list<int>,
      *     quick_product_ids: list<int>,
-     *     quick_products_configured: bool
+     *     quick_products_configured: bool,
+     *     customer_display_title: string
      * }
      */
     private function format(
@@ -178,7 +186,36 @@ class ProductDispatchConfigurationService
             ],
             'quick_product_ids' => $this->effectiveQuickProductIds($configuration, $companyId),
             'quick_products_configured' => (bool) $configuration->productos_rapidos_configurados,
+            'customer_display_title' => $this->effectiveCustomerDisplayTitle(
+                $configuration,
+                $companyId,
+            ),
         ];
+    }
+
+    private function effectiveCustomerDisplayTitle(
+        ConfiguracionDespachoProducto $configuration,
+        int $companyId,
+    ): string {
+        $configuredTitle = trim((string) $configuration->titulo_pantalla_cliente);
+
+        if ($configuredTitle !== '') {
+            return $configuredTitle;
+        }
+
+        $company = DB::table('empresas')
+            ->where('id', $companyId)
+            ->first(['nombre_comercial', 'razon_social']);
+
+        $commercialName = trim((string) ($company?->nombre_comercial ?? ''));
+
+        if ($commercialName !== '') {
+            return $commercialName;
+        }
+
+        $legalName = trim((string) ($company?->razon_social ?? ''));
+
+        return $legalName !== '' ? $legalName : 'Despacho de productos';
     }
 
     /** @return list<int> */

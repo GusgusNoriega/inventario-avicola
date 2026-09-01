@@ -132,7 +132,15 @@ export function normalizeCatalog(payload = {}) {
     ticket_message: String(source.ticket_message || source.mensaje_ticket || "Gracias por su compra"),
     scale: source.scale || source.balanza || null,
     waste_presets: normalizeWastePresets(source.waste_presets),
-    quick_product_ids: normalizeQuickProductIds(source.quick_product_ids, products)
+    quick_product_ids: normalizeQuickProductIds(source.quick_product_ids, products),
+    customer_display_title: String(
+      source.customer_display_title
+      || source.titulo_pantalla_cliente
+      || source.company?.name
+      || source.empresa?.nombre_comercial
+      || source.empresa?.razon_social
+      || "Despacho de productos"
+    ).trim().slice(0, 120) || "Despacho de productos"
   };
 }
 

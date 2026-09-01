@@ -506,6 +506,11 @@ test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () =>
     "function captureValues",
     "function renderWastePresets"
   );
+  const netValidationFlow = sourceBetween(
+    dispatchSource,
+    "function captureNetValidation",
+    "function captureValidation"
+  );
   const validationFlow = sourceBetween(
     dispatchSource,
     "function captureValidation",
@@ -527,9 +532,10 @@ test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () =>
     /waste_total_grams:\s*wasteGramsPerUnit\s*\*\s*quantity/
   );
   assert.doesNotMatch(captureValuesFlow, /Math\.min\s*\(|clamp(?:Number)?\s*\(/i);
-  assert.match(validationFlow, /waste_total_grams\s*>\s*PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS/);
-  assert.match(validationFlow, /values\.tare_grams\s*>=\s*Math\.round\(weightKg\s*\*\s*1000\)\s*\+\s*values\.waste_total_grams/);
-  assert.doesNotMatch(validationFlow, /values\.waste_total_grams\s*\+\s*values\.tare_grams\s*>=/);
+  assert.match(netValidationFlow, /waste_total_grams\s*>\s*PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS/);
+  assert.match(netValidationFlow, /values\.tare_grams\s*>=\s*Math\.round\(weightKg\s*\*\s*1000\)\s*\+\s*values\.waste_total_grams/);
+  assert.doesNotMatch(netValidationFlow, /values\.waste_total_grams\s*\+\s*values\.tare_grams\s*>=/);
+  assert.match(validationFlow, /const netValidation\s*=\s*captureNetValidation\(weightKg,\s*values\)/);
   assert.match(previewFlow, /const validation\s*=\s*captureValidation\(/);
   assert.match(previewFlow, /captureReady[\s\S]*&&\s*!validation\.message[\s\S]*captureWeight\.disabled\s*=\s*!captureReady/);
   assert.match(
@@ -579,4 +585,87 @@ test("el diálogo manual explica que prepara el peso sin prometer agregar la pes
 
   assert.match(manualDialog, /type="submit"/);
   assert.doesNotMatch(manualDialog, /agregar pesada/i);
+});
+
+test("la configuración guarda el título exclusivo de la pantalla cliente", () => {
+  const setting = sourceBetween(
+    dispatchView,
+    '<form id="pddCustomerDisplayTitleForm"',
+    '<div class="pdd-theme-setting">'
+  );
+  const saveFlow = sourceBetween(
+    dispatchSource,
+    "async function saveCustomerDisplayTitle",
+    "async function loadCatalog"
+  );
+
+  assert.match(setting, /id="pddCustomerDisplayTitle"[^>]*maxlength="120"[^>]*required/);
+  assert.match(setting, /id="pddSaveCustomerDisplayTitle"[^>]*type="submit"/);
+  assert.match(saveFlow, /JSON\.stringify\(\{\s*customer_display_title:\s*proposed\s*\}\)/);
+  assert.match(saveFlow, /state\.catalog\.customer_display_title/);
+  assert.match(saveFlow, /publishProductCustomerDisplayState\(true\)/);
+});
+
+test("la estación publica la lista activa y el neto calculado en una pantalla aislada", () => {
+  const builderFlow = sourceBetween(
+    dispatchSource,
+    "function buildCurrentProductCustomerDisplayState",
+    "function flushProductCustomerDisplayStorage"
+  );
+  const openFlow = sourceBetween(
+    dispatchSource,
+    "function openProductCustomerDisplay",
+    "function blockCaptureBriefly"
+  );
+
+  assert.match(dispatchView, /id="pddOpenCustomerDisplay"/);
+  assert.match(dispatchView, /route\('despacho-productos\.pantalla-cliente'\)/);
+  assert.match(builderFlow, /const draft\s*=\s*activeDraft\(\)/);
+  assert.match(builderFlow, /const totals\s*=\s*calculateDraft\(draft\.items\)/);
+  assert.match(builderFlow, /const line\s*=\s*calculateLine\(/);
+  assert.match(builderFlow, /resolveProductDispatchCustomerDisplayPreview\(/);
+  assert.match(builderFlow, /calculationAvailable:\s*Boolean\(!netValidation\.message\s*&&\s*line\.net_weight_kg\s*>\s*0\)/);
+  assert.match(builderFlow, /amountAvailable:\s*Boolean\(selection\s*&&\s*!validation\.message\s*&&\s*line\.amount\s*>=\s*0\.01\)/);
+  assert.match(builderFlow, /rows:\s*draft\.items\.map/);
+  assert.match(builderFlow, /name:\s*itemDisplayName\(item\)/);
+  assert.match(builderFlow, /netWeightKg:\s*calculated\.net_weight_kg/);
+  assert.match(builderFlow, /amount:\s*calculated\.amount/);
+  assert.doesNotMatch(builderFlow, /scale_reading|read_weight_kg:\s*calculated|tare_grams|waste_total_grams/);
+  assert.match(openFlow, /searchParams\.set\("source"/);
+  assert.match(openFlow, /searchParams\.set\("branch"/);
+  assert.match(openFlow, /searchParams\.set\("user"/);
+  assert.match(openFlow, /scrollbars=no/);
+  assert.match(
+    dispatchSource,
+    /PRODUCT_CUSTOMER_DISPLAY_PRODUCER_ID\s*=\s*`\$\{PRODUCT_CUSTOMER_DISPLAY_PRODUCER_BASE_ID\}-\$\{PRODUCT_CUSTOMER_DISPLAY_PRODUCER_INSTANCE\}`/
+  );
+  assert.match(
+    dispatchSource,
+    /window\.addEventListener\("pagehide",\s*\(event\)\s*=>\s*\{[\s\S]*if\s*\(!event\.persisted\)\s*resetProductCustomerDisplay\(\)/
+  );
+});
+
+test("la balanza se reconstruye al volver desde la caché de navegación", () => {
+  const factoryFlow = sourceBetween(
+    dispatchSource,
+    "function createProductScaleController",
+    "state.scale = createProductScaleController()"
+  );
+  const pageShowFlow = sourceBetween(
+    dispatchSource,
+    'window.addEventListener("pageshow"',
+    'window.addEventListener("pagehide"'
+  );
+  const pageHideFlow = sourceBetween(
+    dispatchSource,
+    'window.addEventListener("pagehide"',
+    'document.addEventListener("visibilitychange"'
+  );
+
+  assert.match(factoryFlow, /new RetailScaleController\(/);
+  assert.match(pageShowFlow, /if\s*\(!event\.persisted\)\s*return/);
+  assert.match(pageShowFlow, /state\.scale\s*=\s*createProductScaleController\(\)/);
+  assert.match(pageShowFlow, /configureProductScaleForCurrentBranch\(\)/);
+  assert.match(pageShowFlow, /state\.scale\.getState\(\)\.autoConnectMode[\s\S]*restoreScale\(\)/);
+  assert.match(pageHideFlow, /state\.scale\.destroy\(\)/);
 });
