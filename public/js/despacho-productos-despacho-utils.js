@@ -4,6 +4,7 @@ export const PRODUCT_PRICE_MODE_KG = "POR_KG";
 export const PRODUCT_PRICE_MODE_UNIT = "POR_UNIDAD";
 export const PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS = [0, 50, 100];
 export const PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS = 1_000_000_000;
+export const PRODUCT_DISPATCH_MAX_UNIT_PRICE = 9_999_999_999.9999;
 
 export function createUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -132,8 +133,16 @@ export function effectiveProduct(product, variation = null) {
 
 export const resolveEffectiveProduct = effectiveProduct;
 
-export function itemKey(productId, variationId = null) {
-  return `${Number(productId)}:${variationId ? Number(variationId) : "base"}`;
+export function validateUnitPrice(value, maximum = PRODUCT_DISPATCH_MAX_UNIT_PRICE) {
+  const raw = String(value ?? "").trim().replace(",", ".");
+  if (!/^\d+(?:\.\d{1,4})?$/.test(raw)) {
+    return "Ingresa un precio válido con hasta 4 decimales.";
+  }
+
+  const price = Number(raw);
+  if (!Number.isFinite(price) || price <= 0) return "El precio debe ser mayor que cero.";
+  if (price > Number(maximum)) return "El precio supera el máximo permitido.";
+  return "";
 }
 
 export function calculateLine(input = {}) {
@@ -198,7 +207,6 @@ export function createEmptyDraft(number = 1) {
     number: Number(number) || 1,
     client_id: null,
     items: [],
-    price_overrides: {},
     updated_at: new Date().toISOString()
   };
 }
@@ -213,11 +221,6 @@ export function normalizeDraft(raw, number = 1) {
   clean.client_id = Number.isInteger(Number(raw.client_id)) && Number(raw.client_id) > 0
     ? Number(raw.client_id)
     : null;
-  clean.price_overrides = raw.price_overrides && typeof raw.price_overrides === "object"
-    ? Object.fromEntries(Object.entries(raw.price_overrides)
-      .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0)
-      .map(([key, value]) => [key, roundTo(value, 4)]))
-    : {};
   clean.items = (Array.isArray(raw.items) ? raw.items : []).filter((item) => (
     Number(item?.product_id) > 0
     && Number(item?.quantity) > 0

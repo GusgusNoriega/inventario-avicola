@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client.js";
 import { RetailScaleController } from "./despacho-minorista-balanza.js";
 import { bindIntegerKeypad } from "./despacho-productos-numeric-keypad.js";
 import {
+  PRODUCT_DISPATCH_MAX_UNIT_PRICE,
   PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS,
   PRODUCT_DISPATCH_SCALE_CODE,
   buildDraftCollection,
@@ -15,13 +16,13 @@ import {
   escapeHtml,
   formatMoney,
   formatWeight,
-  itemKey,
   normalizeCatalog,
   normalizeWastePresets,
   priceModeLabel,
   productInitial,
   roundTo,
-  searchClients
+  searchClients,
+  validateUnitPrice
 } from "./despacho-productos-despacho-utils.js";
 import { printProductDispatchTicket } from "./despacho-productos-ticket-printer.js";
 import {
@@ -61,7 +62,7 @@ const TYPOGRAPHY_GROUPS = [
     controls: [
       { label: "Etiquetas superiores", description: "Textos pequeños en mayúsculas sobre cada sección.", variable: "--pdd-fs-section-label", defaultValue: 11.5, min: 9, max: 18, step: 0.5, target: ".pdd-panel-heading span, .pdd-config-head span" },
       { label: "Títulos y producto seleccionado", description: "Nombre del producto y título de configuración.", variable: "--pdd-fs-section-title", defaultValue: 16, min: 12, max: 26, step: 1, target: ".pdd-panel-heading strong, .pdd-config-head strong" },
-      { label: "Acciones de sección", description: "Elegir producto y cambiar precios del ticket.", variable: "--pdd-fs-section-action", defaultValue: 13, min: 10, max: 22, step: 1, target: ".pdd-choose-product, .pdd-link-button" }
+      { label: "Acciones de sección", description: "Botón para elegir el producto.", variable: "--pdd-fs-section-action", defaultValue: 13, min: 10, max: 22, step: 1, target: ".pdd-choose-product" }
     ]
   },
   {
@@ -89,7 +90,7 @@ const TYPOGRAPHY_GROUPS = [
       { label: "Unidades", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
       { label: "Etiqueta de peso neto", description: "Texto “Peso neto estimado”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-net-preview > span" },
       { label: "Valor de peso neto", description: "Kilogramos netos estimados.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-net-preview strong" },
-      { label: "Total estimado", description: "Importe estimado debajo del peso neto.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-net-preview small" }
+      { label: "Importe pesada", description: "Importe estimado de la pesada actual.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-net-preview small" }
     ]
   },
   {
@@ -134,7 +135,7 @@ const TYPOGRAPHY_GROUPS = [
     label: "Ticket y acciones",
     description: "Lista activa, botones laterales y total del ticket.",
     controls: [
-      { label: "Títulos de acciones", description: "Asignar cliente, Cambiar precio, Guardar e imprimir.", variable: "--pdd-fs-action-title", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-rail-action b, .pdd-save-button b, .pdd-active-list-badge span" },
+      { label: "Títulos de acciones", description: "Asignar cliente, Guardar e imprimir.", variable: "--pdd-fs-action-title", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-rail-action b, .pdd-save-button b, .pdd-active-list-badge span" },
       { label: "Detalle de acciones", description: "Explicación secundaria debajo de cada botón.", variable: "--pdd-fs-action-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-rail-action small, .pdd-save-button small" },
       { label: "Número de lista activa", description: "Número superior de la barra lateral del ticket.", variable: "--pdd-fs-active-list", defaultValue: 22, min: 15, max: 36, step: 1, target: ".pdd-active-list-badge strong" },
       { label: "Etiqueta Total de la lista", description: "Texto pequeño sobre el monto principal.", variable: "--pdd-fs-ticket-label", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-total span" },
@@ -156,16 +157,16 @@ const TYPOGRAPHY_GROUPS = [
   {
     id: "dialogs",
     label: "Ventanas emergentes",
-    description: "Producto, cliente, precio, edición, balanza y peso manual.",
+    description: "Producto, cliente, edición, balanza y peso manual.",
     controls: [
       { label: "Subtítulos de ventanas", description: "Texto pequeño superior de cada ventana.", variable: "--pdd-fs-dialog-eyebrow", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-dialog-head p" },
       { label: "Títulos de ventanas", description: "Título principal de todos los popups.", variable: "--pdd-fs-dialog-title", defaultValue: 22, min: 16, max: 38, step: 1, target: ".pdd-dialog-head h2" },
       { label: "Texto explicativo", description: "Instrucciones, mensajes y lectura técnica.", variable: "--pdd-fs-dialog-body", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-dialog-intro, .pdd-scale-message, .pdd-raw-reading" },
       { label: "Buscadores", description: "Texto escrito para buscar productos o clientes.", variable: "--pdd-fs-dialog-search", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-dialog-search input" },
-      { label: "Etiquetas de campos", description: "Nombres de los datos editables en ventanas.", variable: "--pdd-fs-dialog-label", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-edit-grid label > span, .pdd-price-row label > span" },
-      { label: "Valores de campos", description: "Números, listas y precios editables.", variable: "--pdd-fs-dialog-field", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-edit-grid input, .pdd-edit-grid select, .pdd-price-row input" },
-      { label: "Nombres de tarjetas", description: "Productos, clientes, precios y dispositivos.", variable: "--pdd-fs-dialog-item-title", defaultValue: 13, min: 10, max: 24, step: 0.5, target: ".pdd-product-option b, .pdd-client-option b, .pdd-price-row b" },
-      { label: "Detalles de tarjetas", description: "Precio, documento y textos secundarios.", variable: "--pdd-fs-dialog-item-detail", defaultValue: 10, min: 9, max: 20, step: 0.5, target: ".pdd-product-option small, .pdd-client-option small, .pdd-price-row small" },
+      { label: "Etiquetas de campos", description: "Nombres de los datos editables en ventanas.", variable: "--pdd-fs-dialog-label", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-edit-grid label > span" },
+      { label: "Valores de campos", description: "Números, listas y precios editables.", variable: "--pdd-fs-dialog-field", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-edit-grid input, .pdd-edit-grid select" },
+      { label: "Nombres de tarjetas", description: "Productos, clientes y dispositivos.", variable: "--pdd-fs-dialog-item-title", defaultValue: 13, min: 10, max: 24, step: 0.5, target: ".pdd-product-option b, .pdd-client-option b" },
+      { label: "Detalles de tarjetas", description: "Precio, documento y textos secundarios.", variable: "--pdd-fs-dialog-item-detail", defaultValue: 10, min: 9, max: 20, step: 0.5, target: ".pdd-product-option small, .pdd-client-option small" },
       { label: "Botones de ventanas", description: "Cancelar, guardar, aplicar y confirmar.", variable: "--pdd-fs-dialog-actions", defaultValue: 14, min: 10, max: 24, step: 1, target: ".pdd-dialog-actions button" },
       { label: "Peso manual grande", description: "Número principal al ingresar un peso manual.", variable: "--pdd-fs-manual-weight", defaultValue: 32, min: 22, max: 56, step: 2, target: ".pdd-big-number-input input" },
       { label: "Resumen de edición", description: "Origen, peso neto y total al editar una pesada.", variable: "--pdd-fs-edit-summary", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-edit-summary" }
@@ -197,9 +198,9 @@ const elements = {
   clearManualWeight: document.querySelector("#pddClearManualWeight"),
   captureWeight: document.querySelector("#pddCaptureWeight"),
   selectedVariantLabel: document.querySelector("#pddSelectedVariantLabel"),
-  changePrice: document.querySelector("#pddChangePrice"),
   quantity: document.querySelector("#pddQuantity"),
   unitPrice: document.querySelector("#pddUnitPrice"),
+  priceCurrency: document.querySelector("#pddPriceCurrency"),
   priceMode: document.querySelector("#pddPriceMode"),
   tare: document.querySelector("#pddTare"),
   wastePerUnit: document.querySelector("#pddWastePerUnit"),
@@ -214,7 +215,6 @@ const elements = {
   assignClient: document.querySelector("#pddAssignClient"),
   clientActionLabel: document.querySelector("#pddClientActionLabel"),
   clientActionDetail: document.querySelector("#pddClientActionDetail"),
-  railChangePrice: document.querySelector("#pddRailChangePrice"),
   ticketTotal: document.querySelector("#pddTicketTotal"),
   ticketSummary: document.querySelector("#pddTicketSummary"),
   save: document.querySelector("#pddSave"),
@@ -259,9 +259,6 @@ const elements = {
   editSource: document.querySelector("#pddEditSource"),
   editCalculated: document.querySelector("#pddEditCalculated"),
   deleteWeighing: document.querySelector("#pddDeleteWeighing"),
-  priceDialog: document.querySelector("#pddPriceDialog"),
-  priceForm: document.querySelector("#pddPriceForm"),
-  priceRows: document.querySelector("#pddPriceRows"),
   scaleDialog: document.querySelector("#pddScaleDialog"),
   scaleForm: document.querySelector("#pddScaleForm"),
   scaleDialogDot: document.querySelector("#pddScaleDialogDot"),
@@ -793,10 +790,18 @@ function initializeDraftStorage() {
   state.drafts = buildDraftCollection(storageRead());
 }
 
-function effectivePrice(selection = currentSelection(), draft = activeDraft()) {
-  if (!selection) return 0;
-  const override = draft.price_overrides[itemKey(selection.product_id, selection.variation_id)];
-  return Number(override ?? selection.price ?? 0);
+function captureUnitPrice() {
+  return Number(String(elements.unitPrice.value || "").replace(",", "."));
+}
+
+function setCapturePrice(value) {
+  const price = Number(value);
+  elements.unitPrice.value = Number.isFinite(price) && price > 0 ? price.toFixed(4) : "";
+}
+
+function useCatalogPrice() {
+  const selection = currentSelection();
+  setCapturePrice(selection?.price);
 }
 
 function mediaMarkup(name, imageUrl, altPrefix = "Imagen de") {
@@ -815,13 +820,15 @@ function renderSelectedProduct() {
     elements.selectedName.textContent = "Ningún producto seleccionado";
     elements.selectedVariantLabel.textContent = "Producto base";
     elements.productMedia.innerHTML = '<span class="pdd-media-placeholder"><b>?</b><small>Elige un producto</small></span>';
-    elements.unitPrice.textContent = `${currencyLabel(state.catalog.currency)} --`;
+    elements.unitPrice.disabled = true;
+    elements.priceCurrency.textContent = currencyLabel(state.catalog.currency);
     elements.priceMode.textContent = "Selecciona un producto";
   } else {
     elements.selectedName.textContent = selection.product_name;
     elements.selectedVariantLabel.textContent = selection.variation_name || "Producto base";
     elements.productMedia.innerHTML = mediaMarkup(selection.display_name, selection.image_url);
-    elements.unitPrice.textContent = formatMoney(effectivePrice(selection), state.catalog.currency);
+    elements.unitPrice.disabled = state.saving;
+    elements.priceCurrency.textContent = currencyLabel(state.catalog.currency);
     elements.priceMode.textContent = `Precio ${priceModeLabel(selection.price_mode)}`;
   }
 
@@ -866,7 +873,8 @@ function captureValues() {
     quantity,
     waste_grams_per_unit: wasteGramsPerUnit,
     waste_total_grams: wasteGramsPerUnit * quantity,
-    tare_grams: tareGrams
+    tare_grams: tareGrams,
+    unit_price: captureUnitPrice()
   };
 }
 
@@ -896,7 +904,7 @@ function useCatalogWaste() {
   if (selection) setWastePerUnit(selection.waste_grams_per_unit);
 }
 
-function captureValidation(weightKg = Number(state.liveScale.currentWeightKg)) {
+function captureValidation(weightKg = Number(state.liveScale.currentWeightKg), selection = currentSelection()) {
   const values = captureValues();
   if (!Number.isSafeInteger(values.waste_grams_per_unit)
     || values.waste_grams_per_unit < 0
@@ -915,6 +923,21 @@ function captureValidation(weightKg = Number(state.liveScale.currentWeightKg)) {
     && values.waste_total_grams + values.tare_grams >= weightKg * 1000) {
     return { message: "Merma + tara deben ser menores al peso.", target: elements.tare };
   }
+  if (selection) {
+    const priceError = validateUnitPrice(elements.unitPrice.value, PRODUCT_DISPATCH_MAX_UNIT_PRICE);
+    if (priceError) return { message: priceError, target: elements.unitPrice };
+
+    if (Number.isFinite(weightKg) && weightKg > 0) {
+      const line = calculateLine({
+        ...values,
+        read_weight_kg: weightKg,
+        price_mode: selection.price_mode
+      });
+      if (line.amount < 0.01) {
+        return { message: "El importe de la pesada debe ser mínimo 0.01.", target: elements.unitPrice };
+      }
+    }
+  }
   return { message: "", target: null };
 }
 
@@ -923,22 +946,26 @@ function renderCapturePreview() {
   const scaleWeight = Number(state.liveScale.currentWeightKg);
   const hasWeight = Number.isFinite(scaleWeight) && scaleWeight > 0;
   syncWasteTotal();
-  const validation = captureValidation(hasWeight ? scaleWeight : 0);
-  elements.wasteHint.classList.toggle("is-error", Boolean(validation.message));
-  elements.wasteHint.textContent = validation.message;
+  const validation = captureValidation(hasWeight ? scaleWeight : 0, selection);
+  const priceMessage = validation.target === elements.unitPrice ? validation.message : "";
+  const wasteMessage = priceMessage ? "" : validation.message;
+  elements.priceMode.classList.toggle("is-error", Boolean(priceMessage));
+  elements.priceMode.textContent = priceMessage || (selection ? `Precio ${priceModeLabel(selection.price_mode)}` : "Selecciona un producto");
+  elements.wasteHint.classList.toggle("is-error", Boolean(wasteMessage));
+  elements.wasteHint.textContent = wasteMessage;
   const line = calculateLine({
     quantity: elements.quantity.value,
     read_weight_kg: hasWeight ? scaleWeight : 0,
     waste_grams_per_unit: elements.wastePerUnit.value,
     tare_grams: elements.tare.value,
-    unit_price: effectivePrice(selection),
+    unit_price: elements.unitPrice.value,
     price_mode: selection?.price_mode
   });
 
   elements.netPreview.textContent = hasWeight ? formatWeight(line.net_weight_kg) : "--- kg";
   elements.amountPreview.textContent = hasWeight && selection
-    ? `Total estimado ${formatMoney(line.amount, state.catalog.currency)}`
-    : `Total estimado ${currencyLabel(state.catalog.currency)} --`;
+    ? `Importe pesada ${formatMoney(line.amount, state.catalog.currency)}`
+    : `Importe pesada ${currencyLabel(state.catalog.currency)} --`;
   const captureReady = Boolean(
     selection
     && state.liveScale.isCaptureReady
@@ -1054,8 +1081,7 @@ function renderActiveSummary() {
   elements.footerWaste.textContent = `${totals.waste_total_grams} g`;
   elements.footerNet.textContent = formatWeight(totals.net_weight_kg);
   elements.assignClient.disabled = state.saving;
-  elements.railChangePrice.disabled = state.saving;
-  elements.changePrice.disabled = state.saving;
+  elements.unitPrice.disabled = state.saving || !currentSelection();
   elements.manualWeight.disabled = state.saving;
   elements.save.disabled = state.saving || !draft.items.length;
   elements.savePrint.disabled = state.saving || !draft.items.length;
@@ -1087,6 +1113,7 @@ function selectProduct(productId) {
   state.selectedProductId = product.id;
   state.selectedVariationId = null;
   useCatalogWaste();
+  useCatalogPrice();
   renderSelectedProduct();
   closeDialog(elements.productDialog);
   setMessage(`${product.name} seleccionado. Captura un peso o ingrésalo manualmente.`);
@@ -1099,6 +1126,7 @@ function selectVariation(variationId) {
   if (normalized !== null && !product.variations.some((variation) => variation.id === normalized)) return;
   state.selectedVariationId = normalized;
   useCatalogWaste();
+  useCatalogPrice();
   renderSelectedProduct();
 }
 
@@ -1149,7 +1177,7 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
     read_weight_kg: weight,
     waste_grams_per_unit: elements.wastePerUnit.value,
     tare_grams: elements.tare.value,
-    unit_price: effectivePrice(selection),
+    unit_price: elements.unitPrice.value,
     price_mode: selection.price_mode
   });
   if (calculated.net_weight_kg <= 0) {
@@ -1185,6 +1213,7 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
   activeDraft().items.push(item);
   elements.tare.value = "0";
   state.numericKeypad?.refreshLabel(elements.tare);
+  useCatalogPrice();
   syncWasteTotal();
   persistDrafts();
   renderLists();
@@ -1298,8 +1327,7 @@ function changeEditingProduct(useCatalogDefaults = true) {
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
   if (selection && useCatalogDefaults) {
-    const override = activeDraft().price_overrides[itemKey(selection.product_id, selection.variation_id)];
-    elements.editPrice.value = Number(override ?? selection.price).toFixed(4);
+    elements.editPrice.value = Number(selection.price).toFixed(4);
     elements.editWastePerUnit.value = String(selection.waste_grams_per_unit);
   } else if (!selection && item) {
     elements.editPrice.value = Number(item.unit_price).toFixed(4);
@@ -1311,7 +1339,14 @@ function saveEditingItem(event) {
   event.preventDefault();
   if (state.saving) return;
   const item = editingItem();
-  if (!item || !elements.editForm.reportValidity()) return;
+  if (!item) return;
+  const priceError = validateUnitPrice(elements.editPrice.value, PRODUCT_DISPATCH_MAX_UNIT_PRICE);
+  if (priceError) {
+    elements.editPrice.focus();
+    setMessage(priceError, "error");
+    return;
+  }
+  if (!elements.editForm.reportValidity()) return;
   const product = state.catalog.products.find((entry) => entry.id === Number(elements.editProduct.value));
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
@@ -1375,83 +1410,6 @@ function deleteEditingItem() {
   renderActiveSummary();
   closeDialog(elements.editDialog);
   setMessage("La pesada se quitó del borrador.", "success");
-}
-
-function priceTargets() {
-  const targets = new Map();
-  activeDraft().items.forEach((item) => {
-    const key = itemKey(item.product_id, item.variation_id);
-    if (!targets.has(key)) targets.set(key, {
-      key,
-      product_id: item.product_id,
-      variation_id: item.variation_id,
-      name: itemDisplayName(item),
-      price_mode: item.price_mode,
-      catalog_price: item.catalog_price,
-      price: activeDraft().price_overrides[key] ?? item.unit_price
-    });
-  });
-  const selection = currentSelection();
-  if (selection) {
-    const key = itemKey(selection.product_id, selection.variation_id);
-    if (!targets.has(key)) targets.set(key, {
-      key,
-      product_id: selection.product_id,
-      variation_id: selection.variation_id,
-      name: selection.display_name,
-      price_mode: selection.price_mode,
-      catalog_price: selection.price,
-      price: effectivePrice(selection)
-    });
-  }
-  return [...targets.values()];
-}
-
-function openPriceDialog() {
-  const targets = priceTargets();
-  elements.priceRows.innerHTML = targets.length ? targets.map((target) => `
-    <div class="pdd-price-row">
-      <span><b>${escapeHtml(target.name)}</b><small>Catálogo: ${escapeHtml(formatMoney(target.catalog_price, state.catalog.currency))} ${escapeHtml(priceModeLabel(target.price_mode))}</small></span>
-      <label><span>${escapeHtml(currencyLabel(state.catalog.currency))}</span><input type="number" min="0.0001" max="9999999999.9999" step="0.0001" value="${Number(target.price).toFixed(4)}" data-pdd-price-key="${escapeHtml(target.key)}" required></label>
-    </div>`).join("") : '<div class="pdd-empty-dialog"><strong>No hay productos para cambiar</strong><span>Selecciona un producto o agrega una pesada primero.</span></div>';
-  openDialog(elements.priceDialog, elements.priceRows.querySelector("input"));
-}
-
-function savePrices(event) {
-  event.preventDefault();
-  if (state.saving) return;
-  const inputs = [...elements.priceRows.querySelectorAll("[data-pdd-price-key]")];
-  if (!inputs.length) {
-    closeDialog(elements.priceDialog);
-    return;
-  }
-  if (!elements.priceForm.reportValidity()) return;
-  const proposedPrices = new Map(inputs.map((input) => [
-    input.dataset.pddPriceKey,
-    roundTo(input.value, 4)
-  ]));
-  const invalidItem = activeDraft().items.find((item) => {
-    const price = proposedPrices.get(itemKey(item.product_id, item.variation_id));
-    return price !== undefined && calculateLine({ ...item, unit_price: price }).amount < 0.01;
-  });
-  if (invalidItem) {
-    const key = itemKey(invalidItem.product_id, invalidItem.variation_id);
-    elements.priceRows.querySelector(`[data-pdd-price-key="${CSS.escape(key)}"]`)?.focus();
-    setMessage(`El precio de ${itemDisplayName(invalidItem)} debe producir un total mínimo de 0.01.`, "error");
-    return;
-  }
-  inputs.forEach((input) => {
-    const price = proposedPrices.get(input.dataset.pddPriceKey);
-    activeDraft().price_overrides[input.dataset.pddPriceKey] = price;
-    activeDraft().items.forEach((item) => {
-      if (itemKey(item.product_id, item.variation_id) !== input.dataset.pddPriceKey) return;
-      Object.assign(item, calculateLine({ ...item, unit_price: price }));
-    });
-  });
-  persistDrafts();
-  renderAll();
-  closeDialog(elements.priceDialog);
-  setMessage("Los precios del ticket activo fueron actualizados.", "success");
 }
 
 function showTicketToast(ticket, printed, printError = null) {
@@ -1760,6 +1718,12 @@ elements.quantity.addEventListener("change", () => {
   syncWasteTotal();
   renderCapturePreview();
 });
+elements.unitPrice.addEventListener("input", renderCapturePreview);
+elements.unitPrice.addEventListener("change", () => {
+  const error = validateUnitPrice(elements.unitPrice.value, PRODUCT_DISPATCH_MAX_UNIT_PRICE);
+  if (!error) elements.unitPrice.value = captureUnitPrice().toFixed(4);
+  renderCapturePreview();
+});
 elements.wastePerUnit.addEventListener("input", () => {
   syncWasteTotal();
   renderCapturePreview();
@@ -1841,9 +1805,6 @@ elements.editVariation.addEventListener("change", () => changeEditingProduct(tru
 [elements.editQuantity, elements.editWeight, elements.editWastePerUnit, elements.editTare, elements.editPrice].forEach((input) => input.addEventListener("input", renderEditCalculation));
 elements.editForm.addEventListener("submit", saveEditingItem);
 elements.deleteWeighing.addEventListener("click", deleteEditingItem);
-elements.changePrice.addEventListener("click", openPriceDialog);
-elements.railChangePrice.addEventListener("click", openPriceDialog);
-elements.priceForm.addEventListener("submit", savePrices);
 elements.save.addEventListener("click", () => void saveActiveDraft(false));
 elements.savePrint.addEventListener("click", () => void saveActiveDraft(true));
 elements.retryPrint.addEventListener("click", retryPrint);

@@ -86,7 +86,6 @@
       <article class="pdd-config-panel pdd-panel">
         <div class="pdd-config-head">
           <div><span>Configuración de la pesada</span><strong id="pddSelectedVariantLabel">Producto base</strong></div>
-          <button id="pddChangePrice" class="pdd-link-button" type="button" aria-haspopup="dialog" aria-controls="pddPriceDialog">Cambiar precios del ticket</button>
         </div>
 
         <div class="pdd-fields-grid">
@@ -97,9 +96,12 @@
               <b aria-hidden="true">und</b>
             </span>
           </label>
-          <label>
-            <span>Precio de venta</span>
-            <strong id="pddUnitPrice">S/ --</strong>
+          <label class="pdd-price-field">
+            <span>Precio</span>
+            <span class="pdd-price-input">
+              <b id="pddPriceCurrency" aria-hidden="true">S/</b>
+              <input id="pddUnitPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="decimal" placeholder="0.0000" required aria-label="Precio de esta pesada" disabled>
+            </span>
             <small id="pddPriceMode">Selecciona un producto</small>
           </label>
           <label>
@@ -112,7 +114,7 @@
           <div class="pdd-net-preview">
             <span>Peso neto estimado</span>
             <strong id="pddNetPreview">--- kg</strong>
-            <small id="pddAmountPreview">Total estimado S/ --</small>
+            <small id="pddAmountPreview">Importe pesada S/ --</small>
           </div>
         </div>
 
@@ -158,9 +160,6 @@
         <div class="pdd-active-list-badge"><span>Lista activa</span><strong id="pddActiveList">1</strong></div>
         <button id="pddAssignClient" class="pdd-rail-action is-client" type="button" aria-haspopup="dialog" aria-controls="pddClientDialog">
           <span aria-hidden="true">♙</span><span><b id="pddClientActionLabel">Asignar cliente</b><small id="pddClientActionDetail">Venta al público</small></span>
-        </button>
-        <button id="pddRailChangePrice" class="pdd-rail-action is-price" type="button" aria-haspopup="dialog" aria-controls="pddPriceDialog">
-          <span aria-hidden="true">$</span><span><b>Cambiar precio</b><small>Del ticket activo</small></span>
         </button>
         <div class="pdd-ticket-total">
           <span>Total de la lista</span>
@@ -293,7 +292,7 @@
         <label><span>Merma/u (g)</span><input id="pddEditWastePerUnit" type="number" min="0" max="1000000" step="1" required></label>
         <label><span>Merma total (g)</span><output id="pddEditWasteTotal" class="pdd-edit-output">0 g</output></label>
         <label><span>Tara (g)</span><input id="pddEditTare" type="number" min="0" max="1000000000" step="1" required></label>
-        <label><span>Precio de venta</span><input id="pddEditPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" required></label>
+        <label><span>Precio pesada</span><input id="pddEditPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="decimal" required></label>
       </div>
       <div class="pdd-edit-summary">
         <span id="pddEditSource">Origen: manual</span><strong id="pddEditCalculated">Neto 0.000 kg · S/ 0.00</strong>
@@ -303,21 +302,6 @@
         <span></span>
         <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddEditDialog">Cancelar</button>
         <button class="pdd-dialog-confirm" type="submit">Guardar cambios</button>
-      </footer>
-    </form>
-  </dialog>
-
-  <dialog id="pddPriceDialog" class="pdd-dialog pdd-price-dialog" aria-labelledby="pddPriceDialogTitle">
-    <form id="pddPriceForm">
-      <header class="pdd-dialog-head">
-        <div><p>Lista activa</p><h2 id="pddPriceDialogTitle">Cambiar precios del ticket</h2></div>
-        <button type="button" data-pdd-close="pddPriceDialog" aria-label="Cerrar">×</button>
-      </header>
-      <p class="pdd-dialog-intro">El precio modificado se aplicará a las pesadas existentes y a las próximas pesadas del mismo producto o variación en esta lista.</p>
-      <div id="pddPriceRows" class="pdd-price-rows"></div>
-      <footer class="pdd-dialog-actions">
-        <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddPriceDialog">Cancelar</button>
-        <button class="pdd-dialog-confirm" type="submit">Aplicar precios</button>
       </footer>
     </form>
   </dialog>

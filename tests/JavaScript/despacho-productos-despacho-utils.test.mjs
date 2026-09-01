@@ -13,7 +13,8 @@ import {
   effectiveProduct,
   normalizeCatalog,
   normalizeDraft,
-  normalizeWastePresets
+  normalizeWastePresets,
+  validateUnitPrice
 } from "../../public/js/despacho-productos-despacho-utils.js";
 
 test("la estación siempre mantiene ocho listas independientes y recuperables", () => {
@@ -115,7 +116,6 @@ test("la recuperación limpia listas dañadas sin convertir una pesada manual en
   const recovered = normalizeDraft({
     id: "11111111-1111-4111-8111-111111111111",
     client_id: "9",
-    price_overrides: { "7:base": "18.12346", bad: -2 },
     items: [
       {
         local_id: "manual-1",
@@ -135,7 +135,7 @@ test("la recuperación limpia listas dañadas sin convertir una pesada manual en
 
   assert.equal(recovered.number, 3);
   assert.equal(recovered.client_id, 9);
-  assert.deepEqual(recovered.price_overrides, { "7:base": 18.1235 });
+  assert.equal(Object.hasOwn(recovered, "price_overrides"), false);
   assert.equal(recovered.items.length, 1);
   assert.equal(recovered.items[0].read_weight_kg, 4.555);
   assert.equal(recovered.items[0].weight_source, "MANUAL");
@@ -232,4 +232,27 @@ test("los tres presets del catálogo son enteros seguros y tienen valores de res
   assert.deepEqual(normalizeWastePresets([10, -1, 30]), [0, 50, 100]);
   assert.deepEqual(normalizeWastePresets([10, 20]), [0, 50, 100]);
   assert.deepEqual(normalizeWastePresets([10, 20, 1_000_001]), [0, 50, 100]);
+});
+
+test("el precio de una pesada debe ser positivo, acotado y usar máximo cuatro decimales", () => {
+  assert.equal(validateUnitPrice("12.3456"), "");
+  assert.equal(validateUnitPrice("0.0001"), "");
+  assert.match(validateUnitPrice("0"), /mayor que cero/);
+  assert.match(validateUnitPrice("12.34567"), /hasta 4 decimales/);
+  assert.match(validateUnitPrice("100.0001", 100), /máximo permitido/);
+  assert.match(validateUnitPrice(""), /precio válido/);
+});
+
+test("dos pesadas del mismo ticket conservan precios e importes independientes", () => {
+  const draft = normalizeDraft({
+    id: "33333333-3333-4333-8333-333333333333",
+    items: [
+      { product_id: 7, quantity: 1, read_weight_kg: 2, unit_price: 10, price_mode: PRODUCT_PRICE_MODE_KG },
+      { product_id: 7, quantity: 1, read_weight_kg: 2, unit_price: 12.5, price_mode: PRODUCT_PRICE_MODE_KG }
+    ]
+  });
+
+  assert.deepEqual(draft.items.map((item) => item.unit_price), [10, 12.5]);
+  assert.deepEqual(draft.items.map((item) => item.amount), [20, 25]);
+  assert.deepEqual(buildTicketPayload(draft).weighings.map((item) => item.unit_price), ["10.0000", "12.5000"]);
 });

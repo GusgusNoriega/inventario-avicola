@@ -310,6 +310,80 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseCount('lecturas_balanza', 0);
     }
 
+    public function test_same_product_weighings_keep_independent_prices_and_sum_their_amounts(): void
+    {
+        $payload = $this->payload($this->clientId, [
+            $this->weighing(
+                product: $this->eggs,
+                quantity: 2,
+                price: '0.7500',
+                readWeight: '1.000',
+            ),
+            $this->weighing(
+                product: $this->eggs,
+                quantity: 3,
+                price: '0.9000',
+                readWeight: '1.000',
+            ),
+        ]);
+
+        $response = $this->postJson('/api/v1/despacho-productos/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('data.weighings.0.price_origin', PesadaDespachoProducto::PRICE_CATALOG)
+            ->assertJsonPath('data.weighings.1.price_origin', PesadaDespachoProducto::PRICE_MANUAL);
+
+        $this->assertEqualsWithDelta(0.75, $response->json('data.weighings.0.unit_price'), 0.0001);
+        $this->assertEqualsWithDelta(1.50, $response->json('data.weighings.0.amount'), 0.001);
+        $this->assertEqualsWithDelta(0.90, $response->json('data.weighings.1.unit_price'), 0.0001);
+        $this->assertEqualsWithDelta(2.70, $response->json('data.weighings.1.amount'), 0.001);
+        $this->assertEqualsWithDelta(4.20, $response->json('data.totals.amount'), 0.001);
+
+        $ticketId = (int) $response->json('data.id');
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticketId,
+            'subtotal' => 4.20,
+            'total' => 4.20,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'ticket_despacho_producto_id' => $ticketId,
+            'numero' => 1,
+            'producto_despacho_id' => $this->eggs->id,
+            'precio_catalogo_snapshot' => 0.75,
+            'precio_venta_snapshot' => 0.75,
+            'origen_precio' => PesadaDespachoProducto::PRICE_CATALOG,
+            'importe' => 1.50,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'ticket_despacho_producto_id' => $ticketId,
+            'numero' => 2,
+            'producto_despacho_id' => $this->eggs->id,
+            'precio_catalogo_snapshot' => 0.75,
+            'precio_venta_snapshot' => 0.90,
+            'origen_precio' => PesadaDespachoProducto::PRICE_MANUAL,
+            'importe' => 2.70,
+        ]);
+
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticketId}")
+            ->value('id');
+        $this->assertGreaterThan(0, $documentId);
+        $this->assertDatabaseCount('comprobante_detalles', 2);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $documentId,
+            'producto_despacho_id' => $this->eggs->id,
+            'modo_precio' => ProductoDespacho::PRICE_MODE_UNIT,
+            'precio_unitario' => 0.75,
+            'subtotal' => 1.50,
+        ]);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $documentId,
+            'producto_despacho_id' => $this->eggs->id,
+            'modo_precio' => ProductoDespacho::PRICE_MODE_UNIT,
+            'precio_unitario' => 0.90,
+            'subtotal' => 2.70,
+        ]);
+    }
+
     public function test_ticket_without_a_client_is_an_explicit_public_sale_and_keeps_a_financial_document(): void
     {
         $payload = $this->payload(null, [

@@ -20,6 +20,10 @@ const dispatchStyles = readFileSync(
   new URL("../../public/css/despacho-productos-despacho.css", import.meta.url),
   "utf8"
 );
+const dispatchUtilsSource = readFileSync(
+  new URL("../../public/js/despacho-productos-despacho-utils.js", import.meta.url),
+  "utf8"
+);
 const keypadSource = readFileSync(
   new URL("../../public/js/despacho-productos-numeric-keypad.js", import.meta.url),
   "utf8"
@@ -105,6 +109,55 @@ test("cantidad, merma por unidad y tara comparten el teclado; la merma total es 
   const wasteControlStyles = dispatchStyles.match(/\.pdd-touch-number-input\s+input\s*\{([^}]*)\}/)?.[1] || "";
   const wasteControlHeight = Number(wasteControlStyles.match(/(?:min-)?height:\s*(\d+)px/)?.[1]);
   assert.ok(wasteControlHeight >= 60, "El control táctil de merma debe medir al menos 60 px de alto.");
+});
+
+test("el precio editable pertenece a la pesada y no existen cambios globales del ticket", () => {
+  const capturePrice = dispatchView.match(/<input\b[^>]*\bid="pddUnitPrice"[^>]*>/)?.[0] || "";
+  const editPrice = dispatchView.match(/<input\b[^>]*\bid="pddEditPrice"[^>]*>/)?.[0] || "";
+
+  for (const input of [capturePrice, editPrice]) {
+    assert.ok(input, "Debe existir el precio editable de la pesada.");
+    assert.match(input, /\btype="number"/);
+    assert.match(input, /\bmin="0\.0001"/);
+    assert.match(input, /\bmax="9999999999\.9999"/);
+    assert.match(input, /\bstep="0\.0001"/);
+    assert.match(input, /\binputmode="decimal"/);
+  }
+
+  assert.match(dispatchView, /id="pddPriceCurrency"/);
+  assert.match(dispatchView, /Importe pesada/);
+  assert.match(dispatchStyles, /\.pdd-price-input\s*\{[^}]*min-height:\s*60px/);
+  assert.doesNotMatch(dispatchView, /pddChangePrice|pddRailChangePrice|pddPriceDialog/);
+  assert.doesNotMatch(dispatchSource, /openPriceDialog|savePrices|price_overrides/);
+  assert.doesNotMatch(dispatchUtilsSource, /price_overrides/);
+});
+
+test("el precio manual se conserva al cambiar de lista y vuelve al catálogo solo donde corresponde", () => {
+  const selectedRender = sourceBetween(dispatchSource, "function renderSelectedProduct", "function renderVariations");
+  const listSelection = sourceBetween(dispatchSource, "function selectList", "function selectProduct");
+  const productSelection = sourceBetween(dispatchSource, "function selectProduct", "function selectVariation");
+  const variationSelection = sourceBetween(dispatchSource, "function selectVariation", "function capturedReadingIds");
+  const addReading = sourceBetween(dispatchSource, "function addCurrentReading", "function openProductDialog");
+
+  assert.doesNotMatch(selectedRender, /useCatalogPrice\(|setCapturePrice\(/);
+  assert.doesNotMatch(listSelection, /useCatalogPrice\(|setCapturePrice\(/);
+  assert.match(productSelection, /useCatalogPrice\(\)/);
+  assert.match(variationSelection, /useCatalogPrice\(\)/);
+  assert.match(addReading, /activeDraft\(\)\.items\.push\(item\);[\s\S]*?useCatalogPrice\(\)/);
+  assert.match(dispatchSource, /elements\.unitPrice\.addEventListener\("input",\s*renderCapturePreview\)/);
+});
+
+test("captura y edición bloquean precios o importes inválidos", () => {
+  const captureValidationFlow = sourceBetween(dispatchSource, "function captureValidation", "function renderCapturePreview");
+  const addReadingFlow = sourceBetween(dispatchSource, "function addCurrentReading", "function openProductDialog");
+  const editFlow = sourceBetween(dispatchSource, "function saveEditingItem", "function deleteEditingItem");
+
+  assert.match(captureValidationFlow, /validateUnitPrice\(elements\.unitPrice\.value/);
+  assert.match(captureValidationFlow, /line\.amount\s*<\s*0\.01/);
+  assert.match(addReadingFlow, /unit_price:\s*elements\.unitPrice\.value/);
+  assert.match(editFlow, /validateUnitPrice\(elements\.editPrice\.value/);
+  assert.match(editFlow, /line|calculated/);
+  assert.match(editFlow, /calculated\.amount\s*<\s*0\.01/);
 });
 
 test("el teclado confirma con eventos que recalculan cantidad, merma y total", () => {
