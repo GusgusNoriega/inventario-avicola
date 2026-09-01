@@ -240,6 +240,24 @@ test("en escritorio se ven cinco listas anchas y las restantes conservan el desp
   assert.match(mobileResponsive, /\.pdd-lists-grid\s*\{[^}]*grid-auto-columns:\s*minmax\(245px,\s*88%\)/);
 });
 
+test("el documento queda fijo en escritorio y el zoom conserva el tamaño del viewport", () => {
+  const desktopViewport = sourceBetween(dispatchStyles, "@media (min-width: 861px)", "@media (min-width: 961px)");
+  const mobileLayout = sourceBetween(dispatchStyles, "@media (max-width: 860px)", "@media (max-width: 560px)");
+  const appScaleFlow = sourceBetween(dispatchSource, "function applyAppScale", "function stepAppScale");
+
+  assert.match(desktopViewport, /html\.product-dispatch-operation-root,\s*body\.pdd-page\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden/);
+  assert.match(desktopViewport, /\.pdd-station\s*\{[^}]*max-width:\s*100vw;[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden/);
+  assert.match(desktopViewport, /\.pdd-zoom-surface\s*\{[^}]*width:\s*var\(--pdd-app-layout-width,\s*100%\);[^}]*height:\s*var\(--pdd-app-layout-height-dvh,\s*100dvh\);[^}]*overflow:\s*hidden/);
+  assert.match(appScaleFlow, /const layoutPercent\s*=\s*\(100\s*\/\s*scale\)\.toFixed\(6\)/);
+  assert.match(appScaleFlow, /setProperty\("--pdd-app-layout-width",\s*`\$\{layoutPercent\}%`\)/);
+  assert.match(appScaleFlow, /setProperty\("--pdd-app-layout-height-dvh",\s*`\$\{layoutPercent\}dvh`\)/);
+  assert.match(appScaleFlow, /elements\.zoomSurface\.style\.zoom\s*=\s*String\(scale\)/);
+  assert.match(appScaleFlow, /matchMedia\("\(min-width: 861px\)"\)\.matches\) window\.scrollTo\(0,\s*0\)/);
+  assert.match(mobileLayout, /\.pdd-zoom-surface\s*\{[^}]*display:\s*block/);
+  assert.match(dispatchStyles, /\.pdd-lists-grid\s*\{[^}]*overflow-x:\s*auto/);
+  assert.match(dispatchStyles, /\.pdd-list-items\s*\{[^}]*overflow-y:\s*auto/);
+});
+
 test("Configuración permite buscar y guardar exactamente cuatro productos rápidos ordenados", () => {
   const settingsFlow = sourceBetween(dispatchSource, "function quickProductSettingVisual", "function renderWastePresetSettings");
   const settingsListeners = sourceBetween(dispatchSource, 'elements.openViewSettings.addEventListener', 'elements.wastePresetForm.addEventListener');

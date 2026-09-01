@@ -456,7 +456,13 @@ function renderAppScale() {
 
 function applyAppScale(value, persist = true) {
   state.appScale = normalizeAppScale(value);
-  elements.zoomSurface.style.zoom = String(state.appScale / 100);
+  const scale = state.appScale / 100;
+  const layoutPercent = (100 / scale).toFixed(6);
+  elements.zoomSurface.style.setProperty("--pdd-app-layout-width", `${layoutPercent}%`);
+  elements.zoomSurface.style.setProperty("--pdd-app-layout-height-vh", `${layoutPercent}vh`);
+  elements.zoomSurface.style.setProperty("--pdd-app-layout-height-dvh", `${layoutPercent}dvh`);
+  elements.zoomSurface.style.zoom = String(scale);
+  if (window.matchMedia("(min-width: 861px)").matches) window.scrollTo(0, 0);
   renderAppScale();
 
   if (!persist) return;
