@@ -468,7 +468,8 @@ test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () =>
   );
   assert.doesNotMatch(captureValuesFlow, /Math\.min\s*\(|clamp(?:Number)?\s*\(/i);
   assert.match(validationFlow, /waste_total_grams\s*>\s*PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS/);
-  assert.match(validationFlow, /waste_total_grams\s*\+\s*values\.tare_grams\s*>=\s*weightKg\s*\*\s*1000/);
+  assert.match(validationFlow, /values\.tare_grams\s*>=\s*Math\.round\(weightKg\s*\*\s*1000\)\s*\+\s*values\.waste_total_grams/);
+  assert.doesNotMatch(validationFlow, /values\.waste_total_grams\s*\+\s*values\.tare_grams\s*>=/);
   assert.match(previewFlow, /const validation\s*=\s*captureValidation\(/);
   assert.match(previewFlow, /captureReady[\s\S]*&&\s*!validation\.message[\s\S]*captureWeight\.disabled\s*=\s*!captureReady/);
   assert.match(
@@ -478,7 +479,7 @@ test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () =>
   assert.ok(
     addReadingFlow.indexOf("const validation = captureValidation(weight)")
       < addReadingFlow.indexOf("const calculated = calculateLine"),
-    "La merma o tara fuera de rango debe rechazarse antes de calcular o insertar la pesada."
+    "La merma máxima o una tara fuera de rango deben rechazarse antes de insertar la pesada."
   );
 });
 

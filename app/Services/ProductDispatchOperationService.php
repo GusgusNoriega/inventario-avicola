@@ -385,14 +385,11 @@ class ProductDispatchOperationService
                 );
             }
             $tareGrams = (int) ($input['tare_grams'] ?? 0);
-            $netWeightGrams = $readWeightGrams - $wasteTotalGrams - $tareGrams;
+            $netWeightGrams = $readWeightGrams + $wasteTotalGrams - $tareGrams;
 
             if ($netWeightGrams <= 0) {
-                $field = $tareGrams > 0
-                    ? "weighings.{$index}.tare_grams"
-                    : "weighings.{$index}.waste_total_grams";
                 throw ValidationException::withMessages([
-                    $field => 'La suma de merma y tara debe ser menor que el peso leído.',
+                    "weighings.{$index}.tare_grams" => 'La tara debe ser menor que la suma del peso leído y la merma.',
                 ]);
             }
 

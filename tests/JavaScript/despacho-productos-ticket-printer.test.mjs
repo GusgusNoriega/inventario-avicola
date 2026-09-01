@@ -19,16 +19,16 @@ test("el ticket impreso muestra cliente, variación, merma, peso neto y total co
         unit_price: "21.0000",
         waste_grams_per_unit: 50,
         tare_grams: 20,
-        net_weight_kg: "9.880",
-        amount: "207.48"
+        net_weight_kg: "10.080",
+        amount: "211.68"
       }],
       totals: {
         quantity: 2,
         read_weight_kg: "10.000",
         waste_grams: 100,
         tare_grams: 20,
-        net_weight_kg: "9.880",
-        amount: "207.48"
+        net_weight_kg: "10.080",
+        amount: "211.68"
       },
       ticket_message: "Gracias por su compra"
     }
@@ -40,8 +40,8 @@ test("el ticket impreso muestra cliente, variación, merma, peso neto y total co
   assert.match(html, /Merma<\/span><strong>100 g/);
   assert.match(html, /M 50 g\/u · T 20 g/);
   assert.match(html, /Tara<\/span><strong>20 g/);
-  assert.match(html, /9\.880 kg/);
-  assert.match(html, /S\/ 207\.48/);
+  assert.match(html, /10\.080 kg/);
+  assert.match(html, /S\/ 211\.68/);
   assert.match(html, /Gracias por su compra/);
 });
 
@@ -57,10 +57,10 @@ test("sin cliente el comprobante dice Venta al público y escapa datos del servi
         product: { name: "<script>alert('producto')</script>" },
         price_mode: "POR_UNIDAD",
         unit_price: 0.8,
-        net_weight_kg: 0.988,
+        net_weight_kg: 1.012,
         amount: 4.8
       }],
-      totals: { quantity: 6, read_weight_kg: 1, waste_grams: 12, net_weight_kg: 0.988, amount: 4.8 }
+      totals: { quantity: 6, read_weight_kg: 1, waste_grams: 12, net_weight_kg: 1.012, amount: 4.8 }
     }
   });
 

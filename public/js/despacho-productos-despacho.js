@@ -951,8 +951,8 @@ function captureValidation(weightKg = Number(state.liveScale.currentWeightKg), s
     return { message: "Tara inválida.", target: elements.tare };
   }
   if (Number.isFinite(weightKg) && weightKg > 0
-    && values.waste_total_grams + values.tare_grams >= weightKg * 1000) {
-    return { message: "Merma + tara deben ser menores al peso.", target: elements.tare };
+    && values.tare_grams >= Math.round(weightKg * 1000) + values.waste_total_grams) {
+    return { message: "Peso + merma deben superar la tara.", target: elements.tare };
   }
   if (selection) {
     const priceError = validateUnitPrice(elements.unitPrice.value, PRODUCT_DISPATCH_MAX_UNIT_PRICE);
@@ -1208,7 +1208,7 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
     price_mode: selection.price_mode
   });
   if (calculated.net_weight_kg <= 0) {
-    setMessage("Merma + tara deben ser menores al peso.", "error");
+    setMessage("Peso + merma deben superar la tara.", "error");
     return false;
   }
   if (calculated.amount < 0.01) {
@@ -1394,13 +1394,13 @@ function saveEditingItem(event) {
     setMessage("Merma total supera el máximo.", "error");
     return;
   }
-  if (calculated.waste_total_grams + calculated.tare_grams >= calculated.read_weight_kg * 1000) {
+  if (calculated.tare_grams >= Math.round(calculated.read_weight_kg * 1000) + calculated.waste_total_grams) {
     elements.editTare.focus();
-    setMessage("Merma + tara deben ser menores al peso.", "error");
+    setMessage("Peso + merma deben superar la tara.", "error");
     return;
   }
   if (calculated.net_weight_kg <= 0) {
-    setMessage("Merma + tara deben ser menores al peso.", "error");
+    setMessage("Peso + merma deben superar la tara.", "error");
     return;
   }
   if (calculated.amount < 0.01) {

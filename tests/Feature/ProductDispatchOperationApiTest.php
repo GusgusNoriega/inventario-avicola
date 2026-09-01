@@ -385,13 +385,13 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonPath('data.weighings.1.price_origin', PesadaDespachoProducto::PRICE_CATALOG);
 
         $this->assertEqualsWithDelta(12, $response->json('data.totals.read_weight_kg'), 0.0001);
-        $this->assertEqualsWithDelta(11.876, $response->json('data.totals.net_weight_kg'), 0.0001);
-        $this->assertEqualsWithDelta(216.9, $response->json('data.totals.amount'), 0.001);
+        $this->assertEqualsWithDelta(12.124, $response->json('data.totals.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(221.1, $response->json('data.totals.amount'), 0.001);
         $this->assertEqualsWithDelta(20, $response->json('data.weighings.0.catalog_price'), 0.0001);
         $this->assertEqualsWithDelta(21, $response->json('data.weighings.0.unit_price'), 0.0001);
-        $this->assertEqualsWithDelta(9.9, $response->json('data.weighings.0.net_weight_kg'), 0.0001);
-        $this->assertEqualsWithDelta(207.9, $response->json('data.weighings.0.amount'), 0.001);
-        $this->assertEqualsWithDelta(1.976, $response->json('data.weighings.1.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(10.1, $response->json('data.weighings.0.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(212.1, $response->json('data.weighings.0.amount'), 0.001);
+        $this->assertEqualsWithDelta(2.024, $response->json('data.weighings.1.net_weight_kg'), 0.0001);
         $this->assertEqualsWithDelta(9, $response->json('data.weighings.1.amount'), 0.001);
 
         $ticketId = (int) $response->json('data.id');
@@ -407,8 +407,8 @@ class ProductDispatchOperationApiTest extends TestCase
             'peso_leido_total_kg' => 12,
             'merma_total_gramos' => 124,
             'tara_total_gramos' => 0,
-            'peso_neto_total_kg' => 11.876,
-            'total' => 216.90,
+            'peso_neto_total_kg' => 12.124,
+            'total' => 221.10,
         ]);
         $this->assertDatabaseHas('pesadas_despacho_productos', [
             'ticket_despacho_producto_id' => $ticketId,
@@ -424,8 +424,8 @@ class ProductDispatchOperationApiTest extends TestCase
             'merma_aplicada_gramos_unidad' => 50,
             'merma_total_gramos' => 100,
             'tara_gramos' => 0,
-            'peso_neto_kg' => 9.9,
-            'importe' => 207.9,
+            'peso_neto_kg' => 10.1,
+            'importe' => 212.1,
         ]);
         $this->assertDatabaseHas('pesadas_despacho_productos', [
             'ticket_despacho_producto_id' => $ticketId,
@@ -446,8 +446,8 @@ class ProductDispatchOperationApiTest extends TestCase
             'tercero_id' => $this->clientId,
             'operacion' => 'VENTA',
             'naturaleza' => 'CARGO',
-            'total' => 216.90,
-            'saldo_pendiente' => 216.90,
+            'total' => 221.10,
+            'saldo_pendiente' => 221.10,
             'estado' => 'PENDIENTE',
         ]);
         $this->assertDatabaseHas('comprobante_detalles', [
@@ -457,7 +457,7 @@ class ProductDispatchOperationApiTest extends TestCase
             'cantidad_unidades' => 2,
             'modo_precio' => ProductoDespacho::PRICE_MODE_KG,
             'precio_kg' => 21,
-            'subtotal' => 207.9,
+            'subtotal' => 212.1,
         ]);
         $this->assertDatabaseHas('comprobante_detalles', [
             'comprobante_id' => $documentId,
@@ -470,7 +470,7 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseHas('comprobante_tickets_despacho_productos', [
             'comprobante_id' => $documentId,
             'ticket_despacho_producto_id' => $ticketId,
-            'importe_aplicado' => 216.9,
+            'importe_aplicado' => 221.1,
         ]);
         $this->assertDatabaseHas('auditoria_eventos', [
             'empresa_id' => $this->user->empresa_id,
@@ -593,7 +593,7 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseCount('comprobante_detalles', 1);
     }
 
-    public function test_unit_waste_and_tare_are_persisted_and_authoritatively_reduce_net_weight(): void
+    public function test_unit_waste_is_added_before_tare_is_subtracted_from_net_weight(): void
     {
         $weighing = $this->weighing(
             product: $this->turkey,
@@ -616,16 +616,16 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonPath('data.weighings.0.waste_total_grams', 100)
             ->assertJsonPath('data.weighings.0.tare_grams', 250);
 
-        $this->assertEqualsWithDelta(9.65, $response->json('data.weighings.0.net_weight_kg'), 0.0001);
-        $this->assertEqualsWithDelta(193, $response->json('data.weighings.0.amount'), 0.001);
-        $this->assertEqualsWithDelta(9.65, $response->json('data.totals.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(9.85, $response->json('data.weighings.0.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(197, $response->json('data.weighings.0.amount'), 0.001);
+        $this->assertEqualsWithDelta(9.85, $response->json('data.totals.net_weight_kg'), 0.0001);
 
         $ticketId = (int) $response->json('data.id');
         $this->assertDatabaseHas('tickets_despacho_productos', [
             'id' => $ticketId,
             'merma_total_gramos' => 100,
             'tara_total_gramos' => 250,
-            'peso_neto_total_kg' => 9.65,
+            'peso_neto_total_kg' => 9.85,
         ]);
         $this->assertDatabaseHas('pesadas_despacho_productos', [
             'ticket_despacho_producto_id' => $ticketId,
@@ -633,12 +633,12 @@ class ProductDispatchOperationApiTest extends TestCase
             'merma_aplicada_gramos_unidad' => 50,
             'merma_total_gramos' => 100,
             'tara_gramos' => 250,
-            'peso_neto_kg' => 9.65,
+            'peso_neto_kg' => 9.85,
         ]);
         $this->assertDatabaseHas('comprobante_detalles', [
             'producto_despacho_id' => $this->turkey->id,
-            'peso_neto_kg' => 9.65,
-            'subtotal' => 193,
+            'peso_neto_kg' => 9.85,
+            'subtotal' => 197,
         ]);
     }
 
@@ -817,17 +817,8 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseCount('comprobantes', 0);
     }
 
-    public function test_impossible_waste_future_capture_and_invalid_source_are_rejected(): void
+    public function test_inconsistent_or_overflowing_waste_impossible_tare_future_capture_and_invalid_source_are_rejected(): void
     {
-        $impossibleWaste = $this->weighing(
-            product: $this->eggs,
-            readWeight: '1.000',
-            waste: 1000,
-        );
-        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$impossibleWaste]))
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('weighings.0.waste_total_grams');
-
         $inconsistentWaste = $this->weighing(
             product: $this->eggs,
             quantity: 2,
@@ -845,7 +836,7 @@ class ProductDispatchOperationApiTest extends TestCase
             waste: 200,
         );
         $impossibleTare['waste_grams_per_unit'] = 200;
-        $impossibleTare['tare_grams'] = 800;
+        $impossibleTare['tare_grams'] = 1200;
         $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$impossibleTare]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors('weighings.0.tare_grams');

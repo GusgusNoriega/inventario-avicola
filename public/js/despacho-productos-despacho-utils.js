@@ -179,7 +179,7 @@ export function calculateLine(input = {}) {
   const tareGrams = Math.max(0, Math.round(Number(input.tare_grams || 0)));
   const wasteWeightKg = roundTo(wasteTotalGrams / 1000, 3);
   const tareWeightKg = roundTo(tareGrams / 1000, 3);
-  const netWeightKg = Math.max(0, roundTo(readWeightKg - wasteWeightKg - tareWeightKg, 3));
+  const netWeightKg = Math.max(0, roundTo(readWeightKg + wasteWeightKg - tareWeightKg, 3));
   const unitPrice = Math.max(0, roundTo(input.unit_price, 2));
   const priceMode = normalizePriceMode(input.price_mode);
   const basis = priceMode === PRODUCT_PRICE_MODE_UNIT ? quantity : netWeightKg;

@@ -95,12 +95,12 @@ test("los importes por kg usan peso neto y los importes por unidad usan cantidad
     waste_weight_kg: 0.1,
     tare_grams: 0,
     tare_weight_kg: 0,
-    net_weight_kg: 9.9,
+    net_weight_kg: 10.1,
     unit_price: 21,
     price_mode: PRODUCT_PRICE_MODE_KG,
-    amount: 207.9
+    amount: 212.1
   });
-  assert.equal(unitLine.net_weight_kg, 1.976);
+  assert.equal(unitLine.net_weight_kg, 2.024);
   assert.equal(unitLine.amount, 9);
   assert.deepEqual(calculateDraft([kgLine, unitLine]), {
     weighings: 2,
@@ -108,8 +108,8 @@ test("los importes por kg usan peso neto y los importes por unidad usan cantidad
     read_weight_kg: 12,
     waste_total_grams: 124,
     tare_grams: 0,
-    net_weight_kg: 11.876,
-    amount: 216.9
+    net_weight_kg: 12.124,
+    amount: 221.1
   });
 });
 
@@ -227,7 +227,7 @@ test("los productos rápidos conservan cuatro ids activos únicos y su orden con
   assert.deepEqual(catalog.quick_product_ids, [5, 3, 2, 1]);
 });
 
-test("la merma por unidad y la tara se descuentan juntas sin modificar la merma total", () => {
+test("la merma por unidad se suma y la tara se descuenta sin modificar la merma total", () => {
   const line = calculateLine({
     quantity: 3,
     read_weight_kg: 5,
@@ -239,8 +239,8 @@ test("la merma por unidad y la tara se descuentan juntas sin modificar la merma 
 
   assert.equal(line.waste_total_grams, 120);
   assert.equal(line.tare_weight_kg, 0.08);
-  assert.equal(line.net_weight_kg, 4.8);
-  assert.equal(line.amount, 48);
+  assert.equal(line.net_weight_kg, 5.04);
+  assert.equal(line.amount, 50.4);
   assert.equal(calculateDraft([line]).tare_grams, 80);
 });
 
