@@ -139,7 +139,6 @@
         </div>
 
         <div class="pdd-variations-block">
-          <div class="pdd-variations-heading"><span>Variaciones</span></div>
           <div id="pddVariations" class="pdd-variations-slider" role="listbox" aria-label="Variaciones del producto">
             <span class="pdd-variation-empty">Elige producto</span>
           </div>

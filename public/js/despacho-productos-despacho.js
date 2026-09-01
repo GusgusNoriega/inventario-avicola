@@ -99,10 +99,8 @@ const TYPOGRAPHY_GROUPS = [
     label: "Variaciones",
     description: "Slider de presentaciones del producto.",
     controls: [
-      { label: "Título Variaciones", description: "Encabezado de la sección de variaciones.", variable: "--pdd-fs-variation-heading", defaultValue: 12, min: 9, max: 20, step: 0.5, target: ".pdd-variations-heading span" },
-      { label: "Ayuda del slider", description: "Indicación para deslizar y estado sin producto.", variable: "--pdd-fs-variation-hint", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-variations-heading small, .pdd-variation-empty" },
-      { label: "Nombre de la variación", description: "Nombre principal de cada presentación.", variable: "--pdd-fs-variation-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-variation-option b" },
-      { label: "Precio y detalle", description: "Precio o información secundaria de la variación.", variable: "--pdd-fs-variation-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-variation-option small" }
+      { label: "Estado sin producto", description: "Aviso mostrado antes de elegir un producto.", variable: "--pdd-fs-variation-hint", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-variation-empty" },
+      { label: "Nombre de la variación", description: "Nombre principal de cada presentación.", variable: "--pdd-fs-variation-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-variation-option b" }
     ]
   },
   {
@@ -888,9 +886,7 @@ function renderVariations() {
   const options = [{
     id: null,
     name: "Producto base",
-    image_url: product.image_url,
-    price: product.price,
-    price_mode: product.price_mode
+    image_url: product.image_url
   }, ...product.variations];
 
   elements.variations.innerHTML = options.map((variation) => {
@@ -901,7 +897,7 @@ function renderVariations() {
       ? `<img src="${escapeHtml(variation.image_url)}" alt="" data-pdd-image-fallback="${escapeHtml(variation.name)}">`
       : `<i>${escapeHtml(productInitial(variation.name))}</i>`;
     return `<button class="pdd-variation-option${active ? " is-active" : ""}" type="button" role="option" aria-selected="${active}" data-pdd-variation-id="${variation.id ?? "base"}">
-      ${visual}<span><b>${escapeHtml(variation.name)}</b><small>${escapeHtml(formatMoney(variation.price, state.catalog.currency))} ${escapeHtml(priceModeLabel(variation.price_mode))}</small></span>
+      ${visual}<b>${escapeHtml(variation.name)}</b>
     </button>`;
   }).join("");
 }

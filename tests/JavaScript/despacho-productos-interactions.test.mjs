@@ -240,6 +240,18 @@ test("las imágenes rápidas tienen un respaldo visual propio", () => {
   assert.match(imageFallbackFlow, /pdd-quick-product-setting-placeholder/);
 });
 
+test("las variaciones ahorran espacio y muestran solamente una imagen más grande con el nombre", () => {
+  const variationsRender = sourceBetween(dispatchSource, "function renderVariations", "function captureValues");
+
+  assert.doesNotMatch(dispatchView, /pdd-variations-heading/);
+  assert.doesNotMatch(variationsRender, /<small>|formatMoney\(variation\.price|priceModeLabel\(variation\.price_mode/);
+  assert.match(variationsRender, /\$\{visual\}<b>\$\{escapeHtml\(variation\.name\)\}<\/b>/);
+  assert.match(dispatchStyles, /\.pdd-variation-option\s*\{[^}]*min-height:\s*50px/);
+  assert.match(dispatchStyles, /\.pdd-variation-option img,\s*\.pdd-variation-option i\s*\{[^}]*width:\s*40px;\s*height:\s*40px/);
+  assert.doesNotMatch(dispatchStyles, /\.pdd-variation-option small\s*\{/);
+  assert.doesNotMatch(dispatchSource, /Título Variaciones|Precio y detalle/);
+});
+
 test("el teclado de precio anidado conserva el foco de cada diálogo", () => {
   const dialogFlow = sourceBetween(dispatchSource, "function openDialog", "function normalizeAppScale");
   const dialogListeners = sourceBetween(dispatchSource, 'document.querySelectorAll(".pdd-dialog")', 'document.addEventListener("keydown"');
