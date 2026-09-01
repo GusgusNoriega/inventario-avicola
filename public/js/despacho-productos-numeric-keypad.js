@@ -26,20 +26,22 @@ export function applyIntegerKeypadKey(buffer, key, maxLength = DEFAULT_MAX_LENGT
 export function validateIntegerKeypadBuffer(buffer, options = {}) {
   const { required = true } = options;
   const value = sanitizeIntegerKeypadBuffer(buffer, options.maxLength);
+  const valueName = String(options.valueName || "cantidad").trim();
+  const valueArticle = String(options.valueArticle || "una").trim();
 
-  if (!value) return required ? "Ingresa una cantidad." : "";
+  if (!value) return required ? `Ingresa ${valueArticle} ${valueName}.` : "";
 
   const numeric = Number(value);
-  if (!Number.isSafeInteger(numeric)) return "Ingresa una cantidad válida.";
+  if (!Number.isSafeInteger(numeric)) return `Ingresa ${valueArticle} ${valueName} válida.`;
 
   const minimum = Number(options.min);
   if (options.min !== undefined && Number.isFinite(minimum) && numeric < minimum) {
-    return `La cantidad mínima es ${minimum}.`;
+    return `La ${valueName} mínima es ${minimum}.`;
   }
 
   const maximum = Number(options.max);
   if (options.max !== undefined && Number.isFinite(maximum) && numeric > maximum) {
-    return `La cantidad máxima es ${maximum}.`;
+    return `La ${valueName} máxima es ${maximum}.`;
   }
 
   return "";
@@ -47,30 +49,60 @@ export function validateIntegerKeypadBuffer(buffer, options = {}) {
 
 export function bindIntegerKeypad(options = {}) {
   const {
-    input,
     dialog,
     valueOutput,
     messageOutput,
     clearButton,
     confirmButton,
+    titleOutput,
+    valueLabelOutput,
     showDialog,
-    hideDialog,
-    onCommit
+    hideDialog
   } = options;
 
-  if (!input || !dialog || !valueOutput || !messageOutput || !clearButton || !confirmButton) {
+  const inputOptions = Array.isArray(options.inputs) && options.inputs.length
+    ? options.inputs
+    : [{
+        input: options.input,
+        maxLength: options.maxLength,
+        onCommit: options.onCommit,
+        valueName: options.valueName,
+        valueArticle: options.valueArticle
+      }];
+  const bindings = inputOptions
+    .map((entry) => (entry?.input ? entry : { input: entry }))
+    .filter((entry) => entry.input);
+
+  if (!bindings.length || !dialog || !valueOutput || !messageOutput || !clearButton || !confirmButton) {
     throw new TypeError("El teclado numérico necesita todos sus controles.");
   }
 
   const keyButtons = [...dialog.querySelectorAll("[data-pdd-keypad-key]")];
-  const maxLength = normalizedMaxLength(options.maxLength);
-  const fieldLabel = String(input.dataset.pddKeypadLabel || input.getAttribute("aria-label") || "Cantidad").trim();
+  let activeBinding = bindings[0];
   let buffer = "";
   let replaceOnNextDigit = false;
 
-  function refreshLabel() {
+  function bindingMaxLength(binding = activeBinding) {
+    return normalizedMaxLength(binding?.maxLength ?? options.maxLength);
+  }
+
+  function fieldLabel(binding = activeBinding) {
+    const input = binding?.input;
+    return String(input?.dataset.pddKeypadLabel || input?.getAttribute("aria-label") || "Valor").trim();
+  }
+
+  function refreshLabel(input = activeBinding?.input) {
+    if (!input) return;
     const currentValue = String(input.value || "0");
-    input.setAttribute("aria-label", `${fieldLabel}: ${currentValue}. Presiona para cambiarla con el teclado táctil.`);
+    const binding = bindings.find((entry) => entry.input === input) || activeBinding;
+    input.setAttribute("aria-label", `${fieldLabel(binding)}: ${currentValue}. Presiona para cambiarla con el teclado táctil.`);
+  }
+
+  function renderDialogCopy(binding = activeBinding) {
+    const input = binding.input;
+    if (titleOutput) titleOutput.textContent = fieldLabel(binding);
+    if (valueLabelOutput) valueLabelOutput.textContent = input.dataset.pddKeypadValueLabel || "Valor seleccionado";
+    confirmButton.textContent = input.dataset.pddKeypadConfirmLabel || "Usar valor";
   }
 
   function render(message = "") {
@@ -78,21 +110,29 @@ export function bindIntegerKeypad(options = {}) {
     messageOutput.textContent = message;
   }
 
-  function open() {
+  function open(input = bindings[0].input) {
+    const nextBinding = bindings.find((entry) => entry.input === input);
+    if (!nextBinding) return;
+    activeBinding = nextBinding;
     if (input.disabled) return;
-    buffer = sanitizeIntegerKeypadBuffer(input.value, maxLength);
+    buffer = sanitizeIntegerKeypadBuffer(input.value, bindingMaxLength());
     replaceOnNextDigit = true;
-    render();
+    renderDialogCopy();
+    const numericValue = Number(input.value);
+    const maximum = Number(input.max);
+    const exceedsMaximum = input.hasAttribute("max") && Number.isFinite(maximum) && numericValue > maximum;
+    render(exceedsMaximum ? `La ${input.dataset.pddKeypadValueName || "cantidad"} máxima es ${maximum}. Ingresa un valor nuevo.` : "");
     input.setAttribute("aria-expanded", "true");
     if (typeof showDialog === "function") {
-      showDialog(keyButtons[0] || confirmButton);
+      showDialog(valueOutput);
     } else if (!dialog.open) {
       dialog.showModal();
+      valueOutput.focus();
     }
   }
 
   function close() {
-    input.setAttribute("aria-expanded", "false");
+    activeBinding?.input.setAttribute("aria-expanded", "false");
     if (typeof hideDialog === "function") {
       hideDialog();
     } else if (dialog.open) {
@@ -105,16 +145,20 @@ export function bindIntegerKeypad(options = {}) {
       buffer = "";
     }
     replaceOnNextDigit = false;
-    buffer = applyIntegerKeypadKey(buffer, key, maxLength);
+    buffer = applyIntegerKeypadKey(buffer, key, bindingMaxLength());
     render();
   }
 
   function confirm() {
+    const input = activeBinding.input;
+    const maxLength = bindingMaxLength();
     const validationMessage = validateIntegerKeypadBuffer(buffer, {
       required: input.required,
       min: input.hasAttribute("min") ? input.min : undefined,
       max: input.hasAttribute("max") ? input.max : undefined,
-      maxLength
+      maxLength,
+      valueName: activeBinding.valueName || input.dataset.pddKeypadValueName,
+      valueArticle: activeBinding.valueArticle || input.dataset.pddKeypadValueArticle
     });
     if (validationMessage) {
       render(validationMessage);
@@ -126,22 +170,25 @@ export function bindIntegerKeypad(options = {}) {
     refreshLabel();
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    if (typeof onCommit === "function") onCommit(Number(nextValue));
+    const onCommit = activeBinding.onCommit || options.onCommit;
+    if (typeof onCommit === "function") onCommit(Number(nextValue), input);
     close();
   }
 
-  input.readOnly = true;
-  input.setAttribute("inputmode", "none");
-  input.setAttribute("role", "button");
-  input.setAttribute("aria-haspopup", "dialog");
-  input.setAttribute("aria-controls", dialog.id);
-  input.setAttribute("aria-expanded", "false");
-  refreshLabel();
-  input.addEventListener("click", open);
-  input.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    open();
+  bindings.forEach(({ input }) => {
+    input.readOnly = true;
+    input.setAttribute("inputmode", "none");
+    input.setAttribute("role", "button");
+    input.setAttribute("aria-haspopup", "dialog");
+    input.setAttribute("aria-controls", dialog.id);
+    input.setAttribute("aria-expanded", "false");
+    refreshLabel(input);
+    input.addEventListener("click", () => open(input));
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      open(input);
+    });
   });
 
   keyButtons.forEach((button) => {
@@ -149,7 +196,9 @@ export function bindIntegerKeypad(options = {}) {
   });
   clearButton.addEventListener("click", () => applyKey("clear"));
   confirmButton.addEventListener("click", confirm);
-  dialog.addEventListener("close", () => input.setAttribute("aria-expanded", "false"));
+  dialog.addEventListener("close", () => {
+    bindings.forEach(({ input }) => input.setAttribute("aria-expanded", "false"));
+  });
   dialog.addEventListener("keydown", (event) => {
     if (/^\d$/.test(event.key)) {
       event.preventDefault();
@@ -167,6 +216,7 @@ export function bindIntegerKeypad(options = {}) {
       return;
     }
     if (event.key === "Enter") {
+      if (event.target.closest?.("button")) return;
       event.preventDefault();
       confirm();
     }

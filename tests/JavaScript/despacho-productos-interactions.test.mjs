@@ -63,14 +63,61 @@ test("la validación del teclado respeta obligatoriedad y límites de cantidad",
   );
 });
 
-test("la cantidad se presenta como control táctil y abre su propio diálogo", () => {
+test("cantidad y merma son controles grandes del mismo teclado y no usan botones más o menos", () => {
   const quantityInput = dispatchView.match(/<input\b[^>]*\bid="pddQuantity"[^>]*>/)?.[0] || "";
+  const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWasteTotal"[^>]*>/)?.[0] || "";
+  const keypadBinding = sourceBetween(
+    dispatchSource,
+    "bindIntegerKeypad({",
+    "elements.chooseProduct.addEventListener"
+  );
 
   assert.ok(quantityInput, "No se encontró el campo de cantidad.");
-  assert.match(quantityInput, /\breadonly\b/);
-  assert.match(quantityInput, /\binputmode="none"/);
-  assert.match(quantityInput, /\bdata-pdd-keypad-label=/);
-  assert.match(dispatchView, /<dialog\b[^>]*\bid="pddQuantityKeypad"[^>]*>/);
+  assert.ok(wasteInput, "No se encontró el campo de merma.");
+  for (const input of [quantityInput, wasteInput]) {
+    assert.match(input, /\breadonly\b/);
+    assert.match(input, /\binputmode="none"/);
+    assert.match(input, /\bdata-pdd-keypad-label=/);
+    assert.match(input, /\baria-controls="[^"]+"/);
+  }
+
+  const quantityDialogId = quantityInput.match(/\baria-controls="([^"]+)"/)?.[1];
+  const wasteDialogId = wasteInput.match(/\baria-controls="([^"]+)"/)?.[1];
+  assert.equal(wasteDialogId, quantityDialogId, "Cantidad y merma deben abrir el mismo diálogo.");
+  assert.match(dispatchView, new RegExp(`<dialog\\b[^>]*\\bid="${quantityDialogId}"[^>]*>`));
+
+  assert.doesNotMatch(dispatchView, /data-pdd-quantity-step|Disminuir cantidad|Aumentar cantidad/);
+  assert.doesNotMatch(dispatchSource, /data-pdd-quantity-step/);
+  assert.equal((dispatchSource.match(/\bbindIntegerKeypad\s*\(\{/g) || []).length, 1);
+  assert.match(keypadBinding, /elements\.quantity/);
+  assert.match(keypadBinding, /elements\.wasteTotal/);
+
+  assert.match(
+    dispatchView,
+    /class="pdd-touch-number-input"[\s\S]*?id="pddQuantity"[\s\S]*?class="pdd-touch-number-input"[\s\S]*?id="pddWasteTotal"/
+  );
+  const wasteControlStyles = dispatchStyles.match(/\.pdd-touch-number-input\s+input\s*\{([^}]*)\}/)?.[1] || "";
+  const wasteControlHeight = Number(wasteControlStyles.match(/(?:min-)?height:\s*(\d+)px/)?.[1]);
+  assert.ok(wasteControlHeight >= 60, "El control táctil de merma debe medir al menos 60 px de alto.");
+});
+
+test("el teclado confirma con eventos que recalculan cantidad, merma y total", () => {
+  assert.match(
+    keypadSource,
+    /dispatchEvent\(new Event\(["']input["'],\s*\{\s*bubbles:\s*true\s*\}\)\)/
+  );
+  assert.match(
+    keypadSource,
+    /dispatchEvent\(new Event\(["']change["'],\s*\{\s*bubbles:\s*true\s*\}\)\)/
+  );
+  assert.match(
+    dispatchSource,
+    /elements\.quantity\.addEventListener\(["']input["'][\s\S]*?syncDefaultWaste\(\);[\s\S]*?renderCapturePreview\(\);/
+  );
+  assert.match(
+    dispatchSource,
+    /elements\.wasteTotal\.addEventListener\(["']input["'][\s\S]*?wasteWasEdited\s*=\s*true;[\s\S]*?renderCapturePreview\(\);/
+  );
 });
 
 test("confirmar el peso manual solo fija la lectura pendiente y no agrega una pesada", () => {
@@ -158,18 +205,80 @@ test("la pesada manual fija su hora al capturar y no reutiliza readingAt", () =>
   assert.doesNotMatch(itemFlow, /weighed_at:\s*scaleState\.readingAt\s*\|\|/);
 });
 
-test("Enter confirma el teclado sin depender del elemento que tiene el foco", () => {
+test("el teclado enfoca el output y Enter respeta cualquier botón del diálogo", () => {
+  const openFlow = sourceBetween(
+    keypadSource,
+    "function open(",
+    "function close()"
+  );
   const dialogKeyboardFlow = sourceBetween(
     keypadSource,
     'dialog.addEventListener("keydown"',
     "return { open, close, confirm"
   );
+  const keypadOutput = dispatchView.match(/<output\b[^>]*\bid="pddNumericKeypadValue"[^>]*>/)?.[0] || "";
+  const enterStart = dialogKeyboardFlow.indexOf('if (event.key === "Enter")');
+  const enterFlow = enterStart >= 0 ? dialogKeyboardFlow.slice(enterStart) : "";
+
+  assert.match(keypadOutput, /\btabindex="-1"/);
+  assert.match(openFlow, /showDialog\(valueOutput\)/);
+  assert.match(openFlow, /valueOutput\.focus\(\)/);
+  assert.notEqual(enterStart, -1, "No se encontró el manejo de Enter en el diálogo.");
+  assert.match(enterFlow, /event\.target\.closest\?\.\(["']button["']\)\)\s*return/);
+  assert.ok(
+    enterFlow.indexOf('closest?.("button")') < enterFlow.indexOf("event.preventDefault()"),
+    "La acción nativa de un botón debe respetarse antes de interceptar Enter."
+  );
+  assert.ok(
+    enterFlow.indexOf("event.preventDefault()") < enterFlow.indexOf("confirm()"),
+    "Enter desde el output debe prevenir el envío nativo antes de confirmar."
+  );
+  assert.match(
+    dispatchView,
+    /<button\b[^>]*\bdata-pdd-close="pddNumericKeypad"[^>]*>Cancelar<\/button>/
+  );
+});
+
+test("la merma automática fuera del máximo bloquea Capturar sin recortarse", () => {
+  const syncWasteFlow = sourceBetween(
+    dispatchSource,
+    "function syncDefaultWaste",
+    "function wasteValidationMessage"
+  );
+  const validationFlow = sourceBetween(
+    dispatchSource,
+    "function wasteValidationMessage",
+    "function renderCapturePreview"
+  );
+  const previewFlow = sourceBetween(
+    dispatchSource,
+    "function renderCapturePreview",
+    "function renderScale"
+  );
+  const addReadingFlow = sourceBetween(
+    dispatchSource,
+    "function addCurrentReading",
+    "function openProductDialog"
+  );
 
   assert.match(
-    dialogKeyboardFlow,
-    /if\s*\(event\.key\s*===\s*["']Enter["']\)\s*\{\s*event\.preventDefault\(\);\s*confirm\(\);\s*\}/
+    syncWasteFlow,
+    /wasteTotal\.value\s*=\s*String\(selection\.waste_grams_per_unit\s*\*\s*quantity\)/
   );
-  assert.doesNotMatch(dialogKeyboardFlow, /event\.target|closest\(["']button/);
+  assert.doesNotMatch(syncWasteFlow, /Math\.min\s*\(|clamp(?:Number)?\s*\(/i);
+  assert.match(validationFlow, /waste\s*>\s*maximum/);
+  assert.match(validationFlow, /merma total no puede superar/i);
+  assert.match(previewFlow, /const wasteError\s*=\s*wasteValidationMessage\(\)/);
+  assert.match(previewFlow, /captureReady[\s\S]*&&\s*!wasteError[\s\S]*captureWeight\.disabled\s*=\s*!captureReady/);
+  assert.match(
+    addReadingFlow,
+    /const wasteError\s*=\s*wasteValidationMessage\(\);\s*if\s*\(wasteError\)\s*\{[\s\S]*wasteTotal\.focus\(\);[\s\S]*setMessage\(wasteError,\s*["']error["']\);[\s\S]*return false;/
+  );
+  assert.ok(
+    addReadingFlow.indexOf("const wasteError = wasteValidationMessage()")
+      < addReadingFlow.indexOf("const calculated = calculateLine"),
+    "La merma fuera de rango debe rechazarse antes de calcular o insertar la pesada."
+  );
 });
 
 test("en móvil Cantidad ocupa toda la fila para evitar desbordes", () => {

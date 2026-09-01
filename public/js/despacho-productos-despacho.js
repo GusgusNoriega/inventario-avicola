@@ -82,9 +82,9 @@ const TYPOGRAPHY_GROUPS = [
     description: "Cantidad, precio, merma y total estimado.",
     controls: [
       { label: "Etiquetas de campos", description: "Cantidad, Precio de venta y Merma total.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid label > span:first-child" },
-      { label: "Valores de campos", description: "Cantidad, precio y valor de merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-stepper input, .pdd-suffix-input input" },
+      { label: "Valores de campos", description: "Cantidad, precio y valor de merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-touch-number-input input" },
       { label: "Ayudas de campos", description: "Forma de cobro y explicación de la merma.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small" },
-      { label: "Unidad de merma", description: "Letra g junto al valor de merma.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-suffix-input b" },
+      { label: "Unidades de cantidad y merma", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
       { label: "Etiqueta de peso neto", description: "Texto “Peso neto estimado”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-net-preview > span" },
       { label: "Valor de peso neto", description: "Kilogramos netos estimados.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-net-preview strong" },
       { label: "Total estimado", description: "Importe estimado debajo del peso neto.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-net-preview small" }
@@ -230,11 +230,13 @@ const elements = {
   manualDialog: document.querySelector("#pddManualDialog"),
   manualForm: document.querySelector("#pddManualForm"),
   manualInput: document.querySelector("#pddManualInput"),
-  quantityKeypad: document.querySelector("#pddQuantityKeypad"),
-  quantityKeypadValue: document.querySelector("#pddQuantityKeypadValue"),
-  quantityKeypadMessage: document.querySelector("#pddQuantityKeypadMessage"),
-  quantityKeypadClear: document.querySelector("#pddQuantityKeypadClear"),
-  quantityKeypadConfirm: document.querySelector("#pddQuantityKeypadConfirm"),
+  numericKeypad: document.querySelector("#pddNumericKeypad"),
+  numericKeypadTitle: document.querySelector("#pddNumericKeypadTitle"),
+  numericKeypadValueLabel: document.querySelector("#pddNumericKeypadValueLabel"),
+  numericKeypadValue: document.querySelector("#pddNumericKeypadValue"),
+  numericKeypadMessage: document.querySelector("#pddNumericKeypadMessage"),
+  numericKeypadClear: document.querySelector("#pddNumericKeypadClear"),
+  numericKeypadConfirm: document.querySelector("#pddNumericKeypadConfirm"),
   clientDialog: document.querySelector("#pddClientDialog"),
   publicSale: document.querySelector("#pddPublicSale"),
   clientSearch: document.querySelector("#pddClientSearch"),
@@ -312,7 +314,7 @@ const state = {
   typographyHighlightTimer: null,
   typographyHighlighted: [],
   scale: null,
-  quantityKeypad: null
+  numericKeypad: null
 };
 
 function activeDraft() {
@@ -847,12 +849,33 @@ function syncDefaultWaste() {
   if (!selection || state.wasteWasEdited) return;
   const quantity = Math.max(1, Math.round(Number(elements.quantity.value || 1)));
   elements.wasteTotal.value = String(selection.waste_grams_per_unit * quantity);
+  elements.wasteTotal.setCustomValidity(wasteValidationMessage());
+  state.numericKeypad?.refreshLabel(elements.wasteTotal);
+}
+
+function wasteValidationMessage(value = elements.wasteTotal.value) {
+  const waste = Number(value);
+  const maximum = Number(elements.wasteTotal.max);
+  if (!Number.isSafeInteger(waste) || waste < 0) {
+    return "Ingresa una merma total válida en gramos.";
+  }
+  if (Number.isFinite(maximum) && waste > maximum) {
+    return `La merma total no puede superar ${maximum.toLocaleString("es-PE")} g. Reduce la cantidad o ingresa una merma menor.`;
+  }
+  return "";
 }
 
 function renderCapturePreview() {
   const selection = currentSelection();
   const scaleWeight = Number(state.liveScale.currentWeightKg);
   const hasWeight = Number.isFinite(scaleWeight) && scaleWeight > 0;
+  const wasteError = wasteValidationMessage();
+  elements.wasteTotal.setCustomValidity(wasteError);
+  elements.wasteHint.classList.toggle("is-error", Boolean(wasteError));
+  elements.wasteHint.textContent = wasteError
+    || (selection
+      ? `${selection.waste_grams_per_unit} g por unidad · puedes modificar el total.`
+      : "Se calcula según la cantidad y puedes modificarla.");
   const line = calculateLine({
     quantity: elements.quantity.value,
     read_weight_kg: hasWeight ? scaleWeight : 0,
@@ -868,6 +891,7 @@ function renderCapturePreview() {
   const captureReady = Boolean(
     selection
     && state.liveScale.isCaptureReady
+    && !wasteError
     && line.net_weight_kg > 0
     && !state.saving
     && Date.now() >= state.captureBlockedUntil
@@ -1061,6 +1085,14 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
   const isPhysical = ["ble", "serial"].includes(scaleState.readingSource);
   if (isPhysical && scaleState.readingId && capturedReadingIds().has(scaleState.readingId)) {
     setMessage("Esta lectura de la balanza ya fue capturada. Retira el producto y espera una lectura nueva.", "error");
+    return false;
+  }
+
+  const wasteError = wasteValidationMessage();
+  if (wasteError) {
+    elements.wasteTotal.setCustomValidity(wasteError);
+    elements.wasteTotal.focus();
+    setMessage(wasteError, "error");
     return false;
   }
 
@@ -1552,19 +1584,23 @@ state.scale = new RetailScaleController({
   }
 });
 
-state.quantityKeypad = bindIntegerKeypad({
-  input: elements.quantity,
-  dialog: elements.quantityKeypad,
-  valueOutput: elements.quantityKeypadValue,
-  messageOutput: elements.quantityKeypadMessage,
-  clearButton: elements.quantityKeypadClear,
-  confirmButton: elements.quantityKeypadConfirm,
-  maxLength: 6,
+state.numericKeypad = bindIntegerKeypad({
+  inputs: [
+    { input: elements.quantity, maxLength: 6 },
+    { input: elements.wasteTotal, maxLength: 10 }
+  ],
+  dialog: elements.numericKeypad,
+  titleOutput: elements.numericKeypadTitle,
+  valueLabelOutput: elements.numericKeypadValueLabel,
+  valueOutput: elements.numericKeypadValue,
+  messageOutput: elements.numericKeypadMessage,
+  clearButton: elements.numericKeypadClear,
+  confirmButton: elements.numericKeypadConfirm,
   showDialog(focusTarget) {
-    openDialog(elements.quantityKeypad, focusTarget);
+    openDialog(elements.numericKeypad, focusTarget);
   },
   hideDialog() {
-    closeDialog(elements.quantityKeypad);
+    closeDialog(elements.numericKeypad);
   }
 });
 
@@ -1606,13 +1642,6 @@ document.addEventListener("error", (event) => {
   image.replaceWith(fallback);
 }, true);
 document.addEventListener("click", (event) => {
-  const step = event.target.closest("[data-pdd-quantity-step]");
-  if (step) {
-    elements.quantity.value = String(Math.max(1, Math.min(100000, Math.round(Number(elements.quantity.value || 1)) + Number(step.dataset.pddQuantityStep))));
-    state.quantityKeypad?.refreshLabel();
-    syncDefaultWaste();
-    renderCapturePreview();
-  }
   const close = event.target.closest("[data-pdd-close]");
   if (close) closeDialog(document.querySelector(`#${CSS.escape(close.dataset.pddClose)}`));
 });
@@ -1622,12 +1651,18 @@ elements.quantity.addEventListener("input", () => {
 });
 elements.quantity.addEventListener("change", () => {
   elements.quantity.value = String(Math.max(1, Math.min(100000, Math.round(Number(elements.quantity.value || 1)))));
-  state.quantityKeypad?.refreshLabel();
+  state.numericKeypad?.refreshLabel(elements.quantity);
   syncDefaultWaste();
   renderCapturePreview();
 });
 elements.wasteTotal.addEventListener("input", () => {
   state.wasteWasEdited = true;
+  renderCapturePreview();
+});
+elements.wasteTotal.addEventListener("change", () => {
+  const normalized = Math.round(Number(elements.wasteTotal.value || 0));
+  elements.wasteTotal.value = String(Number.isFinite(normalized) ? Math.max(0, normalized) : 0);
+  state.numericKeypad?.refreshLabel(elements.wasteTotal);
   renderCapturePreview();
 });
 elements.captureWeight.addEventListener("click", () => addCurrentReading());

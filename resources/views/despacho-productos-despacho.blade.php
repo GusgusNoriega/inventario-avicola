@@ -92,10 +92,9 @@
         <div class="pdd-fields-grid">
           <label>
             <span>Cantidad</span>
-            <span class="pdd-stepper">
-              <button type="button" data-pdd-quantity-step="-1" aria-label="Disminuir cantidad">−</button>
-              <input id="pddQuantity" type="number" min="1" max="100000" step="1" inputmode="none" value="1" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" aria-label="Cantidad de aves o elementos: 1. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddQuantityKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
-              <button type="button" data-pdd-quantity-step="1" aria-label="Aumentar cantidad">＋</button>
+            <span class="pdd-touch-number-input">
+              <input id="pddQuantity" type="number" min="1" max="100000" step="1" inputmode="none" value="1" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" data-pdd-keypad-value-label="Cantidad seleccionada" data-pdd-keypad-confirm-label="Usar cantidad" data-pdd-keypad-value-name="cantidad" aria-label="Cantidad de aves o elementos: 1. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <b aria-hidden="true">und</b>
             </span>
           </label>
           <label>
@@ -105,7 +104,10 @@
           </label>
           <label>
             <span>Merma total</span>
-            <span class="pdd-suffix-input"><input id="pddWasteTotal" type="number" min="0" max="1000000000" step="1" inputmode="numeric" value="0"><b>g</b></span>
+            <span class="pdd-touch-number-input">
+              <input id="pddWasteTotal" type="number" min="0" max="1000000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Merma total en gramos" data-pdd-keypad-value-label="Merma seleccionada" data-pdd-keypad-confirm-label="Usar merma" data-pdd-keypad-value-name="merma" aria-label="Merma total en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-describedby="pddWasteHint" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <b aria-hidden="true">g</b>
+            </span>
             <small id="pddWasteHint">Se calcula según la cantidad y puedes modificarla.</small>
           </label>
           <div class="pdd-net-preview">
@@ -205,20 +207,20 @@
     </form>
   </dialog>
 
-  <dialog id="pddQuantityKeypad" class="pdd-dialog pdd-keypad-dialog" aria-labelledby="pddQuantityKeypadTitle">
+  <dialog id="pddNumericKeypad" class="pdd-dialog pdd-keypad-dialog" aria-labelledby="pddNumericKeypadTitle">
     <section>
       <header class="pdd-dialog-head">
-        <div><p>Teclado táctil</p><h2 id="pddQuantityKeypadTitle">Cantidad de aves o elementos</h2></div>
-        <button type="button" data-pdd-close="pddQuantityKeypad" aria-label="Cerrar">×</button>
+        <div><p>Teclado táctil</p><h2 id="pddNumericKeypadTitle">Ingresar valor</h2></div>
+        <button type="button" data-pdd-close="pddNumericKeypad" aria-label="Cerrar">×</button>
       </header>
 
       <div class="pdd-keypad-value-wrap">
-        <span>Cantidad seleccionada</span>
-        <output id="pddQuantityKeypadValue" class="pdd-keypad-value" aria-live="polite">1</output>
+        <span id="pddNumericKeypadValueLabel">Valor seleccionado</span>
+        <output id="pddNumericKeypadValue" class="pdd-keypad-value" tabindex="-1" aria-labelledby="pddNumericKeypadValueLabel" aria-live="polite">1</output>
       </div>
-      <p id="pddQuantityKeypadMessage" class="pdd-keypad-message" role="status" aria-live="polite"></p>
+      <p id="pddNumericKeypadMessage" class="pdd-keypad-message" role="status" aria-live="polite"></p>
 
-      <div class="pdd-keypad-grid" aria-label="Números disponibles">
+      <div class="pdd-keypad-grid" role="group" aria-label="Números disponibles">
         <button type="button" data-pdd-keypad-key="7">7</button>
         <button type="button" data-pdd-keypad-key="8">8</button>
         <button type="button" data-pdd-keypad-key="9">9</button>
@@ -234,9 +236,9 @@
       </div>
 
       <footer class="pdd-keypad-actions">
-        <button id="pddQuantityKeypadClear" class="pdd-dialog-cancel" type="button">Limpiar</button>
-        <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddQuantityKeypad">Cancelar</button>
-        <button id="pddQuantityKeypadConfirm" class="pdd-dialog-confirm" type="button">Usar cantidad</button>
+        <button id="pddNumericKeypadClear" class="pdd-dialog-cancel" type="button">Limpiar</button>
+        <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddNumericKeypad">Cancelar</button>
+        <button id="pddNumericKeypadConfirm" class="pdd-dialog-confirm" type="button">Usar valor</button>
       </footer>
     </section>
   </dialog>
