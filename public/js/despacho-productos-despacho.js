@@ -1,5 +1,6 @@
 import { apiRequest } from "./api-client.js";
 import { RetailScaleController } from "./despacho-minorista-balanza.js";
+import { bindIntegerKeypad } from "./despacho-productos-numeric-keypad.js";
 import {
   PRODUCT_DISPATCH_SCALE_CODE,
   buildDraftCollection,
@@ -191,6 +192,7 @@ const elements = {
   readingState: document.querySelector("#pddReadingState"),
   liveWeight: document.querySelector("#pddLiveWeight"),
   manualWeight: document.querySelector("#pddManualWeight"),
+  clearManualWeight: document.querySelector("#pddClearManualWeight"),
   captureWeight: document.querySelector("#pddCaptureWeight"),
   selectedVariantLabel: document.querySelector("#pddSelectedVariantLabel"),
   changePrice: document.querySelector("#pddChangePrice"),
@@ -228,6 +230,11 @@ const elements = {
   manualDialog: document.querySelector("#pddManualDialog"),
   manualForm: document.querySelector("#pddManualForm"),
   manualInput: document.querySelector("#pddManualInput"),
+  quantityKeypad: document.querySelector("#pddQuantityKeypad"),
+  quantityKeypadValue: document.querySelector("#pddQuantityKeypadValue"),
+  quantityKeypadMessage: document.querySelector("#pddQuantityKeypadMessage"),
+  quantityKeypadClear: document.querySelector("#pddQuantityKeypadClear"),
+  quantityKeypadConfirm: document.querySelector("#pddQuantityKeypadConfirm"),
   clientDialog: document.querySelector("#pddClientDialog"),
   publicSale: document.querySelector("#pddPublicSale"),
   clientSearch: document.querySelector("#pddClientSearch"),
@@ -292,6 +299,8 @@ const state = {
   saving: false,
   editingLocalId: null,
   liveScale: {},
+  pendingManualReading: null,
+  captureBlockedUntil: 0,
   lastRaw: "",
   pendingPrintTicket: null,
   lastFocus: null,
@@ -302,7 +311,8 @@ const state = {
   typographyHideTimer: null,
   typographyHighlightTimer: null,
   typographyHighlighted: [],
-  scale: null
+  scale: null,
+  quantityKeypad: null
 };
 
 function activeDraft() {
@@ -319,6 +329,43 @@ function selectedVariation(product = selectedProduct()) {
 
 function currentSelection() {
   return effectiveProduct(selectedProduct(), selectedVariation());
+}
+
+function createPendingManualReading(rawValue) {
+  const weightKg = roundTo(Number(String(rawValue ?? "").trim().replace(",", ".")), 3);
+  if (!Number.isFinite(weightKg) || weightKg <= 0) {
+    throw new RangeError("La lectura manual debe ser un peso válido mayor que cero.");
+  }
+
+  const readingAt = new Date().toISOString();
+  return {
+    currentWeightKg: weightKg,
+    updatedAt: readingAt,
+    readingAt,
+    readingSource: "manual",
+    readingStatus: "stable",
+    inputStatus: "stable",
+    readingId: `manual-pending-${Date.now()}`,
+    readingRaw: `MANUAL ${weightKg.toFixed(3)} kg`,
+    lastRawValue: String(rawValue),
+    isStable: true,
+    isFresh: true,
+    isCaptureReady: true
+  };
+}
+
+function effectiveCaptureReading(scaleState = state.scale?.getState?.() || state.liveScale) {
+  const physicalState = scaleState || {};
+  return state.pendingManualReading
+    ? { ...physicalState, ...state.pendingManualReading }
+    : physicalState;
+}
+
+function blockCaptureBriefly(durationMs = 650) {
+  state.captureBlockedUntil = Date.now() + durationMs;
+  window.setTimeout(() => {
+    if (Date.now() >= state.captureBlockedUntil) renderCapturePreview();
+  }, durationMs + 25);
 }
 
 function clientById(id) {
@@ -818,11 +865,18 @@ function renderCapturePreview() {
   elements.amountPreview.textContent = hasWeight && selection
     ? `Total estimado ${formatMoney(line.amount, state.catalog.currency)}`
     : `Total estimado ${currencyLabel(state.catalog.currency)} --`;
-  const captureReady = Boolean(selection && state.liveScale.isCaptureReady && line.net_weight_kg > 0 && !state.saving);
+  const captureReady = Boolean(
+    selection
+    && state.liveScale.isCaptureReady
+    && line.net_weight_kg > 0
+    && !state.saving
+    && Date.now() >= state.captureBlockedUntil
+  );
   elements.captureWeight.disabled = !captureReady;
 }
 
-function renderScale(scaleState = state.liveScale) {
+function renderScale(scaleState = state.scale?.getState?.() || state.liveScale) {
+  scaleState = effectiveCaptureReading(scaleState);
   state.liveScale = scaleState || {};
   const weight = Number(scaleState.currentWeightKg);
   const hasWeight = Number.isFinite(weight) && weight >= 0;
@@ -834,11 +888,16 @@ function renderScale(scaleState = state.liveScale) {
       : scaleState.connectionMode === "serial"
         ? "Balanza serial"
         : "Sin lectura";
-  elements.readingState.textContent = scaleState.isCaptureReady
-    ? "Peso estable"
-    : scaleState.currentWeightKg > 0
+  if (state.pendingManualReading) {
+    elements.readingState.textContent = "Listo para agregar";
+  } else if (scaleState.isCaptureReady) {
+    elements.readingState.textContent = "Peso estable";
+  } else {
+    elements.readingState.textContent = scaleState.currentWeightKg > 0
       ? "Estabilizando…"
       : "Esperando peso";
+  }
+  elements.clearManualWeight.hidden = !state.pendingManualReading;
 
   const status = scaleState.status || "offline";
   elements.scaleStatus.className = `pdd-status-chip is-${status}`;
@@ -976,7 +1035,8 @@ function capturedReadingIds() {
     .filter(Boolean));
 }
 
-function addCurrentReading(scaleState = state.scale.getState()) {
+function addCurrentReading(scaleState = effectiveCaptureReading()) {
+  if (Date.now() < state.captureBlockedUntil) return false;
   if (state.saving) {
     setMessage("Espera a que termine el guardado antes de agregar otra pesada.", "error");
     return false;
@@ -1032,7 +1092,7 @@ function addCurrentReading(scaleState = state.scale.getState()) {
     catalog_waste_grams_per_unit: selection.waste_grams_per_unit,
     ...calculated,
     weight_source: isPhysical ? PRODUCT_DISPATCH_SCALE_CODE : "MANUAL",
-    weighed_at: scaleState.readingAt || new Date().toISOString(),
+    weighed_at: isPhysical ? (scaleState.readingAt || new Date().toISOString()) : new Date().toISOString(),
     scale_reading: isPhysical ? {
       raw_frame: String(scaleState.readingRaw || state.lastRaw || "").slice(0, 500) || null,
       connection_mode: scaleState.connectionMode,
@@ -1046,7 +1106,13 @@ function addCurrentReading(scaleState = state.scale.getState()) {
   renderLists();
   renderActiveSummary();
   setMessage(`${itemDisplayName(item)} agregado a la lista ${state.activeIndex + 1}.`, "success");
-  state.scale.clearReading();
+  if (isPhysical) {
+    state.scale.clearReading();
+  } else {
+    blockCaptureBriefly();
+    state.pendingManualReading = null;
+    renderScale(state.scale.getState());
+  }
   return true;
 }
 
@@ -1486,6 +1552,22 @@ state.scale = new RetailScaleController({
   }
 });
 
+state.quantityKeypad = bindIntegerKeypad({
+  input: elements.quantity,
+  dialog: elements.quantityKeypad,
+  valueOutput: elements.quantityKeypadValue,
+  messageOutput: elements.quantityKeypadMessage,
+  clearButton: elements.quantityKeypadClear,
+  confirmButton: elements.quantityKeypadConfirm,
+  maxLength: 6,
+  showDialog(focusTarget) {
+    openDialog(elements.quantityKeypad, focusTarget);
+  },
+  hideDialog() {
+    closeDialog(elements.quantityKeypad);
+  }
+});
+
 elements.chooseProduct.addEventListener("click", openProductDialog);
 elements.productMedia.addEventListener("click", openProductDialog);
 elements.productSearch.addEventListener("input", () => renderProductGrid(elements.productSearch.value));
@@ -1527,6 +1609,7 @@ document.addEventListener("click", (event) => {
   const step = event.target.closest("[data-pdd-quantity-step]");
   if (step) {
     elements.quantity.value = String(Math.max(1, Math.min(100000, Math.round(Number(elements.quantity.value || 1)) + Number(step.dataset.pddQuantityStep))));
+    state.quantityKeypad?.refreshLabel();
     syncDefaultWaste();
     renderCapturePreview();
   }
@@ -1539,6 +1622,7 @@ elements.quantity.addEventListener("input", () => {
 });
 elements.quantity.addEventListener("change", () => {
   elements.quantity.value = String(Math.max(1, Math.min(100000, Math.round(Number(elements.quantity.value || 1)))));
+  state.quantityKeypad?.refreshLabel();
   syncDefaultWaste();
   renderCapturePreview();
 });
@@ -1553,18 +1637,31 @@ elements.manualWeight.addEventListener("click", () => {
     openProductDialog();
     return;
   }
-  elements.manualForm.reset();
+  elements.manualInput.value = state.pendingManualReading
+    ? state.pendingManualReading.currentWeightKg.toFixed(3)
+    : "";
   openDialog(elements.manualDialog, elements.manualInput);
 });
 elements.manualForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!elements.manualForm.reportValidity()) return;
   try {
-    const scaleState = state.scale.setManualReading(elements.manualInput.value);
-    if (addCurrentReading(scaleState)) closeDialog(elements.manualDialog);
+    state.pendingManualReading = createPendingManualReading(elements.manualInput.value);
+    renderScale(state.scale.getState());
+    closeDialog(elements.manualDialog);
+    setMessage(
+      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo. Ajusta producto, cantidad o merma y presiona Capturar peso.`,
+      "success"
+    );
   } catch (error) {
     setMessage(errorMessage(error), "error");
   }
+});
+elements.clearManualWeight.addEventListener("click", () => {
+  if (!state.pendingManualReading) return;
+  state.pendingManualReading = null;
+  renderScale(state.scale.getState());
+  setMessage("Se quitó el peso manual. La pantalla vuelve a mostrar la lectura de la balanza.");
 });
 elements.lists.addEventListener("click", (event) => {
   const edit = event.target.closest("[data-pdd-edit-item]");

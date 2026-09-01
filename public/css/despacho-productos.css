@@ -2,10 +2,13 @@
   color-scheme: dark;
 }
 
-.product-dispatch-root,
-.product-dispatch-menu-page,
-.product-catalog-page {
+html.product-dispatch-root,
+body.product-dispatch-menu-page,
+body.product-catalog-page {
+  height: auto;
   min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .product-dispatch-menu-page,

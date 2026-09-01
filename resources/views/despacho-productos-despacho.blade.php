@@ -64,7 +64,10 @@
 
           <div class="pdd-scale-reading-wrap">
             <div class="pdd-scale-reading-head">
-              <span id="pddWeightSource">Sin lectura</span>
+              <span class="pdd-scale-reading-origin">
+                <span id="pddWeightSource">Sin lectura</span>
+                <button id="pddClearManualWeight" type="button" hidden>Volver a balanza</button>
+              </span>
               <span id="pddReadingState">Esperando peso</span>
             </div>
             <output id="pddLiveWeight" class="pdd-live-weight">---<small>kg</small></output>
@@ -91,7 +94,7 @@
             <span>Cantidad</span>
             <span class="pdd-stepper">
               <button type="button" data-pdd-quantity-step="-1" aria-label="Disminuir cantidad">−</button>
-              <input id="pddQuantity" type="number" min="1" max="100000" step="1" inputmode="numeric" value="1">
+              <input id="pddQuantity" type="number" min="1" max="100000" step="1" inputmode="none" value="1" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" aria-label="Cantidad de aves o elementos: 1. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddQuantityKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
               <button type="button" data-pdd-quantity-step="1" aria-label="Aumentar cantidad">＋</button>
             </span>
           </label>
@@ -194,12 +197,48 @@
         <span>Peso leído</span>
         <span><input id="pddManualInput" type="number" min="0.001" max="999999999.999" step="0.001" inputmode="decimal" placeholder="0.000" required><b>kg</b></span>
       </label>
-      <p>El peso se marcará como manual y podrá editarse antes de guardar.</p>
+      <p>El peso quedará visible como lectura activa. Después podrás cambiar el producto, la variación, la cantidad o la merma antes de pulsar Capturar peso.</p>
       <footer class="pdd-dialog-actions">
         <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddManualDialog">Cancelar</button>
-        <button class="pdd-dialog-confirm" type="submit">Usar y agregar pesada</button>
+        <button class="pdd-dialog-confirm" type="submit">Mostrar este peso</button>
       </footer>
     </form>
+  </dialog>
+
+  <dialog id="pddQuantityKeypad" class="pdd-dialog pdd-keypad-dialog" aria-labelledby="pddQuantityKeypadTitle">
+    <section>
+      <header class="pdd-dialog-head">
+        <div><p>Teclado táctil</p><h2 id="pddQuantityKeypadTitle">Cantidad de aves o elementos</h2></div>
+        <button type="button" data-pdd-close="pddQuantityKeypad" aria-label="Cerrar">×</button>
+      </header>
+
+      <div class="pdd-keypad-value-wrap">
+        <span>Cantidad seleccionada</span>
+        <output id="pddQuantityKeypadValue" class="pdd-keypad-value" aria-live="polite">1</output>
+      </div>
+      <p id="pddQuantityKeypadMessage" class="pdd-keypad-message" role="status" aria-live="polite"></p>
+
+      <div class="pdd-keypad-grid" aria-label="Números disponibles">
+        <button type="button" data-pdd-keypad-key="7">7</button>
+        <button type="button" data-pdd-keypad-key="8">8</button>
+        <button type="button" data-pdd-keypad-key="9">9</button>
+        <button type="button" data-pdd-keypad-key="4">4</button>
+        <button type="button" data-pdd-keypad-key="5">5</button>
+        <button type="button" data-pdd-keypad-key="6">6</button>
+        <button type="button" data-pdd-keypad-key="1">1</button>
+        <button type="button" data-pdd-keypad-key="2">2</button>
+        <button type="button" data-pdd-keypad-key="3">3</button>
+        <button type="button" data-pdd-keypad-key="00">00</button>
+        <button type="button" data-pdd-keypad-key="0">0</button>
+        <button class="is-backspace" type="button" data-pdd-keypad-key="backspace" aria-label="Borrar último número">⌫</button>
+      </div>
+
+      <footer class="pdd-keypad-actions">
+        <button id="pddQuantityKeypadClear" class="pdd-dialog-cancel" type="button">Limpiar</button>
+        <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddQuantityKeypad">Cancelar</button>
+        <button id="pddQuantityKeypadConfirm" class="pdd-dialog-confirm" type="button">Usar cantidad</button>
+      </footer>
+    </section>
   </dialog>
 
   <dialog id="pddClientDialog" class="pdd-dialog pdd-client-dialog" aria-labelledby="pddClientDialogTitle">

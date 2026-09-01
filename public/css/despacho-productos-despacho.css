@@ -266,7 +266,11 @@ button { color: inherit; }
     #07120e;
   color: #fff;
 }
-.pdd-scale-reading-head { display: flex; justify-content: space-between; gap: 10px; color: #a9c7bb; font-size: .7rem; font-weight: 700; }
+.pdd-scale-reading-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 10px; color: #a9c7bb; font-size: .7rem; font-weight: 700; }
+.pdd-scale-reading-origin { min-width: 0; display: flex; align-items: center; gap: 7px; }
+#pddClearManualWeight { position: relative; min-height: 28px; padding: 0 8px; border: 1px solid rgba(216, 242, 119, .48); border-radius: 8px; color: var(--pdd-lime); background: rgba(216, 242, 119, .09); cursor: pointer; font-size: .65rem; font-weight: 850; white-space: nowrap; }
+#pddClearManualWeight::after { content: ""; position: absolute; inset: -8px -4px; }
+#pddClearManualWeight[hidden] { display: none; }
 .pdd-live-weight { display: flex; align-items: baseline; justify-content: center; gap: 7px; color: #f4ffd0; font-size: clamp(2.5rem, 5vw, 4.4rem); font-weight: 900; letter-spacing: -.06em; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 25px rgba(215, 237, 120, .2); }
 .pdd-live-weight small { font-size: 1rem; letter-spacing: 0; color: #a9c7bb; }
 .pdd-scale-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 7px; }
@@ -277,7 +281,7 @@ button { color: inherit; }
 .pdd-capture-touch:disabled { cursor: not-allowed; opacity: .38; filter: grayscale(.5); }
 
 .pdd-config-panel { display: grid; grid-template-rows: auto auto 1fr; }
-.pdd-fields-grid { display: grid; grid-template-columns: .8fr 1fr 1fr 1.1fr; gap: 9px; }
+.pdd-fields-grid { display: grid; grid-template-columns: minmax(198px, 1.3fr) .9fr 1fr 1.1fr; gap: 9px; }
 .pdd-fields-grid > label,
 .pdd-net-preview { min-width: 0; display: grid; align-content: center; gap: 4px; padding: 9px 10px; border: 1px solid var(--pdd-line); border-radius: 13px; background: var(--pdd-surface-raised); }
 .pdd-fields-grid label > span:first-child,
@@ -286,12 +290,13 @@ button { color: inherit; }
 .pdd-net-preview strong { font-size: 1rem; }
 .pdd-fields-grid small,
 .pdd-net-preview small { overflow: hidden; color: var(--pdd-muted); font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
-.pdd-stepper { display: grid; grid-template-columns: 32px minmax(42px, 1fr) 32px; }
+.pdd-stepper { display: grid; grid-template-columns: 54px minmax(76px, 1fr) 54px; gap: 6px; }
 .pdd-stepper button,
-.pdd-stepper input { min-width: 0; height: 44px; border: 1px solid #345247; background: var(--pdd-input); text-align: center; font-weight: 850; }
-.pdd-stepper button:first-child { border-radius: 9px 0 0 9px; }
-.pdd-stepper button:last-child { border-radius: 0 9px 9px 0; }
-.pdd-stepper input { border-left: 0; border-right: 0; -moz-appearance: textfield; }
+.pdd-stepper input { min-width: 0; height: 60px; border: 1px solid #345247; border-radius: 12px; background: var(--pdd-input); text-align: center; font-weight: 900; }
+.pdd-stepper button { color: #dff9ef; background: #1b362e; cursor: pointer; font-size: 1.5rem; touch-action: manipulation; }
+.pdd-stepper button:active { transform: translateY(1px); filter: brightness(1.18); }
+.pdd-stepper input { border-width: 2px; border-color: rgba(216, 242, 119, .72); color: var(--pdd-lime); background: linear-gradient(180deg, #14251f, #09120f); cursor: pointer; font-size: max(1.65rem, var(--pdd-fs-field-value)); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.pdd-stepper input:focus-visible { outline: 3px solid rgba(32, 201, 142, .32); outline-offset: 2px; }
 .pdd-stepper input::-webkit-inner-spin-button { appearance: none; }
 .pdd-suffix-input { display: grid; grid-template-columns: 1fr 27px; }
 .pdd-suffix-input input { min-width: 0; height: 44px; border: 1px solid #345247; border-radius: 9px 0 0 9px; padding: 0 8px; font-weight: 800; }
@@ -475,6 +480,20 @@ button { color: inherit; }
 .pdd-big-number-input > span:last-child { display: grid; grid-template-columns: 1fr 52px; }
 .pdd-big-number-input input { min-width: 0; height: 68px; border: 2px solid #3b6757; border-radius: 14px 0 0 14px; outline: 0; padding: 0 14px; color: var(--pdd-green-dark); font-size: 2rem; font-weight: 900; text-align: right; }
 .pdd-big-number-input b { display: grid; place-items: center; border-radius: 0 14px 14px 0; color: #fff; background: var(--pdd-green); }
+.pdd-keypad-dialog { width: min(540px, calc(100vw - 24px)); }
+.pdd-keypad-dialog > section { gap: 11px; max-height: min(92dvh, 760px); }
+.pdd-keypad-value-wrap { display: grid; gap: 5px; }
+.pdd-keypad-value-wrap > span { color: var(--pdd-muted); font-size: .72rem; font-weight: 850; text-transform: uppercase; letter-spacing: .05em; }
+.pdd-keypad-value { min-height: 82px; display: flex; align-items: center; justify-content: flex-end; overflow: hidden; padding: 8px 16px; border: 2px solid #3b6757; border-radius: 14px; color: var(--pdd-lime); background: radial-gradient(circle at 80% 50%, rgba(216, 242, 119, .12), transparent 55%), #07120e; font-size: clamp(2.6rem, 9vw, 4rem); font-weight: 950; line-height: 1; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.pdd-keypad-message { min-height: 20px; margin: -3px 0 0; color: #ffadb3; font-size: .78rem; font-weight: 850; text-align: center; }
+.pdd-keypad-grid { min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.pdd-keypad-grid button { min-height: clamp(54px, 9dvh, 72px); border: 1px solid #3b6757; border-radius: 13px; color: #f4fff9; background: linear-gradient(180deg, #1b362e, #11251e); cursor: pointer; font-size: clamp(1.55rem, 5vw, 2.2rem); font-weight: 900; touch-action: manipulation; user-select: none; }
+.pdd-keypad-grid button:hover,
+.pdd-keypad-grid button:focus-visible { border-color: var(--pdd-green); background: linear-gradient(180deg, #245443, #163b2f); }
+.pdd-keypad-grid button:active { transform: translateY(1px); filter: brightness(1.18); }
+.pdd-keypad-grid .is-backspace { color: #ffe2b7; border-color: rgba(255, 184, 77, .52); background: rgba(109, 70, 15, .32); }
+.pdd-keypad-actions { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 9px; padding-top: 2px; }
+.pdd-keypad-actions button { min-height: 52px; padding: 0 10px; border-radius: 11px; cursor: pointer; font-weight: 900; }
 .pdd-small-dialog form > p,
 .pdd-dialog-intro { color: var(--pdd-muted); font-size: .76rem; line-height: 1.5; }
 .pdd-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--pdd-line); }
@@ -614,9 +633,9 @@ button { color: inherit; }
 
 .pdd-fields-grid label > span:first-child { font-size: var(--pdd-fs-field-label); }
 .pdd-fields-grid label > strong,
-.pdd-stepper button,
-.pdd-stepper input,
 .pdd-suffix-input input { font-size: var(--pdd-fs-field-value); }
+.pdd-stepper button { font-size: max(1.35rem, var(--pdd-fs-field-value)); }
+.pdd-stepper input { font-size: max(1.65rem, var(--pdd-fs-field-value)); }
 .pdd-fields-grid small { font-size: var(--pdd-fs-field-help); }
 .pdd-suffix-input b { font-size: var(--pdd-fs-field-unit); }
 .pdd-net-preview > span { font-size: var(--pdd-fs-net-label); }
@@ -862,6 +881,8 @@ button { color: inherit; }
   .pdd-scale-actions { grid-template-columns: 1fr; }
   .pdd-product-media .pdd-media-placeholder small { font-size: clamp(9px, calc(var(--pdd-fs-product-name) * .82), 16px); }
   .pdd-fields-grid { grid-template-columns: 1fr 1fr; }
+  .pdd-fields-grid > label:first-child,
+  .pdd-net-preview { grid-column: 1 / -1; }
   .pdd-lists-heading > small { display: none; }
   .pdd-lists-grid { grid-auto-columns: minmax(245px, 88%); }
   .pdd-action-rail { grid-template-columns: 1fr 1fr; }
@@ -892,6 +913,18 @@ button { color: inherit; }
   .pdd-typography-inputs .pdd-typography-reset-one { grid-column: 1 / -1; min-height: 36px; }
   .pdd-typography-state { align-items: flex-start; flex-direction: column; }
   #pddTypographySaveStatus { text-align: left; }
+}
+
+@media (max-height: 680px) {
+  .pdd-keypad-dialog > section { gap: 6px; padding: 10px 12px; }
+  .pdd-keypad-dialog .pdd-dialog-head { padding-bottom: 7px; }
+  .pdd-keypad-dialog .pdd-dialog-head p { display: none; }
+  .pdd-keypad-value { min-height: 52px; padding: 5px 12px; font-size: 2.25rem; }
+  .pdd-keypad-message { min-height: 16px; font-size: .7rem; }
+  .pdd-keypad-grid { gap: 6px; }
+  .pdd-keypad-grid button { min-height: 44px; font-size: 1.45rem; }
+  .pdd-keypad-actions { gap: 6px; }
+  .pdd-keypad-actions button { min-height: 44px; }
 }
 
 @media (max-height: 720px) {
