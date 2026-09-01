@@ -163,6 +163,11 @@ class WebViewsTest extends TestCase
             ->assertSee('id="pddTypographyResetAll"', false)
             ->assertSee('id="pddSave"', false)
             ->assertSee('id="pddSavePrint"', false)
+            ->assertDontSee('class="pdd-statusbar"', false)
+            ->assertDontSee('id="pddFooterWeighings"', false)
+            ->assertDontSee('id="pddFooterQuantity"', false)
+            ->assertDontSee('id="pddFooterWaste"', false)
+            ->assertDontSee('id="pddFooterNet"', false)
             ->assertSee(asset('js/despacho-productos-despacho.js'), false)
             ->assertSee(asset('css/despacho-productos-despacho.css'), false);
 

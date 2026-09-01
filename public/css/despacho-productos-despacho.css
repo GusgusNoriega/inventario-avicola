@@ -62,8 +62,6 @@
   --pdd-fs-ticket-label: 11px;
   --pdd-fs-ticket-total: 18px;
   --pdd-fs-ticket-detail: 10px;
-  --pdd-fs-footer-message: 12px;
-  --pdd-fs-footer-summary: 11px;
   --pdd-fs-toast-title: 13px;
   --pdd-fs-toast-detail: 11px;
   --pdd-fs-dialog-eyebrow: 11px;
@@ -129,15 +127,14 @@ button { color: inherit; }
 .pdd-zoom-surface {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto auto minmax(330px, 1fr) auto;
+  grid-template-rows: auto auto minmax(330px, 1fr);
   gap: 8px;
   padding: 8px;
 }
 
 .pdd-topbar,
 .pdd-panel,
-.pdd-workspace,
-.pdd-statusbar {
+.pdd-workspace {
   border: 1px solid var(--pdd-line);
   background: rgba(12, 19, 17, .96);
   box-shadow: var(--pdd-shadow);
@@ -443,25 +440,37 @@ button { color: inherit; }
 .pdd-save-button small { color: rgba(255, 255, 255, .76); }
 .pdd-save-button:disabled { cursor: not-allowed; opacity: .43; box-shadow: none; }
 
-.pdd-statusbar { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 7px 13px; border-radius: 14px; }
-.pdd-statusbar p { margin: 0; color: var(--pdd-muted); font-size: .74rem; font-weight: 650; }
-.pdd-statusbar p.is-error {
+.pdd-message-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.pdd-message-live.is-error {
   position: fixed;
   z-index: 40;
   left: 50%;
   bottom: max(16px, env(safe-area-inset-bottom));
   width: min(620px, calc(100vw - 28px));
+  height: auto;
   padding: 11px 14px;
+  margin: 0;
+  overflow: visible;
   border: 1px solid rgba(255, 112, 122, .44);
   border-radius: 12px;
+  clip: auto;
   color: #ffadb3;
   background: #361218;
   box-shadow: 0 16px 40px rgba(0, 0, 0, .42);
   text-align: center;
+  white-space: normal;
   transform: translateX(-50%);
 }
-.pdd-statusbar p.is-success { color: var(--pdd-green-dark); }
-.pdd-footer-summary { display: flex; gap: 13px; font-size: .7rem; white-space: nowrap; }
 
 .pdd-ticket-toast { position: fixed; z-index: 30; right: 18px; bottom: 18px; max-width: min(520px, calc(100vw - 36px)); display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid rgba(32, 201, 142, .48); border-radius: 14px; background: #111e1a; box-shadow: 0 18px 45px rgba(0, 0, 0, .45); }
 .pdd-ticket-toast[hidden] { display: none; }
@@ -739,8 +748,6 @@ button { color: inherit; }
 .pdd-ticket-total strong { font-size: var(--pdd-fs-ticket-total); }
 .pdd-ticket-total small { font-size: var(--pdd-fs-ticket-detail); }
 
-.pdd-statusbar p { font-size: var(--pdd-fs-footer-message); }
-.pdd-footer-summary { font-size: var(--pdd-fs-footer-summary); }
 .pdd-ticket-toast strong { font-size: var(--pdd-fs-toast-title); }
 .pdd-ticket-toast span,
 #pddRetryPrint { font-size: var(--pdd-fs-toast-detail); }
@@ -926,8 +933,7 @@ button { color: inherit; }
   .pdd-zoom-surface { display: block; padding: 8px; }
   .pdd-topbar,
   .pdd-capture-deck,
-  .pdd-workspace,
-  .pdd-statusbar { margin-bottom: 9px; }
+  .pdd-workspace { margin-bottom: 9px; }
   .pdd-topbar { grid-template-columns: 1fr; gap: 9px; }
   .pdd-top-actions { width: 100%; justify-self: stretch; }
   .pdd-status-chip { margin-right: auto; }
@@ -937,8 +943,6 @@ button { color: inherit; }
   .pdd-lists-grid { height: 275px; grid-auto-columns: minmax(255px, 54%); }
   .pdd-action-rail { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--pdd-line); border-left: 0; }
   .pdd-ticket-total { margin: 0; }
-  .pdd-statusbar { align-items: flex-start; flex-direction: column; }
-  .pdd-footer-summary { width: 100%; justify-content: space-between; overflow-x: auto; }
 }
 
 @media (max-width: 560px) {
@@ -967,7 +971,6 @@ button { color: inherit; }
   .pdd-active-list-badge,
   .pdd-ticket-total { grid-column: 1/-1; }
   .pdd-save-button { min-height: 58px; }
-  .pdd-footer-summary { gap: 10px; }
   .pdd-dialog > section,
   .pdd-dialog > form { padding: 13px; }
   .pdd-product-grid { grid-template-columns: 1fr 1fr; }

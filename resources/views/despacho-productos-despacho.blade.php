@@ -183,16 +183,9 @@
       </aside>
     </section>
 
-    <footer class="pdd-statusbar">
-      <p id="pddMessage" role="status" aria-live="polite">Preparando la estación de despacho…</p>
-      <div class="pdd-footer-summary">
-        <span>Pesadas <strong id="pddFooterWeighings">0</strong></span>
-        <span>Unidades <strong id="pddFooterQuantity">0</strong></span>
-        <span>Merma <strong id="pddFooterWaste">0 g</strong></span>
-        <span>Neto <strong id="pddFooterNet">0.000 kg</strong></span>
-      </div>
-    </footer>
     </div>
+
+    <p id="pddMessage" class="pdd-message-live" role="status" aria-live="polite">Preparando la estación de despacho…</p>
 
     <section id="pddLastTicket" class="pdd-ticket-toast" hidden aria-live="polite">
       <div><strong id="pddLastTicketTitle">Ticket guardado</strong><span id="pddLastTicketDetail"></span></div>

@@ -143,12 +143,10 @@ const TYPOGRAPHY_GROUPS = [
     ]
   },
   {
-    id: "footer",
-    label: "Estado y avisos",
-    description: "Mensajes inferiores y confirmación de tickets.",
+    id: "notifications",
+    label: "Avisos",
+    description: "Confirmación de tickets guardados e impresos.",
     controls: [
-      { label: "Mensaje de estado", description: "Mensaje operativo en la barra inferior.", variable: "--pdd-fs-footer-message", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-statusbar p" },
-      { label: "Resumen inferior", description: "Pesadas, unidades, merma y peso neto.", variable: "--pdd-fs-footer-summary", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-footer-summary" },
       { label: "Título del aviso", description: "Título mostrado cuando se guarda un ticket.", variable: "--pdd-fs-toast-title", defaultValue: 13, min: 10, max: 24, step: 1, target: ".pdd-ticket-toast strong" },
       { label: "Detalle del aviso", description: "Información y botón de reintento de impresión.", variable: "--pdd-fs-toast-detail", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-toast span, #pddRetryPrint" }
     ]
@@ -221,10 +219,6 @@ const elements = {
   save: document.querySelector("#pddSave"),
   savePrint: document.querySelector("#pddSavePrint"),
   message: document.querySelector("#pddMessage"),
-  footerWeighings: document.querySelector("#pddFooterWeighings"),
-  footerQuantity: document.querySelector("#pddFooterQuantity"),
-  footerWaste: document.querySelector("#pddFooterWaste"),
-  footerNet: document.querySelector("#pddFooterNet"),
   lastTicket: document.querySelector("#pddLastTicket"),
   lastTicketTitle: document.querySelector("#pddLastTicketTitle"),
   lastTicketDetail: document.querySelector("#pddLastTicketDetail"),
@@ -1113,10 +1107,6 @@ function renderActiveSummary() {
   elements.clientActionDetail.textContent = client?.document || "Venta al público";
   elements.ticketTotal.textContent = formatMoney(totals.amount, state.catalog.currency);
   elements.ticketSummary.textContent = `${totals.weighings} ${totals.weighings === 1 ? "pesada" : "pesadas"} · ${formatWeight(totals.net_weight_kg)} netos`;
-  elements.footerWeighings.textContent = String(totals.weighings);
-  elements.footerQuantity.textContent = String(totals.quantity);
-  elements.footerWaste.textContent = `${totals.waste_total_grams} g`;
-  elements.footerNet.textContent = formatWeight(totals.net_weight_kg);
   elements.assignClient.disabled = state.saving;
   elements.unitPrice.disabled = state.saving || !currentSelection();
   elements.manualWeight.disabled = state.saving;

@@ -189,7 +189,7 @@ test("las imágenes rápidas no aumentan la fila y dejan el espacio restante a l
     "@media (max-width: 1280px)"
   );
 
-  assert.match(dispatchStyles, /\.pdd-zoom-surface\s*\{[^}]*grid-template-rows:\s*auto\s+auto\s+minmax\(330px,\s*1fr\)\s+auto/);
+  assert.match(dispatchStyles, /\.pdd-zoom-surface\s*\{[^}]*grid-template-rows:\s*auto\s+auto\s+minmax\(330px,\s*1fr\)/);
   assert.match(dispatchStyles, /\.pdd-capture-deck\s*\{[^}]*align-items:\s*stretch/);
   assert.match(dispatchStyles, /\.pdd-quick-panel\s*\{[^}]*height:\s*auto;[^}]*align-self:\s*stretch;[^}]*overflow:\s*hidden/);
   assert.match(desktopHeightContainment, /\.pdd-quick-panel\s*\{[^}]*contain:\s*size/);
@@ -250,6 +250,16 @@ test("las variaciones ahorran espacio y muestran solamente una imagen más grand
   assert.match(dispatchStyles, /\.pdd-variation-option img,\s*\.pdd-variation-option i\s*\{[^}]*width:\s*40px;\s*height:\s*40px/);
   assert.doesNotMatch(dispatchStyles, /\.pdd-variation-option small\s*\{/);
   assert.doesNotMatch(dispatchSource, /Título Variaciones|Precio y detalle/);
+});
+
+test("la barra inferior se elimina sin reservar espacio y los errores conservan un aviso flotante", () => {
+  assert.doesNotMatch(dispatchView, /pdd-statusbar|pdd-footer-summary|pddFooter(?:Weighings|Quantity|Waste|Net)/);
+  assert.match(dispatchView, /id="pddMessage"\s+class="pdd-message-live"\s+role="status"\s+aria-live="polite"/);
+  assert.doesNotMatch(dispatchSource, /footerWeighings|footerQuantity|footerWaste|footerNet/);
+  assert.doesNotMatch(dispatchSource, /Mensaje de estado|Resumen inferior|--pdd-fs-footer-(?:message|summary)/);
+  assert.doesNotMatch(dispatchStyles, /\.pdd-statusbar|\.pdd-footer-summary|--pdd-fs-footer-(?:message|summary)/);
+  assert.match(dispatchStyles, /\.pdd-message-live\s*\{[^}]*position:\s*absolute;[^}]*width:\s*1px;[^}]*height:\s*1px/);
+  assert.match(dispatchStyles, /\.pdd-message-live\.is-error\s*\{[^}]*position:\s*fixed/);
 });
 
 test("el teclado de precio anidado conserva el foco de cada diálogo", () => {
