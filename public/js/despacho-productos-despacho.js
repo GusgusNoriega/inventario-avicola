@@ -112,8 +112,8 @@ const TYPOGRAPHY_GROUPS = [
       { label: "Título de las listas", description: "Instrucción principal sobre las ocho listas.", variable: "--pdd-fs-lists-title", defaultValue: 15, min: 11, max: 26, step: 1, target: ".pdd-lists-heading strong" },
       { label: "Ayuda horizontal", description: "Indicación para deslizar entre las listas.", variable: "--pdd-fs-lists-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-lists-heading small" },
       { label: "Número de lista", description: "Número grande en la cabecera de cada lista.", variable: "--pdd-fs-list-number", defaultValue: 18, min: 14, max: 32, step: 1, target: ".pdd-list-number" },
-      { label: "Cliente o nombre de lista", description: "Venta al público o cliente asignado.", variable: "--pdd-fs-list-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-list-card-head b, .pdd-list-empty b" },
-      { label: "Detalle y contador", description: "Cliente opcional, lista vacía y cantidad de pesadas.", variable: "--pdd-fs-list-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-list-card-head small, .pdd-list-count, .pdd-list-empty span" },
+      { label: "Cliente o nombre de lista", description: "Venta al público, cliente asignado o lista vacía.", variable: "--pdd-fs-list-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-list-card-head b, .pdd-weighing-empty td" },
+      { label: "Detalle y contador", description: "Cliente opcional y cantidad de pesadas.", variable: "--pdd-fs-list-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-list-card-head small, .pdd-list-count" },
       { label: "Etiquetas de totales", description: "Neto y Total al pie de cada lista.", variable: "--pdd-fs-list-total", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-list-totals" },
       { label: "Importe de la lista", description: "Monto resaltado al pie de cada lista.", variable: "--pdd-fs-list-amount", defaultValue: 13, min: 10, max: 24, step: 1, target: ".pdd-list-total-amount" }
     ]
@@ -123,10 +123,10 @@ const TYPOGRAPHY_GROUPS = [
     label: "Pesadas registradas",
     description: "Cada renglón agregado dentro de una lista.",
     controls: [
-      { label: "Índice de la pesada", description: "Número pequeño al inicio del renglón.", variable: "--pdd-fs-weighing-index", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-weighing-row > i" },
-      { label: "Nombre del producto pesado", description: "Producto y variación dentro de la lista.", variable: "--pdd-fs-weighing-name", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-row b" },
-      { label: "Detalle de la pesada", description: "Cantidad, peso leído, merma y peso neto.", variable: "--pdd-fs-weighing-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-weighing-row small" },
-      { label: "Importe de la pesada", description: "Monto mostrado al lado derecho del renglón.", variable: "--pdd-fs-weighing-amount", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-row > strong" }
+      { label: "Encabezados de la tabla", description: "Títulos abreviados de producto, cantidad y neto.", variable: "--pdd-fs-weighing-index", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-weighing-table th" },
+      { label: "Nombre del producto pesado", description: "Producto y variación dentro de la lista.", variable: "--pdd-fs-weighing-name", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-edit > span" },
+      { label: "Cantidad de la pesada", description: "Unidades registradas en cada renglón.", variable: "--pdd-fs-weighing-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-weighing-quantity" },
+      { label: "Peso neto de la pesada", description: "Peso neto mostrado al lado derecho.", variable: "--pdd-fs-weighing-amount", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-net" }
     ]
   },
   {
@@ -1082,11 +1082,26 @@ function renderLists() {
   elements.lists.innerHTML = state.drafts.map((draft, index) => {
     const totals = calculateDraft(draft.items);
     const client = clientById(draft.client_id);
-    const rows = draft.items.length
-      ? draft.items.map((item, itemIndex) => `<button class="pdd-weighing-row" type="button"${state.saving ? " disabled" : ""} data-pdd-edit-item="${escapeHtml(item.local_id)}" data-pdd-list-index="${index}">
-          <i>${itemIndex + 1}</i><span><b>${escapeHtml(itemDisplayName(item))}</b><small>${item.quantity} und · ${formatWeight(item.net_weight_kg)} · M ${item.waste_total_grams} g${item.tare_grams ? ` · T ${item.tare_grams} g` : ""}</small></span><strong>${escapeHtml(formatMoney(item.amount, state.catalog.currency))}</strong>
-        </button>`).join("")
-      : '<div class="pdd-list-empty"><b>Vacía</b></div>';
+    const tableRows = draft.items.length
+      ? draft.items.map((item) => {
+        const productName = itemDisplayName(item);
+        const quantity = String(item.quantity);
+        const netWeight = formatWeight(item.net_weight_kg);
+        const editLabel = `Editar ${productName}, cantidad ${quantity}, peso neto ${netWeight}`;
+
+        return `<tr class="pdd-weighing-row">
+          <td class="pdd-weighing-product"><button class="pdd-weighing-edit" type="button"${state.saving ? " disabled" : ""} data-pdd-edit-item="${escapeHtml(item.local_id)}" data-pdd-list-index="${index}" aria-label="${escapeHtml(editLabel)}"><span>${escapeHtml(productName)}</span></button></td>
+          <td class="pdd-weighing-quantity">${escapeHtml(quantity)}</td>
+          <td class="pdd-weighing-net">${escapeHtml(netWeight)}</td>
+        </tr>`;
+      }).join("")
+      : '<tr class="pdd-weighing-empty"><td colspan="3">Vacía</td></tr>';
+    const rows = `<table class="pdd-weighing-table">
+      <caption class="sr-only">Pesadas de la lista ${index + 1}</caption>
+      <colgroup><col><col class="pdd-weighing-quantity-column"><col class="pdd-weighing-net-column"></colgroup>
+      <thead><tr><th scope="col"><abbr title="Producto">Prod.</abbr></th><th scope="col"><abbr title="Cantidad">Cant.</abbr></th><th scope="col"><abbr title="Peso neto">Neto</abbr></th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>`;
 
     return `<article class="pdd-list-card${index === state.activeIndex ? " is-active" : ""}" data-pdd-list-card="${index}">
       <button class="pdd-list-card-head" type="button" aria-pressed="${index === state.activeIndex}"${state.saving ? " disabled" : ""} data-pdd-select-list="${index}">

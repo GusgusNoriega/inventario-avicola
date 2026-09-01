@@ -368,7 +368,7 @@ button { color: inherit; }
 .pdd-lists-heading span { color: var(--pdd-green-dark); font-size: .68rem; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .pdd-lists-heading strong { font-size: .91rem; }
 .pdd-lists-heading small { color: var(--pdd-muted); font-size: .67rem; }
-.pdd-lists-grid { height: calc(100% - 43px); min-height: 270px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 24%); gap: 9px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: thin; padding: 1px 2px 7px; touch-action: pan-x pan-y; }
+.pdd-lists-grid { height: calc(100% - 43px); min-height: 270px; display: grid; grid-auto-flow: column; grid-auto-columns: calc(20% - 7.2px); gap: 9px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: thin; padding: 1px 2px 7px; touch-action: pan-x pan-y; }
 .pdd-list-card {
   --pdd-list-accent: #35d39d;
   --pdd-list-accent-soft: rgba(53, 211, 157, .14);
@@ -398,17 +398,27 @@ button { color: inherit; }
 .pdd-list-card-head b { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .pdd-list-card-head small { color: var(--pdd-muted); font-size: .65rem; }
 .pdd-list-count { padding: 4px 7px; border-radius: 999px; color: var(--pdd-list-accent); background: var(--pdd-list-accent-soft); font-size: .65rem; font-weight: 900; }
-.pdd-list-items { overflow-y: auto; padding: 6px; }
-.pdd-list-empty { height: 100%; min-height: 105px; display: grid; place-content: center; gap: 5px; padding: 12px; color: #71837b; text-align: center; }
-.pdd-list-empty b { color: #96a9a1; font-size: .8rem; }
-.pdd-list-empty span { font-size: .66rem; }
-.pdd-weighing-row { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 7px 6px; border: 0; border-bottom: 1px solid #1e302a; background: transparent; cursor: pointer; text-align: left; }
-.pdd-weighing-row:hover { background: var(--pdd-green-soft); border-radius: 8px; }
-.pdd-weighing-row > i { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; color: var(--pdd-list-accent); background: var(--pdd-list-accent-soft); font-size: .67rem; font-style: normal; font-weight: 900; }
-.pdd-weighing-row > span { min-width: 0; display: grid; gap: 1px; }
-.pdd-weighing-row b { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
-.pdd-weighing-row small { color: var(--pdd-muted); font-size: .61rem; }
-.pdd-weighing-row > strong { font-size: .68rem; text-align: right; }
+.pdd-list-items { overflow-y: auto; padding: 0 6px 6px; }
+.pdd-weighing-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.pdd-weighing-quantity-column { width: 52px; }
+.pdd-weighing-net-column { width: 88px; }
+.pdd-weighing-table th { position: sticky; top: 0; z-index: 2; padding: 6px 4px; border-bottom: 1px solid var(--pdd-line); color: var(--pdd-muted); background: #0b1310; font-size: .67rem; font-weight: 900; text-align: left; text-transform: uppercase; letter-spacing: .03em; }
+.pdd-list-card.is-active .pdd-weighing-table th { background: #101b17; }
+.pdd-weighing-table th:nth-child(2) { text-align: center; }
+.pdd-weighing-table th:nth-child(3) { text-align: right; }
+.pdd-weighing-table abbr { text-decoration: none; }
+.pdd-weighing-row { position: relative; }
+.pdd-weighing-row td { padding: 5px 4px; border-bottom: 1px solid #1e302a; vertical-align: middle; transition: background .14s; }
+.pdd-weighing-row:hover td,
+.pdd-weighing-row:focus-within td { background: var(--pdd-green-soft); }
+.pdd-weighing-edit { width: 100%; min-width: 0; min-height: 34px; display: block; overflow: hidden; padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; text-align: left; }
+.pdd-weighing-edit::after { content: ""; position: absolute; inset: 0; z-index: 1; cursor: pointer; }
+.pdd-weighing-edit:disabled::after { cursor: not-allowed; }
+.pdd-weighing-edit:focus-visible { outline: 2px solid var(--pdd-list-accent); outline-offset: -2px; border-radius: 6px; }
+.pdd-weighing-edit > span { display: block; overflow: hidden; font-size: .68rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.pdd-weighing-quantity { text-align: center; }
+.pdd-weighing-net { font-variant-numeric: tabular-nums; font-weight: 850; text-align: right; white-space: nowrap; }
+.pdd-weighing-empty td { height: 105px; padding: 12px; color: #96a9a1; font-size: .8rem; font-weight: 800; text-align: center; }
 .pdd-list-totals { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 8px; border-top: 1px solid var(--pdd-line); background: #101b17; font-size: .67rem; }
 .pdd-list-totals strong { text-align: right; }
 .pdd-list-total-amount { color: var(--pdd-list-accent); font-size: .8rem; }
@@ -726,17 +736,16 @@ button { color: inherit; }
 .pdd-lists-heading small { font-size: var(--pdd-fs-lists-help); }
 .pdd-list-number { font-size: var(--pdd-fs-list-number); }
 .pdd-list-card-head b,
-.pdd-list-empty b { font-size: var(--pdd-fs-list-name); }
+.pdd-weighing-empty td { font-size: var(--pdd-fs-list-name); }
 .pdd-list-card-head small,
-.pdd-list-count,
-.pdd-list-empty span { font-size: var(--pdd-fs-list-detail); }
+.pdd-list-count { font-size: var(--pdd-fs-list-detail); }
 .pdd-list-totals { font-size: var(--pdd-fs-list-total); }
 .pdd-list-total-amount { font-size: var(--pdd-fs-list-amount); }
 
-.pdd-weighing-row > i { font-size: var(--pdd-fs-weighing-index); }
-.pdd-weighing-row b { font-size: var(--pdd-fs-weighing-name); }
-.pdd-weighing-row small { font-size: var(--pdd-fs-weighing-detail); }
-.pdd-weighing-row > strong { font-size: var(--pdd-fs-weighing-amount); }
+.pdd-weighing-table th { font-size: var(--pdd-fs-weighing-index); }
+.pdd-weighing-edit > span { font-size: var(--pdd-fs-weighing-name); }
+.pdd-weighing-quantity { font-size: var(--pdd-fs-weighing-detail); }
+.pdd-weighing-net { font-size: var(--pdd-fs-weighing-amount); }
 
 .pdd-rail-action b,
 .pdd-save-button b,
