@@ -99,6 +99,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'ajustes_peso_minorista',
         'ajustes_peso_mayorista_2',
         'configuraciones_despacho_minorista',
+        'configuraciones_despacho_productos',
         'configuraciones_recepcion_pollo_vivo',
         'metodos_pago',
         'entidades_financieras',

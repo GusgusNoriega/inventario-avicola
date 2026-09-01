@@ -111,6 +111,7 @@ class ProductDispatchOperationApiTest extends TestCase
 
         $response = $this->getJson('/api/v1/despacho-productos/catalogo')
             ->assertOk()
+            ->assertJsonPath('data.waste_presets', [0, 50, 100])
             ->assertJsonPath('data.scale.code', Balanza::CODE_PRODUCT_DISPATCH)
             ->assertJsonPath('data.scale.configuration.baudRate', 9600);
 
@@ -126,6 +127,54 @@ class ProductDispatchOperationApiTest extends TestCase
         );
         $this->assertContains($this->clientId, collect($response->json('data.clients'))->pluck('id')->all());
         $this->assertNotContains($inactiveClientId, collect($response->json('data.clients'))->pluck('id')->all());
+    }
+
+    public function test_waste_presets_are_configurable_and_scoped_by_company_and_branch(): void
+    {
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'waste_presets' => [15, 40, 90],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.waste_presets', [15, 40, 90]);
+
+        $this->assertDatabaseHas('configuraciones_despacho_productos', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'merma_preset_1_gramos_unidad' => 15,
+            'merma_preset_2_gramos_unidad' => 40,
+            'merma_preset_3_gramos_unidad' => 90,
+        ]);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.waste_presets', [15, 40, 90]);
+
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'SECUNDARIA',
+            'nombre' => 'Sucursal secundaria',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.waste_presets', [0, 50, 100]);
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'waste_presets' => [1, 2],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('waste_presets');
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'waste_presets' => [0, -1, 1000001],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'waste_presets.1',
+                'waste_presets.2',
+            ]);
     }
 
     public function test_registered_client_ticket_uses_snapshots_and_authoritative_kg_and_unit_calculations(): void
@@ -155,8 +204,11 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonPath('data.client.id', $this->clientId)
             ->assertJsonPath('data.totals.quantity', 14)
             ->assertJsonPath('data.totals.waste_grams', 124)
+            ->assertJsonPath('data.totals.tare_grams', 0)
             ->assertJsonPath('data.weighings.0.price_mode', ProductoDespacho::PRICE_MODE_KG)
             ->assertJsonPath('data.weighings.0.price_origin', PesadaDespachoProducto::PRICE_MANUAL)
+            ->assertJsonPath('data.weighings.0.waste_grams_per_unit', 50)
+            ->assertJsonPath('data.weighings.0.tare_grams', 0)
             ->assertJsonPath('data.weighings.1.price_mode', ProductoDespacho::PRICE_MODE_UNIT)
             ->assertJsonPath('data.weighings.1.price_origin', PesadaDespachoProducto::PRICE_CATALOG);
 
@@ -182,6 +234,7 @@ class ProductDispatchOperationApiTest extends TestCase
             'cantidad_total' => 14,
             'peso_leido_total_kg' => 12,
             'merma_total_gramos' => 124,
+            'tara_total_gramos' => 0,
             'peso_neto_total_kg' => 11.876,
             'total' => 216.90,
         ]);
@@ -196,7 +249,9 @@ class ProductDispatchOperationApiTest extends TestCase
             'precio_venta_snapshot' => 21,
             'origen_precio' => PesadaDespachoProducto::PRICE_MANUAL,
             'merma_catalogo_gramos_unidad' => 30,
+            'merma_aplicada_gramos_unidad' => 50,
             'merma_total_gramos' => 100,
+            'tara_gramos' => 0,
             'peso_neto_kg' => 9.9,
             'importe' => 207.9,
         ]);
@@ -290,6 +345,55 @@ class ProductDispatchOperationApiTest extends TestCase
         ]);
         $this->assertDatabaseCount('comprobantes', 1);
         $this->assertDatabaseCount('comprobante_detalles', 1);
+    }
+
+    public function test_unit_waste_and_tare_are_persisted_and_authoritatively_reduce_net_weight(): void
+    {
+        $weighing = $this->weighing(
+            product: $this->turkey,
+            quantity: 2,
+            price: '20.0000',
+            readWeight: '10.000',
+            waste: 100,
+        );
+        $weighing['waste_grams_per_unit'] = 50;
+        $weighing['tare_grams'] = 250;
+
+        $response = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload(null, [$weighing]),
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.totals.waste_grams', 100)
+            ->assertJsonPath('data.totals.tare_grams', 250)
+            ->assertJsonPath('data.weighings.0.waste_grams_per_unit', 50)
+            ->assertJsonPath('data.weighings.0.waste_total_grams', 100)
+            ->assertJsonPath('data.weighings.0.tare_grams', 250);
+
+        $this->assertEqualsWithDelta(9.65, $response->json('data.weighings.0.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(193, $response->json('data.weighings.0.amount'), 0.001);
+        $this->assertEqualsWithDelta(9.65, $response->json('data.totals.net_weight_kg'), 0.0001);
+
+        $ticketId = (int) $response->json('data.id');
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticketId,
+            'merma_total_gramos' => 100,
+            'tara_total_gramos' => 250,
+            'peso_neto_total_kg' => 9.65,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'ticket_despacho_producto_id' => $ticketId,
+            'merma_catalogo_gramos_unidad' => 25,
+            'merma_aplicada_gramos_unidad' => 50,
+            'merma_total_gramos' => 100,
+            'tara_gramos' => 250,
+            'peso_neto_kg' => 9.65,
+        ]);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'producto_despacho_id' => $this->turkey->id,
+            'peso_neto_kg' => 9.65,
+            'subtotal' => 193,
+        ]);
     }
 
     public function test_physical_weight_keeps_the_raw_scale_evidence(): void
@@ -478,6 +582,39 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('weighings.0.waste_total_grams');
 
+        $inconsistentWaste = $this->weighing(
+            product: $this->eggs,
+            quantity: 2,
+            readWeight: '1.000',
+            waste: 90,
+        );
+        $inconsistentWaste['waste_grams_per_unit'] = 50;
+        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$inconsistentWaste]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.waste_total_grams');
+
+        $impossibleTare = $this->weighing(
+            product: $this->eggs,
+            readWeight: '1.000',
+            waste: 200,
+        );
+        $impossibleTare['waste_grams_per_unit'] = 200;
+        $impossibleTare['tare_grams'] = 800;
+        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$impossibleTare]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.tare_grams');
+
+        $overflowingWaste = $this->weighing(
+            product: $this->eggs,
+            quantity: 100000,
+            readWeight: '999999999.999',
+            waste: 1000000000,
+        );
+        $overflowingWaste['waste_grams_per_unit'] = 1000000;
+        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$overflowingWaste]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.waste_grams_per_unit');
+
         $future = $this->weighing(product: $this->eggs);
         $future['weighed_at'] = now('America/Lima')->addMinutes(10)->toIso8601String();
         $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$future]))
@@ -541,6 +678,9 @@ class ProductDispatchOperationApiTest extends TestCase
         Sanctum::actingAs($unauthorized, ['api']);
 
         $this->getJson('/api/v1/despacho-productos/catalogo')->assertForbidden();
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'waste_presets' => [0, 50, 100],
+        ])->assertForbidden();
         $this->postJson('/api/v1/despacho-productos/tickets', [])->assertForbidden();
     }
 

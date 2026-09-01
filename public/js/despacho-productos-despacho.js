@@ -2,6 +2,7 @@ import { apiRequest } from "./api-client.js";
 import { RetailScaleController } from "./despacho-minorista-balanza.js";
 import { bindIntegerKeypad } from "./despacho-productos-numeric-keypad.js";
 import {
+  PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS,
   PRODUCT_DISPATCH_SCALE_CODE,
   buildDraftCollection,
   buildTicketPayload,
@@ -16,6 +17,7 @@ import {
   formatWeight,
   itemKey,
   normalizeCatalog,
+  normalizeWastePresets,
   priceModeLabel,
   productInitial,
   roundTo,
@@ -79,12 +81,12 @@ const TYPOGRAPHY_GROUPS = [
   {
     id: "fields",
     label: "Campos y peso neto",
-    description: "Cantidad, precio, merma y total estimado.",
+    description: "Cantidad, precio, tara, merma y total estimado.",
     controls: [
-      { label: "Etiquetas de campos", description: "Cantidad, Precio de venta y Merma total.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid label > span:first-child" },
-      { label: "Valores de campos", description: "Cantidad, precio y valor de merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-touch-number-input input" },
-      { label: "Ayudas de campos", description: "Forma de cobro y explicación de la merma.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small" },
-      { label: "Unidades de cantidad y merma", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
+      { label: "Etiquetas de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid label > span:first-child, .pdd-waste-unit-control > span:first-child" },
+      { label: "Valores de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-touch-number-input input" },
+      { label: "Ayudas de campos", description: "Forma de cobro y validaciones.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small, .pdd-waste-hint" },
+      { label: "Unidades", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
       { label: "Etiqueta de peso neto", description: "Texto “Peso neto estimado”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-net-preview > span" },
       { label: "Valor de peso neto", description: "Kilogramos netos estimados.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-net-preview strong" },
       { label: "Total estimado", description: "Importe estimado debajo del peso neto.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-net-preview small" }
@@ -199,7 +201,10 @@ const elements = {
   quantity: document.querySelector("#pddQuantity"),
   unitPrice: document.querySelector("#pddUnitPrice"),
   priceMode: document.querySelector("#pddPriceMode"),
+  tare: document.querySelector("#pddTare"),
+  wastePerUnit: document.querySelector("#pddWastePerUnit"),
   wasteTotal: document.querySelector("#pddWasteTotal"),
+  wastePresets: document.querySelector("#pddWastePresets"),
   wasteHint: document.querySelector("#pddWasteHint"),
   netPreview: document.querySelector("#pddNetPreview"),
   amountPreview: document.querySelector("#pddAmountPreview"),
@@ -247,7 +252,9 @@ const elements = {
   editVariation: document.querySelector("#pddEditVariation"),
   editQuantity: document.querySelector("#pddEditQuantity"),
   editWeight: document.querySelector("#pddEditWeight"),
-  editWaste: document.querySelector("#pddEditWaste"),
+  editWastePerUnit: document.querySelector("#pddEditWastePerUnit"),
+  editWasteTotal: document.querySelector("#pddEditWasteTotal"),
+  editTare: document.querySelector("#pddEditTare"),
   editPrice: document.querySelector("#pddEditPrice"),
   editSource: document.querySelector("#pddEditSource"),
   editCalculated: document.querySelector("#pddEditCalculated"),
@@ -275,6 +282,14 @@ const elements = {
   zoomIn: document.querySelector("#pddZoomIn"),
   zoomReset: document.querySelector("#pddZoomReset"),
   openTypography: document.querySelector("#pddOpenTypography"),
+  wastePresetForm: document.querySelector("#pddWastePresetForm"),
+  wastePresetInputs: [
+    document.querySelector("#pddWastePreset1"),
+    document.querySelector("#pddWastePreset2"),
+    document.querySelector("#pddWastePreset3")
+  ],
+  saveWastePresets: document.querySelector("#pddSaveWastePresets"),
+  wastePresetStatus: document.querySelector("#pddWastePresetStatus"),
   typographySummary: document.querySelector("#pddTypographySummary"),
   typographyPanel: document.querySelector("#pddTypographyPanel"),
   typographyClose: document.querySelector("#pddTypographyClose"),
@@ -295,7 +310,7 @@ const state = {
   activeIndex: 0,
   selectedProductId: null,
   selectedVariationId: null,
-  wasteWasEdited: false,
+  wastePresetSaving: false,
   storageKey: null,
   loading: true,
   saving: false,
@@ -802,17 +817,16 @@ function renderSelectedProduct() {
     elements.productMedia.innerHTML = '<span class="pdd-media-placeholder"><b>?</b><small>Elige un producto</small></span>';
     elements.unitPrice.textContent = `${currencyLabel(state.catalog.currency)} --`;
     elements.priceMode.textContent = "Selecciona un producto";
-    elements.wasteHint.textContent = "Se calcula según la cantidad y puedes modificarla.";
   } else {
     elements.selectedName.textContent = selection.product_name;
     elements.selectedVariantLabel.textContent = selection.variation_name || "Producto base";
     elements.productMedia.innerHTML = mediaMarkup(selection.display_name, selection.image_url);
     elements.unitPrice.textContent = formatMoney(effectivePrice(selection), state.catalog.currency);
     elements.priceMode.textContent = `Precio ${priceModeLabel(selection.price_mode)}`;
-    elements.wasteHint.textContent = `${selection.waste_grams_per_unit} g por unidad · puedes modificar el total.`;
   }
 
   renderVariations();
+  syncWasteTotal();
   renderCapturePreview();
 }
 
@@ -844,42 +858,79 @@ function renderVariations() {
   }).join("");
 }
 
-function syncDefaultWaste() {
-  const selection = currentSelection();
-  if (!selection || state.wasteWasEdited) return;
+function captureValues() {
   const quantity = Math.max(1, Math.round(Number(elements.quantity.value || 1)));
-  elements.wasteTotal.value = String(selection.waste_grams_per_unit * quantity);
-  elements.wasteTotal.setCustomValidity(wasteValidationMessage());
-  state.numericKeypad?.refreshLabel(elements.wasteTotal);
+  const wasteGramsPerUnit = Number(elements.wastePerUnit.value);
+  const tareGrams = Number(elements.tare.value);
+  return {
+    quantity,
+    waste_grams_per_unit: wasteGramsPerUnit,
+    waste_total_grams: wasteGramsPerUnit * quantity,
+    tare_grams: tareGrams
+  };
 }
 
-function wasteValidationMessage(value = elements.wasteTotal.value) {
-  const waste = Number(value);
-  const maximum = Number(elements.wasteTotal.max);
-  if (!Number.isSafeInteger(waste) || waste < 0) {
-    return "Ingresa una merma total válida en gramos.";
+function renderWastePresets() {
+  const current = Number(elements.wastePerUnit.value);
+  elements.wastePresets.innerHTML = state.catalog.waste_presets.map((preset, index) => {
+    const active = current === preset;
+    return `<button class="${active ? "is-active" : ""}" type="button" data-pdd-waste-preset="${index}" aria-pressed="${active}"><span>M${index + 1}</span><strong>${preset.toLocaleString("es-PE")} g</strong></button>`;
+  }).join("");
+}
+
+function syncWasteTotal() {
+  const values = captureValues();
+  const total = Number.isFinite(values.waste_total_grams) ? values.waste_total_grams : 0;
+  elements.wasteTotal.textContent = `${Math.max(0, total).toLocaleString("es-PE")} g`;
+  renderWastePresets();
+}
+
+function setWastePerUnit(value) {
+  elements.wastePerUnit.value = String(Math.max(0, Math.round(Number(value) || 0)));
+  state.numericKeypad?.refreshLabel(elements.wastePerUnit);
+  syncWasteTotal();
+}
+
+function useCatalogWaste() {
+  const selection = currentSelection();
+  if (selection) setWastePerUnit(selection.waste_grams_per_unit);
+}
+
+function captureValidation(weightKg = Number(state.liveScale.currentWeightKg)) {
+  const values = captureValues();
+  if (!Number.isSafeInteger(values.waste_grams_per_unit)
+    || values.waste_grams_per_unit < 0
+    || values.waste_grams_per_unit > Number(elements.wastePerUnit.max)) {
+    return { message: "Merma/u inválida.", target: elements.wastePerUnit };
   }
-  if (Number.isFinite(maximum) && waste > maximum) {
-    return `La merma total no puede superar ${maximum.toLocaleString("es-PE")} g. Reduce la cantidad o ingresa una merma menor.`;
+  if (values.waste_total_grams > PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS) {
+    return { message: "Merma total supera el máximo.", target: elements.wastePerUnit };
   }
-  return "";
+  if (!Number.isSafeInteger(values.tare_grams)
+    || values.tare_grams < 0
+    || values.tare_grams > Number(elements.tare.max)) {
+    return { message: "Tara inválida.", target: elements.tare };
+  }
+  if (Number.isFinite(weightKg) && weightKg > 0
+    && values.waste_total_grams + values.tare_grams >= weightKg * 1000) {
+    return { message: "Merma + tara deben ser menores al peso.", target: elements.tare };
+  }
+  return { message: "", target: null };
 }
 
 function renderCapturePreview() {
   const selection = currentSelection();
   const scaleWeight = Number(state.liveScale.currentWeightKg);
   const hasWeight = Number.isFinite(scaleWeight) && scaleWeight > 0;
-  const wasteError = wasteValidationMessage();
-  elements.wasteTotal.setCustomValidity(wasteError);
-  elements.wasteHint.classList.toggle("is-error", Boolean(wasteError));
-  elements.wasteHint.textContent = wasteError
-    || (selection
-      ? `${selection.waste_grams_per_unit} g por unidad · puedes modificar el total.`
-      : "Se calcula según la cantidad y puedes modificarla.");
+  syncWasteTotal();
+  const validation = captureValidation(hasWeight ? scaleWeight : 0);
+  elements.wasteHint.classList.toggle("is-error", Boolean(validation.message));
+  elements.wasteHint.textContent = validation.message;
   const line = calculateLine({
     quantity: elements.quantity.value,
     read_weight_kg: hasWeight ? scaleWeight : 0,
-    waste_total_grams: elements.wasteTotal.value,
+    waste_grams_per_unit: elements.wastePerUnit.value,
+    tare_grams: elements.tare.value,
     unit_price: effectivePrice(selection),
     price_mode: selection?.price_mode
   });
@@ -891,7 +942,7 @@ function renderCapturePreview() {
   const captureReady = Boolean(
     selection
     && state.liveScale.isCaptureReady
-    && !wasteError
+    && !validation.message
     && line.net_weight_kg > 0
     && !state.saving
     && Date.now() >= state.captureBlockedUntil
@@ -975,7 +1026,7 @@ function renderLists() {
     const client = clientById(draft.client_id);
     const rows = draft.items.length
       ? draft.items.map((item, itemIndex) => `<button class="pdd-weighing-row" type="button"${state.saving ? " disabled" : ""} data-pdd-edit-item="${escapeHtml(item.local_id)}" data-pdd-list-index="${index}">
-          <i>${itemIndex + 1}</i><span><b>${escapeHtml(itemDisplayName(item))}</b><small>${item.quantity} und · ${formatWeight(item.net_weight_kg)} · ${item.waste_total_grams} g merma</small></span><strong>${escapeHtml(formatMoney(item.amount, state.catalog.currency))}</strong>
+          <i>${itemIndex + 1}</i><span><b>${escapeHtml(itemDisplayName(item))}</b><small>${item.quantity} und · ${formatWeight(item.net_weight_kg)} · M ${item.waste_total_grams} g${item.tare_grams ? ` · T ${item.tare_grams} g` : ""}</small></span><strong>${escapeHtml(formatMoney(item.amount, state.catalog.currency))}</strong>
         </button>`).join("")
       : '<div class="pdd-list-empty"><b>Lista vacía</b><span>Selecciónala y captura el primer peso.</span></div>';
 
@@ -1035,8 +1086,7 @@ function selectProduct(productId) {
   if (!product) return;
   state.selectedProductId = product.id;
   state.selectedVariationId = null;
-  state.wasteWasEdited = false;
-  syncDefaultWaste();
+  useCatalogWaste();
   renderSelectedProduct();
   closeDialog(elements.productDialog);
   setMessage(`${product.name} seleccionado. Captura un peso o ingrésalo manualmente.`);
@@ -1048,8 +1098,7 @@ function selectVariation(variationId) {
   const normalized = variationId === "base" ? null : Number(variationId);
   if (normalized !== null && !product.variations.some((variation) => variation.id === normalized)) return;
   state.selectedVariationId = normalized;
-  state.wasteWasEdited = false;
-  syncDefaultWaste();
+  useCatalogWaste();
   renderSelectedProduct();
 }
 
@@ -1088,23 +1137,23 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
     return false;
   }
 
-  const wasteError = wasteValidationMessage();
-  if (wasteError) {
-    elements.wasteTotal.setCustomValidity(wasteError);
-    elements.wasteTotal.focus();
-    setMessage(wasteError, "error");
+  const validation = captureValidation(weight);
+  if (validation.message) {
+    validation.target?.focus();
+    setMessage(validation.message, "error");
     return false;
   }
 
   const calculated = calculateLine({
     quantity: elements.quantity.value,
     read_weight_kg: weight,
-    waste_total_grams: elements.wasteTotal.value,
+    waste_grams_per_unit: elements.wastePerUnit.value,
+    tare_grams: elements.tare.value,
     unit_price: effectivePrice(selection),
     price_mode: selection.price_mode
   });
   if (calculated.net_weight_kg <= 0) {
-    setMessage("La merma no puede ser igual o mayor que el peso leído.", "error");
+    setMessage("Merma + tara deben ser menores al peso.", "error");
     return false;
   }
   if (calculated.amount < 0.01) {
@@ -1134,6 +1183,9 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
   };
 
   activeDraft().items.push(item);
+  elements.tare.value = "0";
+  state.numericKeypad?.refreshLabel(elements.tare);
+  syncWasteTotal();
   persistDrafts();
   renderLists();
   renderActiveSummary();
@@ -1212,10 +1264,12 @@ function renderEditCalculation() {
   const line = calculateLine({
     quantity: elements.editQuantity.value,
     read_weight_kg: elements.editWeight.value,
-    waste_total_grams: elements.editWaste.value,
+    waste_grams_per_unit: elements.editWastePerUnit.value,
+    tare_grams: elements.editTare.value,
     unit_price: elements.editPrice.value,
     price_mode: selection?.price_mode
   });
+  elements.editWasteTotal.textContent = `${line.waste_total_grams.toLocaleString("es-PE")} g`;
   elements.editCalculated.textContent = `Neto ${formatWeight(line.net_weight_kg)} · ${formatMoney(line.amount, state.catalog.currency)}`;
 }
 
@@ -1228,7 +1282,8 @@ function openEditDialog(localId, listIndex) {
   fillEditVariationOptions(item.variation_id);
   elements.editQuantity.value = String(item.quantity);
   elements.editWeight.value = Number(item.read_weight_kg).toFixed(3);
-  elements.editWaste.value = String(item.waste_total_grams);
+  elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / item.quantity));
+  elements.editTare.value = String(item.tare_grams || 0);
   elements.editPrice.value = Number(item.unit_price).toFixed(4);
   elements.editSource.textContent = item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
     ? `Origen: balanza ${item.scale_reading?.device_name || "conectada"}`
@@ -1245,7 +1300,7 @@ function changeEditingProduct(useCatalogDefaults = true) {
   if (selection && useCatalogDefaults) {
     const override = activeDraft().price_overrides[itemKey(selection.product_id, selection.variation_id)];
     elements.editPrice.value = Number(override ?? selection.price).toFixed(4);
-    elements.editWaste.value = String(selection.waste_grams_per_unit * Math.max(1, Math.round(Number(elements.editQuantity.value || 1))));
+    elements.editWastePerUnit.value = String(selection.waste_grams_per_unit);
   } else if (!selection && item) {
     elements.editPrice.value = Number(item.unit_price).toFixed(4);
   }
@@ -1264,12 +1319,23 @@ function saveEditingItem(event) {
   const calculated = calculateLine({
     quantity: elements.editQuantity.value,
     read_weight_kg: elements.editWeight.value,
-    waste_total_grams: elements.editWaste.value,
+    waste_grams_per_unit: elements.editWastePerUnit.value,
+    tare_grams: elements.editTare.value,
     unit_price: elements.editPrice.value,
     price_mode: selection.price_mode
   });
+  if (calculated.waste_total_grams > PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS) {
+    elements.editWastePerUnit.focus();
+    setMessage("Merma total supera el máximo.", "error");
+    return;
+  }
+  if (calculated.waste_total_grams + calculated.tare_grams >= calculated.read_weight_kg * 1000) {
+    elements.editTare.focus();
+    setMessage("Merma + tara deben ser menores al peso.", "error");
+    return;
+  }
   if (calculated.net_weight_kg <= 0) {
-    setMessage("La merma editada no puede ser igual o mayor que el peso leído.", "error");
+    setMessage("Merma + tara deben ser menores al peso.", "error");
     return;
   }
   if (calculated.amount < 0.01) {
@@ -1541,12 +1607,50 @@ async function restoreScale() {
   }
 }
 
+function renderWastePresetSettings() {
+  state.catalog.waste_presets.forEach((preset, index) => {
+    elements.wastePresetInputs[index].value = String(preset);
+  });
+}
+
+async function saveWastePresets(event) {
+  event.preventDefault();
+  if (state.wastePresetSaving || !elements.wastePresetForm.reportValidity()) return;
+  const proposed = elements.wastePresetInputs.map((input) => Number(input.value));
+  if (proposed.some((value) => !Number.isSafeInteger(value) || value < 0 || value > 1_000_000)) {
+    elements.wastePresetStatus.textContent = "Revisa los valores.";
+    return;
+  }
+
+  state.wastePresetSaving = true;
+  elements.saveWastePresets.disabled = true;
+  elements.wastePresetStatus.textContent = "Guardando…";
+  try {
+    const response = await apiRequest(`${apiBase}/configuracion`, {
+      method: "PUT",
+      body: JSON.stringify({ waste_presets: proposed })
+    });
+    state.catalog.waste_presets = normalizeWastePresets(
+      response?.data?.waste_presets ?? response?.waste_presets ?? proposed
+    );
+    renderWastePresetSettings();
+    renderWastePresets();
+    elements.wastePresetStatus.textContent = "Guardado";
+  } catch (error) {
+    elements.wastePresetStatus.textContent = errorMessage(error);
+  } finally {
+    state.wastePresetSaving = false;
+    elements.saveWastePresets.disabled = false;
+  }
+}
+
 async function loadCatalog() {
   state.loading = true;
   setMessage("Cargando productos, clientes y configuración de la sucursal…");
   try {
     const response = await apiRequest(`${apiBase}/catalogo`);
     state.catalog = normalizeCatalog(response);
+    renderWastePresetSettings();
     initializeDraftStorage();
     elements.branchName.textContent = state.catalog.branch?.name || state.catalog.branch?.nombre || "Sucursal actual";
     const branchId = state.catalog.branch?.id || "default";
@@ -1587,7 +1691,8 @@ state.scale = new RetailScaleController({
 state.numericKeypad = bindIntegerKeypad({
   inputs: [
     { input: elements.quantity, maxLength: 6 },
-    { input: elements.wasteTotal, maxLength: 10 }
+    { input: elements.wastePerUnit, maxLength: 7 },
+    { input: elements.tare, maxLength: 10 }
   ],
   dialog: elements.numericKeypad,
   titleOutput: elements.numericKeypadTitle,
@@ -1646,24 +1751,38 @@ document.addEventListener("click", (event) => {
   if (close) closeDialog(document.querySelector(`#${CSS.escape(close.dataset.pddClose)}`));
 });
 elements.quantity.addEventListener("input", () => {
-  syncDefaultWaste();
+  syncWasteTotal();
   renderCapturePreview();
 });
 elements.quantity.addEventListener("change", () => {
   elements.quantity.value = String(Math.max(1, Math.min(100000, Math.round(Number(elements.quantity.value || 1)))));
   state.numericKeypad?.refreshLabel(elements.quantity);
-  syncDefaultWaste();
+  syncWasteTotal();
   renderCapturePreview();
 });
-elements.wasteTotal.addEventListener("input", () => {
-  state.wasteWasEdited = true;
+elements.wastePerUnit.addEventListener("input", () => {
+  syncWasteTotal();
   renderCapturePreview();
 });
-elements.wasteTotal.addEventListener("change", () => {
-  const normalized = Math.round(Number(elements.wasteTotal.value || 0));
-  elements.wasteTotal.value = String(Number.isFinite(normalized) ? Math.max(0, normalized) : 0);
-  state.numericKeypad?.refreshLabel(elements.wasteTotal);
+elements.wastePerUnit.addEventListener("change", () => {
+  setWastePerUnit(elements.wastePerUnit.value);
   renderCapturePreview();
+});
+elements.tare.addEventListener("input", renderCapturePreview);
+elements.tare.addEventListener("change", () => {
+  const normalized = Math.round(Number(elements.tare.value || 0));
+  elements.tare.value = String(Number.isFinite(normalized) ? Math.max(0, normalized) : 0);
+  state.numericKeypad?.refreshLabel(elements.tare);
+  renderCapturePreview();
+});
+elements.wastePresets.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-pdd-waste-preset]");
+  if (!button) return;
+  const preset = state.catalog.waste_presets[Number(button.dataset.pddWastePreset)];
+  if (Number.isSafeInteger(preset)) {
+    setWastePerUnit(preset);
+    renderCapturePreview();
+  }
 });
 elements.captureWeight.addEventListener("click", () => addCurrentReading());
 elements.manualWeight.addEventListener("click", () => {
@@ -1685,7 +1804,7 @@ elements.manualForm.addEventListener("submit", (event) => {
     renderScale(state.scale.getState());
     closeDialog(elements.manualDialog);
     setMessage(
-      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo. Ajusta producto, cantidad o merma y presiona Capturar peso.`,
+      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo. Ajusta los datos y presiona Capturar peso.`,
       "success"
     );
   } catch (error) {
@@ -1719,7 +1838,7 @@ elements.editProduct.addEventListener("change", () => {
   changeEditingProduct(true);
 });
 elements.editVariation.addEventListener("change", () => changeEditingProduct(true));
-[elements.editQuantity, elements.editWeight, elements.editWaste, elements.editPrice].forEach((input) => input.addEventListener("input", renderEditCalculation));
+[elements.editQuantity, elements.editWeight, elements.editWastePerUnit, elements.editTare, elements.editPrice].forEach((input) => input.addEventListener("input", renderEditCalculation));
 elements.editForm.addEventListener("submit", saveEditingItem);
 elements.deleteWeighing.addEventListener("click", deleteEditingItem);
 elements.changePrice.addEventListener("click", openPriceDialog);
@@ -1738,8 +1857,11 @@ elements.openScaleSettings.addEventListener("click", () => {
 elements.openViewSettings.addEventListener("click", () => {
   if (!elements.typographyPanel.hidden) closeTypographyPanel();
   renderAppScale();
+  renderWastePresetSettings();
+  elements.wastePresetStatus.textContent = "";
   openDialog(elements.viewDialog, state.appScale === APP_SCALE_LEVELS.at(-1) ? elements.zoomOut : elements.zoomIn);
 });
+elements.wastePresetForm.addEventListener("submit", saveWastePresets);
 elements.zoomOut.addEventListener("click", () => stepAppScale(-1));
 elements.zoomIn.addEventListener("click", () => stepAppScale(1));
 elements.zoomReset.addEventListener("click", () => applyAppScale(100));

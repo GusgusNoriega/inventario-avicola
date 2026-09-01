@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ProductDispatch\StoreProductDispatchTicketRequest;
+use App\Http\Requests\ProductDispatch\UpdateProductDispatchConfigurationRequest;
 use App\Models\Balanza;
 use App\Models\ProductoDespacho;
 use App\Models\Tercero;
@@ -11,6 +12,7 @@ use App\Models\TerceroRole;
 use App\Models\TicketDespachoProducto;
 use App\Models\VariacionProductoDespacho;
 use App\Services\OperationContextService;
+use App\Services\ProductDispatchConfigurationService;
 use App\Services\ProductDispatchOperationService;
 use App\Services\TicketMessageService;
 use App\Services\TicketTitleService;
@@ -22,6 +24,7 @@ class ProductDispatchOperationController extends Controller
 {
     public function __construct(
         private readonly OperationContextService $context,
+        private readonly ProductDispatchConfigurationService $configuration,
         private readonly ProductDispatchOperationService $dispatches,
         private readonly TicketTitleService $ticketTitles,
         private readonly TicketMessageService $ticketMessages,
@@ -64,12 +67,17 @@ class ProductDispatchOperationController extends Controller
             'flowControl' => 'none',
             ...(is_array($scale?->configuracion) ? $scale->configuracion : []),
         ];
+        $dispatchConfiguration = $this->configuration->configuration(
+            $companyId,
+            (int) $branch->id,
+        );
 
         return response()->json([
             'data' => [
                 'ticket_title' => $this->ticketTitles->current($companyId),
                 'ticket_message' => $this->ticketMessages->current($companyId),
                 'currency' => (string) (DB::table('empresas')->where('id', $companyId)->value('moneda') ?: 'PEN'),
+                'waste_presets' => $dispatchConfiguration['waste_presets'],
                 'branch' => [
                     'id' => (int) $branch->id,
                     'name' => $branch->nombre,
@@ -113,6 +121,23 @@ class ProductDispatchOperationController extends Controller
                     'configuration' => $serialConfiguration,
                 ],
             ],
+        ]);
+    }
+
+    public function updateConfiguration(
+        UpdateProductDispatchConfigurationRequest $request,
+    ): JsonResponse {
+        $companyId = $this->context->companyId($request);
+        $branch = $this->context->branch($request);
+        $configuration = $this->configuration->update(
+            $companyId,
+            (int) $branch->id,
+            $request->validated('waste_presets'),
+        );
+
+        return response()->json([
+            'message' => 'Mermas rápidas actualizadas correctamente.',
+            'data' => $configuration,
         ]);
     }
 
@@ -196,6 +221,7 @@ class ProductDispatchOperationController extends Controller
                 'read_weight_kg' => (float) $ticket->peso_leido_total_kg,
                 'waste_grams' => (int) $ticket->merma_total_gramos,
                 'waste_weight_kg' => round((int) $ticket->merma_total_gramos / 1000, 3),
+                'tare_grams' => (int) $ticket->tara_total_gramos,
                 'net_weight_kg' => (float) $ticket->peso_neto_total_kg,
                 'subtotal' => (float) $ticket->subtotal,
                 'amount' => (float) $ticket->total,
@@ -231,10 +257,12 @@ class ProductDispatchOperationController extends Controller
                     'weight_source' => $weighing->origen_peso,
                     'read_weight_kg' => (float) $weighing->peso_leido_kg,
                     'catalog_waste_grams_per_unit' => (int) $weighing->merma_catalogo_gramos_unidad,
+                    'waste_grams_per_unit' => (int) $weighing->merma_aplicada_gramos_unidad,
                     'catalog_waste_total_grams' => (int) $weighing->merma_catalogo_gramos_unidad
                         * (int) $weighing->cantidad,
                     'waste_total_grams' => (int) $weighing->merma_total_gramos,
                     'waste_weight_kg' => round((int) $weighing->merma_total_gramos / 1000, 3),
+                    'tare_grams' => (int) $weighing->tara_gramos,
                     'net_weight_kg' => (float) $weighing->peso_neto_kg,
                     'amount' => (float) $weighing->importe,
                     'weighed_at' => $weighing->pesada_at?->toISOString(),

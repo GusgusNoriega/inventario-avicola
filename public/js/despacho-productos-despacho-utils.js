@@ -2,6 +2,8 @@ export const PRODUCT_DISPATCH_DRAFT_COUNT = 8;
 export const PRODUCT_DISPATCH_SCALE_CODE = "BALANZA_DESPACHO_PRODUCTOS";
 export const PRODUCT_PRICE_MODE_KG = "POR_KG";
 export const PRODUCT_PRICE_MODE_UNIT = "POR_UNIDAD";
+export const PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS = [0, 50, 100];
+export const PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS = 1_000_000_000;
 
 export function createUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -40,6 +42,23 @@ export function productInitial(name) {
 
 export function normalizePriceMode(value) {
   return value === PRODUCT_PRICE_MODE_UNIT ? PRODUCT_PRICE_MODE_UNIT : PRODUCT_PRICE_MODE_KG;
+}
+
+export function normalizeWastePresets(value) {
+  if (!Array.isArray(value) || value.length !== 3) {
+    return [...PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS];
+  }
+
+  const presets = value.map(Number);
+  if (presets.some((preset) => (
+    !Number.isSafeInteger(preset)
+    || preset < 0
+    || preset > 1_000_000
+  ))) {
+    return [...PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS];
+  }
+
+  return presets;
 }
 
 export function normalizeCatalog(payload = {}) {
@@ -88,7 +107,8 @@ export function normalizeCatalog(payload = {}) {
     currency: String(source.currency || source.moneda || "S/").trim() || "S/",
     ticket_title: String(source.ticket_title || source.titulo_ticket || "DESPACHO DE PRODUCTOS"),
     ticket_message: String(source.ticket_message || source.mensaje_ticket || "Gracias por su compra"),
-    scale: source.scale || source.balanza || null
+    scale: source.scale || source.balanza || null,
+    waste_presets: normalizeWastePresets(source.waste_presets)
   };
 }
 
@@ -119,9 +139,15 @@ export function itemKey(productId, variationId = null) {
 export function calculateLine(input = {}) {
   const quantity = Math.max(1, Math.round(Number(input.quantity || 1)));
   const readWeightKg = Math.max(0, roundTo(input.read_weight_kg, 3));
-  const wasteTotalGrams = Math.max(0, Math.round(Number(input.waste_total_grams || 0)));
+  const legacyWasteTotal = Math.max(0, Math.round(Number(input.waste_total_grams || 0)));
+  const wasteGramsPerUnit = Math.max(0, Math.round(Number(
+    input.waste_grams_per_unit ?? (legacyWasteTotal / quantity)
+  ) || 0));
+  const wasteTotalGrams = wasteGramsPerUnit * quantity;
+  const tareGrams = Math.max(0, Math.round(Number(input.tare_grams || 0)));
   const wasteWeightKg = roundTo(wasteTotalGrams / 1000, 3);
-  const netWeightKg = Math.max(0, roundTo(readWeightKg - wasteWeightKg, 3));
+  const tareWeightKg = roundTo(tareGrams / 1000, 3);
+  const netWeightKg = Math.max(0, roundTo(readWeightKg - wasteWeightKg - tareWeightKg, 3));
   const unitPrice = Math.max(0, roundTo(input.unit_price, 4));
   const priceMode = normalizePriceMode(input.price_mode);
   const basis = priceMode === PRODUCT_PRICE_MODE_UNIT ? quantity : netWeightKg;
@@ -129,8 +155,11 @@ export function calculateLine(input = {}) {
   return {
     quantity,
     read_weight_kg: readWeightKg,
+    waste_grams_per_unit: wasteGramsPerUnit,
     waste_total_grams: wasteTotalGrams,
     waste_weight_kg: wasteWeightKg,
+    tare_grams: tareGrams,
+    tare_weight_kg: tareWeightKg,
     net_weight_kg: netWeightKg,
     unit_price: unitPrice,
     price_mode: priceMode,
@@ -145,6 +174,7 @@ export function calculateDraft(items = []) {
     totals.quantity += line.quantity;
     totals.read_weight_kg += line.read_weight_kg;
     totals.waste_total_grams += line.waste_total_grams;
+    totals.tare_grams += line.tare_grams;
     totals.net_weight_kg += line.net_weight_kg;
     totals.amount += line.amount;
     totals.read_weight_kg = roundTo(totals.read_weight_kg, 3);
@@ -156,6 +186,7 @@ export function calculateDraft(items = []) {
     quantity: 0,
     read_weight_kg: 0,
     waste_total_grams: 0,
+    tare_grams: 0,
     net_weight_kg: 0,
     amount: 0
   });
@@ -250,7 +281,9 @@ export function buildTicketPayload(draft) {
       quantity: Math.max(1, Math.round(Number(item.quantity))),
       price_mode: normalizePriceMode(item.price_mode),
       unit_price: roundTo(item.unit_price, 4).toFixed(4),
+      waste_grams_per_unit: Math.max(0, Math.round(Number(item.waste_grams_per_unit || 0))),
       waste_total_grams: Math.max(0, Math.round(Number(item.waste_total_grams))),
+      tare_grams: Math.max(0, Math.round(Number(item.tare_grams || 0))),
       weight_source: item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
         ? PRODUCT_DISPATCH_SCALE_CODE
         : "MANUAL",

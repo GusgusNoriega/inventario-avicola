@@ -17,15 +17,18 @@ test("el ticket impreso muestra cliente, variación, merma, peso neto y total co
         variation: { name: "Grande" },
         price_mode: "POR_KG",
         unit_price: "21.0000",
-        net_weight_kg: "9.900",
-        amount: "207.90"
+        waste_grams_per_unit: 50,
+        tare_grams: 20,
+        net_weight_kg: "9.880",
+        amount: "207.48"
       }],
       totals: {
         quantity: 2,
         read_weight_kg: "10.000",
         waste_grams: 100,
-        net_weight_kg: "9.900",
-        amount: "207.90"
+        tare_grams: 20,
+        net_weight_kg: "9.880",
+        amount: "207.48"
       },
       ticket_message: "Gracias por su compra"
     }
@@ -35,8 +38,10 @@ test("el ticket impreso muestra cliente, variación, merma, peso neto y total co
   assert.match(html, /Cliente:<\/strong> Tienda Norte/);
   assert.match(html, /Pavo · Grande/);
   assert.match(html, /Merma<\/span><strong>100 g/);
-  assert.match(html, /9\.900 kg/);
-  assert.match(html, /S\/ 207\.90/);
+  assert.match(html, /M 50 g\/u · T 20 g/);
+  assert.match(html, /Tara<\/span><strong>20 g/);
+  assert.match(html, /9\.880 kg/);
+  assert.match(html, /S\/ 207\.48/);
   assert.match(html, /Gracias por su compra/);
 });
 

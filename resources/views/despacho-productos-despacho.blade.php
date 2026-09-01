@@ -39,7 +39,7 @@
         </button>
         <button id="pddOpenViewSettings" class="pdd-icon-action pdd-view-settings-action" type="button" aria-haspopup="dialog" aria-controls="pddViewDialog">
           <span aria-hidden="true">Aa</span>
-          <span class="pdd-action-label"><span>Configuración</span><span>Vista</span></span>
+          <span class="pdd-action-label"><span>Configuración</span><span>Ajustes</span></span>
         </button>
         <a class="pdd-menu-action" href="{{ route('despacho-productos.menu') }}" aria-label="Volver al módulo Despacho de productos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h7v7H4zM13 5h7v7h-7zM4 14h7v5H4zM13 14h7v5h-7z"></path></svg>
@@ -103,18 +103,37 @@
             <small id="pddPriceMode">Selecciona un producto</small>
           </label>
           <label>
-            <span>Merma total</span>
+            <span>Tara</span>
             <span class="pdd-touch-number-input">
-              <input id="pddWasteTotal" type="number" min="0" max="1000000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Merma total en gramos" data-pdd-keypad-value-label="Merma seleccionada" data-pdd-keypad-confirm-label="Usar merma" data-pdd-keypad-value-name="merma" aria-label="Merma total en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-describedby="pddWasteHint" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <input id="pddTare" type="number" min="0" max="1000000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Tara en gramos" data-pdd-keypad-value-label="Tara seleccionada" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" aria-label="Tara en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
               <b aria-hidden="true">g</b>
             </span>
-            <small id="pddWasteHint">Se calcula según la cantidad y puedes modificarla.</small>
           </label>
           <div class="pdd-net-preview">
             <span>Peso neto estimado</span>
             <strong id="pddNetPreview">--- kg</strong>
             <small id="pddAmountPreview">Total estimado S/ --</small>
           </div>
+        </div>
+
+        <div class="pdd-waste-strip">
+          <label class="pdd-waste-unit-control">
+            <span>Merma/u</span>
+            <span class="pdd-touch-number-input">
+              <input id="pddWastePerUnit" type="number" min="0" max="1000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Merma por unidad en gramos" data-pdd-keypad-value-label="Merma por unidad" data-pdd-keypad-confirm-label="Usar merma" data-pdd-keypad-value-name="merma por unidad" aria-label="Merma por unidad en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-describedby="pddWasteHint" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <b aria-hidden="true">g/u</b>
+            </span>
+          </label>
+          <div id="pddWastePresets" class="pdd-waste-presets" role="group" aria-label="Mermas estándar">
+            <button type="button" data-pdd-waste-preset="0" aria-pressed="true"><span>M1</span><strong>0 g</strong></button>
+            <button type="button" data-pdd-waste-preset="1" aria-pressed="false"><span>M2</span><strong>50 g</strong></button>
+            <button type="button" data-pdd-waste-preset="2" aria-pressed="false"><span>M3</span><strong>100 g</strong></button>
+          </div>
+          <span class="pdd-waste-total-display">
+            <span>Merma total</span>
+            <output id="pddWasteTotal" aria-live="polite">0 g</output>
+          </span>
+          <small id="pddWasteHint" class="pdd-waste-hint" aria-live="polite"></small>
         </div>
 
         <div class="pdd-variations-block">
@@ -199,7 +218,7 @@
         <span>Peso leído</span>
         <span><input id="pddManualInput" type="number" min="0.001" max="999999999.999" step="0.001" inputmode="decimal" placeholder="0.000" required><b>kg</b></span>
       </label>
-      <p>El peso quedará visible como lectura activa. Después podrás cambiar el producto, la variación, la cantidad o la merma antes de pulsar Capturar peso.</p>
+      <p>El peso quedará visible para ajustar producto, cantidad, merma o tara antes de capturarlo.</p>
       <footer class="pdd-dialog-actions">
         <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddManualDialog">Cancelar</button>
         <button class="pdd-dialog-confirm" type="submit">Mostrar este peso</button>
@@ -271,7 +290,9 @@
         <label><span>Variación</span><select id="pddEditVariation"></select></label>
         <label><span>Cantidad</span><input id="pddEditQuantity" type="number" min="1" max="100000" step="1" required></label>
         <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0.001" max="999999999.999" step="0.001" required></label>
-        <label><span>Merma total (g)</span><input id="pddEditWaste" type="number" min="0" max="1000000000" step="1" required></label>
+        <label><span>Merma/u (g)</span><input id="pddEditWastePerUnit" type="number" min="0" max="1000000" step="1" required></label>
+        <label><span>Merma total (g)</span><output id="pddEditWasteTotal" class="pdd-edit-output">0 g</output></label>
+        <label><span>Tara (g)</span><input id="pddEditTare" type="number" min="0" max="1000000000" step="1" required></label>
         <label><span>Precio de venta</span><input id="pddEditPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" required></label>
       </div>
       <div class="pdd-edit-summary">
@@ -335,7 +356,7 @@
   <dialog id="pddViewDialog" class="pdd-dialog pdd-view-dialog" aria-labelledby="pddViewDialogTitle">
     <section>
       <header class="pdd-dialog-head">
-        <div><p>Preferencias de pantalla</p><h2 id="pddViewDialogTitle">Configuración de la vista</h2></div>
+        <div><p>Vista y despacho</p><h2 id="pddViewDialogTitle">Configuración</h2></div>
         <button type="button" data-pdd-close="pddViewDialog" aria-label="Cerrar">×</button>
       </header>
 
@@ -371,6 +392,17 @@
           aria-expanded="false"
         >Editar tamaños</button>
       </div>
+
+      <form id="pddWastePresetForm" class="pdd-waste-preset-setting">
+        <div><strong>Mermas M1–M3</strong><small>Gramos por unidad</small></div>
+        <div class="pdd-waste-preset-inputs">
+          <label><span>M1</span><input id="pddWastePreset1" type="number" min="0" max="1000000" step="1" value="0" required></label>
+          <label><span>M2</span><input id="pddWastePreset2" type="number" min="0" max="1000000" step="1" value="50" required></label>
+          <label><span>M3</span><input id="pddWastePreset3" type="number" min="0" max="1000000" step="1" value="100" required></label>
+        </div>
+        <button id="pddSaveWastePresets" type="submit">Guardar</button>
+        <small id="pddWastePresetStatus" class="pdd-waste-preset-status" role="status" aria-live="polite"></small>
+      </form>
 
       <footer class="pdd-dialog-actions is-spread">
         <button id="pddZoomReset" class="pdd-dialog-cancel" type="button">Restablecer a 100%</button>

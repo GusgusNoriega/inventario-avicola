@@ -24,6 +24,7 @@ function ticketTotals(ticket, items) {
     quantity: source.quantity ?? source.cantidad ?? items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     readWeight: source.read_weight_kg ?? source.peso_leido_kg ?? items.reduce((sum, item) => sum + Number(item.read_weight_kg || 0), 0),
     waste: source.waste_grams ?? source.waste_total_grams ?? source.merma_gramos ?? items.reduce((sum, item) => sum + Number(item.waste_total_grams || 0), 0),
+    tare: source.tare_grams ?? source.tara_gramos ?? items.reduce((sum, item) => sum + Number(item.tare_grams || 0), 0),
     netWeight: source.net_weight_kg ?? source.peso_neto_kg ?? items.reduce((sum, item) => sum + Number(item.net_weight_kg || 0), 0),
     amount: source.amount ?? source.total ?? ticket.total ?? items.reduce((sum, item) => sum + Number(itemAmount(item)), 0)
   };
@@ -51,7 +52,7 @@ function printableHtml(response, options = {}) {
       <td colspan="4" class="name">${index + 1}. ${escapeHtml(displayName(item))}</td>
     </tr>
     <tr class="detail">
-      <td>${Number(item.quantity || 0)} und</td>
+      <td>${Number(item.quantity || 0)} und<br><small>M ${Number(item.waste_grams_per_unit || 0)} g/u${Number(item.tare_grams || 0) ? ` · T ${Number(item.tare_grams)} g` : ""}</small></td>
       <td>${formatWeight(item.net_weight_kg || 0)}</td>
       <td>${escapeHtml(formatMoney(item.unit_price || 0, currency))}<br><small>${escapeHtml(priceModeLabel(item.price_mode))}</small></td>
       <td class="right">${escapeHtml(formatMoney(itemAmount(item), currency))}</td>
@@ -78,6 +79,7 @@ function printableHtml(response, options = {}) {
       <span>Cantidad</span><strong>${Number(totals.quantity || 0)} und</strong>
       <span>Peso leído</span><strong>${escapeHtml(formatWeight(totals.readWeight))}</strong>
       <span>Merma</span><strong>${Number(totals.waste || 0)} g</strong>
+      <span>Tara</span><strong>${Number(totals.tare || 0)} g</strong>
       <span>Peso neto</span><strong>${escapeHtml(formatWeight(totals.netWeight))}</strong>
       <span class="grand">TOTAL</span><strong class="grand">${escapeHtml(formatMoney(totals.amount, currency))}</strong>
     </div>

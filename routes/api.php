@@ -379,6 +379,7 @@ Route::prefix('v1')->group(function (): void {
         ])
         ->group(function (): void {
             Route::get('/catalogo', [ProductDispatchOperationController::class, 'catalog']);
+            Route::put('/configuracion', [ProductDispatchOperationController::class, 'updateConfiguration']);
             Route::post('/tickets', [ProductDispatchOperationController::class, 'store']);
             Route::get('/tickets/{ticket}', [ProductDispatchOperationController::class, 'show'])
                 ->whereNumber('ticket');

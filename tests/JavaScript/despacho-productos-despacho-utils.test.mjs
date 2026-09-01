@@ -12,7 +12,8 @@ import {
   calculateLine,
   effectiveProduct,
   normalizeCatalog,
-  normalizeDraft
+  normalizeDraft,
+  normalizeWastePresets
 } from "../../public/js/despacho-productos-despacho-utils.js";
 
 test("la estación siempre mantiene ocho listas independientes y recuperables", () => {
@@ -87,8 +88,11 @@ test("los importes por kg usan peso neto y los importes por unidad usan cantidad
   assert.deepEqual(kgLine, {
     quantity: 2,
     read_weight_kg: 10,
+    waste_grams_per_unit: 50,
     waste_total_grams: 100,
     waste_weight_kg: 0.1,
+    tare_grams: 0,
+    tare_weight_kg: 0,
     net_weight_kg: 9.9,
     unit_price: 21,
     price_mode: PRODUCT_PRICE_MODE_KG,
@@ -101,6 +105,7 @@ test("los importes por kg usan peso neto y los importes por unidad usan cantidad
     quantity: 14,
     read_weight_kg: 12,
     waste_total_grams: 124,
+    tare_grams: 0,
     net_weight_kg: 11.876,
     amount: 216.9
   });
@@ -168,7 +173,9 @@ test("el payload conserva precisión y evidencia solo para la balanza de product
       quantity: 2,
       price_mode: PRODUCT_PRICE_MODE_KG,
       unit_price: "20.5000",
+      waste_grams_per_unit: 30,
       waste_total_grams: 60,
+      tare_grams: 0,
       weight_source: PRODUCT_DISPATCH_SCALE_CODE,
       read_weight_kg: "4.321",
       weighed_at: "2026-08-28T10:00:00-05:00",
@@ -200,4 +207,29 @@ test("el catálogo acepta el contrato del API y normaliza clientes para búsqued
   assert.equal(catalog.products[0].price_mode, PRODUCT_PRICE_MODE_UNIT);
   assert.equal(catalog.clients[0].document, "901234567");
   assert.equal(catalog.ticket_title, "AVÍCOLA DE PRUEBA");
+  assert.deepEqual(catalog.waste_presets, [0, 50, 100]);
+});
+
+test("la merma por unidad y la tara se descuentan juntas sin modificar la merma total", () => {
+  const line = calculateLine({
+    quantity: 3,
+    read_weight_kg: 5,
+    waste_grams_per_unit: 40,
+    tare_grams: 80,
+    unit_price: 10,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+
+  assert.equal(line.waste_total_grams, 120);
+  assert.equal(line.tare_weight_kg, 0.08);
+  assert.equal(line.net_weight_kg, 4.8);
+  assert.equal(line.amount, 48);
+  assert.equal(calculateDraft([line]).tare_grams, 80);
+});
+
+test("los tres presets del catálogo son enteros seguros y tienen valores de respaldo", () => {
+  assert.deepEqual(normalizeWastePresets([10, 20, 30]), [10, 20, 30]);
+  assert.deepEqual(normalizeWastePresets([10, -1, 30]), [0, 50, 100]);
+  assert.deepEqual(normalizeWastePresets([10, 20]), [0, 50, 100]);
+  assert.deepEqual(normalizeWastePresets([10, 20, 1_000_001]), [0, 50, 100]);
 });

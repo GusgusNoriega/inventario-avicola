@@ -117,6 +117,7 @@ class ProductDispatchOperationService
                 'cantidad_total' => $totals['quantity'],
                 'peso_leido_total_kg' => $totals['read_weight_kg'],
                 'merma_total_gramos' => $totals['waste_grams'],
+                'tara_total_gramos' => $totals['tare_grams'],
                 'peso_neto_total_kg' => $totals['net_weight_kg'],
                 'subtotal' => $totals['amount'],
                 'total' => $totals['amount'],
@@ -150,7 +151,9 @@ class ProductDispatchOperationService
                     'origen_peso' => $weighing['weight_source'],
                     'peso_leido_kg' => $weighing['read_weight_kg'],
                     'merma_catalogo_gramos_unidad' => $weighing['catalog_waste_grams_per_unit'],
+                    'merma_aplicada_gramos_unidad' => $weighing['applied_waste_grams_per_unit'],
                     'merma_total_gramos' => $weighing['waste_total_grams'],
+                    'tara_gramos' => $weighing['tare_grams'],
                     'peso_neto_kg' => $weighing['net_weight_kg'],
                     'importe' => $weighing['amount'],
                     'pesada_at' => $weighing['weighed_at'],
@@ -357,12 +360,39 @@ class ProductDispatchOperationService
             $quantity = (int) $input['quantity'];
             $readWeightKg = round((float) $input['read_weight_kg'], 3, PHP_ROUND_HALF_UP);
             $readWeightGrams = (int) round($readWeightKg * 1000, 0, PHP_ROUND_HALF_UP);
-            $wasteTotalGrams = (int) $input['waste_total_grams'];
-            $netWeightGrams = $readWeightGrams - $wasteTotalGrams;
+            $submittedWasteTotalGrams = (int) $input['waste_total_grams'];
+            if (array_key_exists('waste_grams_per_unit', $input)) {
+                $appliedWasteGramsPerUnit = (int) $input['waste_grams_per_unit'];
+                $wasteTotalGrams = $appliedWasteGramsPerUnit * $quantity;
+
+                if ($wasteTotalGrams > 1_000_000_000) {
+                    throw ValidationException::withMessages([
+                        "weighings.{$index}.waste_grams_per_unit" => 'La merma por unidad multiplicada por la cantidad supera el máximo permitido.',
+                    ]);
+                }
+
+                if ($submittedWasteTotalGrams !== $wasteTotalGrams) {
+                    throw ValidationException::withMessages([
+                        "weighings.{$index}.waste_total_grams" => 'La merma total no coincide con la merma por unidad multiplicada por la cantidad.',
+                    ]);
+                }
+            } else {
+                $wasteTotalGrams = $submittedWasteTotalGrams;
+                $appliedWasteGramsPerUnit = (int) round(
+                    $wasteTotalGrams / max(1, $quantity),
+                    0,
+                    PHP_ROUND_HALF_UP,
+                );
+            }
+            $tareGrams = (int) ($input['tare_grams'] ?? 0);
+            $netWeightGrams = $readWeightGrams - $wasteTotalGrams - $tareGrams;
 
             if ($netWeightGrams <= 0) {
+                $field = $tareGrams > 0
+                    ? "weighings.{$index}.tare_grams"
+                    : "weighings.{$index}.waste_total_grams";
                 throw ValidationException::withMessages([
-                    "weighings.{$index}.waste_total_grams" => 'La merma total debe ser menor que el peso leído.',
+                    $field => 'La suma de merma y tara debe ser menor que el peso leído.',
                 ]);
             }
 
@@ -373,6 +403,8 @@ class ProductDispatchOperationService
                 PHP_ROUND_HALF_UP,
             );
             $unitPrice = round((float) $input['unit_price'], 4, PHP_ROUND_HALF_UP);
+            $catalogWasteGramsPerUnit = (int) ($variation?->merma_gramos_unidad
+                ?? $product->merma_gramos_unidad);
             $amountBase = $priceMode === ProductoDespacho::PRICE_MODE_KG
                 ? $netWeightKg
                 : $quantity;
@@ -403,9 +435,10 @@ class ProductDispatchOperationService
                 'quantity' => $quantity,
                 'weight_source' => $weightSource,
                 'read_weight_kg' => $readWeightKg,
-                'catalog_waste_grams_per_unit' => (int) ($variation?->merma_gramos_unidad
-                    ?? $product->merma_gramos_unidad),
+                'catalog_waste_grams_per_unit' => $catalogWasteGramsPerUnit,
+                'applied_waste_grams_per_unit' => $appliedWasteGramsPerUnit,
                 'waste_total_grams' => $wasteTotalGrams,
+                'tare_grams' => $tareGrams,
                 'net_weight_kg' => $netWeightKg,
                 'amount' => $amount,
                 'weighed_at' => $weighedAt->get($index),
@@ -415,7 +448,7 @@ class ProductDispatchOperationService
 
     /**
      * @param  Collection<int, array<string, mixed>>  $weighings
-     * @return array{quantity: int, read_weight_kg: float, waste_grams: int, net_weight_kg: float, amount: float}
+     * @return array{quantity: int, read_weight_kg: float, waste_grams: int, tare_grams: int, net_weight_kg: float, amount: float}
      */
     private function totals(Collection $weighings): array
     {
@@ -445,6 +478,7 @@ class ProductDispatchOperationService
             'quantity' => (int) $weighings->sum('quantity'),
             'read_weight_kg' => $readWeight,
             'waste_grams' => (int) $weighings->sum('waste_total_grams'),
+            'tare_grams' => (int) $weighings->sum('tare_grams'),
             'net_weight_kg' => $netWeight,
             'amount' => $amount,
         ];
@@ -502,7 +536,9 @@ class ProductDispatchOperationService
                     'origen_precio' => $weighing->origen_precio,
                     'merma_catalogo_total_gramos' => (int) $weighing->merma_catalogo_gramos_unidad
                         * (int) $weighing->cantidad,
+                    'merma_aplicada_gramos_unidad' => $weighing->merma_aplicada_gramos_unidad,
                     'merma_aplicada_total_gramos' => $weighing->merma_total_gramos,
+                    'tara_gramos' => $weighing->tara_gramos,
                     'origen_peso' => $weighing->origen_peso,
                     'peso_leido_kg' => $weighing->peso_leido_kg,
                     'peso_neto_kg' => $weighing->peso_neto_kg,

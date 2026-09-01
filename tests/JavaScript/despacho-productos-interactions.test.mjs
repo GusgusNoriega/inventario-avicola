@@ -63,9 +63,11 @@ test("la validación del teclado respeta obligatoriedad y límites de cantidad",
   );
 });
 
-test("cantidad y merma son controles grandes del mismo teclado y no usan botones más o menos", () => {
+test("cantidad, merma por unidad y tara comparten el teclado; la merma total es solo lectura", () => {
   const quantityInput = dispatchView.match(/<input\b[^>]*\bid="pddQuantity"[^>]*>/)?.[0] || "";
-  const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWasteTotal"[^>]*>/)?.[0] || "";
+  const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWastePerUnit"[^>]*>/)?.[0] || "";
+  const tareInput = dispatchView.match(/<input\b[^>]*\bid="pddTare"[^>]*>/)?.[0] || "";
+  const wasteTotalOutput = dispatchView.match(/<output\b[^>]*\bid="pddWasteTotal"[^>]*>/)?.[0] || "";
   const keypadBinding = sourceBetween(
     dispatchSource,
     "bindIntegerKeypad({",
@@ -73,8 +75,11 @@ test("cantidad y merma son controles grandes del mismo teclado y no usan botones
   );
 
   assert.ok(quantityInput, "No se encontró el campo de cantidad.");
-  assert.ok(wasteInput, "No se encontró el campo de merma.");
-  for (const input of [quantityInput, wasteInput]) {
+  assert.ok(wasteInput, "No se encontró el campo de merma por unidad.");
+  assert.ok(tareInput, "No se encontró el campo de tara.");
+  assert.ok(wasteTotalOutput, "La merma total debe mostrarse en un output.");
+  assert.doesNotMatch(dispatchView, /<input\b[^>]*\bid="pddWasteTotal"/);
+  for (const input of [quantityInput, wasteInput, tareInput]) {
     assert.match(input, /\breadonly\b/);
     assert.match(input, /\binputmode="none"/);
     assert.match(input, /\bdata-pdd-keypad-label=/);
@@ -83,19 +88,20 @@ test("cantidad y merma son controles grandes del mismo teclado y no usan botones
 
   const quantityDialogId = quantityInput.match(/\baria-controls="([^"]+)"/)?.[1];
   const wasteDialogId = wasteInput.match(/\baria-controls="([^"]+)"/)?.[1];
+  const tareDialogId = tareInput.match(/\baria-controls="([^"]+)"/)?.[1];
   assert.equal(wasteDialogId, quantityDialogId, "Cantidad y merma deben abrir el mismo diálogo.");
+  assert.equal(tareDialogId, quantityDialogId, "Cantidad y tara deben abrir el mismo diálogo.");
   assert.match(dispatchView, new RegExp(`<dialog\\b[^>]*\\bid="${quantityDialogId}"[^>]*>`));
 
   assert.doesNotMatch(dispatchView, /data-pdd-quantity-step|Disminuir cantidad|Aumentar cantidad/);
   assert.doesNotMatch(dispatchSource, /data-pdd-quantity-step/);
   assert.equal((dispatchSource.match(/\bbindIntegerKeypad\s*\(\{/g) || []).length, 1);
   assert.match(keypadBinding, /elements\.quantity/);
-  assert.match(keypadBinding, /elements\.wasteTotal/);
+  assert.match(keypadBinding, /elements\.wastePerUnit/);
+  assert.match(keypadBinding, /elements\.tare/);
+  assert.doesNotMatch(keypadBinding, /elements\.wasteTotal/);
 
-  assert.match(
-    dispatchView,
-    /class="pdd-touch-number-input"[\s\S]*?id="pddQuantity"[\s\S]*?class="pdd-touch-number-input"[\s\S]*?id="pddWasteTotal"/
-  );
+  assert.equal((dispatchView.match(/class="pdd-touch-number-input"/g) || []).length, 3);
   const wasteControlStyles = dispatchStyles.match(/\.pdd-touch-number-input\s+input\s*\{([^}]*)\}/)?.[1] || "";
   const wasteControlHeight = Number(wasteControlStyles.match(/(?:min-)?height:\s*(\d+)px/)?.[1]);
   assert.ok(wasteControlHeight >= 60, "El control táctil de merma debe medir al menos 60 px de alto.");
@@ -112,12 +118,13 @@ test("el teclado confirma con eventos que recalculan cantidad, merma y total", (
   );
   assert.match(
     dispatchSource,
-    /elements\.quantity\.addEventListener\(["']input["'][\s\S]*?syncDefaultWaste\(\);[\s\S]*?renderCapturePreview\(\);/
+    /elements\.quantity\.addEventListener\(["']input["'][\s\S]*?syncWasteTotal\(\);[\s\S]*?renderCapturePreview\(\);/
   );
   assert.match(
     dispatchSource,
-    /elements\.wasteTotal\.addEventListener\(["']input["'][\s\S]*?wasteWasEdited\s*=\s*true;[\s\S]*?renderCapturePreview\(\);/
+    /elements\.wastePerUnit\.addEventListener\(["']input["'][\s\S]*?syncWasteTotal\(\);[\s\S]*?renderCapturePreview\(\);/
   );
+  assert.match(dispatchSource, /elements\.tare\.addEventListener\(["']input["'],\s*renderCapturePreview\)/);
 });
 
 test("confirmar el peso manual solo fija la lectura pendiente y no agrega una pesada", () => {
@@ -239,15 +246,15 @@ test("el teclado enfoca el output y Enter respeta cualquier botón del diálogo"
   );
 });
 
-test("la merma automática fuera del máximo bloquea Capturar sin recortarse", () => {
-  const syncWasteFlow = sourceBetween(
+test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () => {
+  const captureValuesFlow = sourceBetween(
     dispatchSource,
-    "function syncDefaultWaste",
-    "function wasteValidationMessage"
+    "function captureValues",
+    "function renderWastePresets"
   );
   const validationFlow = sourceBetween(
     dispatchSource,
-    "function wasteValidationMessage",
+    "function captureValidation",
     "function renderCapturePreview"
   );
   const previewFlow = sourceBetween(
@@ -262,23 +269,37 @@ test("la merma automática fuera del máximo bloquea Capturar sin recortarse", (
   );
 
   assert.match(
-    syncWasteFlow,
-    /wasteTotal\.value\s*=\s*String\(selection\.waste_grams_per_unit\s*\*\s*quantity\)/
+    captureValuesFlow,
+    /waste_total_grams:\s*wasteGramsPerUnit\s*\*\s*quantity/
   );
-  assert.doesNotMatch(syncWasteFlow, /Math\.min\s*\(|clamp(?:Number)?\s*\(/i);
-  assert.match(validationFlow, /waste\s*>\s*maximum/);
-  assert.match(validationFlow, /merma total no puede superar/i);
-  assert.match(previewFlow, /const wasteError\s*=\s*wasteValidationMessage\(\)/);
-  assert.match(previewFlow, /captureReady[\s\S]*&&\s*!wasteError[\s\S]*captureWeight\.disabled\s*=\s*!captureReady/);
+  assert.doesNotMatch(captureValuesFlow, /Math\.min\s*\(|clamp(?:Number)?\s*\(/i);
+  assert.match(validationFlow, /waste_total_grams\s*>\s*PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS/);
+  assert.match(validationFlow, /waste_total_grams\s*\+\s*values\.tare_grams\s*>=\s*weightKg\s*\*\s*1000/);
+  assert.match(previewFlow, /const validation\s*=\s*captureValidation\(/);
+  assert.match(previewFlow, /captureReady[\s\S]*&&\s*!validation\.message[\s\S]*captureWeight\.disabled\s*=\s*!captureReady/);
   assert.match(
     addReadingFlow,
-    /const wasteError\s*=\s*wasteValidationMessage\(\);\s*if\s*\(wasteError\)\s*\{[\s\S]*wasteTotal\.focus\(\);[\s\S]*setMessage\(wasteError,\s*["']error["']\);[\s\S]*return false;/
+    /const validation\s*=\s*captureValidation\(weight\);\s*if\s*\(validation\.message\)\s*\{[\s\S]*validation\.target\?\.focus\(\);[\s\S]*setMessage\(validation\.message,\s*["']error["']\);[\s\S]*return false;/
   );
   assert.ok(
-    addReadingFlow.indexOf("const wasteError = wasteValidationMessage()")
+    addReadingFlow.indexOf("const validation = captureValidation(weight)")
       < addReadingFlow.indexOf("const calculated = calculateLine"),
-    "La merma fuera de rango debe rechazarse antes de calcular o insertar la pesada."
+    "La merma o tara fuera de rango debe rechazarse antes de calcular o insertar la pesada."
   );
+});
+
+test("los tres presets son táctiles, indican selección y se guardan en la configuración", () => {
+  assert.equal((dispatchView.match(/data-pdd-waste-preset="[012]"/g) || []).length, 3);
+  assert.match(dispatchView, /id="pddWastePresetForm"/);
+  assert.match(dispatchSource, /aria-pressed="\$\{active\}"/);
+  assert.match(dispatchSource, /apiRequest\(`\$\{apiBase\}\/configuracion`,\s*\{[\s\S]*method:\s*"PUT"/);
+  assert.match(dispatchSource, /JSON\.stringify\(\{\s*waste_presets:\s*proposed\s*\}\)/);
+  assert.match(dispatchStyles, /\.pdd-waste-presets button\s*\{[^}]*min-height:\s*52px/);
+});
+
+test("la tara vuelve a cero después de capturar una pesada", () => {
+  const addReadingFlow = sourceBetween(dispatchSource, "function addCurrentReading", "function openProductDialog");
+  assert.match(addReadingFlow, /activeDraft\(\)\.items\.push\(item\);[\s\S]*elements\.tare\.value\s*=\s*"0"/);
 });
 
 test("en móvil Cantidad ocupa toda la fila para evitar desbordes", () => {
