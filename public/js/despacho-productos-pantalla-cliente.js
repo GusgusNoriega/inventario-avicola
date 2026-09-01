@@ -5,6 +5,7 @@ import {
   PRODUCT_DISPATCH_CUSTOMER_DISPLAY_REQUEST_TYPE,
   PRODUCT_DISPATCH_CUSTOMER_DISPLAY_RESET_TYPE
 } from "./product-dispatch-customer-display.js";
+import { initializeProductCustomerDisplayTypography } from "./product-dispatch-customer-display-typography.js";
 
 const query = new URLSearchParams(globalThis.location.search);
 const BRANCH_ID = String(query.get("branch") || "").trim();
@@ -36,7 +37,9 @@ const elements = {
   listAmount: document.getElementById("productCustomerDisplayListAmount"),
   announcement: document.getElementById("productCustomerDisplayAnnouncement"),
   fullscreen: document.getElementById("productCustomerDisplayFullscreen"),
+  fullscreenLabel: document.getElementById("productCustomerDisplayFullscreenLabel"),
   chooseScreen: document.getElementById("productCustomerDisplayChooseScreen"),
+  chooseScreenLabel: document.getElementById("productCustomerDisplayChooseScreenLabel"),
   screenDialog: document.getElementById("productCustomerDisplayScreenDialog"),
   screenClose: document.getElementById("productCustomerDisplayScreenClose"),
   screenList: document.getElementById("productCustomerDisplayScreenList"),
@@ -48,6 +51,7 @@ let lastUpdateAt = 0;
 let lastPayloadTimestamp = 0;
 let lastRevision = 0;
 let lastProducerInstance = 0;
+let typographySettings = null;
 
 function normalizeNumber(value) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
@@ -322,7 +326,7 @@ async function requestFullscreenOnScreen(screen, index) {
     if (document.fullscreenElement) await document.exitFullscreen();
     await document.documentElement.requestFullscreen({ navigationUI: "hide", screen });
     elements.screenDialog.close();
-    elements.chooseScreen.textContent = "Cambiar monitor";
+    elements.chooseScreenLabel.textContent = "Cambiar monitor";
   } catch {
     try {
       globalThis.moveTo(
@@ -361,6 +365,7 @@ function renderScreenChoices(screens) {
 }
 
 async function openScreenPicker() {
+  typographySettings?.close({ restoreFocus: false });
   elements.screenList.replaceChildren();
   setScreenFeedback("Buscando pantallas…");
   elements.screenDialog.showModal();
@@ -397,6 +402,17 @@ const scopeIsValid = Boolean(
   && USER_ID === AUTHENTICATED_USER_ID
 );
 
+typographySettings = initializeProductCustomerDisplayTypography({
+  document,
+  window: globalThis,
+  branchId: BRANCH_ID,
+  userId: USER_ID,
+  enabled: scopeIsValid,
+  beforeOpen() {
+    if (elements.screenDialog.open) elements.screenDialog.close();
+  }
+});
+
 if (scopeIsValid && "BroadcastChannel" in globalThis) {
   channel = new BroadcastChannel(CHANNEL_NAME);
   channel.addEventListener("message", (event) => {
@@ -422,6 +438,7 @@ globalThis.addEventListener("storage", (event) => {
 });
 
 elements.fullscreen.addEventListener("click", async () => {
+  typographySettings?.close({ restoreFocus: false });
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen({ navigationUI: "hide" });
@@ -435,9 +452,11 @@ elements.screenDialog.addEventListener("click", (event) => {
   if (event.target === elements.screenDialog) elements.screenDialog.close();
 });
 document.addEventListener("fullscreenchange", () => {
-  elements.fullscreen.textContent = document.fullscreenElement
+  const label = document.fullscreenElement
     ? "Salir de pantalla completa"
     : "Pantalla completa";
+  elements.fullscreenLabel.textContent = label;
+  elements.fullscreen.setAttribute("aria-label", label);
 });
 
 globalThis.setInterval(() => {
