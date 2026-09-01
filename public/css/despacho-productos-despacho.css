@@ -634,6 +634,42 @@ button { color: inherit; }
 .pdd-typography-setting button { min-height: 44px; padding: 0 13px; border: 1px solid rgba(169, 135, 255, .5); border-radius: 11px; color: #eee7ff; background: #2a204a; cursor: pointer; font-size: 12px; font-weight: 900; }
 .pdd-typography-setting button:hover { border-color: var(--pdd-violet); background: #382760; }
 
+.pdd-quick-product-setting { display: grid; gap: 7px; margin-top: 12px; padding: 12px; border: 1px solid rgba(67, 199, 237, .4); border-radius: 14px; background: linear-gradient(120deg, rgba(67, 199, 237, .1), transparent 55%), var(--pdd-surface-raised); }
+.pdd-quick-product-setting-head { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pdd-quick-product-setting-head > span { min-width: 0; display: flex; align-items: center; gap: 7px; }
+.pdd-quick-product-setting-head strong { font-size: .8rem; }
+.pdd-quick-product-setting-head small { padding: 4px 7px; border-radius: 999px; color: #dff8ff; background: #17303a; font-size: .67rem; font-weight: 900; }
+.pdd-quick-product-setting-head > button { min-width: 76px; min-height: 44px; padding: 0 11px; border: 0; border-radius: 10px; color: #04110c; background: var(--pdd-green); cursor: pointer; font-size: .72rem; font-weight: 900; }
+.pdd-quick-product-setting-head > button:disabled { cursor: not-allowed; opacity: .4; }
+.pdd-quick-product-selection { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.pdd-quick-product-selection > button,
+.pdd-quick-product-selection > .is-empty { position: relative; min-width: 0; min-height: 54px; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 6px; overflow: hidden; padding: 5px; border: 1px solid #3c6255; border-radius: 10px; color: var(--pdd-ink); background: #0b1512; text-align: left; }
+.pdd-quick-product-selection > button { cursor: pointer; touch-action: manipulation; }
+.pdd-quick-product-selection > button:hover { border-color: #ff9ca4; }
+.pdd-quick-product-selection > button::after { position: absolute; top: 2px; right: 4px; content: "×"; color: #ffb2b8; font-size: .78rem; font-weight: 900; }
+.pdd-quick-product-selection > .is-empty { grid-template-columns: 1fr; place-items: center; color: var(--pdd-muted); border-style: dashed; background: transparent; }
+.pdd-quick-product-selection > button > i,
+.pdd-quick-product-selection > .is-empty > i { position: absolute; z-index: 1; top: 3px; left: 3px; min-width: 17px; height: 17px; display: grid; place-items: center; border-radius: 6px; color: #06110d; background: var(--pdd-lime); font-size: .58rem; font-style: normal; font-weight: 950; }
+.pdd-quick-product-selection > button > span { width: 34px; height: 40px; display: block; overflow: hidden; border-radius: 7px; }
+.pdd-quick-product-selection b { min-width: 0; overflow: hidden; font-size: .65rem; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.pdd-quick-product-selection > .is-empty b { font-size: .62rem; }
+.pdd-quick-product-search { min-height: 44px; display: grid; grid-template-columns: 30px 1fr; align-items: center; padding: 0 8px; border: 1px solid #345247; border-radius: 10px; background: var(--pdd-input); }
+.pdd-quick-product-search > span { color: var(--pdd-cyan); font-size: 1.25rem; text-align: center; }
+.pdd-quick-product-search input { min-width: 0; height: 42px; padding: 0 4px; border: 0; outline: 0; background: transparent; font-size: .8rem; }
+.pdd-quick-product-search:focus-within { border-color: var(--pdd-cyan); box-shadow: 0 0 0 3px rgba(67, 199, 237, .12); }
+.pdd-quick-product-results { min-height: 52px; max-height: 170px; display: grid; grid-template-columns: 1fr 1fr; align-content: start; gap: 5px; overflow-y: auto; padding: 1px; }
+.pdd-quick-product-results > button { min-width: 0; min-height: 48px; display: grid; grid-template-columns: 38px minmax(0, 1fr) 26px; align-items: center; gap: 7px; padding: 4px 7px 4px 4px; border: 1px solid var(--pdd-line); border-radius: 9px; color: var(--pdd-ink); background: #0b1512; cursor: pointer; text-align: left; touch-action: manipulation; }
+.pdd-quick-product-results > button:hover,
+.pdd-quick-product-results > button.is-selected { border-color: var(--pdd-green); background: rgba(32, 201, 142, .1); }
+.pdd-quick-product-results > button > span { width: 38px; height: 38px; display: block; overflow: hidden; border-radius: 7px; }
+.pdd-quick-product-results > button > b { min-width: 0; overflow: hidden; font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; }
+.pdd-quick-product-results > button > i { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; color: var(--pdd-green-dark); background: var(--pdd-green-soft); font-size: .72rem; font-style: normal; font-weight: 950; }
+.pdd-quick-product-setting-placeholder,
+.pdd-quick-product-setting img { width: 100%; height: 100%; display: grid; place-items: center; object-fit: cover; color: var(--pdd-green-dark); background: #13261f; font-size: .8rem; font-weight: 950; }
+.pdd-quick-product-results-empty { grid-column: 1 / -1; min-height: 52px; display: grid; place-items: center; color: var(--pdd-muted); font-size: .7rem; }
+.pdd-quick-product-status { min-height: 16px; color: var(--pdd-muted); font-size: .68rem; }
+.pdd-quick-product-status:empty { display: none; }
+
 .pdd-waste-preset-setting { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(220px, 1.6fr) auto; align-items: center; gap: 9px; margin-top: 12px; padding: 12px; border: 1px solid rgba(216, 242, 119, .35); border-radius: 14px; background: linear-gradient(120deg, rgba(216, 242, 119, .08), transparent 55%), var(--pdd-surface-raised); }
 .pdd-waste-preset-setting > div:first-child { display: grid; gap: 2px; }
 .pdd-waste-preset-setting > div:first-child strong { font-size: .8rem; }
@@ -954,6 +990,8 @@ button { color: inherit; }
   .pdd-typography-setting { grid-template-columns: 48px minmax(0, 1fr); }
   .pdd-typography-setting button { grid-column: 2; width: 100%; }
   .pdd-typography-setting-icon { width: 46px; }
+  .pdd-quick-product-selection { grid-template-columns: 1fr 1fr; }
+  .pdd-quick-product-results { grid-template-columns: 1fr; max-height: 210px; }
   .pdd-waste-preset-setting { grid-template-columns: 1fr; }
   .pdd-waste-preset-setting > button { width: 100%; }
   .pdd-typography-panel { width: 100vw; padding: 12px; }

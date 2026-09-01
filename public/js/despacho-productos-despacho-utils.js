@@ -62,6 +62,28 @@ export function normalizeWastePresets(value) {
   return presets;
 }
 
+export function normalizeQuickProductIds(value, products = []) {
+  const availableIds = (Array.isArray(products) ? products : [])
+    .map((product) => Number(product?.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  const available = new Set(availableIds);
+  const target = Math.min(4, availableIds.length);
+  const normalized = [];
+
+  (Array.isArray(value) ? value : []).forEach((rawId) => {
+    const id = Number(rawId);
+    if (normalized.length < target && available.has(id) && !normalized.includes(id)) {
+      normalized.push(id);
+    }
+  });
+
+  availableIds.forEach((id) => {
+    if (normalized.length < target && !normalized.includes(id)) normalized.push(id);
+  });
+
+  return normalized;
+}
+
 export function normalizeCatalog(payload = {}) {
   const source = payload?.data && !Array.isArray(payload.data) ? payload.data : payload;
   const productsSource = source.products || source.productos || [];
@@ -109,7 +131,8 @@ export function normalizeCatalog(payload = {}) {
     ticket_title: String(source.ticket_title || source.titulo_ticket || "DESPACHO DE PRODUCTOS"),
     ticket_message: String(source.ticket_message || source.mensaje_ticket || "Gracias por su compra"),
     scale: source.scale || source.balanza || null,
-    waste_presets: normalizeWastePresets(source.waste_presets)
+    waste_presets: normalizeWastePresets(source.waste_presets),
+    quick_product_ids: normalizeQuickProductIds(source.quick_product_ids, products)
   };
 }
 

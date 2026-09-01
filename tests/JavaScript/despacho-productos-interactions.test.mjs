@@ -158,8 +158,8 @@ test("los precios de captura y edición comparten el teclado decimal de la pesad
   assert.doesNotMatch(dispatchUtilsSource, /price_overrides/);
 });
 
-test("el acceso rápido muestra los primeros cuatro productos y selecciona con un toque", () => {
-  const quickRender = sourceBetween(dispatchSource, "function renderQuickProducts", "function renderSelectedProduct");
+test("el acceso rápido muestra los cuatro productos configurados y selecciona con un toque", () => {
+  const quickRender = sourceBetween(dispatchSource, "function configuredQuickProducts", "function renderSelectedProduct");
   const quickListeners = sourceBetween(dispatchSource, "elements.chooseProduct.addEventListener", "elements.productSearch.addEventListener");
   const desktopResponsive = sourceBetween(dispatchStyles, "@media (max-width: 1280px)", "@media (max-width: 1120px)");
   const compactResponsive = sourceBetween(dispatchStyles, "@media (max-width: 960px)", "@media (max-width: 860px)");
@@ -167,7 +167,7 @@ test("el acceso rápido muestra los primeros cuatro productos y selecciona con u
 
   assert.match(dispatchView, /id="pddQuickProducts"/);
   assert.match(dispatchView, /id="pddQuickAllProducts"/);
-  assert.match(quickRender, /state\.catalog\.products\.slice\(0,\s*4\)/);
+  assert.match(quickRender, /normalizeQuickProductIds\(state\.catalog\.quick_product_ids,\s*state\.catalog\.products\)/);
   assert.match(quickRender, /data-pdd-quick-product-id/);
   assert.match(quickRender, /aria-pressed="\$\{active\}"/);
   assert.match(quickRender, /product\.image_url/);
@@ -182,6 +182,37 @@ test("el acceso rápido muestra los primeros cuatro productos y selecciona con u
   assert.match(mobileResponsive, /\.pdd-quick-products\s*\{[^}]*repeat\(2/);
 });
 
+test("Configuración permite buscar y guardar exactamente cuatro productos rápidos ordenados", () => {
+  const settingsFlow = sourceBetween(dispatchSource, "function quickProductSettingVisual", "function renderWastePresetSettings");
+  const settingsListeners = sourceBetween(dispatchSource, 'elements.openViewSettings.addEventListener', 'elements.wastePresetForm.addEventListener');
+
+  for (const id of [
+    "pddQuickProductForm",
+    "pddQuickProductCount",
+    "pddQuickProductSelection",
+    "pddQuickProductSearch",
+    "pddQuickProductResults",
+    "pddSaveQuickProducts",
+    "pddQuickProductStatus"
+  ]) {
+    assert.match(dispatchView, new RegExp(`id="${id}"`));
+  }
+
+  assert.match(settingsFlow, /while\s*\(selectedCards\.length\s*<\s*4\)/);
+  assert.match(settingsFlow, /textContent\s*=\s*`\$\{selectedProducts\.length\}\/4`/);
+  assert.match(settingsFlow, /saveQuickProducts\.disabled\s*=\s*state\.quickProductSaving\s*\|\|\s*selectedProducts\.length\s*!==\s*4/);
+  assert.match(settingsFlow, /state\.quickProductSelection\.push\(id\)/);
+  assert.match(settingsFlow, /body:\s*JSON\.stringify\(\{\s*quick_product_ids:\s*proposed\s*\}\)/);
+  assert.match(settingsFlow, /state\.catalog\.quick_product_ids\s*=\s*normalizeQuickProductIds/);
+  assert.match(settingsFlow, /renderQuickProducts\(\)/);
+  assert.match(settingsListeners, /resetQuickProductSettings\(\)/);
+  assert.match(settingsListeners, /quickProductSearch\.addEventListener\("input"/);
+  assert.match(settingsListeners, /data-pdd-quick-setting-remove/);
+  assert.match(settingsListeners, /data-pdd-quick-setting-product/);
+  assert.match(dispatchStyles, /\.pdd-quick-product-selection\s*\{[^}]*repeat\(4/);
+  assert.match(dispatchStyles, /\.pdd-quick-product-results\s*\{[^}]*grid-template-columns:\s*1fr\s+1fr/);
+});
+
 test("las imágenes rápidas tienen un respaldo visual propio", () => {
   const imageFallbackFlow = sourceBetween(dispatchSource, 'document.addEventListener("error"', 'document.addEventListener("click"');
 
@@ -189,6 +220,8 @@ test("las imágenes rápidas tienen un respaldo visual propio", () => {
   assert.match(imageFallbackFlow, /pddQuickImageFallback/);
   assert.match(imageFallbackFlow, /pdd-quick-product-placeholder/);
   assert.match(imageFallbackFlow, /productInitial\(image\.dataset\.pddQuickImageFallback\)/);
+  assert.match(imageFallbackFlow, /pddQuickSettingImageFallback/);
+  assert.match(imageFallbackFlow, /pdd-quick-product-setting-placeholder/);
 });
 
 test("el teclado de precio anidado conserva el foco de cada diálogo", () => {

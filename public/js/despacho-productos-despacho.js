@@ -17,6 +17,7 @@ import {
   formatMoney,
   formatWeight,
   normalizeCatalog,
+  normalizeQuickProductIds,
   normalizeWastePresets,
   priceModeLabel,
   productInitial,
@@ -276,6 +277,13 @@ const elements = {
   scaleMessage: document.querySelector("#pddScaleMessage"),
   disconnectScale: document.querySelector("#pddDisconnectScale"),
   viewDialog: document.querySelector("#pddViewDialog"),
+  quickProductForm: document.querySelector("#pddQuickProductForm"),
+  quickProductCount: document.querySelector("#pddQuickProductCount"),
+  quickProductSelection: document.querySelector("#pddQuickProductSelection"),
+  quickProductSearch: document.querySelector("#pddQuickProductSearch"),
+  quickProductResults: document.querySelector("#pddQuickProductResults"),
+  saveQuickProducts: document.querySelector("#pddSaveQuickProducts"),
+  quickProductStatus: document.querySelector("#pddQuickProductStatus"),
   zoomOut: document.querySelector("#pddZoomOut"),
   zoomValue: document.querySelector("#pddZoomValue"),
   zoomIn: document.querySelector("#pddZoomIn"),
@@ -310,6 +318,8 @@ const state = {
   selectedProductId: null,
   selectedVariationId: null,
   wastePresetSaving: false,
+  quickProductSaving: false,
+  quickProductSelection: [],
   storageKey: null,
   loading: true,
   saving: false,
@@ -816,8 +826,15 @@ function mediaMarkup(name, imageUrl, altPrefix = "Imagen de") {
   return `<span class="pdd-media-placeholder has-name"><b>${escapeHtml(productInitial(name))}</b><small>${escapeHtml(name)}</small></span>`;
 }
 
+function configuredQuickProducts() {
+  const productsById = new Map(state.catalog.products.map((product) => [Number(product.id), product]));
+  return normalizeQuickProductIds(state.catalog.quick_product_ids, state.catalog.products)
+    .map((id) => productsById.get(id))
+    .filter(Boolean);
+}
+
 function renderQuickProducts() {
-  const products = state.catalog.products.slice(0, 4);
+  const products = configuredQuickProducts();
   if (!products.length) {
     elements.quickProducts.innerHTML = '<span class="pdd-quick-empty">Sin productos</span>';
     return;
@@ -1592,6 +1609,115 @@ async function restoreScale() {
   }
 }
 
+function quickProductSettingVisual(product) {
+  return product.image_url
+    ? `<img src="${escapeHtml(product.image_url)}" alt="" loading="lazy" data-pdd-quick-setting-image-fallback="${escapeHtml(product.name)}">`
+    : `<span class="pdd-quick-product-setting-placeholder" aria-hidden="true">${escapeHtml(productInitial(product.name))}</span>`;
+}
+
+function renderQuickProductSettings(query = elements.quickProductSearch.value) {
+  const selectedProducts = state.quickProductSelection
+    .map((id) => state.catalog.products.find((product) => Number(product.id) === Number(id)))
+    .filter(Boolean);
+  const selectedIds = new Set(selectedProducts.map((product) => Number(product.id)));
+  const selectedCards = selectedProducts.map((product, index) => `
+    <button type="button" data-pdd-quick-setting-remove="${product.id}" aria-label="Quitar ${escapeHtml(product.name)} del puesto ${index + 1}">
+      <i>${index + 1}</i><span>${quickProductSettingVisual(product)}</span><b title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</b>
+    </button>`);
+
+  while (selectedCards.length < 4) {
+    selectedCards.push(`<span class="is-empty"><i>${selectedCards.length + 1}</i><b>Libre</b></span>`);
+  }
+
+  elements.quickProductSelection.innerHTML = selectedCards.join("");
+  elements.quickProductCount.textContent = `${selectedProducts.length}/4`;
+  elements.saveQuickProducts.disabled = state.quickProductSaving || selectedProducts.length !== 4;
+
+  const needle = String(query || "").trim().toLocaleLowerCase("es");
+  const products = state.catalog.products.filter((product) => !needle || [
+    product.name,
+    product.description
+  ].some((value) => String(value || "").toLocaleLowerCase("es").includes(needle)));
+
+  if (!products.length) {
+    elements.quickProductResults.innerHTML = '<span class="pdd-quick-product-results-empty">Sin resultados</span>';
+    return;
+  }
+
+  elements.quickProductResults.innerHTML = products.map((product) => {
+    const selectedIndex = state.quickProductSelection.findIndex((id) => Number(id) === Number(product.id));
+    const selected = selectedIds.has(Number(product.id));
+    return `<button class="${selected ? "is-selected" : ""}" type="button" data-pdd-quick-setting-product="${product.id}" aria-pressed="${selected}">
+      <span>${quickProductSettingVisual(product)}</span><b title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</b><i>${selected ? selectedIndex + 1 : "+"}</i>
+    </button>`;
+  }).join("");
+}
+
+function resetQuickProductSettings() {
+  state.quickProductSelection = normalizeQuickProductIds(
+    state.catalog.quick_product_ids,
+    state.catalog.products
+  );
+  elements.quickProductSearch.value = "";
+  elements.quickProductStatus.textContent = state.catalog.products.length < 4
+    ? `Solo hay ${state.catalog.products.length} productos activos.`
+    : "";
+  renderQuickProductSettings();
+}
+
+function toggleQuickProductSetting(productId) {
+  const id = Number(productId);
+  if (!state.catalog.products.some((product) => Number(product.id) === id)) return;
+  const selectedIndex = state.quickProductSelection.findIndex((selectedId) => Number(selectedId) === id);
+
+  if (selectedIndex >= 0) {
+    state.quickProductSelection.splice(selectedIndex, 1);
+  } else if (state.quickProductSelection.length < 4) {
+    state.quickProductSelection.push(id);
+  } else {
+    elements.quickProductStatus.textContent = "Quita uno para cambiarlo.";
+    return;
+  }
+
+  elements.quickProductStatus.textContent = state.catalog.products.length < 4
+    ? `Solo hay ${state.catalog.products.length} productos activos.`
+    : "";
+  renderQuickProductSettings();
+}
+
+async function saveQuickProducts(event) {
+  event.preventDefault();
+  if (state.quickProductSaving) return;
+  if (state.quickProductSelection.length !== 4) {
+    elements.quickProductStatus.textContent = "Elige 4 productos.";
+    renderQuickProductSettings();
+    return;
+  }
+
+  const proposed = [...state.quickProductSelection];
+  state.quickProductSaving = true;
+  elements.quickProductStatus.textContent = "Guardando…";
+  renderQuickProductSettings();
+  try {
+    const response = await apiRequest(`${apiBase}/configuracion`, {
+      method: "PUT",
+      body: JSON.stringify({ quick_product_ids: proposed })
+    });
+    state.catalog.quick_product_ids = normalizeQuickProductIds(
+      response?.data?.quick_product_ids ?? response?.quick_product_ids ?? proposed,
+      state.catalog.products
+    );
+    state.quickProductSelection = [...state.catalog.quick_product_ids];
+    renderQuickProducts();
+    elements.quickProductStatus.textContent = "Guardado";
+  } catch (error) {
+    elements.quickProductStatus.textContent = errorMessage(error);
+  } finally {
+    state.quickProductSaving = false;
+    renderQuickProductSettings();
+  }
+}
+
 function renderWastePresetSettings() {
   state.catalog.waste_presets.forEach((preset, index) => {
     elements.wastePresetInputs[index].value = String(preset);
@@ -1715,6 +1841,14 @@ elements.variations.addEventListener("click", (event) => {
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (!(image instanceof HTMLImageElement)) return;
+  if (image.dataset.pddQuickSettingImageFallback) {
+    const fallback = document.createElement("span");
+    fallback.className = "pdd-quick-product-setting-placeholder";
+    fallback.setAttribute("aria-hidden", "true");
+    fallback.textContent = productInitial(image.dataset.pddQuickSettingImageFallback);
+    image.replaceWith(fallback);
+    return;
+  }
   if (image.dataset.pddQuickImageFallback) {
     const fallback = document.createElement("span");
     fallback.className = "pdd-quick-product-placeholder";
@@ -1862,9 +1996,20 @@ elements.openScaleSettings.addEventListener("click", () => {
 elements.openViewSettings.addEventListener("click", () => {
   if (!elements.typographyPanel.hidden) closeTypographyPanel();
   renderAppScale();
+  resetQuickProductSettings();
   renderWastePresetSettings();
   elements.wastePresetStatus.textContent = "";
   openDialog(elements.viewDialog, state.appScale === APP_SCALE_LEVELS.at(-1) ? elements.zoomOut : elements.zoomIn);
+});
+elements.quickProductForm.addEventListener("submit", saveQuickProducts);
+elements.quickProductSearch.addEventListener("input", () => renderQuickProductSettings(elements.quickProductSearch.value));
+elements.quickProductSelection.addEventListener("click", (event) => {
+  const remove = event.target.closest("[data-pdd-quick-setting-remove]");
+  if (remove) toggleQuickProductSetting(remove.dataset.pddQuickSettingRemove);
+});
+elements.quickProductResults.addEventListener("click", (event) => {
+  const product = event.target.closest("[data-pdd-quick-setting-product]");
+  if (product) toggleQuickProductSetting(product.dataset.pddQuickSettingProduct);
 });
 elements.wastePresetForm.addEventListener("submit", saveWastePresets);
 elements.zoomOut.addEventListener("click", () => stepAppScale(-1));

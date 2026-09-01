@@ -112,8 +112,15 @@ class ProductDispatchOperationApiTest extends TestCase
         $response = $this->getJson('/api/v1/despacho-productos/catalogo')
             ->assertOk()
             ->assertJsonPath('data.waste_presets', [0, 50, 100])
+            ->assertJsonPath('data.quick_product_ids', [$this->eggs->id, $this->turkey->id])
+            ->assertJsonPath('data.quick_products_configured', false)
             ->assertJsonPath('data.scale.code', Balanza::CODE_PRODUCT_DISPATCH)
             ->assertJsonPath('data.scale.configuration.baudRate', 9600);
+
+        $this->assertSame(
+            [$this->eggs->id, $this->turkey->id],
+            collect($response->json('data.quick_products'))->pluck('id')->all(),
+        );
 
         $this->assertSame(
             collect([$this->eggs->id, $this->turkey->id])->sort()->values()->all(),
@@ -175,6 +182,171 @@ class ProductDispatchOperationApiTest extends TestCase
                 'waste_presets.1',
                 'waste_presets.2',
             ]);
+    }
+
+    public function test_quick_products_are_ordered_configurable_and_scoped_by_company_and_branch(): void
+    {
+        $hen = $this->createProduct(
+            'Gallina',
+            ProductoDespacho::PRICE_MODE_KG,
+            '12.0000',
+            20,
+        );
+        $duck = $this->createProduct(
+            'Pato',
+            ProductoDespacho::PRICE_MODE_KG,
+            '16.0000',
+            15,
+        );
+        $chicken = $this->createProduct(
+            'Pollo',
+            ProductoDespacho::PRICE_MODE_KG,
+            '11.0000',
+            10,
+        );
+        $selection = [
+            $this->turkey->id,
+            $hen->id,
+            $this->eggs->id,
+            $duck->id,
+        ];
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'quick_product_ids' => $selection,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.quick_product_ids', $selection)
+            ->assertJsonPath('data.quick_products_configured', true)
+            ->assertJsonPath('data.waste_presets', [0, 50, 100]);
+
+        $this->assertDatabaseHas('configuraciones_despacho_productos', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'productos_rapidos_configurados' => true,
+            'producto_rapido_1_id' => $selection[0],
+            'producto_rapido_2_id' => $selection[1],
+            'producto_rapido_3_id' => $selection[2],
+            'producto_rapido_4_id' => $selection[3],
+        ]);
+
+        $catalog = $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.quick_product_ids', $selection)
+            ->assertJsonPath('data.quick_products_configured', true);
+        $this->assertSame(
+            $selection,
+            collect($catalog->json('data.quick_products'))->pluck('id')->all(),
+        );
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'waste_presets' => [5, 10, 15],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.waste_presets', [5, 10, 15])
+            ->assertJsonPath('data.quick_product_ids', $selection);
+
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'RAPIDOS-SECUNDARIA',
+            'nombre' => 'Sucursal rápida secundaria',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.quick_product_ids', [
+                $hen->id,
+                $this->eggs->id,
+                $duck->id,
+                $this->turkey->id,
+            ])
+            ->assertJsonPath('data.quick_products_configured', false);
+
+        $this->user->update(['sucursal_id' => $this->branchId]);
+        $hen->update(['estado' => ProductoDespacho::STATUS_INACTIVE]);
+        $effectiveSelection = [
+            $this->turkey->id,
+            $this->eggs->id,
+            $duck->id,
+            $chicken->id,
+        ];
+        $catalogAfterDeactivation = $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.quick_product_ids', $effectiveSelection);
+        $this->assertSame(
+            $effectiveSelection,
+            collect($catalogAfterDeactivation->json('data.quick_products'))->pluck('id')->all(),
+        );
+    }
+
+    public function test_quick_product_configuration_rejects_invalid_duplicate_inactive_and_foreign_products(): void
+    {
+        $hen = $this->createProduct(
+            'Gallina rápida',
+            ProductoDespacho::PRICE_MODE_KG,
+            '12.0000',
+            20,
+        );
+        $duck = $this->createProduct(
+            'Pato rápido',
+            ProductoDespacho::PRICE_MODE_KG,
+            '16.0000',
+            15,
+        );
+        $inactive = $this->createProduct(
+            'Inactivo rápido',
+            ProductoDespacho::PRICE_MODE_KG,
+            '10.0000',
+            10,
+            ProductoDespacho::STATUS_INACTIVE,
+        );
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'quick_product_ids' => [$this->eggs->id, $this->turkey->id, $hen->id],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('quick_product_ids');
+
+        $duplicateResponse = $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'quick_product_ids' => [$this->eggs->id, $this->turkey->id, $hen->id, $hen->id],
+        ])->assertUnprocessable();
+        $this->assertTrue(
+            collect(array_keys($duplicateResponse->json('errors')))
+                ->contains(fn (string $key): bool => str_starts_with($key, 'quick_product_ids.')),
+        );
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'quick_product_ids' => [$this->eggs->id, $this->turkey->id, $hen->id, $inactive->id],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('quick_product_ids.3');
+
+        $foreignUser = User::factory()->create();
+        $foreignProduct = ProductoDespacho::query()->create([
+            'empresa_id' => $foreignUser->empresa_id,
+            'nombre' => 'Producto ajeno',
+            'nombre_normalizado' => 'producto ajeno',
+            'descripcion' => null,
+            'modo_precio' => ProductoDespacho::PRICE_MODE_KG,
+            'precio_venta' => '10.0000',
+            'merma_gramos_unidad' => 0,
+            'imagen_path' => null,
+            'estado' => ProductoDespacho::STATUS_ACTIVE,
+            'created_by' => $foreignUser->id,
+            'updated_by' => $foreignUser->id,
+        ]);
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'quick_product_ids' => [$this->eggs->id, $this->turkey->id, $duck->id, $foreignProduct->id],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('quick_product_ids.3');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('configuration');
     }
 
     public function test_registered_client_ticket_uses_snapshots_and_authoritative_kg_and_unit_calculations(): void

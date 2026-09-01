@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ConfiguracionDespachoProducto;
+use App\Models\ProductoDespacho;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -11,7 +12,13 @@ class ProductDispatchConfigurationService
     /** @var list<int> */
     public const DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT = [0, 50, 100];
 
-    /** @return array{waste_presets: list<int>} */
+    /**
+     * @return array{
+     *     waste_presets: list<int>,
+     *     quick_product_ids: list<int>,
+     *     quick_products_configured: bool
+     * }
+     */
     public function configuration(int $companyId, int $branchId): array
     {
         $this->ensureDefaults($companyId, $branchId);
@@ -21,26 +28,93 @@ class ProductDispatchConfigurationService
             ->where('sucursal_id', $branchId)
             ->firstOrFail();
 
-        return $this->format($configuration);
+        return $this->format($configuration, $companyId);
     }
 
     /**
-     * @param  list<int>  $presets
-     * @return array{waste_presets: list<int>}
+     * @param  array{waste_presets?: list<int>, quick_product_ids?: list<int>}  $changes
+     * @return array{
+     *     waste_presets: list<int>,
+     *     quick_product_ids: list<int>,
+     *     quick_products_configured: bool
+     * }
      */
-    public function update(int $companyId, int $branchId, array $presets): array
+    public function update(int $companyId, int $branchId, array $changes): array
     {
-        $values = array_values(array_map(static fn (mixed $value): int => (int) $value, $presets));
-
-        if (count($values) !== 3) {
+        if (! array_key_exists('waste_presets', $changes)
+            && ! array_key_exists('quick_product_ids', $changes)) {
             throw ValidationException::withMessages([
-                'waste_presets' => 'Debes configurar exactamente tres mermas rápidas.',
+                'configuration' => 'No se indicó ninguna configuración para guardar.',
             ]);
+        }
+
+        $updates = [];
+
+        if (array_key_exists('waste_presets', $changes)) {
+            $presets = array_values(array_map(
+                static fn (mixed $value): int => (int) $value,
+                $changes['waste_presets'],
+            ));
+
+            if (count($presets) !== 3) {
+                throw ValidationException::withMessages([
+                    'waste_presets' => 'Debes configurar exactamente tres mermas rápidas.',
+                ]);
+            }
+
+            $updates = [
+                ...$updates,
+                'merma_preset_1_gramos_unidad' => $presets[0],
+                'merma_preset_2_gramos_unidad' => $presets[1],
+                'merma_preset_3_gramos_unidad' => $presets[2],
+            ];
+        }
+
+        if (array_key_exists('quick_product_ids', $changes)) {
+            $quickProductIds = array_values(array_map(
+                static fn (mixed $value): int => (int) $value,
+                $changes['quick_product_ids'],
+            ));
+
+            if (count($quickProductIds) !== 4) {
+                throw ValidationException::withMessages([
+                    'quick_product_ids' => 'Debes seleccionar exactamente cuatro productos rápidos.',
+                ]);
+            }
+
+            if (count(array_unique($quickProductIds, SORT_REGULAR)) !== count($quickProductIds)) {
+                throw ValidationException::withMessages([
+                    'quick_product_ids' => 'No puedes repetir un producto en la selección rápida.',
+                ]);
+            }
+
+            $activeCompanyProductIds = ProductoDespacho::query()
+                ->where('empresa_id', $companyId)
+                ->where('estado', ProductoDespacho::STATUS_ACTIVE)
+                ->whereIn('id', $quickProductIds)
+                ->pluck('id')
+                ->map(static fn (mixed $id): int => (int) $id)
+                ->all();
+
+            if (count($activeCompanyProductIds) !== count($quickProductIds)) {
+                throw ValidationException::withMessages([
+                    'quick_product_ids' => 'Todos los productos rápidos deben estar activos y pertenecer a tu empresa.',
+                ]);
+            }
+
+            $updates = [
+                ...$updates,
+                'productos_rapidos_configurados' => true,
+                'producto_rapido_1_id' => $quickProductIds[0],
+                'producto_rapido_2_id' => $quickProductIds[1],
+                'producto_rapido_3_id' => $quickProductIds[2],
+                'producto_rapido_4_id' => $quickProductIds[3],
+            ];
         }
 
         $this->ensureDefaults($companyId, $branchId);
 
-        DB::transaction(function () use ($companyId, $branchId, $values): void {
+        DB::transaction(function () use ($companyId, $branchId, $updates): void {
             $configuration = ConfiguracionDespachoProducto::query()
                 ->where('empresa_id', $companyId)
                 ->where('sucursal_id', $branchId)
@@ -49,15 +123,11 @@ class ProductDispatchConfigurationService
 
             if (! $configuration) {
                 throw ValidationException::withMessages([
-                    'waste_presets' => 'No existe una configuración para esta sucursal.',
+                    'configuration' => 'No existe una configuración para esta sucursal.',
                 ]);
             }
 
-            $configuration->update([
-                'merma_preset_1_gramos_unidad' => $values[0],
-                'merma_preset_2_gramos_unidad' => $values[1],
-                'merma_preset_3_gramos_unidad' => $values[2],
-            ]);
+            $configuration->update($updates);
         }, 3);
 
         return $this->configuration($companyId, $branchId);
@@ -72,7 +142,7 @@ class ProductDispatchConfigurationService
 
         if (! $branchExists) {
             throw ValidationException::withMessages([
-                'waste_presets' => 'La sucursal no pertenece a la empresa de esta operación.',
+                'configuration' => 'La sucursal no pertenece a la empresa de esta operación.',
             ]);
         }
 
@@ -83,20 +153,70 @@ class ProductDispatchConfigurationService
             'merma_preset_1_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[0],
             'merma_preset_2_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[1],
             'merma_preset_3_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[2],
+            'productos_rapidos_configurados' => false,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
     }
 
-    /** @return array{waste_presets: list<int>} */
-    private function format(ConfiguracionDespachoProducto $configuration): array
-    {
+    /**
+     * @return array{
+     *     waste_presets: list<int>,
+     *     quick_product_ids: list<int>,
+     *     quick_products_configured: bool
+     * }
+     */
+    private function format(
+        ConfiguracionDespachoProducto $configuration,
+        int $companyId,
+    ): array {
         return [
             'waste_presets' => [
                 (int) $configuration->merma_preset_1_gramos_unidad,
                 (int) $configuration->merma_preset_2_gramos_unidad,
                 (int) $configuration->merma_preset_3_gramos_unidad,
             ],
+            'quick_product_ids' => $this->effectiveQuickProductIds($configuration, $companyId),
+            'quick_products_configured' => (bool) $configuration->productos_rapidos_configurados,
         ];
+    }
+
+    /** @return list<int> */
+    private function effectiveQuickProductIds(
+        ConfiguracionDespachoProducto $configuration,
+        int $companyId,
+    ): array {
+        $activeProductIds = ProductoDespacho::query()
+            ->where('empresa_id', $companyId)
+            ->where('estado', ProductoDespacho::STATUS_ACTIVE)
+            ->orderBy('nombre')
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->all();
+        $activeLookup = array_fill_keys($activeProductIds, true);
+        $selected = [];
+
+        if ($configuration->productos_rapidos_configurados) {
+            for ($position = 1; $position <= 4; $position++) {
+                $productId = $configuration->{"producto_rapido_{$position}_id"};
+
+                if ($productId !== null && isset($activeLookup[(int) $productId])) {
+                    $selected[] = (int) $productId;
+                }
+            }
+        }
+
+        foreach ($activeProductIds as $productId) {
+            if (count($selected) >= 4) {
+                break;
+            }
+
+            if (! in_array($productId, $selected, true)) {
+                $selected[] = $productId;
+            }
+        }
+
+        return $selected;
     }
 }

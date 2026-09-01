@@ -353,6 +353,20 @@
         <button type="button" data-pdd-close="pddViewDialog" aria-label="Cerrar">×</button>
       </header>
 
+      <form id="pddQuickProductForm" class="pdd-quick-product-setting">
+        <div class="pdd-quick-product-setting-head">
+          <span><strong>Despacho rápido</strong><small id="pddQuickProductCount">0/4</small></span>
+          <button id="pddSaveQuickProducts" type="submit">Guardar</button>
+        </div>
+        <div id="pddQuickProductSelection" class="pdd-quick-product-selection" aria-label="Productos rápidos seleccionados"></div>
+        <label class="pdd-quick-product-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="pddQuickProductSearch" type="search" autocomplete="off" placeholder="Buscar producto" aria-label="Buscar producto rápido">
+        </label>
+        <div id="pddQuickProductResults" class="pdd-quick-product-results" aria-live="polite"></div>
+        <small id="pddQuickProductStatus" class="pdd-quick-product-status" role="status" aria-live="polite"></small>
+      </form>
+
       <div class="pdd-theme-setting">
         <span class="pdd-theme-swatch" aria-hidden="true"><i></i><i></i><i></i></span>
         <span><strong>Tema oscuro</strong><small>Fondo negro con acentos de color para trabajar cómodamente.</small></span>

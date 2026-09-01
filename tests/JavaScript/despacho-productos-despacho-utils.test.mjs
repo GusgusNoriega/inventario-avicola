@@ -13,6 +13,7 @@ import {
   effectiveProduct,
   normalizeCatalog,
   normalizeDraft,
+  normalizeQuickProductIds,
   normalizeWastePresets,
   validateUnitPrice
 } from "../../public/js/despacho-productos-despacho-utils.js";
@@ -208,6 +209,22 @@ test("el catálogo acepta el contrato del API y normaliza clientes para búsqued
   assert.equal(catalog.clients[0].document, "901234567");
   assert.equal(catalog.ticket_title, "AVÍCOLA DE PRUEBA");
   assert.deepEqual(catalog.waste_presets, [0, 50, 100]);
+});
+
+test("los productos rápidos conservan cuatro ids activos únicos y su orden configurado", () => {
+  const products = [1, 2, 3, 4, 5].map((id) => ({ id }));
+
+  assert.deepEqual(normalizeQuickProductIds([4, "2", 4, 999], products), [4, 2, 1, 3]);
+  assert.deepEqual(normalizeQuickProductIds(undefined, products), [1, 2, 3, 4]);
+  assert.deepEqual(normalizeQuickProductIds([8], [{ id: 7 }, { id: 8 }]), [8, 7]);
+
+  const catalog = normalizeCatalog({
+    data: {
+      products: products.map(({ id }) => ({ id, name: `Producto ${id}`, variations: [] })),
+      quick_product_ids: [5, 3, 2, 1]
+    }
+  });
+  assert.deepEqual(catalog.quick_product_ids, [5, 3, 2, 1]);
 });
 
 test("la merma por unidad y la tara se descuentan juntas sin modificar la merma total", () => {

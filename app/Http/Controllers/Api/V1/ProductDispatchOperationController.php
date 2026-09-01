@@ -71,6 +71,30 @@ class ProductDispatchOperationController extends Controller
             $companyId,
             (int) $branch->id,
         );
+        $formattedProducts = $products->map(fn (ProductoDespacho $product): array => [
+            'id' => (int) $product->id,
+            'name' => $product->nombre,
+            'description' => $product->descripcion,
+            'price_mode' => $product->modo_precio,
+            'price' => round((float) $product->precio_venta, 4, PHP_ROUND_HALF_UP),
+            'waste_grams_per_unit' => (int) $product->merma_gramos_unidad,
+            'image_url' => $this->productImageUrl($product),
+            'variations' => $product->variaciones
+                ->map(fn (VariacionProductoDespacho $variation): array => [
+                    'id' => (int) $variation->id,
+                    'name' => $variation->nombre,
+                    'price_mode' => $variation->modo_precio,
+                    'price' => round((float) $variation->precio_venta, 4, PHP_ROUND_HALF_UP),
+                    'waste_grams_per_unit' => (int) $variation->merma_gramos_unidad,
+                    'image_url' => $this->variationImageUrl($variation),
+                    'order' => (int) $variation->orden,
+                ])->values(),
+        ])->values();
+        $productsById = $formattedProducts->keyBy('id');
+        $quickProducts = collect($dispatchConfiguration['quick_product_ids'])
+            ->map(fn (int $productId): ?array => $productsById->get($productId))
+            ->filter()
+            ->values();
 
         return response()->json([
             'data' => [
@@ -78,6 +102,9 @@ class ProductDispatchOperationController extends Controller
                 'ticket_message' => $this->ticketMessages->current($companyId),
                 'currency' => (string) (DB::table('empresas')->where('id', $companyId)->value('moneda') ?: 'PEN'),
                 'waste_presets' => $dispatchConfiguration['waste_presets'],
+                'quick_product_ids' => $dispatchConfiguration['quick_product_ids'],
+                'quick_products' => $quickProducts,
+                'quick_products_configured' => $dispatchConfiguration['quick_products_configured'],
                 'branch' => [
                     'id' => (int) $branch->id,
                     'name' => $branch->nombre,
@@ -94,25 +121,7 @@ class ProductDispatchOperationController extends Controller
                     'name' => $client->nombre_razon_social,
                     'phone' => $client->telefono,
                 ])->values(),
-                'products' => $products->map(fn (ProductoDespacho $product): array => [
-                    'id' => (int) $product->id,
-                    'name' => $product->nombre,
-                    'description' => $product->descripcion,
-                    'price_mode' => $product->modo_precio,
-                    'price' => round((float) $product->precio_venta, 4, PHP_ROUND_HALF_UP),
-                    'waste_grams_per_unit' => (int) $product->merma_gramos_unidad,
-                    'image_url' => $this->productImageUrl($product),
-                    'variations' => $product->variaciones
-                        ->map(fn (VariacionProductoDespacho $variation): array => [
-                            'id' => (int) $variation->id,
-                            'name' => $variation->nombre,
-                            'price_mode' => $variation->modo_precio,
-                            'price' => round((float) $variation->precio_venta, 4, PHP_ROUND_HALF_UP),
-                            'waste_grams_per_unit' => (int) $variation->merma_gramos_unidad,
-                            'image_url' => $this->variationImageUrl($variation),
-                            'order' => (int) $variation->orden,
-                        ])->values(),
-                ])->values(),
+                'products' => $formattedProducts,
                 'scale' => [
                     'code' => Balanza::CODE_PRODUCT_DISPATCH,
                     'name' => $scale?->nombre ?? Balanza::logicalName(Balanza::CODE_PRODUCT_DISPATCH),
@@ -132,11 +141,11 @@ class ProductDispatchOperationController extends Controller
         $configuration = $this->configuration->update(
             $companyId,
             (int) $branch->id,
-            $request->validated('waste_presets'),
+            $request->validated(),
         );
 
         return response()->json([
-            'message' => 'Mermas rápidas actualizadas correctamente.',
+            'message' => 'Configuración de despacho actualizada correctamente.',
             'data' => $configuration,
         ]);
     }
