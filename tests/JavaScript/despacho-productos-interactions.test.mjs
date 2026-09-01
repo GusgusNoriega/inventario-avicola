@@ -182,6 +182,22 @@ test("el acceso rápido muestra los cuatro productos configurados y selecciona c
   assert.match(mobileResponsive, /\.pdd-quick-products\s*\{[^}]*repeat\(2/);
 });
 
+test("las imágenes rápidas no aumentan la fila y dejan el espacio restante a las listas", () => {
+  const desktopHeightContainment = sourceBetween(
+    dispatchStyles,
+    "@media (min-width: 961px)",
+    "@media (max-width: 1280px)"
+  );
+
+  assert.match(dispatchStyles, /\.pdd-zoom-surface\s*\{[^}]*grid-template-rows:\s*auto\s+auto\s+minmax\(330px,\s*1fr\)\s+auto/);
+  assert.match(dispatchStyles, /\.pdd-capture-deck\s*\{[^}]*align-items:\s*stretch/);
+  assert.match(dispatchStyles, /\.pdd-quick-panel\s*\{[^}]*height:\s*auto;[^}]*align-self:\s*stretch;[^}]*overflow:\s*hidden/);
+  assert.match(desktopHeightContainment, /\.pdd-quick-panel\s*\{[^}]*contain:\s*size/);
+  assert.match(dispatchStyles, /\.pdd-quick-product-media\s*\{[^}]*position:\s*relative;[^}]*overflow:\s*hidden/);
+  assert.match(dispatchStyles, /\.pdd-quick-product img,\s*\.pdd-quick-product-placeholder\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*height:\s*100%;[^}]*max-height:\s*100%/);
+  assert.match(dispatchStyles, /\.pdd-lists-grid\s*\{[^}]*height:\s*calc\(100%\s*-\s*43px\)/);
+});
+
 test("Configuración permite buscar y guardar exactamente cuatro productos rápidos ordenados", () => {
   const settingsFlow = sourceBetween(dispatchSource, "function quickProductSettingVisual", "function renderWastePresetSettings");
   const settingsListeners = sourceBetween(dispatchSource, 'elements.openViewSettings.addEventListener', 'elements.wastePresetForm.addEventListener');
