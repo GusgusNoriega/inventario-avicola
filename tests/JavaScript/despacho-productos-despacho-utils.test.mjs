@@ -142,7 +142,7 @@ test("la recuperación limpia listas dañadas sin convertir una pesada manual en
   assert.equal(recovered.items[0].scale_reading, null);
 });
 
-test("el payload conserva precisión y evidencia solo para la balanza de productos", () => {
+test("el payload conserva dos decimales de precio y evidencia solo para la balanza de productos", () => {
   const draft = normalizeDraft({
     id: "22222222-2222-4222-8222-222222222222",
     client_id: 5,
@@ -172,7 +172,7 @@ test("el payload conserva precisión y evidencia solo para la balanza de product
       variation_id: 71,
       quantity: 2,
       price_mode: PRODUCT_PRICE_MODE_KG,
-      unit_price: "20.5000",
+      unit_price: "20.50",
       waste_grams_per_unit: 30,
       waste_total_grams: 60,
       tare_grams: 0,
@@ -234,12 +234,12 @@ test("los tres presets del catálogo son enteros seguros y tienen valores de res
   assert.deepEqual(normalizeWastePresets([10, 20, 1_000_001]), [0, 50, 100]);
 });
 
-test("el precio de una pesada debe ser positivo, acotado y usar máximo cuatro decimales", () => {
-  assert.equal(validateUnitPrice("12.3456"), "");
-  assert.equal(validateUnitPrice("0.0001"), "");
-  assert.match(validateUnitPrice("0"), /mayor que cero/);
-  assert.match(validateUnitPrice("12.34567"), /hasta 4 decimales/);
-  assert.match(validateUnitPrice("100.0001", 100), /máximo permitido/);
+test("el precio de una pesada usa entre 0.01 y el máximo con solo dos decimales", () => {
+  assert.equal(validateUnitPrice("12.34"), "");
+  assert.equal(validateUnitPrice("0.01"), "");
+  assert.match(validateUnitPrice("0"), /mínimo es 0.01/);
+  assert.match(validateUnitPrice("12.345"), /hasta 2 decimales/);
+  assert.match(validateUnitPrice("100.01", 100), /máximo permitido/);
   assert.match(validateUnitPrice(""), /precio válido/);
 });
 
@@ -254,5 +254,5 @@ test("dos pesadas del mismo ticket conservan precios e importes independientes",
 
   assert.deepEqual(draft.items.map((item) => item.unit_price), [10, 12.5]);
   assert.deepEqual(draft.items.map((item) => item.amount), [20, 25]);
-  assert.deepEqual(buildTicketPayload(draft).weighings.map((item) => item.unit_price), ["10.0000", "12.5000"]);
+  assert.deepEqual(buildTicketPayload(draft).weighings.map((item) => item.unit_price), ["10.00", "12.50"]);
 });

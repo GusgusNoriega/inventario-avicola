@@ -4,7 +4,7 @@ export const PRODUCT_PRICE_MODE_KG = "POR_KG";
 export const PRODUCT_PRICE_MODE_UNIT = "POR_UNIDAD";
 export const PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS = [0, 50, 100];
 export const PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS = 1_000_000_000;
-export const PRODUCT_DISPATCH_MAX_UNIT_PRICE = 9_999_999_999.9999;
+export const PRODUCT_DISPATCH_MAX_UNIT_PRICE = 9_999_999_999.99;
 
 export function createUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -135,12 +135,12 @@ export const resolveEffectiveProduct = effectiveProduct;
 
 export function validateUnitPrice(value, maximum = PRODUCT_DISPATCH_MAX_UNIT_PRICE) {
   const raw = String(value ?? "").trim().replace(",", ".");
-  if (!/^\d+(?:\.\d{1,4})?$/.test(raw)) {
-    return "Ingresa un precio válido con hasta 4 decimales.";
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
+    return "Ingresa un precio válido con hasta 2 decimales.";
   }
 
   const price = Number(raw);
-  if (!Number.isFinite(price) || price <= 0) return "El precio debe ser mayor que cero.";
+  if (!Number.isFinite(price) || price < 0.01) return "El precio mínimo es 0.01.";
   if (price > Number(maximum)) return "El precio supera el máximo permitido.";
   return "";
 }
@@ -157,7 +157,7 @@ export function calculateLine(input = {}) {
   const wasteWeightKg = roundTo(wasteTotalGrams / 1000, 3);
   const tareWeightKg = roundTo(tareGrams / 1000, 3);
   const netWeightKg = Math.max(0, roundTo(readWeightKg - wasteWeightKg - tareWeightKg, 3));
-  const unitPrice = Math.max(0, roundTo(input.unit_price, 4));
+  const unitPrice = Math.max(0, roundTo(input.unit_price, 2));
   const priceMode = normalizePriceMode(input.price_mode);
   const basis = priceMode === PRODUCT_PRICE_MODE_UNIT ? quantity : netWeightKg;
 
@@ -283,7 +283,7 @@ export function buildTicketPayload(draft) {
       variation_id: item.variation_id ? Number(item.variation_id) : null,
       quantity: Math.max(1, Math.round(Number(item.quantity))),
       price_mode: normalizePriceMode(item.price_mode),
-      unit_price: roundTo(item.unit_price, 4).toFixed(4),
+      unit_price: roundTo(item.unit_price, 2).toFixed(2),
       waste_grams_per_unit: Math.max(0, Math.round(Number(item.waste_grams_per_unit || 0))),
       waste_total_grams: Math.max(0, Math.round(Number(item.waste_total_grams))),
       tare_grams: Math.max(0, Math.round(Number(item.tare_grams || 0))),

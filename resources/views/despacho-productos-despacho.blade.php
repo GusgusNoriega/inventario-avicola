@@ -51,9 +51,9 @@
     <section class="pdd-capture-deck" aria-label="Captura de producto y peso">
       <article class="pdd-product-panel pdd-panel">
         <div class="pdd-panel-heading">
-          <div><span>Producto a despachar</span><strong id="pddSelectedName">Ningún producto seleccionado</strong></div>
+          <div><span>Producto</span><strong id="pddSelectedName">Sin producto</strong></div>
           <button id="pddChooseProduct" class="pdd-choose-product" type="button" aria-haspopup="dialog" aria-controls="pddProductDialog">
-            <span aria-hidden="true">＋</span> Elegir producto
+            <span aria-hidden="true">＋</span> Elegir
           </button>
         </div>
 
@@ -73,10 +73,10 @@
             <output id="pddLiveWeight" class="pdd-live-weight">---<small>kg</small></output>
             <div class="pdd-scale-actions">
               <button id="pddManualWeight" class="pdd-secondary-touch" type="button" aria-haspopup="dialog" aria-controls="pddManualDialog">
-                <span aria-hidden="true">✎</span> Peso manual
+                <span aria-hidden="true">✎</span> Manual
               </button>
               <button id="pddCaptureWeight" class="pdd-capture-touch" type="button" disabled>
-                <span aria-hidden="true">◎</span> Capturar peso
+                <span aria-hidden="true">◎</span> Capturar
               </button>
             </div>
           </div>
@@ -85,7 +85,7 @@
 
       <article class="pdd-config-panel pdd-panel">
         <div class="pdd-config-head">
-          <div><span>Configuración de la pesada</span><strong id="pddSelectedVariantLabel">Producto base</strong></div>
+          <div><span>Pesada</span><strong id="pddSelectedVariantLabel">Producto base</strong></div>
         </div>
 
         <div class="pdd-fields-grid">
@@ -100,7 +100,7 @@
             <span>Precio</span>
             <span class="pdd-price-input">
               <b id="pddPriceCurrency" aria-hidden="true">S/</b>
-              <input id="pddUnitPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="decimal" placeholder="0.0000" required aria-label="Precio de esta pesada" disabled>
+              <input id="pddUnitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" placeholder="0.00" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" disabled>
             </span>
             <small id="pddPriceMode">Selecciona un producto</small>
           </label>
@@ -112,7 +112,7 @@
             </span>
           </label>
           <div class="pdd-net-preview">
-            <span>Peso neto estimado</span>
+            <span>Neto</span>
             <strong id="pddNetPreview">--- kg</strong>
             <small id="pddAmountPreview">Importe pesada S/ --</small>
           </div>
@@ -139,10 +139,20 @@
         </div>
 
         <div class="pdd-variations-block">
-          <div class="pdd-variations-heading"><span>Variaciones</span><small>Desliza para ver todas</small></div>
+          <div class="pdd-variations-heading"><span>Variaciones</span></div>
           <div id="pddVariations" class="pdd-variations-slider" role="listbox" aria-label="Variaciones del producto">
-            <span class="pdd-variation-empty">Elige un producto para ver sus variaciones.</span>
+            <span class="pdd-variation-empty">Elige producto</span>
           </div>
+        </div>
+      </article>
+
+      <article class="pdd-quick-panel pdd-panel" aria-labelledby="pddQuickProductsTitle">
+        <div class="pdd-quick-heading">
+          <strong id="pddQuickProductsTitle">Rápidos</strong>
+          <button id="pddQuickAllProducts" type="button" aria-haspopup="dialog" aria-controls="pddProductDialog">Todos</button>
+        </div>
+        <div id="pddQuickProducts" class="pdd-quick-products" aria-label="Productos de acceso rápido">
+          <span class="pdd-quick-empty">Cargando…</span>
         </div>
       </article>
     </section>
@@ -150,8 +160,7 @@
     <section class="pdd-workspace" aria-label="Ocho listas de despacho">
       <div class="pdd-lists-area">
         <div class="pdd-lists-heading">
-          <div><span>Distribución de tickets</span><strong>Selecciona una lista y agrega sus pesadas</strong></div>
-          <small>Desliza horizontalmente para ver las listas 5 a 8.</small>
+          <div><strong>Listas de despacho</strong></div>
         </div>
         <div id="pddLists" class="pdd-lists-grid"></div>
       </div>
@@ -292,7 +301,7 @@
         <label><span>Merma/u (g)</span><input id="pddEditWastePerUnit" type="number" min="0" max="1000000" step="1" required></label>
         <label><span>Merma total (g)</span><output id="pddEditWasteTotal" class="pdd-edit-output">0 g</output></label>
         <label><span>Tara (g)</span><input id="pddEditTare" type="number" min="0" max="1000000000" step="1" required></label>
-        <label><span>Precio pesada</span><input id="pddEditPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="decimal" required></label>
+        <label class="pdd-edit-price-field"><span>Precio</span><input id="pddEditPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico"></label>
       </div>
       <div class="pdd-edit-summary">
         <span id="pddEditSource">Origen: manual</span><strong id="pddEditCalculated">Neto 0.000 kg · S/ 0.00</strong>

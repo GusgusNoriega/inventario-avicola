@@ -210,6 +210,8 @@ const elements = {
   netPreview: document.querySelector("#pddNetPreview"),
   amountPreview: document.querySelector("#pddAmountPreview"),
   variations: document.querySelector("#pddVariations"),
+  quickProducts: document.querySelector("#pddQuickProducts"),
+  quickAllProducts: document.querySelector("#pddQuickAllProducts"),
   lists: document.querySelector("#pddLists"),
   activeList: document.querySelector("#pddActiveList"),
   assignClient: document.querySelector("#pddAssignClient"),
@@ -317,7 +319,7 @@ const state = {
   captureBlockedUntil: 0,
   lastRaw: "",
   pendingPrintTicket: null,
-  lastFocus: null,
+  dialogFocus: new WeakMap(),
   appScale: 100,
   typography: defaultTypographyValues(TYPOGRAPHY_GROUPS),
   typographyPreset: "standard",
@@ -416,8 +418,10 @@ function setMessage(message, tone = "") {
 function openDialog(dialog, focusTarget = null) {
   if (!dialog) return;
   dialog.querySelectorAll(".pdd-dialog-message").forEach((notice) => notice.remove());
-  state.lastFocus = document.activeElement;
-  if (!dialog.open) dialog.showModal();
+  if (!dialog.open) {
+    state.dialogFocus.set(dialog, document.activeElement);
+    dialog.showModal();
+  }
   window.setTimeout(() => (focusTarget || dialog.querySelector("input,button,select"))?.focus(), 0);
 }
 
@@ -796,7 +800,8 @@ function captureUnitPrice() {
 
 function setCapturePrice(value) {
   const price = Number(value);
-  elements.unitPrice.value = Number.isFinite(price) && price > 0 ? price.toFixed(4) : "";
+  elements.unitPrice.value = Number.isFinite(price) && price > 0 ? price.toFixed(2) : "";
+  state.numericKeypad?.refreshLabel(elements.unitPrice);
 }
 
 function useCatalogPrice() {
@@ -811,13 +816,31 @@ function mediaMarkup(name, imageUrl, altPrefix = "Imagen de") {
   return `<span class="pdd-media-placeholder has-name"><b>${escapeHtml(productInitial(name))}</b><small>${escapeHtml(name)}</small></span>`;
 }
 
+function renderQuickProducts() {
+  const products = state.catalog.products.slice(0, 4);
+  if (!products.length) {
+    elements.quickProducts.innerHTML = '<span class="pdd-quick-empty">Sin productos</span>';
+    return;
+  }
+
+  elements.quickProducts.innerHTML = products.map((product) => {
+    const active = Number(product.id) === Number(state.selectedProductId);
+    const visual = product.image_url
+      ? `<img src="${escapeHtml(product.image_url)}" alt="" loading="lazy" data-pdd-quick-image-fallback="${escapeHtml(product.name)}">`
+      : `<span class="pdd-quick-product-placeholder" aria-hidden="true">${escapeHtml(productInitial(product.name))}</span>`;
+    return `<button class="pdd-quick-product${active ? " is-active" : ""}" type="button" data-pdd-quick-product-id="${product.id}" aria-pressed="${active}" aria-label="Seleccionar ${escapeHtml(product.name)}">
+      <span class="pdd-quick-product-media">${visual}</span><strong title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</strong>
+    </button>`;
+  }).join("");
+}
+
 function renderSelectedProduct() {
   const product = selectedProduct();
   const variation = selectedVariation(product);
   const selection = effectiveProduct(product, variation);
 
   if (!selection) {
-    elements.selectedName.textContent = "Ningún producto seleccionado";
+    elements.selectedName.textContent = "Sin producto";
     elements.selectedVariantLabel.textContent = "Producto base";
     elements.productMedia.innerHTML = '<span class="pdd-media-placeholder"><b>?</b><small>Elige un producto</small></span>';
     elements.unitPrice.disabled = true;
@@ -829,10 +852,11 @@ function renderSelectedProduct() {
     elements.productMedia.innerHTML = mediaMarkup(selection.display_name, selection.image_url);
     elements.unitPrice.disabled = state.saving;
     elements.priceCurrency.textContent = currencyLabel(state.catalog.currency);
-    elements.priceMode.textContent = `Precio ${priceModeLabel(selection.price_mode)}`;
+    elements.priceMode.textContent = priceModeLabel(selection.price_mode);
   }
 
   renderVariations();
+  renderQuickProducts();
   syncWasteTotal();
   renderCapturePreview();
 }
@@ -840,7 +864,7 @@ function renderSelectedProduct() {
 function renderVariations() {
   const product = selectedProduct();
   if (!product) {
-    elements.variations.innerHTML = '<span class="pdd-variation-empty">Elige un producto para ver sus variaciones.</span>';
+    elements.variations.innerHTML = '<span class="pdd-variation-empty">Elige producto</span>';
     return;
   }
 
@@ -950,7 +974,7 @@ function renderCapturePreview() {
   const priceMessage = validation.target === elements.unitPrice ? validation.message : "";
   const wasteMessage = priceMessage ? "" : validation.message;
   elements.priceMode.classList.toggle("is-error", Boolean(priceMessage));
-  elements.priceMode.textContent = priceMessage || (selection ? `Precio ${priceModeLabel(selection.price_mode)}` : "Selecciona un producto");
+  elements.priceMode.textContent = priceMessage || (selection ? priceModeLabel(selection.price_mode) : "Selecciona producto");
   elements.wasteHint.classList.toggle("is-error", Boolean(wasteMessage));
   elements.wasteHint.textContent = wasteMessage;
   const line = calculateLine({
@@ -964,8 +988,8 @@ function renderCapturePreview() {
 
   elements.netPreview.textContent = hasWeight ? formatWeight(line.net_weight_kg) : "--- kg";
   elements.amountPreview.textContent = hasWeight && selection
-    ? `Importe pesada ${formatMoney(line.amount, state.catalog.currency)}`
-    : `Importe pesada ${currencyLabel(state.catalog.currency)} --`;
+    ? `Importe ${formatMoney(line.amount, state.catalog.currency)}`
+    : `Importe ${currencyLabel(state.catalog.currency)} --`;
   const captureReady = Boolean(
     selection
     && state.liveScale.isCaptureReady
@@ -1055,7 +1079,7 @@ function renderLists() {
       ? draft.items.map((item, itemIndex) => `<button class="pdd-weighing-row" type="button"${state.saving ? " disabled" : ""} data-pdd-edit-item="${escapeHtml(item.local_id)}" data-pdd-list-index="${index}">
           <i>${itemIndex + 1}</i><span><b>${escapeHtml(itemDisplayName(item))}</b><small>${item.quantity} und · ${formatWeight(item.net_weight_kg)} · M ${item.waste_total_grams} g${item.tare_grams ? ` · T ${item.tare_grams} g` : ""}</small></span><strong>${escapeHtml(formatMoney(item.amount, state.catalog.currency))}</strong>
         </button>`).join("")
-      : '<div class="pdd-list-empty"><b>Lista vacía</b><span>Selecciónala y captura el primer peso.</span></div>';
+      : '<div class="pdd-list-empty"><b>Vacía</b></div>';
 
     return `<article class="pdd-list-card${index === state.activeIndex ? " is-active" : ""}" data-pdd-list-card="${index}">
       <button class="pdd-list-card-head" type="button" aria-pressed="${index === state.activeIndex}"${state.saving ? " disabled" : ""} data-pdd-select-list="${index}">
@@ -1313,7 +1337,8 @@ function openEditDialog(localId, listIndex) {
   elements.editWeight.value = Number(item.read_weight_kg).toFixed(3);
   elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / item.quantity));
   elements.editTare.value = String(item.tare_grams || 0);
-  elements.editPrice.value = Number(item.unit_price).toFixed(4);
+  elements.editPrice.value = Number(item.unit_price).toFixed(2);
+  state.numericKeypad?.refreshLabel(elements.editPrice);
   elements.editSource.textContent = item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
     ? `Origen: balanza ${item.scale_reading?.device_name || "conectada"}`
     : "Origen: peso manual";
@@ -1327,10 +1352,12 @@ function changeEditingProduct(useCatalogDefaults = true) {
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
   if (selection && useCatalogDefaults) {
-    elements.editPrice.value = Number(selection.price).toFixed(4);
+    elements.editPrice.value = Number(selection.price).toFixed(2);
+    state.numericKeypad?.refreshLabel(elements.editPrice);
     elements.editWastePerUnit.value = String(selection.waste_grams_per_unit);
   } else if (!selection && item) {
-    elements.editPrice.value = Number(item.unit_price).toFixed(4);
+    elements.editPrice.value = Number(item.unit_price).toFixed(2);
+    state.numericKeypad?.refreshLabel(elements.editPrice);
   }
   renderEditCalculation();
 }
@@ -1650,7 +1677,9 @@ state.numericKeypad = bindIntegerKeypad({
   inputs: [
     { input: elements.quantity, maxLength: 6 },
     { input: elements.wastePerUnit, maxLength: 7 },
-    { input: elements.tare, maxLength: 10 }
+    { input: elements.tare, maxLength: 10 },
+    { input: elements.unitPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" },
+    { input: elements.editPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" }
   ],
   dialog: elements.numericKeypad,
   titleOutput: elements.numericKeypadTitle,
@@ -1669,6 +1698,11 @@ state.numericKeypad = bindIntegerKeypad({
 
 elements.chooseProduct.addEventListener("click", openProductDialog);
 elements.productMedia.addEventListener("click", openProductDialog);
+elements.quickAllProducts.addEventListener("click", openProductDialog);
+elements.quickProducts.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-pdd-quick-product-id]");
+  if (option) selectProduct(option.dataset.pddQuickProductId);
+});
 elements.productSearch.addEventListener("input", () => renderProductGrid(elements.productSearch.value));
 elements.productGrid.addEventListener("click", (event) => {
   const option = event.target.closest("[data-pdd-product-id]");
@@ -1680,7 +1714,16 @@ elements.variations.addEventListener("click", (event) => {
 });
 document.addEventListener("error", (event) => {
   const image = event.target;
-  if (!(image instanceof HTMLImageElement) || !image.dataset.pddImageFallback) return;
+  if (!(image instanceof HTMLImageElement)) return;
+  if (image.dataset.pddQuickImageFallback) {
+    const fallback = document.createElement("span");
+    fallback.className = "pdd-quick-product-placeholder";
+    fallback.setAttribute("aria-hidden", "true");
+    fallback.textContent = productInitial(image.dataset.pddQuickImageFallback);
+    image.replaceWith(fallback);
+    return;
+  }
+  if (!image.dataset.pddImageFallback) return;
   const name = image.dataset.pddImageFallback;
   if (image.closest(".pdd-product-option")) {
     const fallback = document.createElement("span");
@@ -1721,7 +1764,8 @@ elements.quantity.addEventListener("change", () => {
 elements.unitPrice.addEventListener("input", renderCapturePreview);
 elements.unitPrice.addEventListener("change", () => {
   const error = validateUnitPrice(elements.unitPrice.value, PRODUCT_DISPATCH_MAX_UNIT_PRICE);
-  if (!error) elements.unitPrice.value = captureUnitPrice().toFixed(4);
+  if (!error) elements.unitPrice.value = captureUnitPrice().toFixed(2);
+  state.numericKeypad?.refreshLabel(elements.unitPrice);
   renderCapturePreview();
 });
 elements.wastePerUnit.addEventListener("input", () => {
@@ -1904,7 +1948,11 @@ document.querySelectorAll(".pdd-dialog").forEach((dialog) => {
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) closeDialog(dialog);
   });
-  dialog.addEventListener("close", () => state.lastFocus?.focus?.());
+  dialog.addEventListener("close", () => {
+    const returnFocus = state.dialogFocus.get(dialog);
+    state.dialogFocus.delete(dialog);
+    window.setTimeout(() => returnFocus?.focus?.(), 0);
+  });
 });
 
 document.addEventListener("keydown", (event) => {

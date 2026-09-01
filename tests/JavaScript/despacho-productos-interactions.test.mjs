@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  applyDecimalKeypadKey,
   applyIntegerKeypadKey,
+  sanitizeDecimalKeypadBuffer,
   sanitizeIntegerKeypadBuffer,
+  validateDecimalKeypadBuffer,
   validateIntegerKeypadBuffer
 } from "../../public/js/despacho-productos-numeric-keypad.js";
 
@@ -67,6 +70,20 @@ test("la validación del teclado respeta obligatoriedad y límites de cantidad",
   );
 });
 
+test("el modo decimal del mismo teclado conserva dos decimales y admite punto o coma", () => {
+  assert.equal(sanitizeDecimalKeypadBuffer("0012,345", 10, 2), "12.34");
+  assert.equal(applyDecimalKeypadKey("12", ".", 10, 2), "12.");
+  assert.equal(applyDecimalKeypadKey("12.", "3", 10, 2), "12.3");
+  assert.equal(applyDecimalKeypadKey("12.3", "4", 10, 2), "12.34");
+  assert.equal(applyDecimalKeypadKey("12.34", "5", 10, 2), "12.34");
+  assert.equal(applyDecimalKeypadKey("12.34", "backspace", 10, 2), "12.3");
+  assert.equal(validateDecimalKeypadBuffer("0.01", { min: 0.01, max: 9999999999.99, decimalPlaces: 2 }), "");
+  assert.equal(validateDecimalKeypadBuffer("18,50", { min: 0.01, decimalPlaces: 2 }), "");
+  assert.equal(validateDecimalKeypadBuffer("12.", { min: 0.01, decimalPlaces: 2 }), "");
+  assert.match(validateDecimalKeypadBuffer("12.345", { decimalPlaces: 2 }), /hasta 2 decimales/);
+  assert.match(validateDecimalKeypadBuffer("0", { min: 0.01, decimalPlaces: 2, valueName: "precio" }), /mínimo es 0.01/);
+});
+
 test("cantidad, merma por unidad y tara comparten el teclado; la merma total es solo lectura", () => {
   const quantityInput = dispatchView.match(/<input\b[^>]*\bid="pddQuantity"[^>]*>/)?.[0] || "";
   const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWastePerUnit"[^>]*>/)?.[0] || "";
@@ -108,28 +125,81 @@ test("cantidad, merma por unidad y tara comparten el teclado; la merma total es 
   assert.equal((dispatchView.match(/class="pdd-touch-number-input"/g) || []).length, 3);
   const wasteControlStyles = dispatchStyles.match(/\.pdd-touch-number-input\s+input\s*\{([^}]*)\}/)?.[1] || "";
   const wasteControlHeight = Number(wasteControlStyles.match(/(?:min-)?height:\s*(\d+)px/)?.[1]);
-  assert.ok(wasteControlHeight >= 60, "El control táctil de merma debe medir al menos 60 px de alto.");
+  assert.ok(wasteControlHeight >= 44, "El control táctil de merma debe medir al menos 44 px de alto.");
 });
 
-test("el precio editable pertenece a la pesada y no existen cambios globales del ticket", () => {
+test("los precios de captura y edición comparten el teclado decimal de la pesada", () => {
   const capturePrice = dispatchView.match(/<input\b[^>]*\bid="pddUnitPrice"[^>]*>/)?.[0] || "";
   const editPrice = dispatchView.match(/<input\b[^>]*\bid="pddEditPrice"[^>]*>/)?.[0] || "";
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
 
   for (const input of [capturePrice, editPrice]) {
     assert.ok(input, "Debe existir el precio editable de la pesada.");
     assert.match(input, /\btype="number"/);
-    assert.match(input, /\bmin="0\.0001"/);
-    assert.match(input, /\bmax="9999999999\.9999"/);
-    assert.match(input, /\bstep="0\.0001"/);
-    assert.match(input, /\binputmode="decimal"/);
+    assert.match(input, /\bmin="0\.01"/);
+    assert.match(input, /\bmax="9999999999\.99"/);
+    assert.match(input, /\bstep="0\.01"/);
+    assert.match(input, /\binputmode="none"/);
+    assert.match(input, /\breadonly\b/);
+    assert.match(input, /\bdata-pdd-keypad-label=/);
+    assert.match(input, /\baria-controls="pddNumericKeypad"/);
   }
 
+  assert.match(keypadBinding, /input:\s*elements\.unitPrice,\s*mode:\s*"decimal",\s*decimalPlaces:\s*2/);
+  assert.match(keypadBinding, /input:\s*elements\.editPrice,\s*mode:\s*"decimal",\s*decimalPlaces:\s*2/);
+  assert.match(keypadSource, /decimal\s*&&\s*key\s*===\s*"00"\s*\?\s*"\."\s*:\s*key/);
+  assert.match(keypadSource, /event\.key\s*===\s*"\."\s*\|\|\s*event\.key\s*===\s*","/);
+  assert.match(keypadSource, /toFixed\(bindingDecimalPlaces\(\)\)/);
   assert.match(dispatchView, /id="pddPriceCurrency"/);
-  assert.match(dispatchView, /Importe pesada/);
-  assert.match(dispatchStyles, /\.pdd-price-input\s*\{[^}]*min-height:\s*60px/);
+  assert.match(dispatchView, /Importe/);
+  assert.match(dispatchStyles, /\.pdd-price-input\s*\{[^}]*min-height:\s*5[6-9]px/);
   assert.doesNotMatch(dispatchView, /pddChangePrice|pddRailChangePrice|pddPriceDialog/);
   assert.doesNotMatch(dispatchSource, /openPriceDialog|savePrices|price_overrides/);
   assert.doesNotMatch(dispatchUtilsSource, /price_overrides/);
+});
+
+test("el acceso rápido muestra los primeros cuatro productos y selecciona con un toque", () => {
+  const quickRender = sourceBetween(dispatchSource, "function renderQuickProducts", "function renderSelectedProduct");
+  const quickListeners = sourceBetween(dispatchSource, "elements.chooseProduct.addEventListener", "elements.productSearch.addEventListener");
+  const desktopResponsive = sourceBetween(dispatchStyles, "@media (max-width: 1280px)", "@media (max-width: 1120px)");
+  const compactResponsive = sourceBetween(dispatchStyles, "@media (max-width: 960px)", "@media (max-width: 860px)");
+  const mobileResponsive = sourceBetween(dispatchStyles, "@media (max-width: 560px)", "@media (max-width: 390px)");
+
+  assert.match(dispatchView, /id="pddQuickProducts"/);
+  assert.match(dispatchView, /id="pddQuickAllProducts"/);
+  assert.match(quickRender, /state\.catalog\.products\.slice\(0,\s*4\)/);
+  assert.match(quickRender, /data-pdd-quick-product-id/);
+  assert.match(quickRender, /aria-pressed="\$\{active\}"/);
+  assert.match(quickRender, /product\.image_url/);
+  assert.match(quickListeners, /quickAllProducts\.addEventListener\("click",\s*openProductDialog\)/);
+  assert.match(quickListeners, /quickProducts\.addEventListener[\s\S]*selectProduct\(option\.dataset\.pddQuickProductId\)/);
+  assert.match(dispatchStyles, /\.pdd-capture-deck\s*\{[^}]*grid-template-columns:\s*minmax\(0,[^;]+minmax\(0,[^;]+minmax\(220px/);
+  assert.match(dispatchStyles, /\.pdd-quick-products\s*\{[^}]*grid-template-columns:\s*repeat\(2/);
+  assert.match(desktopResponsive, /\.pdd-capture-deck\s*\{[^}]*minmax\(170px/);
+  assert.doesNotMatch(desktopResponsive, /\.pdd-quick-panel\s*\{[^}]*grid-column/);
+  assert.match(compactResponsive, /\.pdd-quick-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+  assert.match(compactResponsive, /\.pdd-quick-products\s*\{[^}]*repeat\(4/);
+  assert.match(mobileResponsive, /\.pdd-quick-products\s*\{[^}]*repeat\(2/);
+});
+
+test("las imágenes rápidas tienen un respaldo visual propio", () => {
+  const imageFallbackFlow = sourceBetween(dispatchSource, 'document.addEventListener("error"', 'document.addEventListener("click"');
+
+  assert.match(dispatchSource, /data-pdd-quick-image-fallback/);
+  assert.match(imageFallbackFlow, /pddQuickImageFallback/);
+  assert.match(imageFallbackFlow, /pdd-quick-product-placeholder/);
+  assert.match(imageFallbackFlow, /productInitial\(image\.dataset\.pddQuickImageFallback\)/);
+});
+
+test("el teclado de precio anidado conserva el foco de cada diálogo", () => {
+  const dialogFlow = sourceBetween(dispatchSource, "function openDialog", "function normalizeAppScale");
+  const dialogListeners = sourceBetween(dispatchSource, 'document.querySelectorAll(".pdd-dialog")', 'document.addEventListener("keydown"');
+
+  assert.match(dispatchSource, /dialogFocus:\s*new WeakMap\(\)/);
+  assert.match(dialogFlow, /state\.dialogFocus\.set\(dialog,\s*document\.activeElement\)/);
+  assert.match(dialogListeners, /state\.dialogFocus\.get\(dialog\)/);
+  assert.match(dialogListeners, /state\.dialogFocus\.delete\(dialog\)/);
+  assert.doesNotMatch(dispatchSource, /state\.lastFocus/);
 });
 
 test("el precio manual se conserva al cambiar de lista y vuelve al catálogo solo donde corresponde", () => {

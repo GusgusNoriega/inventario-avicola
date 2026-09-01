@@ -35,9 +35,9 @@ class StoreProductDispatchTicketRequest extends FormRequest
             'weighings.*.unit_price' => [
                 'required',
                 'numeric',
-                'decimal:0,4',
+                'decimal:0,2',
                 'gt:0',
-                'max:9999999999.9999',
+                'max:9999999999.99',
             ],
             'weighings.*.waste_total_grams' => [
                 'required',
@@ -97,7 +97,8 @@ class StoreProductDispatchTicketRequest extends FormRequest
             'weighings.*.price_mode.in' => 'El modo de precio de una pesada no es válido.',
             'weighings.*.unit_price.required' => 'Indica el precio de cada pesada.',
             'weighings.*.unit_price.gt' => 'El precio debe ser mayor que cero.',
-            'weighings.*.unit_price.decimal' => 'El precio puede tener hasta cuatro decimales.',
+            'weighings.*.unit_price.decimal' => 'El precio puede tener hasta dos decimales.',
+            'weighings.*.unit_price.max' => 'El precio supera el máximo permitido.',
             'weighings.*.waste_total_grams.required' => 'Indica la merma total de cada pesada.',
             'weighings.*.waste_total_grams.min' => 'La merma no puede ser negativa.',
             'weighings.*.waste_total_grams.max' => 'La merma total no puede superar 1.000.000.000 de gramos.',

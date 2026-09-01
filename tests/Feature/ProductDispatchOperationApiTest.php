@@ -184,14 +184,14 @@ class ProductDispatchOperationApiTest extends TestCase
                 product: $this->turkey,
                 variation: $this->largeTurkey,
                 quantity: 2,
-                price: '21.0000',
+                price: '21.00',
                 readWeight: '10.000',
                 waste: 100,
             ),
             $this->weighing(
                 product: $this->eggs,
                 quantity: 12,
-                price: '0.7500',
+                price: '0.75',
                 readWeight: '2.000',
                 waste: 24,
             ),
@@ -316,13 +316,13 @@ class ProductDispatchOperationApiTest extends TestCase
             $this->weighing(
                 product: $this->eggs,
                 quantity: 2,
-                price: '0.7500',
+                price: '0.75',
                 readWeight: '1.000',
             ),
             $this->weighing(
                 product: $this->eggs,
                 quantity: 3,
-                price: '0.9000',
+                price: '0.90',
                 readWeight: '1.000',
             ),
         ]);
@@ -390,7 +390,7 @@ class ProductDispatchOperationApiTest extends TestCase
             $this->weighing(
                 product: $this->eggs,
                 quantity: 6,
-                price: '0.8000',
+                price: '0.80',
                 readWeight: '1.000',
                 waste: 12,
             ),
@@ -426,7 +426,7 @@ class ProductDispatchOperationApiTest extends TestCase
         $weighing = $this->weighing(
             product: $this->turkey,
             quantity: 2,
-            price: '20.0000',
+            price: '20.00',
             readWeight: '10.000',
             waste: 100,
         );
@@ -477,7 +477,7 @@ class ProductDispatchOperationApiTest extends TestCase
             ...$this->weighing(
                 product: $this->turkey,
                 quantity: 1,
-                price: '18.0000',
+                price: '18.00',
                 readWeight: '4.500',
                 waste: 25,
             ),
@@ -519,7 +519,7 @@ class ProductDispatchOperationApiTest extends TestCase
                 product: $this->turkey,
                 variation: $this->largeTurkey,
                 quantity: 1,
-                price: '20.0000',
+                price: '20.00',
                 readWeight: '5.000',
                 waste: 30,
             ),
@@ -552,7 +552,7 @@ class ProductDispatchOperationApiTest extends TestCase
                 product: $this->turkey,
                 variation: $this->largeTurkey,
                 quantity: 1,
-                price: '20.0000',
+                price: '20.00',
                 readWeight: '5.000',
                 waste: 30,
             ),
@@ -634,7 +634,7 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonValidationErrors('weighings.0.variation_id');
 
         $this->postJson('/api/v1/despacho-productos/tickets', $this->payload($this->clientId, [
-            $this->weighing(product: $inactive, price: '11.0000'),
+            $this->weighing(product: $inactive, price: '11.00'),
         ]))
             ->assertUnprocessable()
             ->assertJsonValidationErrors('weighings.0.product_id');
@@ -735,6 +735,29 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseCount('comprobantes', 0);
     }
 
+    public function test_weighing_price_accepts_two_decimals_and_rejects_three(): void
+    {
+        $accepted = $this->weighing(
+            product: $this->eggs,
+            price: '9999999999.99',
+        );
+
+        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$accepted]))
+            ->assertCreated()
+            ->assertJsonPath('data.weighings.0.unit_price', 9999999999.99);
+
+        $threeDecimals = $this->weighing(
+            product: $this->eggs,
+            price: '0.751',
+        );
+
+        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$threeDecimals]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.unit_price');
+
+        $this->assertDatabaseCount('tickets_despacho_productos', 1);
+    }
+
     public function test_operation_endpoints_require_the_product_dispatch_module(): void
     {
         $unauthorized = User::factory()->create();
@@ -781,13 +804,14 @@ class ProductDispatchOperationApiTest extends TestCase
         ?int $waste = null,
     ): array {
         $effective = $variation ?? $product;
+        $unitPrice = $price ?? number_format((float) $effective->precio_venta, 2, '.', '');
 
         return [
             'product_id' => $product->id,
             'variation_id' => $variation?->id,
             'quantity' => $quantity,
             'price_mode' => $effective->modo_precio,
-            'unit_price' => $price ?? $effective->precio_venta,
+            'unit_price' => $unitPrice,
             'waste_total_grams' => $waste ?? ($effective->merma_gramos_unidad * $quantity),
             'weight_source' => 'MANUAL',
             'read_weight_kg' => $readWeight,
