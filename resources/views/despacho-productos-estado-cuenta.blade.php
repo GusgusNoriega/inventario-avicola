@@ -19,7 +19,7 @@
       <div class="pdas-header-copy">
         <p class="eyebrow">Despacho de productos</p>
         <h1>Estado de cuenta del cliente</h1>
-        <p>Consulta las ventas y abonos vinculados únicamente a este módulo, revisa el saldo acumulado y prepara un PDF para el cliente.</p>
+        <p>Consulta las ventas de esta sucursal, la deuda anterior registrada en Finanzas y los abonos aplicados, y prepara un PDF para el cliente.</p>
       </div>
       <a class="menu-return-btn pdas-back" href="{{ route('despacho-productos.menu') }}" aria-label="Volver a las opciones de Despacho de productos">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -129,12 +129,17 @@
         <article class="pdas-summary-card card is-opening">
           <span>Saldo anterior</span>
           <strong id="pdasOpeningBalance">—</strong>
-          <small>Antes del periodo elegido</small>
+          <small>Ventas y deudas previas al periodo</small>
         </article>
         <article class="pdas-summary-card card is-sales">
           <span>Ventas del periodo</span>
           <strong id="pdasSalesTotal">—</strong>
           <small id="pdasTicketCount">0 tickets</small>
+        </article>
+        <article class="pdas-summary-card card is-prior-debt">
+          <span>Deuda anterior del periodo</span>
+          <strong id="pdasPriorDebtTotal">—</strong>
+          <small id="pdasPriorDebtCount">0 deudas anteriores</small>
         </article>
         <article class="pdas-summary-card card is-payments">
           <span>Abonos del periodo</span>
@@ -152,7 +157,7 @@
         <div class="pdas-ledger-heading">
           <div>
             <h3>Movimientos cronológicos</h3>
-            <p>Las ventas aumentan la deuda y los abonos aplicados a este módulo la reducen.</p>
+            <p>Incluye ventas de esta sucursal y deudas anteriores registradas en Finanzas. No incorpora ventas de otros módulos.</p>
           </div>
           <span id="pdasRowCount">Sin consulta</span>
         </div>
@@ -168,7 +173,7 @@
                 <th class="is-number">Kilos</th>
                 <th>Detalle</th>
                 <th class="is-number">Precio</th>
-                <th class="is-number">Venta</th>
+                <th class="is-number">Cargo</th>
                 <th class="is-number">Abono</th>
                 <th class="is-number">Saldo</th>
               </tr>

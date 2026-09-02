@@ -150,7 +150,7 @@ export function normalizeProductDispatchAccountStatement(response = {}) {
     const rawKind = String(row?.kind || "SALE").trim().toUpperCase();
     const kind = ["PAYMENT", "PAGO", "COBRO", "COLLECTION"].includes(rawKind)
       ? "PAYMENT"
-      : "SALE";
+      : (["PRIOR_DEBT", "DEUDA_ANTERIOR"].includes(rawKind) ? "PRIOR_DEBT" : "SALE");
 
     return {
       kind,
@@ -171,6 +171,9 @@ export function normalizeProductDispatchAccountStatement(response = {}) {
       show_balance: Boolean(row?.show_balance),
     };
   });
+  const salesTotal = numberValue(source?.sales_total);
+  const priorDebtTotal = numberValue(source?.prior_debt_total);
+  const reportedChargesTotal = nullableNumber(source?.charges_total);
 
   return {
     client: source?.client && typeof source.client === "object"
@@ -193,10 +196,13 @@ export function normalizeProductDispatchAccountStatement(response = {}) {
       : null,
     currency: CURRENCY_PATTERN.test(currency) ? currency : "PEN",
     opening_balance: numberValue(source?.opening_balance),
-    sales_total: numberValue(source?.sales_total),
+    sales_total: salesTotal,
+    prior_debt_total: priorDebtTotal,
+    charges_total: reportedChargesTotal ?? (salesTotal + priorDebtTotal),
     payments_total: numberValue(source?.payments_total),
     ending_balance: numberValue(source?.ending_balance),
     ticket_count: Math.max(0, Number(source?.ticket_count) || 0),
+    prior_debt_count: Math.max(0, Number(source?.prior_debt_count) || 0),
     payment_count: Math.max(0, Number(source?.payment_count) || 0),
     rows,
   };
@@ -293,10 +299,12 @@ function mountProductDispatchAccountStatement() {
       downloadPdf: document.querySelector("#pdasDownloadPdf"),
       openingBalance: document.querySelector("#pdasOpeningBalance"),
       salesTotal: document.querySelector("#pdasSalesTotal"),
+      priorDebtTotal: document.querySelector("#pdasPriorDebtTotal"),
       paymentsTotal: document.querySelector("#pdasPaymentsTotal"),
       endingBalanceLabel: document.querySelector("#pdasEndingBalanceLabel"),
       endingBalance: document.querySelector("#pdasEndingBalance"),
       ticketCount: document.querySelector("#pdasTicketCount"),
+      priorDebtCount: document.querySelector("#pdasPriorDebtCount"),
       paymentCount: document.querySelector("#pdasPaymentCount"),
       rowCount: document.querySelector("#pdasRowCount"),
       rows: document.querySelector("#pdasRows"),
@@ -449,10 +457,12 @@ function mountProductDispatchAccountStatement() {
       elements.reportPeriod.textContent = instruction;
       elements.openingBalance.textContent = "—";
       elements.salesTotal.textContent = "—";
+      elements.priorDebtTotal.textContent = "—";
       elements.paymentsTotal.textContent = "—";
       elements.endingBalanceLabel.textContent = "Deuda final";
       elements.endingBalance.textContent = "—";
       elements.ticketCount.textContent = "0 tickets";
+      elements.priorDebtCount.textContent = "0 deudas anteriores";
       elements.paymentCount.textContent = "0 abonos";
       elements.rowCount.textContent = "Sin consulta";
       emptyRows("Aún no hay una consulta", instruction);
@@ -467,20 +477,48 @@ function mountProductDispatchAccountStatement() {
             : "Aplicado a este módulo",
         };
       }
+      if (row.kind === "PRIOR_DEBT") {
+        return {
+          title: row.movement_label || row.product || "Deuda anterior",
+          subtitle: "Saldo registrado para el cliente",
+        };
+      }
       return {
         title: [row.product, row.variation].filter(Boolean).join(" · ") || "Venta",
         subtitle: row.price_mode ? productDispatchAccountPriceModeLabel(row.price_mode) : "Salida de producto",
       };
     }
 
-    function renderRows(rows, currency) {
+    function openingBalanceRow(openingBalance, currency, dateFrom) {
+      return `<tr class="is-opening-balance">
+        <td>${escapeProductDispatchAccountHtml(formatDate(dateFrom))}</td>
+        <td class="pdas-document-cell">—</td>
+        <td class="pdas-kind-cell"><strong>Saldo anterior</strong><small>Incluye ventas previas y deuda anterior registrada</small></td>
+        <td class="is-number">—</td>
+        <td class="is-number">—</td>
+        <td>Saldo acumulado antes del periodo elegido</td>
+        <td class="is-number">—</td>
+        <td class="is-number is-sale-value">—</td>
+        <td class="is-number is-payment-value">—</td>
+        <td class="is-number is-balance-value">${escapeProductDispatchAccountHtml(formatMoney(openingBalance, currency))}</td>
+      </tr>`;
+    }
+
+    function renderRows(rows, currency, openingBalance, dateFrom) {
+      const openingRow = openingBalanceRow(openingBalance, currency, dateFrom);
       if (!rows.length) {
-        emptyRows("Sin movimientos en este periodo", "El saldo anterior se conserva en el resumen.");
+        elements.rows.innerHTML = `${openingRow}
+          <tr class="pdas-empty-row">
+            <td colspan="10">
+              <strong>Sin movimientos en este periodo</strong>
+              <span>El saldo anterior se conserva como punto de partida.</span>
+            </td>
+          </tr>`;
         return;
       }
 
       let previousDate = null;
-      elements.rows.innerHTML = rows.map((row) => {
+      elements.rows.innerHTML = openingRow + rows.map((row) => {
         const product = rowProduct(row);
         const dayStart = previousDate !== null && previousDate !== row.date;
         previousDate = row.date;
@@ -490,7 +528,11 @@ function mountProductDispatchAccountStatement() {
           ? formatMoney(row.balance, currency)
           : "—";
 
-        return `<tr class="${row.kind === "PAYMENT" ? "is-payment" : "is-sale"}${dayStart ? " is-day-start" : ""}">
+        const kindClass = row.kind === "PAYMENT"
+          ? "is-payment"
+          : (row.kind === "PRIOR_DEBT" ? "is-prior-debt" : "is-sale");
+
+        return `<tr class="${kindClass}${dayStart ? " is-day-start" : ""}">
           <td>${escapeProductDispatchAccountHtml(formatDate(row.date))}</td>
           <td class="pdas-document-cell">${escapeProductDispatchAccountHtml(row.document || "—")}</td>
           <td class="pdas-kind-cell"><strong>${escapeProductDispatchAccountHtml(product.title)}</strong><small>${escapeProductDispatchAccountHtml(product.subtitle)}</small></td>
@@ -515,13 +557,19 @@ function mountProductDispatchAccountStatement() {
       elements.reportPeriod.textContent = `Periodo ${formatDate(from)} al ${formatDate(to)} · ${branch} · ${report.currency}`;
       elements.openingBalance.textContent = formatMoney(report.opening_balance, report.currency);
       elements.salesTotal.textContent = formatMoney(report.sales_total, report.currency);
+      elements.priorDebtTotal.textContent = formatMoney(report.prior_debt_total, report.currency);
       elements.paymentsTotal.textContent = formatMoney(report.payments_total, report.currency);
       elements.endingBalanceLabel.textContent = report.ending_balance < 0 ? "Saldo a favor" : "Deuda final";
       elements.endingBalance.textContent = formatMoney(Math.abs(report.ending_balance), report.currency);
       elements.ticketCount.textContent = plural(report.ticket_count, "ticket", "tickets");
+      elements.priorDebtCount.textContent = plural(
+        report.prior_debt_count,
+        "deuda anterior",
+        "deudas anteriores",
+      );
       elements.paymentCount.textContent = plural(report.payment_count, "abono", "abonos");
       elements.rowCount.textContent = plural(report.rows.length, "movimiento", "movimientos");
-      renderRows(report.rows, report.currency);
+      renderRows(report.rows, report.currency, report.opening_balance, from);
     }
 
     function filtersFromForm() {
@@ -561,9 +609,9 @@ function mountProductDispatchAccountStatement() {
 
       state.reportFilters = null;
       state.report = null;
-      resetReportPresentation("Consultando las ventas y pagos del periodo…");
+      resetReportPresentation("Consultando las ventas, deudas anteriores y pagos del periodo…");
       setReportLoading(true);
-      setMessage("Consultando las ventas y abonos de este módulo…");
+      setMessage("Consultando las ventas del módulo, las deudas anteriores y sus abonos…");
       elements.rowCount.textContent = "Consultando…";
       emptyRows("Consultando movimientos…", "Estamos preparando el estado de cuenta.");
 

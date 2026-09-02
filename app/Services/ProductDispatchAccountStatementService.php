@@ -19,6 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 class ProductDispatchAccountStatementService
 {
+    private const MANUAL_CUSTOMER_DEBT_ORIGIN_PREFIX = 'DEUDA_ANTERIOR_CLIENTE:';
+
     /**
      * @param  object{id: int, codigo: string, nombre: string, zona_horaria: string}  $branch
      * @return array<string, mixed>
@@ -26,11 +28,17 @@ class ProductDispatchAccountStatementService
     public function catalog(int $companyId, object $branch): array
     {
         $eligible = $this->eligibleDocumentsQuery($companyId, (int) $branch->id);
+        $manualDebts = $this->manualCustomerDebtsQuery($companyId);
         $historicalClientIds = (clone $eligible)
             ->select('ticket.cliente_id');
+        $manualDebtClientIds = (clone $manualDebts)
+            ->select('document.tercero_id');
         $clients = Tercero::query()
             ->where('terceros.empresa_id', $companyId)
-            ->where(function (EloquentBuilder $clients) use ($historicalClientIds): void {
+            ->where(function (EloquentBuilder $clients) use (
+                $historicalClientIds,
+                $manualDebtClientIds,
+            ): void {
                 $clients
                     ->where(function (EloquentBuilder $activeExternalClients): void {
                         $activeExternalClients
@@ -38,7 +46,8 @@ class ProductDispatchAccountStatementService
                             ->where('terceros.es_cliente_interno', false)
                             ->conRol(TerceroRole::CLIENT);
                     })
-                    ->orWhereIn('terceros.id', $historicalClientIds);
+                    ->orWhereIn('terceros.id', $historicalClientIds)
+                    ->orWhereIn('terceros.id', $manualDebtClientIds);
             })
             ->select([
                 'terceros.id',
@@ -65,6 +74,9 @@ class ProductDispatchAccountStatementService
             : 'PEN';
         $currencies = collect([$defaultCurrency])
             ->merge((clone $eligible)
+                ->distinct()
+                ->pluck('document.moneda'))
+            ->merge((clone $manualDebts)
                 ->distinct()
                 ->pluck('document.moneda'))
             ->map(fn (mixed $currency): string => strtoupper(trim((string) $currency)))
@@ -100,7 +112,7 @@ class ProductDispatchAccountStatementService
         $timezone = (string) ($branch->zona_horaria ?: config('app.timezone'));
         $databaseTimezone = $this->databaseTimezone();
 
-        $linkedDocuments = $this->eligibleDocumentsQuery($companyId, (int) $branch->id)
+        $productDocuments = $this->eligibleDocumentsQuery($companyId, (int) $branch->id)
             ->where('ticket.cliente_id', $clientId)
             ->where('document.moneda', $currency)
             ->whereDate('document.fecha_emision', '<=', $dateTo)
@@ -120,10 +132,29 @@ class ProductDispatchAccountStatementService
             ->orderBy('document.id')
             ->get();
 
-        $this->assertConsistentFinancialLinks($linkedDocuments);
+        $this->assertConsistentFinancialLinks($productDocuments);
 
-        $documents = $linkedDocuments->values();
-        $periodTicketIds = $documents
+        $productDocuments = $productDocuments->values();
+        $manualDebts = $this->manualCustomerDebtsQuery($companyId)
+            ->where('document.tercero_id', $clientId)
+            ->where('document.moneda', $currency)
+            ->whereDate('document.fecha_emision', '<=', $dateTo)
+            ->select([
+                'document.id as document_id',
+                'document.fecha_emision as document_date',
+                'document.total as document_total',
+                'document.codigo as document_code',
+            ])
+            ->orderBy('document.fecha_emision')
+            ->orderBy('document.id')
+            ->get()
+            ->values();
+        $manualDebtDetails = DB::table('comprobante_detalles')
+            ->whereIn('comprobante_id', $manualDebts->pluck('document_id'))
+            ->orderBy('id')
+            ->get(['comprobante_id', 'descripcion'])
+            ->groupBy('comprobante_id');
+        $periodTicketIds = $productDocuments
             ->filter(fn (object $document): bool => CarbonImmutable::parse(
                 (string) $document->document_date,
             )->format('Y-m-d') >= $dateFrom)
@@ -149,17 +180,19 @@ class ProductDispatchAccountStatementService
             ])
             ->groupBy('ticket_despacho_producto_id');
 
-        $openingSales = '0.00';
+        $openingCharges = '0.00';
         $salesTotal = '0.00';
-        $saleRows = collect();
+        $priorDebtTotal = '0.00';
+        $chargeRows = collect();
         $ticketCount = 0;
+        $priorDebtCount = 0;
 
-        foreach ($documents as $document) {
+        foreach ($productDocuments as $document) {
             $amount = FinancialMoney::normalize((string) $document->document_total);
             $date = CarbonImmutable::parse((string) $document->document_date)->format('Y-m-d');
 
             if ($date < $dateFrom) {
-                $openingSales = FinancialMoney::add($openingSales, $amount);
+                $openingCharges = FinancialMoney::add($openingCharges, $amount);
 
                 continue;
             }
@@ -171,7 +204,7 @@ class ProductDispatchAccountStatementService
                 $databaseTimezone,
             )->setTimezone($timezone);
             $lines = $weighings->get((int) $document->ticket_id, collect())->values();
-            $saleRows->push(...$this->saleRows(
+            $chargeRows->push(...$this->saleRows(
                 $document,
                 $lines,
                 $amount,
@@ -180,11 +213,34 @@ class ProductDispatchAccountStatementService
             ));
         }
 
+        foreach ($manualDebts as $document) {
+            $amount = FinancialMoney::normalize((string) $document->document_total);
+            $date = CarbonImmutable::parse((string) $document->document_date)->format('Y-m-d');
+
+            if ($date < $dateFrom) {
+                $openingCharges = FinancialMoney::add($openingCharges, $amount);
+
+                continue;
+            }
+
+            $priorDebtCount++;
+            $priorDebtTotal = FinancialMoney::add($priorDebtTotal, $amount);
+            $detail = $manualDebtDetails
+                ->get((int) $document->document_id, collect())
+                ->first()?->descripcion;
+            $chargeRows->push($this->manualDebtRow($document, $amount, $date, $detail));
+        }
+
+        $documentIds = $productDocuments
+            ->pluck('document_id')
+            ->merge($manualDebts->pluck('document_id'))
+            ->unique()
+            ->values();
         $payments = $this->paymentsForDocuments(
             $companyId,
             $clientId,
             $currency,
-            $documents->pluck('document_id'),
+            $documentIds,
             $dateTo,
             $timezone,
         );
@@ -252,9 +308,10 @@ class ProductDispatchAccountStatementService
             ]);
         }
 
-        $openingBalance = FinancialMoney::subtract($openingSales, $openingPayments);
+        $openingBalance = FinancialMoney::subtract($openingCharges, $openingPayments);
+        $chargesTotal = FinancialMoney::add($salesTotal, $priorDebtTotal);
         $balance = $openingBalance;
-        $rows = $saleRows
+        $rows = $chargeRows
             ->concat($paymentRows)
             ->sortBy('_sort', SORT_STRING)
             ->values()
@@ -281,9 +338,12 @@ class ProductDispatchAccountStatementService
             'currency' => $currency,
             'opening_balance' => $openingBalance,
             'sales_total' => $salesTotal,
+            'prior_debt_total' => $priorDebtTotal,
+            'charges_total' => $chargesTotal,
             'payments_total' => $paymentsTotal,
             'ending_balance' => $balance,
             'ticket_count' => $ticketCount,
+            'prior_debt_count' => $priorDebtCount,
             'payment_count' => $paymentCount,
             'rows' => $rows,
             'generated_at' => now($timezone)->toIso8601String(),
@@ -312,6 +372,23 @@ class ProductDispatchAccountStatementService
             ->where('document.estado', '<>', Comprobante::STATUS_VOIDED)
             ->whereColumn('document.tercero_id', 'ticket.cliente_id')
             ->whereColumn('document.moneda', 'ticket.moneda');
+    }
+
+    private function manualCustomerDebtsQuery(int $companyId): Builder
+    {
+        return DB::table('comprobantes as document')
+            ->where('document.empresa_id', $companyId)
+            ->whereNotNull('document.tercero_id')
+            ->where('document.operacion', Comprobante::OPERATION_SALE)
+            ->where('document.naturaleza', Comprobante::NATURE_CHARGE)
+            ->where('document.tipo_documento', 'SALDO_ANTERIOR')
+            ->where('document.origen_codigo', 'MANUAL')
+            ->where('document.origen_clave', 'like', self::MANUAL_CUSTOMER_DEBT_ORIGIN_PREFIX.'%')
+            ->whereIn('document.estado', [
+                Comprobante::STATUS_PENDING,
+                Comprobante::STATUS_PARTIAL,
+                Comprobante::STATUS_PAID,
+            ]);
     }
 
     /** @param Collection<int, object> $documents */
@@ -379,14 +456,49 @@ class ProductDispatchAccountStatementService
         $hasHistory = $client && $this->eligibleDocumentsQuery($companyId, $branchId)
             ->where('ticket.cliente_id', $clientId)
             ->exists();
+        $hasManualDebtHistory = $client && $this->manualCustomerDebtsQuery($companyId)
+            ->where('document.tercero_id', $clientId)
+            ->exists();
 
-        if (! $isActiveExternalClient && ! $hasHistory) {
+        if (! $isActiveExternalClient && ! $hasHistory && ! $hasManualDebtHistory) {
             throw ValidationException::withMessages([
                 'client_id' => 'El cliente no está disponible para consultar en Despacho de productos.',
             ]);
         }
 
         return $client;
+    }
+
+    /** @return array<string, mixed> */
+    private function manualDebtRow(
+        object $document,
+        string $amount,
+        string $date,
+        mixed $detail,
+    ): array {
+        $description = trim((string) $detail);
+
+        return [
+            'kind' => 'PRIOR_DEBT',
+            'payment_type' => null,
+            'movement_label' => 'Deuda anterior',
+            'date' => $date,
+            'document' => (string) $document->document_code,
+            'product' => 'Deuda anterior',
+            'variation' => null,
+            'quantity' => null,
+            'net_weight_kg' => null,
+            'detail' => $description !== '' ? $description : 'Saldo anterior registrado',
+            'price' => null,
+            'price_mode' => null,
+            'sale' => $amount,
+            'payment' => '0.00',
+            'balance' => '0.00',
+            'show_balance' => true,
+            '_effect' => $amount,
+            '_sort' => $date.' 00:00:00-0-'
+                .str_pad((string) $document->document_id, 12, '0', STR_PAD_LEFT),
+        ];
     }
 
     /**

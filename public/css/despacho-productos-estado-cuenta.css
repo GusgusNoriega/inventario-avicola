@@ -389,7 +389,7 @@ body.product-dispatch-account-page {
 
 .pdas-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -409,6 +409,11 @@ body.product-dispatch-account-page {
 .pdas-summary-card.is-sales {
   border-color: rgba(43, 145, 205, 0.58);
   background: linear-gradient(145deg, rgba(10, 36, 55, 0.96), rgba(7, 14, 21, 0.98));
+}
+
+.pdas-summary-card.is-prior-debt {
+  border-color: rgba(194, 139, 45, 0.58);
+  background: linear-gradient(145deg, rgba(52, 37, 10, 0.96), rgba(15, 13, 8, 0.98));
 }
 
 .pdas-summary-card.is-payments {
@@ -443,6 +448,10 @@ body.product-dispatch-account-page {
 
 .pdas-summary-card.is-sales strong {
   color: #83ceff;
+}
+
+.pdas-summary-card.is-prior-debt strong {
+  color: #f2c565;
 }
 
 .pdas-summary-card.is-payments strong {
@@ -551,12 +560,24 @@ body.product-dispatch-account-page {
   border-top: 2px solid #3e5670;
 }
 
+.pdas-table tbody tr.is-opening-balance td {
+  background: rgba(40, 27, 61, 0.62);
+}
+
 .pdas-table tbody tr.is-payment td {
   background: rgba(9, 35, 24, 0.48);
 }
 
 .pdas-table tbody tr.is-payment:nth-child(even) td {
   background: rgba(12, 43, 30, 0.62);
+}
+
+.pdas-table tbody tr.is-prior-debt td {
+  background: rgba(55, 39, 10, 0.44);
+}
+
+.pdas-table tbody tr.is-prior-debt:nth-child(even) td {
+  background: rgba(66, 47, 12, 0.58);
 }
 
 .pdas-table .is-number {

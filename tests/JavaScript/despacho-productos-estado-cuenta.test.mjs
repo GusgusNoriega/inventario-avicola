@@ -122,6 +122,45 @@ test("normaliza totales y filas cronológicas sin convertir vacíos a valores re
   assert.equal(report.rows[0].show_balance, true);
 });
 
+test("normaliza deudas anteriores y sus totales de cargos", () => {
+  const report = normalizeProductDispatchAccountStatement({
+    data: {
+      currency: "pen",
+      sales_total: "80.25",
+      prior_debt_total: "125.50",
+      charges_total: "205.75",
+      prior_debt_count: "2",
+      rows: [{
+        kind: "prior_debt",
+        date: "2026-08-05",
+        document: "DA-00000021",
+        movement_label: "Deuda anterior",
+        detail: "Saldo pendiente antes del sistema",
+        sale: "125.50",
+        payment: "0.00",
+        balance: "125.50",
+        show_balance: true,
+      }],
+    },
+  });
+
+  assert.equal(report.prior_debt_total, 125.5);
+  assert.equal(report.charges_total, 205.75);
+  assert.equal(report.prior_debt_count, 2);
+  assert.equal(report.rows[0].kind, "PRIOR_DEBT");
+  assert.equal(report.rows[0].movement_label, "Deuda anterior");
+  assert.equal(report.rows[0].sale, 125.5);
+
+  const fallback = normalizeProductDispatchAccountStatement({
+    data: {
+      sales_total: "10.25",
+      prior_debt_total: "4.75",
+    },
+  });
+
+  assert.equal(fallback.charges_total, 15);
+});
+
 test("busca clientes sin distinguir mayúsculas ni acentos simples", () => {
   const clients = [
     { id: 1, name: "Mercado Central", document_type: "RUC", document: "201234" },

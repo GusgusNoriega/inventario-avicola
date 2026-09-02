@@ -88,6 +88,7 @@
     }
     .summary td:first-child { border-left: 3px solid {{ $reportPalette['primary'] }}; }
     .summary .is-sale { border-left: 3px solid {{ $reportPalette['debit'] }}; }
+    .summary .is-debt { border-left: 3px solid {{ $reportPalette['primary'] }}; }
     .summary .is-payment { border-left: 3px solid {{ $reportPalette['credit'] }}; }
     .summary .is-balance {
       border: 2px solid {{ $reportPalette['primary'] }};
@@ -95,6 +96,7 @@
     }
     .summary strong { color: {{ $reportPalette['primary'] }}; font-size: 11px; }
     .summary .is-sale strong { color: {{ $reportPalette['debit'] }}; }
+    .summary .is-debt strong { color: {{ $reportPalette['primary'] }}; }
     .summary .is-payment strong { color: {{ $reportPalette['credit'] }}; }
     .summary small { display: block; color: {{ $reportPalette['muted_text'] }}; font-size: 6px; }
     table.ledger { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -126,6 +128,7 @@
     }
     table.ledger tr.payment-row td { color: {{ $reportPalette['credit'] }}; }
     table.ledger tr.payment-row td.detail { color: {{ $reportPalette['body_text'] }}; }
+    table.ledger tr.debt-row td { background: {{ $reportPalette['accent'] }}; }
     table.ledger tfoot td {
       border-top: 1.5px solid {{ $reportPalette['primary'] }};
       background: {{ $reportPalette['accent'] }};
@@ -136,6 +139,7 @@
     .center { text-align: center; }
     .muted { color: {{ $reportPalette['muted_text'] }}; }
     .sale { color: {{ $reportPalette['debit'] }}; font-weight: bold; }
+    .debt { color: {{ $reportPalette['primary'] }}; font-weight: bold; }
     .payment { color: {{ $reportPalette['credit'] }}; font-weight: bold; }
     .balance { color: {{ $reportPalette['primary'] }}; font-weight: bold; }
     .product { font-weight: bold; }
@@ -181,7 +185,7 @@
       <td>
         <span>Reporte exclusivo</span>
         <strong>Despacho de productos</strong>
-        <small>Solo incluye ventas y abonos aplicados a este módulo y sucursal.</small>
+        <small>Ventas de esta sucursal más la deuda anterior empresarial registrada en Finanzas.</small>
       </td>
     </tr>
   </table>
@@ -193,16 +197,21 @@
         <strong>{{ $currencySymbol }} {{ $money($statement['opening_balance']) }}</strong>
       </td>
       <td class="is-sale">
-        <span>Salidas / ventas</span>
+        <span>Ventas del periodo</span>
         <strong>{{ $currencySymbol }} {{ $money($statement['sales_total']) }}</strong>
         <small>{{ $statement['ticket_count'] }} ticket(s)</small>
+      </td>
+      <td class="is-debt">
+        <span>Deuda anterior</span>
+        <strong>{{ $currencySymbol }} {{ $money($statement['prior_debt_total']) }}</strong>
+        <small>{{ $statement['prior_debt_count'] }} registro(s) del periodo</small>
       </td>
       <td class="is-payment">
         <span>Abonos aplicados</span>
         <strong>{{ $currencySymbol }} {{ $money($statement['payments_total']) }}</strong>
         <small>{{ $statement['payment_count'] }} pago(s)</small>
       </td>
-      <td class="is-balance" colspan="2">
+      <td class="is-balance">
         <span>{{ $balanceLabel }} al cierre</span>
         <strong>{{ $currencySymbol }} {{ $money(abs($endingBalance)) }}</strong>
       </td>
@@ -219,7 +228,7 @@
         <th style="width: 7%">Kilos</th>
         <th style="width: 16%">Detalle</th>
         <th style="width: 8%">Precio</th>
-        <th style="width: 8%">Salida ventas</th>
+        <th style="width: 8%">Cargos</th>
         <th style="width: 8%">Abonos</th>
         <th style="width: 9%">Saldo</th>
       </tr>
@@ -231,11 +240,13 @@
         <td class="num balance">{{ $money($statement['opening_balance']) }}</td>
       </tr>
       @forelse($statement['rows'] as $row)
-        <tr class="{{ $row['kind'] === 'PAYMENT' ? 'payment-row' : 'sale-row' }}">
+        <tr class="{{ $row['kind'] === 'PAYMENT' ? 'payment-row' : ($row['kind'] === 'PRIOR_DEBT' ? 'debt-row' : 'sale-row') }}">
           <td class="center">{{ \Carbon\CarbonImmutable::parse($row['date'])->format('d/m/Y') }}</td>
           <td>{{ $row['document'] }}</td>
           <td>
-            @if($row['product'])
+            @if($row['kind'] === 'PRIOR_DEBT')
+              <span class="debt">{{ $row['movement_label'] ?? 'Deuda anterior' }}</span>
+            @elseif($row['product'])
               <span class="product">{{ $row['product'] }}</span>
               @if($row['variation'])<span class="variation">{{ $row['variation'] }}</span>@endif
             @else
@@ -258,13 +269,13 @@
           <td class="num balance">{{ $row['show_balance'] ? $money($row['balance']) : '' }}</td>
         </tr>
       @empty
-        <tr><td colspan="10" class="empty">No hay ventas ni abonos aplicados dentro del periodo seleccionado.</td></tr>
+        <tr><td colspan="10" class="empty">No hay ventas, deudas anteriores ni abonos aplicados dentro del periodo seleccionado.</td></tr>
       @endforelse
     </tbody>
     <tfoot>
       <tr>
         <td colspan="7">Totales del periodo</td>
-        <td class="num">{{ $money($statement['sales_total']) }}</td>
+        <td class="num">{{ $money($statement['charges_total']) }}</td>
         <td class="num">{{ $money($statement['payments_total']) }}</td>
         <td class="num">{{ $money($statement['ending_balance']) }}</td>
       </tr>
@@ -272,7 +283,7 @@
   </table>
 
   <p class="note">
-    Generado el {{ $generatedLabel }}. Los abonos mostrados (pagos o descuentos) corresponden únicamente al importe aplicado a comprobantes vigentes de Despacho de productos en {{ $statement['branch']['name'] }}.
+    Generado el {{ $generatedLabel }}. Las ventas corresponden únicamente a Despacho de productos en {{ $statement['branch']['name'] }}. La deuda anterior proviene de Finanzas y es empresarial; los abonos mostrados corresponden solo a esos cargos incluidos.
   </p>
 </body>
 </html>

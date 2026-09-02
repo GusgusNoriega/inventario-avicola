@@ -501,6 +501,224 @@ class ProductDispatchAccountStatementTest extends TestCase
         $this->assertTrue($discountRow['show_balance']);
     }
 
+    public function test_manual_prior_debt_and_its_payments_rebuild_the_opening_balance(): void
+    {
+        $debtId = $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $this->clientId,
+            'DA-APERTURA',
+            '2026-06-20',
+            'PEN',
+            '150.00',
+            'Deuda anterior al inicio del sistema',
+        );
+        $openingPayment = $this->createPayment(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $this->clientId,
+            'PG-DA-ANTES',
+            '2026-06-28 09:00:00',
+            '40.00',
+        );
+        $this->applyPayment($openingPayment, $debtId, '40.00');
+        $periodPayment = $this->createPayment(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $this->clientId,
+            'PG-DA-PERIODO',
+            '2026-07-10 11:30:00',
+            '30.00',
+        );
+        $this->applyPayment($periodPayment, $debtId, '30.00');
+
+        $response = $this->getJson($this->statementUrl())
+            ->assertOk()
+            ->assertJsonPath('data.opening_balance', '110.00')
+            ->assertJsonPath('data.sales_total', '0.00')
+            ->assertJsonPath('data.prior_debt_total', '0.00')
+            ->assertJsonPath('data.charges_total', '0.00')
+            ->assertJsonPath('data.payments_total', '30.00')
+            ->assertJsonPath('data.ending_balance', '80.00')
+            ->assertJsonPath('data.ticket_count', 0)
+            ->assertJsonPath('data.prior_debt_count', 0)
+            ->assertJsonPath('data.payment_count', 1)
+            ->assertJsonCount(1, 'data.rows');
+
+        $payment = $response->json('data.rows.0');
+        $this->assertSame('PAYMENT', $payment['kind']);
+        $this->assertSame('PG-DA-PERIODO', $payment['document']);
+        $this->assertSame('30.00', $payment['payment']);
+        $this->assertSame('80.00', $payment['balance']);
+        $this->assertTrue($payment['show_balance']);
+    }
+
+    public function test_manual_prior_debt_inside_the_period_is_a_separate_charge_and_excludes_invalid_debts(): void
+    {
+        $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $this->clientId,
+            'DA-PERIODO',
+            '2026-07-05',
+            'PEN',
+            '200.00',
+            'Saldo heredado del sistema anterior',
+        );
+        $this->simpleProductDocument('PD-CON-DEUDA', '2026-07-06', '50.00');
+        $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $this->clientId,
+            'DA-ANULADA',
+            '2026-07-07',
+            'PEN',
+            '70.00',
+            'No debe aparecer porque fue anulada',
+            Comprobante::STATUS_VOIDED,
+        );
+        $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $this->clientId,
+            'DA-ORIGEN-FALSO',
+            '2026-07-08',
+            'PEN',
+            '80.00',
+            'No debe aparecer porque no fue registrada como deuda anterior',
+            originKey: 'PRUEBA:DA-ORIGEN-FALSO',
+        );
+
+        $response = $this->getJson($this->statementUrl())
+            ->assertOk()
+            ->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.sales_total', '50.00')
+            ->assertJsonPath('data.prior_debt_total', '200.00')
+            ->assertJsonPath('data.charges_total', '250.00')
+            ->assertJsonPath('data.payments_total', '0.00')
+            ->assertJsonPath('data.ending_balance', '250.00')
+            ->assertJsonPath('data.ticket_count', 1)
+            ->assertJsonPath('data.prior_debt_count', 1)
+            ->assertJsonPath('data.payment_count', 0)
+            ->assertJsonCount(2, 'data.rows');
+
+        $rows = collect($response->json('data.rows'));
+        $debt = $rows->firstWhere('kind', 'PRIOR_DEBT');
+
+        $this->assertIsArray($debt);
+        $this->assertSame('2026-07-05', $debt['date']);
+        $this->assertSame('DA-PERIODO', $debt['document']);
+        $this->assertSame('Deuda anterior', $debt['movement_label']);
+        $this->assertSame('Deuda anterior', $debt['product']);
+        $this->assertSame('Saldo heredado del sistema anterior', $debt['detail']);
+        $this->assertNull($debt['quantity']);
+        $this->assertNull($debt['net_weight_kg']);
+        $this->assertNull($debt['price']);
+        $this->assertSame('200.00', $debt['sale']);
+        $this->assertSame('0.00', $debt['payment']);
+        $this->assertSame('200.00', $debt['balance']);
+        $this->assertTrue($debt['show_balance']);
+        $this->assertSame(['DA-PERIODO', 'PD-CON-DEUDA'], $rows->pluck('document')->all());
+        $this->assertNotContains('DA-ANULADA', $rows->pluck('document'));
+        $this->assertNotContains('DA-ORIGEN-FALSO', $rows->pluck('document'));
+    }
+
+    public function test_catalog_includes_manual_debt_currency_and_inactive_historical_client_only_for_valid_company_debt(): void
+    {
+        $historicalClient = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Histórico Con Deuda',
+            '20666666661',
+        );
+        $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $historicalClient,
+            'DA-HISTORICA-USD',
+            '2026-06-15',
+            'USD',
+            '75.00',
+            'Saldo histórico en dólares',
+        );
+        DB::table('terceros')->where('id', $historicalClient)->update([
+            'estado' => Tercero::STATUS_INACTIVE,
+        ]);
+
+        $voidedClient = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Solo Deuda Anulada',
+            '20666666662',
+            Tercero::STATUS_INACTIVE,
+        );
+        $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $voidedClient,
+            'DA-CATALOGO-ANULADA',
+            '2026-06-16',
+            'EUR',
+            '80.00',
+            'Deuda anulada fuera del catálogo',
+            Comprobante::STATUS_VOIDED,
+        );
+
+        $fakeClient = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Solo Origen Falso',
+            '20666666663',
+            Tercero::STATUS_INACTIVE,
+        );
+        $this->createManualCustomerDebt(
+            (int) $this->user->empresa_id,
+            (int) $this->user->id,
+            $fakeClient,
+            'DA-CATALOGO-FALSA',
+            '2026-06-17',
+            'GBP',
+            '90.00',
+            'Documento que imita una deuda anterior',
+            originKey: 'PRUEBA:DA-CATALOGO-FALSA',
+        );
+
+        $foreignUser = User::factory()->create();
+        $foreignClient = $this->createClient(
+            (int) $foreignUser->empresa_id,
+            'Cliente Con Deuda De Otra Empresa',
+            '20666666664',
+            Tercero::STATUS_INACTIVE,
+        );
+        $this->createManualCustomerDebt(
+            (int) $foreignUser->empresa_id,
+            (int) $foreignUser->id,
+            $foreignClient,
+            'DA-EMPRESA-AJENA',
+            '2026-06-18',
+            'CAD',
+            '100.00',
+            'Deuda de otra empresa',
+        );
+
+        $response = $this->getJson('/api/v1/despacho-productos/estado-cuenta/catalogo')
+            ->assertOk();
+        $clientIds = collect($response->json('data.clients'))->pluck('id');
+
+        $this->assertContains($historicalClient, $clientIds);
+        $this->assertNotContains($voidedClient, $clientIds);
+        $this->assertNotContains($fakeClient, $clientIds);
+        $this->assertNotContains($foreignClient, $clientIds);
+        $this->assertSame(['PEN', 'USD'], $response->json('data.currencies'));
+
+        $this->getJson($this->statementUrl(clientId: $historicalClient, currency: 'USD'))
+            ->assertOk()
+            ->assertJsonPath('data.opening_balance', '75.00')
+            ->assertJsonPath('data.sales_total', '0.00')
+            ->assertJsonPath('data.prior_debt_total', '0.00')
+            ->assertJsonPath('data.charges_total', '0.00')
+            ->assertJsonPath('data.ending_balance', '75.00')
+            ->assertJsonPath('data.prior_debt_count', 0)
+            ->assertJsonCount(0, 'data.rows');
+    }
+
     public function test_catalog_lists_active_external_company_clients_and_historical_branch_clients(): void
     {
         $this->simpleProductDocument('PD-CATALOGO-PEN', '2026-07-05', '10.00');
@@ -647,11 +865,14 @@ class ProductDispatchAccountStatementTest extends TestCase
 
     public function test_active_external_client_without_tickets_can_generate_an_empty_statement(): void
     {
-        $newClient = $this->createClient(
-            (int) $this->user->empresa_id,
-            'Cliente Recién Registrado',
-            '20888888887',
-        );
+        $created = $this->postJson('/api/v1/despacho-productos/clientes', [
+            'nombre_razon_social' => 'Cliente Recién Registrado',
+            'numero_documento' => '20888888887',
+            'direccion' => 'Av. Cliente Nuevo 123',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'CLIENTE RECIÉN REGISTRADO');
+        $newClient = (int) $created->json('data.id');
 
         $catalog = $this->getJson('/api/v1/despacho-productos/estado-cuenta/catalogo')
             ->assertOk();
@@ -663,7 +884,7 @@ class ProductDispatchAccountStatementTest extends TestCase
         $this->getJson($this->statementUrl(clientId: $newClient))
             ->assertOk()
             ->assertJsonPath('data.client.id', $newClient)
-            ->assertJsonPath('data.client.name', 'Cliente Recién Registrado')
+            ->assertJsonPath('data.client.name', 'CLIENTE RECIÉN REGISTRADO')
             ->assertJsonPath('data.opening_balance', '0.00')
             ->assertJsonPath('data.sales_total', '0.00')
             ->assertJsonPath('data.payments_total', '0.00')
@@ -1134,6 +1355,52 @@ class ProductDispatchAccountStatementTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function createManualCustomerDebt(
+        int $companyId,
+        int $actorId,
+        int $clientId,
+        string $code,
+        string $date,
+        string $currency,
+        string $amount,
+        string $detail,
+        string $status = Comprobante::STATUS_PENDING,
+        ?string $originKey = null,
+    ): int {
+        $documentId = $this->createStandaloneDocument(
+            $companyId,
+            $actorId,
+            $clientId,
+            $code,
+            $date,
+            $currency,
+            $amount,
+            $status,
+            $originKey ?? 'DEUDA_ANTERIOR_CLIENTE:'.Str::uuid(),
+        );
+        DB::table('comprobantes')->where('id', $documentId)->update([
+            'tipo_documento' => 'SALDO_ANTERIOR',
+            'origen_codigo' => 'MANUAL',
+        ]);
+        DB::table('comprobante_detalles')->insert([
+            'comprobante_id' => $documentId,
+            'tipo_pollo_id' => null,
+            'producto_despacho_id' => null,
+            'variacion_producto_despacho_id' => null,
+            'descripcion' => $detail,
+            'cantidad_aves' => null,
+            'cantidad_unidades' => null,
+            'peso_neto_kg' => null,
+            'modo_precio' => null,
+            'precio_kg' => null,
+            'precio_unitario' => null,
+            'subtotal' => $amount,
+            'created_at' => now(),
+        ]);
+
+        return $documentId;
     }
 
     private function createPayment(
