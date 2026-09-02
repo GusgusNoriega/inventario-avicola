@@ -36,7 +36,7 @@ class UpdateProductDispatchTicketRequest extends FormRequest
             'weighings.*.id' => ['nullable', 'integer', 'min:1', 'distinct'],
             'weighings.*.product_id' => ['required', 'integer', 'min:1'],
             'weighings.*.variation_id' => ['nullable', 'integer', 'min:1'],
-            'weighings.*.quantity' => ['required', 'integer', 'min:1', 'max:100000'],
+            'weighings.*.quantity' => ['required', 'integer', 'min:0', 'max:100000'],
             'weighings.*.price_mode' => ['required', Rule::in([
                 ProductoDespacho::PRICE_MODE_KG,
                 ProductoDespacho::PRICE_MODE_UNIT,
@@ -124,7 +124,7 @@ class UpdateProductDispatchTicketRequest extends FormRequest
             'weighings.*.id.distinct' => 'Una pesada aparece más de una vez.',
             'weighings.*.product_id.required' => 'Selecciona el producto de cada pesada.',
             'weighings.*.quantity.required' => 'Indica la cantidad de cada pesada.',
-            'weighings.*.quantity.min' => 'La cantidad debe ser mayor que cero.',
+            'weighings.*.quantity.min' => 'La cantidad no puede ser negativa.',
             'weighings.*.price_mode.in' => 'El modo de precio de una pesada no es válido.',
             'weighings.*.unit_price.gt' => 'El precio debe ser mayor que cero.',
             'weighings.*.unit_price.decimal' => 'El precio puede tener hasta dos decimales.',

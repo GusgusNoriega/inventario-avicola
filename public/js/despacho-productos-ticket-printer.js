@@ -249,21 +249,47 @@ function printableHtml(response, options = {}) {
     <div class="total"><span>TOT ${escapeHtml(currency)}</span><span>${decimal(totals.amount, 2)}</span></div>
     <p class="observ">OBSERV:</p>
     ${footerMessage ? `<p class="footer">${escapeHtml(footerMessage)}</p>` : ""}
-    <script>window.addEventListener("load",()=>{window.focus();window.print();});<\/script>
   </body></html>`;
 }
 
 export function printProductDispatchTicket(response, options = {}) {
-  const popup = options.printWindow && !options.printWindow.closed
-    ? options.printWindow
-    : window.open("", "_blank", "popup=yes,width=420,height=720");
-  if (!popup) {
-    throw new Error("El navegador bloqueó la ventana de impresión. Habilita las ventanas emergentes e inténtalo nuevamente.");
-  }
+  const ticket = ticketData(response);
+  const printFrame = document.createElement("iframe");
+  let cleanupTimer = null;
 
-  popup.document.open();
-  popup.document.write(printableHtml(response, options));
-  popup.document.close();
+  printFrame.className = "ticket-print-frame";
+  printFrame.title = `Impresión de ${ticket.code || ticket.codigo || "ticket"}`;
+  printFrame.setAttribute("aria-hidden", "true");
+  printFrame.addEventListener("load", () => {
+    const printWindow = printFrame.contentWindow;
+
+    if (!printWindow) {
+      printFrame.remove();
+      options.onError?.(new Error("No se pudo preparar el ticket para imprimir."));
+      return;
+    }
+
+    const cleanup = () => {
+      if (cleanupTimer) window.clearTimeout(cleanupTimer);
+      printFrame.remove();
+    };
+
+    printWindow.addEventListener("afterprint", cleanup, { once: true });
+    cleanupTimer = window.setTimeout(cleanup, 60000);
+    window.setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+        options.onSuccess?.();
+      } catch (error) {
+        cleanup();
+        options.onError?.(error);
+      }
+    }, 150);
+  }, { once: true });
+
+  printFrame.srcdoc = printableHtml(response, options);
+  document.body.appendChild(printFrame);
   return true;
 }
 

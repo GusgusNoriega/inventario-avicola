@@ -62,6 +62,7 @@ test("la validación del teclado respeta obligatoriedad y límites de cantidad",
   assert.equal(validateIntegerKeypadBuffer("", { required: false }), "");
   assert.match(validateIntegerKeypadBuffer("", { required: true }), /Ingresa una cantidad/);
   assert.match(validateIntegerKeypadBuffer("0", { min: 1 }), /mínima es 1/);
+  assert.equal(validateIntegerKeypadBuffer("0", { min: 0, max: 100000 }), "");
   assert.match(validateIntegerKeypadBuffer("100001", { max: 100000 }), /máxima es 100000/);
   assert.equal(validateIntegerKeypadBuffer("42", { min: 1, max: 100000 }), "");
   assert.match(
@@ -99,6 +100,8 @@ test("cantidad, merma por unidad y tara comparten el teclado; la merma total es 
   assert.ok(wasteInput, "No se encontró el campo de merma por unidad.");
   assert.ok(tareInput, "No se encontró el campo de tara.");
   assert.ok(wasteTotalOutput, "La merma total debe mostrarse en un output.");
+  assert.match(quantityInput, /\bmin="0"/);
+  assert.match(quantityInput, /\bvalue="0"/);
   assert.doesNotMatch(dispatchView, /<input\b[^>]*\bid="pddWasteTotal"/);
   for (const input of [quantityInput, wasteInput, tareInput]) {
     assert.match(input, /\breadonly\b/);
@@ -310,6 +313,58 @@ test("las variaciones ahorran espacio y muestran solamente una imagen más grand
   assert.match(dispatchStyles, /\.pdd-variation-option img,\s*\.pdd-variation-option i\s*\{[^}]*width:\s*40px;\s*height:\s*40px/);
   assert.doesNotMatch(dispatchStyles, /\.pdd-variation-option small\s*\{/);
   assert.doesNotMatch(dispatchSource, /Título Variaciones|Precio y detalle/);
+});
+
+test("el peso neto queda como lectura principal y el bruto de balanza en el recuadro verde", () => {
+  const previewFlow = sourceBetween(
+    dispatchSource,
+    "function renderCapturePreview",
+    "function renderScale"
+  );
+
+  assert.match(dispatchView, /id="pddLiveWeight"[^>]*aria-label="Peso neto actual"/);
+  assert.match(dispatchView, /class="pdd-gross-preview"[\s\S]*?<span>Peso bruto<\/span>[\s\S]*?id="pddGrossPreview"/);
+  assert.doesNotMatch(dispatchView, /id="pddNetPreview"|class="pdd-net-preview"/);
+  assert.match(previewFlow, /elements\.liveWeight\.innerHTML\s*=\s*`\$\{hasDisplayedWeight\s*\?\s*line\.net_weight_kg\.toFixed\(3\)/);
+  assert.match(previewFlow, /elements\.grossPreview\.textContent[\s\S]*formatWeight\(scaleWeight\)/);
+  assert.match(dispatchStyles, /\.pdd-gross-preview\s*\{[^}]*background:\s*linear-gradient/);
+});
+
+test("el peso manual se calcula como neto directo sin merma ni tara", () => {
+  const calculationFlow = sourceBetween(
+    dispatchSource,
+    "function calculationValuesForReading",
+    "function resetCaptureQuantity"
+  );
+  const manualDialog = sourceBetween(
+    dispatchView,
+    '<dialog id="pddManualDialog"',
+    '<dialog id="pddClientDialog"'
+  );
+
+  assert.match(calculationFlow, /weight_source:\s*isManualReading\(scaleState\)\s*\?\s*"MANUAL"/);
+  assert.match(dispatchUtilsSource, /String\(input\.weight_source\s*\|\|\s*""\)\.toUpperCase\(\)\s*===\s*"MANUAL"/);
+  assert.match(dispatchUtilsSource, /waste_grams_per_unit:\s*0,[\s\S]*waste_total_grams:\s*0,[\s\S]*tare_grams:\s*0/);
+  assert.match(manualDialog, /<span>Peso neto<\/span>/);
+  assert.match(manualDialog, /directamente como peso neto, sin aplicar merma ni tara/i);
+});
+
+test("cambiar producto o subproducto restablece la cantidad a cero", () => {
+  const resetFlow = sourceBetween(dispatchSource, "function resetCaptureQuantity", "function createPendingManualReading");
+  const productSelection = sourceBetween(dispatchSource, "function selectProduct", "function selectVariation");
+  const variationSelection = sourceBetween(dispatchSource, "function selectVariation", "function capturedReadingIds");
+  const editSelection = sourceBetween(dispatchSource, "function changeEditingProduct", "function saveEditingItem");
+
+  assert.match(resetFlow, /elements\.quantity\.value\s*=\s*"0"/);
+  assert.match(productSelection, /resetCaptureQuantity\(\)/);
+  assert.match(variationSelection, /resetCaptureQuantity\(\)/);
+  assert.match(editSelection, /elements\.editQuantity\.value\s*=\s*"0"/);
+});
+
+test("la barra lateral ya no muestra el cuadro de lista activa", () => {
+  assert.doesNotMatch(dispatchView, /pdd-active-list-badge|id="pddActiveList"|>Lista activa</i);
+  assert.doesNotMatch(dispatchSource, /activeList:\s*document\.querySelector|elements\.activeList/);
+  assert.doesNotMatch(dispatchStyles, /\.pdd-active-list-badge/);
 });
 
 test("la barra inferior se elimina sin reservar espacio y los errores conservan un aviso flotante", () => {
@@ -540,10 +595,10 @@ test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () =>
   assert.match(previewFlow, /captureReady[\s\S]*&&\s*!validation\.message[\s\S]*captureWeight\.disabled\s*=\s*!captureReady/);
   assert.match(
     addReadingFlow,
-    /const validation\s*=\s*captureValidation\(weight\);\s*if\s*\(validation\.message\)\s*\{[\s\S]*validation\.target\?\.focus\(\);[\s\S]*setMessage\(validation\.message,\s*["']error["']\);[\s\S]*return false;/
+    /const validation\s*=\s*captureValidation\(weight,\s*selection,\s*values\);\s*if\s*\(validation\.message\)\s*\{[\s\S]*validation\.target\?\.focus\(\);[\s\S]*setMessage\(validation\.message,\s*["']error["']\);[\s\S]*return false;/
   );
   assert.ok(
-    addReadingFlow.indexOf("const validation = captureValidation(weight)")
+    addReadingFlow.indexOf("const validation = captureValidation(weight, selection, values)")
       < addReadingFlow.indexOf("const calculated = calculateLine"),
     "La merma máxima o una tara fuera de rango deben rechazarse antes de insertar la pesada."
   );

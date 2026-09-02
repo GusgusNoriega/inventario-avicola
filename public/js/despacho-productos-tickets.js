@@ -988,7 +988,7 @@ function mountProductDispatchTickets() {
           </label>
           <label class="pdt-field" for="${fieldId}Quantity">
             <span>Cantidad <b>*</b></span>
-            <input id="${fieldId}Quantity" data-pdt-line-field="quantity" type="number" min="1" max="100000" step="1" value="${escapeHtml(line.quantity)}" inputmode="numeric" required>
+            <input id="${fieldId}Quantity" data-pdt-line-field="quantity" type="number" min="0" max="100000" step="1" value="${escapeHtml(line.quantity)}" inputmode="numeric" required>
           </label>
           <label class="pdt-field" for="${fieldId}Mode">
             <span>Forma de cobro (catálogo)</span>
@@ -1251,7 +1251,7 @@ function mountProductDispatchTickets() {
         const calculated = calculateLine(line);
 
         if (!positiveInteger(line.product_id)) return markInvalid(control("product_id"), "Selecciona un producto para cada pesada.");
-        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) return markInvalid(control("quantity"), "La cantidad debe ser un número entero entre 1 y 100.000.");
+        if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100000) return markInvalid(control("quantity"), "La cantidad debe ser un número entero entre 0 y 100.000.");
         if (!Number.isFinite(price) || price < 0.01 || price > PRODUCT_DISPATCH_MAX_UNIT_PRICE) return markInvalid(control("unit_price"), "Ingresa un precio válido mayor o igual a 0,01.");
         if (!Number.isFinite(readWeight) || readWeight < 0.001 || readWeight > MAX_READ_WEIGHT_KG) return markInvalid(control("read_weight_kg"), "El peso leído debe estar entre 0,001 y 999.999.999,999 kg.");
         if (!Number.isInteger(wastePerUnit) || wastePerUnit < 0) return markInvalid(control("waste_grams_per_unit"), "La merma debe ser un número entero igual o mayor que cero.");
@@ -1300,26 +1300,8 @@ function mountProductDispatchTickets() {
       }
     }
 
-    function reservePrintWindow() {
-      const popup = window.open("", "_blank", "popup=yes,width=420,height=720");
-      if (!popup) return null;
-      popup.document.open();
-      popup.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Preparando ticket</title></head><body style="margin:0;padding:32px;text-align:center;color:#24313d;font-family:system-ui,sans-serif"><strong>Preparando ticket…</strong><p>La ventana de impresión se abrirá en un momento.</p></body></html>');
-      popup.document.close();
-      return popup;
-    }
-
-    function closePrintWindow(popup) {
-      try { popup?.close(); } catch { /* La ventana pudo cerrarse mientras cargaba. */ }
-    }
-
     async function reprintTicket(ticketId, button) {
       if (!ticketId || state.printing.has(ticketId)) return;
-      const popup = reservePrintWindow();
-      if (!popup) {
-        setMessage("El navegador bloqueó la ventana de impresión. Habilita las ventanas emergentes e inténtalo nuevamente.", "error");
-        return;
-      }
 
       const originalMarkup = button.innerHTML;
       state.printing.add(ticketId);
@@ -1331,7 +1313,6 @@ function mountProductDispatchTickets() {
           apiRequest(`${apiBase}/tickets/${ticketId}`),
           ensureCatalog().catch(() => null),
         ]);
-        if (popup.closed) throw new Error("La ventana de impresión se cerró antes de terminar la carga.");
         const ticket = ticketFromResponse(response);
         const ticketMessage = Object.prototype.hasOwnProperty.call(ticket, "ticket_message")
           ? ticket.ticket_message
@@ -1341,12 +1322,11 @@ function mountProductDispatchTickets() {
           productTicketTitle: ticket.product_ticket_title || state.catalog.product_ticket_title,
           ticketMessage,
           timezone: ticket.branch?.timezone || state.catalog.branch?.timezone,
-          printWindow: popup,
+          onSuccess: () => setMessage(`Ticket ${ticket.code || ticket.codigo || "seleccionado"} enviado a impresión.`, "success"),
+          onError: (error) => setMessage(errorMessage(error, "No se pudo reimprimir el ticket."), "error"),
         });
-        setMessage(`Ticket ${ticket.code || ticket.codigo || "seleccionado"} enviado a impresión.`, "success");
       } catch (error) {
         console.error(error);
-        closePrintWindow(popup);
         setMessage(errorMessage(error, "No se pudo reimprimir el ticket."), "error");
       } finally {
         state.printing.delete(ticketId);

@@ -185,12 +185,24 @@ export function validateUnitPrice(value, maximum = PRODUCT_DISPATCH_MAX_UNIT_PRI
   return "";
 }
 
+export function calculationInputForWeightSource(input = {}) {
+  return String(input.weight_source || "").toUpperCase() === "MANUAL"
+    ? {
+        ...input,
+        waste_grams_per_unit: 0,
+        waste_total_grams: 0,
+        tare_grams: 0
+      }
+    : input;
+}
+
 export function calculateLine(input = {}) {
-  const quantity = Math.max(1, Math.round(Number(input.quantity || 1)));
+  const numericQuantity = Number(input.quantity ?? 1);
+  const quantity = Math.max(0, Math.round(Number.isFinite(numericQuantity) ? numericQuantity : 1));
   const readWeightKg = Math.max(0, roundTo(input.read_weight_kg, 3));
   const legacyWasteTotal = Math.max(0, Math.round(Number(input.waste_total_grams || 0)));
   const wasteGramsPerUnit = Math.max(0, Math.round(Number(
-    input.waste_grams_per_unit ?? (legacyWasteTotal / quantity)
+    input.waste_grams_per_unit ?? (legacyWasteTotal / Math.max(1, quantity))
   ) || 0));
   const wasteTotalGrams = wasteGramsPerUnit * quantity;
   const tareGrams = Math.max(0, Math.round(Number(input.tare_grams || 0)));
@@ -261,25 +273,36 @@ export function normalizeDraft(raw, number = 1) {
   clean.client_id = Number.isInteger(Number(raw.client_id)) && Number(raw.client_id) > 0
     ? Number(raw.client_id)
     : null;
-  clean.items = (Array.isArray(raw.items) ? raw.items : []).filter((item) => (
-    Number(item?.product_id) > 0
-    && Number(item?.quantity) > 0
-    && Number(item?.read_weight_kg) > 0
-    && Number(item?.unit_price) > 0
-  )).slice(0, 100).map((item) => ({
-    ...item,
-    local_id: String(item.local_id || createUuid()),
-    product_id: Number(item.product_id),
-    variation_id: item.variation_id ? Number(item.variation_id) : null,
-    ...calculateLine(item),
-    weighed_at: item.weighed_at || new Date().toISOString(),
-    weight_source: item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
+  clean.items = (Array.isArray(raw.items) ? raw.items : []).filter((item) => {
+    const quantity = Number(item?.quantity);
+    return Number(item?.product_id) > 0
+      && Number.isInteger(quantity)
+      && quantity >= 0
+      && quantity <= 100000
+      && Number(item?.read_weight_kg) > 0
+      && Number(item?.unit_price) > 0;
+  }).slice(0, 100).map((item) => {
+    const weightSource = item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
       ? PRODUCT_DISPATCH_SCALE_CODE
-      : "MANUAL",
-    scale_reading: item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
-      ? (item.scale_reading || null)
-      : null
-  }));
+      : "MANUAL";
+    const calculationInput = calculationInputForWeightSource({
+      ...item,
+      weight_source: weightSource
+    });
+
+    return {
+      ...item,
+      local_id: String(item.local_id || createUuid()),
+      product_id: Number(item.product_id),
+      variation_id: item.variation_id ? Number(item.variation_id) : null,
+      ...calculateLine(calculationInput),
+      weighed_at: item.weighed_at || new Date().toISOString(),
+      weight_source: weightSource,
+      scale_reading: weightSource === PRODUCT_DISPATCH_SCALE_CODE
+        ? (item.scale_reading || null)
+        : null
+    };
+  });
   clean.updated_at = String(raw.updated_at || new Date().toISOString());
   return clean;
 }
@@ -306,10 +329,10 @@ export function searchClients(clients = [], query = "") {
 export function updateWeighing(items = [], localId, changes = {}) {
   return items.map((item) => {
     if (String(item.local_id) !== String(localId)) return item;
+    const updated = { ...item, ...changes };
     return {
-      ...item,
-      ...changes,
-      ...calculateLine({ ...item, ...changes })
+      ...updated,
+      ...calculateLine(calculationInputForWeightSource(updated))
     };
   });
 }
@@ -319,24 +342,32 @@ export function buildTicketPayload(draft) {
     draft_id: draft.id,
     list_number: Math.min(8, Math.max(1, Math.round(Number(draft.number) || 1))),
     client_id: draft.client_id || null,
-    weighings: draft.items.map((item) => ({
-      product_id: Number(item.product_id),
-      variation_id: item.variation_id ? Number(item.variation_id) : null,
-      quantity: Math.max(1, Math.round(Number(item.quantity))),
-      price_mode: normalizePriceMode(item.price_mode),
-      unit_price: roundTo(item.unit_price, 2).toFixed(2),
-      waste_grams_per_unit: Math.max(0, Math.round(Number(item.waste_grams_per_unit || 0))),
-      waste_total_grams: Math.max(0, Math.round(Number(item.waste_total_grams))),
-      tare_grams: Math.max(0, Math.round(Number(item.tare_grams || 0))),
-      weight_source: item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
+    weighings: draft.items.map((item) => {
+      const weightSource = item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
         ? PRODUCT_DISPATCH_SCALE_CODE
-        : "MANUAL",
-      read_weight_kg: roundTo(item.read_weight_kg, 3).toFixed(3),
-      weighed_at: item.weighed_at || new Date().toISOString(),
-      scale_reading: item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
-        ? (item.scale_reading || null)
-        : null
-    }))
+        : "MANUAL";
+      const calculated = calculateLine(calculationInputForWeightSource({
+        ...item,
+        weight_source: weightSource
+      }));
+
+      return {
+        product_id: Number(item.product_id),
+        variation_id: item.variation_id ? Number(item.variation_id) : null,
+        quantity: calculated.quantity,
+        price_mode: calculated.price_mode,
+        unit_price: calculated.unit_price.toFixed(2),
+        waste_grams_per_unit: calculated.waste_grams_per_unit,
+        waste_total_grams: calculated.waste_total_grams,
+        tare_grams: calculated.tare_grams,
+        weight_source: weightSource,
+        read_weight_kg: calculated.read_weight_kg.toFixed(3),
+        weighed_at: item.weighed_at || new Date().toISOString(),
+        scale_reading: weightSource === PRODUCT_DISPATCH_SCALE_CODE
+          ? (item.scale_reading || null)
+          : null
+      };
+    })
   };
 }
 

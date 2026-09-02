@@ -8,6 +8,7 @@ import {
   PRODUCT_PRICE_MODE_UNIT,
   buildDraftCollection,
   buildTicketPayload,
+  calculationInputForWeightSource,
   calculateDraft,
   calculateLine,
   effectiveProduct,
@@ -113,7 +114,26 @@ test("los importes por kg usan peso neto y los importes por unidad usan cantidad
   });
 });
 
-test("la recuperación limpia listas dañadas sin convertir una pesada manual en lectura física", () => {
+test("el peso manual es el neto exacto aunque existan valores de merma o tara", () => {
+  const line = calculateLine(calculationInputForWeightSource({
+    quantity: 3,
+    read_weight_kg: 4.555,
+    waste_grams_per_unit: 80,
+    waste_total_grams: 240,
+    tare_grams: 125,
+    unit_price: 18,
+    price_mode: PRODUCT_PRICE_MODE_KG,
+    weight_source: "MANUAL"
+  }));
+
+  assert.equal(line.read_weight_kg, 4.555);
+  assert.equal(line.net_weight_kg, 4.555);
+  assert.equal(line.waste_grams_per_unit, 0);
+  assert.equal(line.waste_total_grams, 0);
+  assert.equal(line.tare_grams, 0);
+});
+
+test("la recuperación conserva cantidad cero y limpia ajustes de una pesada manual", () => {
   const recovered = normalizeDraft({
     id: "11111111-1111-4111-8111-111111111111",
     client_id: "9",
@@ -125,22 +145,29 @@ test("la recuperación limpia listas dañadas sin convertir una pesada manual en
         quantity: 2,
         read_weight_kg: 4.5554,
         waste_total_grams: 50,
+        tare_grams: 25,
         unit_price: 18,
         price_mode: PRODUCT_PRICE_MODE_KG,
         weight_source: "MANUAL",
         scale_reading: { raw_frame: "no debe sobrevivir" }
       },
-      { product_id: 8, quantity: 0, read_weight_kg: 3, unit_price: 1 }
+      { product_id: 8, quantity: 0, read_weight_kg: 3, unit_price: 1 },
+      { product_id: 9, quantity: null, read_weight_kg: 2, unit_price: 1 }
     ]
   }, 3);
 
   assert.equal(recovered.number, 3);
   assert.equal(recovered.client_id, 9);
   assert.equal(Object.hasOwn(recovered, "price_overrides"), false);
-  assert.equal(recovered.items.length, 1);
+  assert.equal(recovered.items.length, 2);
   assert.equal(recovered.items[0].read_weight_kg, 4.555);
+  assert.equal(recovered.items[0].net_weight_kg, 4.555);
+  assert.equal(recovered.items[0].waste_total_grams, 0);
+  assert.equal(recovered.items[0].tare_grams, 0);
   assert.equal(recovered.items[0].weight_source, "MANUAL");
   assert.equal(recovered.items[0].scale_reading, null);
+  assert.equal(recovered.items[1].quantity, 0);
+  assert.equal(buildTicketPayload(recovered).weighings[1].quantity, 0);
 });
 
 test("el payload conserva dos decimales de precio y evidencia solo para la balanza de productos", () => {

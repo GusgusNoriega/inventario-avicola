@@ -74,12 +74,12 @@
           <div class="pdd-scale-reading-wrap">
             <div class="pdd-scale-reading-head">
               <span class="pdd-scale-reading-origin">
-                <span id="pddWeightSource">Sin lectura</span>
+                <span id="pddWeightSource">Peso neto · Sin lectura</span>
                 <button id="pddClearManualWeight" type="button" hidden>Volver a balanza</button>
               </span>
               <span id="pddReadingState">Esperando peso</span>
             </div>
-            <output id="pddLiveWeight" class="pdd-live-weight">---<small>kg</small></output>
+            <output id="pddLiveWeight" class="pdd-live-weight" aria-label="Peso neto actual">---<small>kg</small></output>
             <div class="pdd-scale-actions">
               <button id="pddManualWeight" class="pdd-secondary-touch" type="button" aria-haspopup="dialog" aria-controls="pddManualDialog">
                 <span aria-hidden="true">✎</span> Manual
@@ -101,7 +101,7 @@
           <label>
             <span>Cantidad</span>
             <span class="pdd-touch-number-input">
-              <input id="pddQuantity" type="number" min="1" max="100000" step="1" inputmode="none" value="1" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" data-pdd-keypad-value-label="Cantidad seleccionada" data-pdd-keypad-confirm-label="Usar cantidad" data-pdd-keypad-value-name="cantidad" aria-label="Cantidad de aves o elementos: 1. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <input id="pddQuantity" type="number" min="0" max="100000" step="1" inputmode="none" value="0" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" data-pdd-keypad-value-label="Cantidad seleccionada" data-pdd-keypad-confirm-label="Usar cantidad" data-pdd-keypad-value-name="cantidad" aria-label="Cantidad de aves o elementos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
               <b aria-hidden="true">und</b>
             </span>
           </label>
@@ -120,9 +120,9 @@
               <b aria-hidden="true">g</b>
             </span>
           </label>
-          <div class="pdd-net-preview">
-            <span>Neto</span>
-            <strong id="pddNetPreview">--- kg</strong>
+          <div class="pdd-gross-preview">
+            <span>Peso bruto</span>
+            <strong id="pddGrossPreview">--- kg</strong>
             <small id="pddAmountPreview">Importe pesada S/ --</small>
           </div>
         </div>
@@ -174,7 +174,6 @@
       </div>
 
       <aside class="pdd-action-rail" aria-label="Acciones del ticket activo">
-        <div class="pdd-active-list-badge"><span>Lista activa</span><strong id="pddActiveList">1</strong></div>
         <button id="pddAssignClient" class="pdd-rail-action is-client" type="button" aria-haspopup="dialog" aria-controls="pddClientDialog">
           <span aria-hidden="true">♙</span><span><b id="pddClientActionLabel">Asignar cliente</b><small id="pddClientActionDetail">Venta al público</small></span>
         </button>
@@ -224,10 +223,10 @@
         <button type="button" data-pdd-close="pddManualDialog" aria-label="Cerrar">×</button>
       </header>
       <label class="pdd-big-number-input">
-        <span>Peso leído</span>
+        <span>Peso neto</span>
         <span><input id="pddManualInput" type="number" min="0.001" max="999999999.999" step="0.001" inputmode="decimal" placeholder="0.000" required><b>kg</b></span>
       </label>
-      <p>El peso quedará visible para ajustar producto, cantidad, merma o tara antes de capturarlo.</p>
+      <p>El valor se usará directamente como peso neto, sin aplicar merma ni tara.</p>
       <footer class="pdd-dialog-actions">
         <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddManualDialog">Cancelar</button>
         <button class="pdd-dialog-confirm" type="submit">Mostrar este peso</button>
@@ -297,7 +296,7 @@
       <div class="pdd-edit-grid">
         <label><span>Producto</span><select id="pddEditProduct" required></select></label>
         <label><span>Variación</span><select id="pddEditVariation"></select></label>
-        <label><span>Cantidad</span><input id="pddEditQuantity" type="number" min="1" max="100000" step="1" required></label>
+        <label><span>Cantidad</span><input id="pddEditQuantity" type="number" min="0" max="100000" step="1" required></label>
         <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0.001" max="999999999.999" step="0.001" required></label>
         <label><span>Merma/u (g)</span><input id="pddEditWastePerUnit" type="number" min="0" max="1000000" step="1" required></label>
         <label><span>Merma total (g)</span><output id="pddEditWasteTotal" class="pdd-edit-output">0 g</output></label>

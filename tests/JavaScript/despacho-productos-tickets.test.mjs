@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -10,6 +11,11 @@ import {
   normalizeProductDispatchTicketsPayload,
   productDispatchEditorFingerprint,
 } from "../../public/js/despacho-productos-tickets.js";
+
+const ticketManagerSource = readFileSync(
+  new URL("../../public/js/despacho-productos-tickets.js", import.meta.url),
+  "utf8"
+);
 
 test("la consulta de tickets combina búsqueda, fechas y paginación permitida", () => {
   const query = new URLSearchParams(buildProductDispatchTicketQuery({
@@ -28,6 +34,20 @@ test("la consulta de tickets combina búsqueda, fechas y paginación permitida",
 
   const invalidPageSize = new URLSearchParams(buildProductDispatchTicketQuery({ per_page: 30 }));
   assert.equal(invalidPageSize.get("per_page"), "10");
+});
+
+test("la reimpresión no abre una ventana previa adicional", () => {
+  const start = ticketManagerSource.indexOf("async function reprintTicket");
+  const end = ticketManagerSource.indexOf("async function deleteTicket", start);
+  const flow = ticketManagerSource.slice(start, end);
+
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  assert.doesNotMatch(ticketManagerSource, /reservePrintWindow|closePrintWindow|popup=yes|printWindow:\s*popup/);
+  assert.doesNotMatch(flow, /window\.open\s*\(/);
+  assert.match(flow, /printProductDispatchTicket\(ticket/);
+  assert.match(flow, /onSuccess:/);
+  assert.match(flow, /onError:/);
 });
 
 test("normaliza el listado detallado y completa la paginación", () => {

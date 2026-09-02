@@ -682,6 +682,60 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseCount('lecturas_balanza', 0);
     }
 
+    public function test_kg_weighing_accepts_zero_quantity_and_rejects_negative_quantity(): void
+    {
+        $created = $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [
+            $this->weighing(
+                product: $this->turkey,
+                variation: $this->largeTurkey,
+                quantity: 0,
+                price: '20.00',
+                readWeight: '5.250',
+                waste: 0,
+            ),
+        ]))
+            ->assertCreated()
+            ->assertJsonPath('data.totals.quantity', 0)
+            ->assertJsonPath('data.weighings.0.quantity', 0)
+            ->assertJsonPath('data.weighings.0.waste_total_grams', 0)
+            ->assertJsonPath('data.weighings.0.tare_grams', 0);
+
+        $this->assertEqualsWithDelta(5.25, $created->json('data.weighings.0.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(105, $created->json('data.weighings.0.amount'), 0.001);
+        $ticket = $created->json('data');
+        $ticketId = (int) $ticket['id'];
+
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'ticket_despacho_producto_id' => $ticketId,
+            'cantidad' => 0,
+            'peso_leido_kg' => 5.25,
+            'peso_neto_kg' => 5.25,
+            'merma_total_gramos' => 0,
+            'tara_gramos' => 0,
+            'importe' => 105,
+        ]);
+
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticketId}",
+            $this->updatePayload($ticket),
+        )
+            ->assertOk()
+            ->assertJsonPath('data.totals.quantity', 0)
+            ->assertJsonPath('data.weighings.0.quantity', 0);
+
+        $negative = $this->weighing(
+            product: $this->turkey,
+            variation: $this->largeTurkey,
+            quantity: -1,
+            price: '20.00',
+            readWeight: '5.250',
+            waste: 0,
+        );
+        $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [$negative]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.quantity');
+    }
+
     public function test_ticket_keeps_its_list_number_and_own_title_snapshot_when_configuration_changes(): void
     {
         DB::table('empresas')->where('id', $this->user->empresa_id)->update([

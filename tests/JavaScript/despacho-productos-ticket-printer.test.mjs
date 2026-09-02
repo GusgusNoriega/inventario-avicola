@@ -3,7 +3,8 @@ import test from "node:test";
 
 import {
   buildProductDispatchTicketHtml,
-  groupTicketItems
+  groupTicketItems,
+  printProductDispatchTicket
 } from "../../public/js/despacho-productos-ticket-printer.js";
 
 test("la plantilla exclusiva de productos imprime control, lista y sus dos tablas", () => {
@@ -226,4 +227,97 @@ test("un mensaje nulo del ticket elimina un pie almacenado previamente", () => {
 
   assert.doesNotMatch(html, /Mensaje anterior del catálogo/);
   assert.doesNotMatch(html, /class="footer"/);
+});
+
+test("la impresión usa un marco oculto y abre directamente el diálogo del navegador", () => {
+  const previousDocument = globalThis.document;
+  const previousWindow = globalThis.window;
+  const frameListeners = {};
+  const printListeners = {};
+  let appendedFrame = null;
+  let removed = 0;
+  let focused = 0;
+  let printed = 0;
+  let succeeded = 0;
+  let clearedTimer = null;
+
+  const printWindow = {
+    addEventListener(type, listener) {
+      printListeners[type] = listener;
+    },
+    focus() {
+      focused += 1;
+    },
+    print() {
+      printed += 1;
+    }
+  };
+  const frame = {
+    className: "",
+    title: "",
+    srcdoc: "",
+    contentWindow: printWindow,
+    setAttribute() {},
+    addEventListener(type, listener) {
+      frameListeners[type] = listener;
+    },
+    remove() {
+      removed += 1;
+    }
+  };
+
+  globalThis.document = {
+    createElement(tagName) {
+      assert.equal(tagName, "iframe");
+      return frame;
+    },
+    body: {
+      appendChild(node) {
+        appendedFrame = node;
+        frameListeners.load();
+      }
+    }
+  };
+  globalThis.window = {
+    setTimeout(callback, delay) {
+      if (delay < 1000) callback();
+      return delay;
+    },
+    clearTimeout(timer) {
+      clearedTimer = timer;
+    }
+  };
+
+  try {
+    assert.equal(printProductDispatchTicket({
+      data: {
+        code: "PD-DIRECTO",
+        weighings: [],
+        totals: { amount: 0 }
+      }
+    }, {
+      onSuccess() {
+        succeeded += 1;
+      }
+    }), true);
+
+    assert.equal(appendedFrame, frame);
+    assert.equal(frame.className, "ticket-print-frame");
+    assert.equal(frame.title, "Impresión de PD-DIRECTO");
+    assert.match(frame.srcdoc, /<!doctype html>/i);
+    assert.doesNotMatch(frame.srcdoc, /window\.print\(\)|<script/i);
+    assert.equal(focused, 1);
+    assert.equal(printed, 1);
+    assert.equal(succeeded, 1);
+    assert.equal(removed, 0);
+
+    printListeners.afterprint();
+    assert.equal(clearedTimer, 60000);
+    assert.equal(removed, 1);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });

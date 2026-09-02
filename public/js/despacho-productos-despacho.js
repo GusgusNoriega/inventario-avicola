@@ -7,6 +7,7 @@ import {
   PRODUCT_DISPATCH_SCALE_CODE,
   buildDraftCollection,
   buildTicketPayload,
+  calculationInputForWeightSource,
   calculateDraft,
   calculateLine,
   createEmptyDraft,
@@ -87,23 +88,23 @@ const TYPOGRAPHY_GROUPS = [
       { label: "Inicial del producto", description: "Letras grandes cuando el producto no tiene imagen.", variable: "--pdd-fs-product-initial", defaultValue: 37, min: 22, max: 54, step: 1, target: ".pdd-media-placeholder b" },
       { label: "Nombre bajo la imagen", description: "Nombre mostrado dentro del cuadro del producto.", variable: "--pdd-fs-product-name", defaultValue: 12, min: 9, max: 20, step: 0.5, target: ".pdd-media-placeholder small" },
       { label: "Estado de la lectura", description: "Origen de la lectura y estado de la balanza.", variable: "--pdd-fs-scale-meta", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-scale-reading-head" },
-      { label: "Peso principal", description: "Número grande de la balanza en tiempo real.", variable: "--pdd-fs-scale-weight", defaultValue: 70, min: 32, max: 96, step: 2, target: ".pdd-live-weight" },
+      { label: "Peso neto principal", description: "Peso neto calculado o ingresado manualmente.", variable: "--pdd-fs-scale-weight", defaultValue: 70, min: 32, max: 96, step: 2, target: ".pdd-live-weight" },
       { label: "Unidad kg", description: "Unidad que acompaña el peso principal.", variable: "--pdd-fs-scale-unit", defaultValue: 16, min: 10, max: 28, step: 1, target: ".pdd-live-weight small" },
       { label: "Botones de captura", description: "Peso manual y Capturar peso.", variable: "--pdd-fs-scale-actions", defaultValue: 12, min: 10, max: 22, step: 1, target: ".pdd-secondary-touch, .pdd-capture-touch" }
     ]
   },
   {
     id: "fields",
-    label: "Campos y peso neto",
-    description: "Cantidad, precio, tara, merma y total estimado.",
+    label: "Campos y peso bruto",
+    description: "Cantidad, precio, tara, merma, peso bruto e importe estimado.",
     controls: [
       { label: "Etiquetas de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid label > span:first-child, .pdd-waste-unit-control > span:first-child" },
       { label: "Valores de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-touch-number-input input" },
       { label: "Ayudas de campos", description: "Forma de cobro y validaciones.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small, .pdd-waste-hint" },
       { label: "Unidades", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
-      { label: "Etiqueta de peso neto", description: "Texto “Peso neto estimado”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-net-preview > span" },
-      { label: "Valor de peso neto", description: "Kilogramos netos estimados.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-net-preview strong" },
-      { label: "Importe pesada", description: "Importe estimado de la pesada actual.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-net-preview small" }
+      { label: "Etiqueta de peso bruto", description: "Texto “Peso bruto”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-gross-preview > span" },
+      { label: "Valor de peso bruto", description: "Lectura original de la balanza.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-gross-preview strong" },
+      { label: "Importe pesada", description: "Importe estimado de la pesada actual.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-gross-preview small" }
     ]
   },
   {
@@ -144,11 +145,10 @@ const TYPOGRAPHY_GROUPS = [
   {
     id: "ticket",
     label: "Ticket y acciones",
-    description: "Lista activa, botones laterales y total del ticket.",
+    description: "Botones laterales y total del ticket.",
     controls: [
-      { label: "Títulos de acciones", description: "Asignar cliente, Guardar e imprimir.", variable: "--pdd-fs-action-title", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-rail-action b, .pdd-save-button b, .pdd-active-list-badge span" },
+      { label: "Títulos de acciones", description: "Asignar cliente, Guardar e imprimir.", variable: "--pdd-fs-action-title", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-rail-action b, .pdd-save-button b" },
       { label: "Detalle de acciones", description: "Explicación secundaria debajo de cada botón.", variable: "--pdd-fs-action-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-rail-action small, .pdd-save-button small" },
-      { label: "Número de lista activa", description: "Número superior de la barra lateral del ticket.", variable: "--pdd-fs-active-list", defaultValue: 22, min: 15, max: 36, step: 1, target: ".pdd-active-list-badge strong" },
       { label: "Etiqueta Total de la lista", description: "Texto pequeño sobre el monto principal.", variable: "--pdd-fs-ticket-label", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-total span" },
       { label: "Total principal del ticket", description: "Monto grande del ticket activo.", variable: "--pdd-fs-ticket-total", defaultValue: 18, min: 14, max: 38, step: 1, target: ".pdd-ticket-total strong" },
       { label: "Resumen del ticket", description: "Cantidad de pesadas y kilogramos netos.", variable: "--pdd-fs-ticket-detail", defaultValue: 10, min: 9, max: 20, step: 0.5, target: ".pdd-ticket-total small" }
@@ -250,13 +250,12 @@ const elements = {
   wasteTotal: document.querySelector("#pddWasteTotal"),
   wastePresets: document.querySelector("#pddWastePresets"),
   wasteHint: document.querySelector("#pddWasteHint"),
-  netPreview: document.querySelector("#pddNetPreview"),
+  grossPreview: document.querySelector("#pddGrossPreview"),
   amountPreview: document.querySelector("#pddAmountPreview"),
   variations: document.querySelector("#pddVariations"),
   quickProducts: document.querySelector("#pddQuickProducts"),
   quickAllProducts: document.querySelector("#pddQuickAllProducts"),
   lists: document.querySelector("#pddLists"),
-  activeList: document.querySelector("#pddActiveList"),
   assignClient: document.querySelector("#pddAssignClient"),
   clientActionLabel: document.querySelector("#pddClientActionLabel"),
   clientActionDetail: document.querySelector("#pddClientActionDetail"),
@@ -409,6 +408,22 @@ function currentSelection() {
   return effectiveProduct(selectedProduct(), selectedVariation());
 }
 
+function isManualReading(scaleState = state.liveScale) {
+  return scaleState?.readingSource === "manual";
+}
+
+function calculationValuesForReading(scaleState = state.liveScale, values = captureValues()) {
+  return calculationInputForWeightSource({
+    ...values,
+    weight_source: isManualReading(scaleState) ? "MANUAL" : PRODUCT_DISPATCH_SCALE_CODE
+  });
+}
+
+function resetCaptureQuantity() {
+  elements.quantity.value = "0";
+  state.numericKeypad?.refreshLabel(elements.quantity);
+}
+
 function createPendingManualReading(rawValue) {
   const weightKg = roundTo(Number(String(rawValue ?? "").trim().replace(",", ".")), 3);
   if (!Number.isFinite(weightKg) || weightKg <= 0) {
@@ -445,7 +460,7 @@ function buildCurrentProductCustomerDisplayState() {
   const selection = currentSelection();
   const scaleWeight = Number(state.liveScale.currentWeightKg);
   const hasReading = Number.isFinite(scaleWeight) && scaleWeight > 0;
-  const values = captureValues();
+  const values = calculationValuesForReading(state.liveScale);
   const netValidation = captureNetValidation(hasReading ? scaleWeight : 0, values);
   const validation = captureValidation(hasReading ? scaleWeight : 0, selection, values);
   const line = calculateLine({
@@ -453,8 +468,7 @@ function buildCurrentProductCustomerDisplayState() {
     read_weight_kg: hasReading ? scaleWeight : 0,
     price_mode: selection?.price_mode
   });
-  const isManual = Boolean(state.pendingManualReading)
-    || state.liveScale.readingSource === "manual";
+  const isManual = isManualReading(state.liveScale);
   const isPhysical = !isManual && (
     state.liveScale.connectionMode === "ble"
     || state.liveScale.connectionMode === "serial"
@@ -1167,7 +1181,8 @@ function renderVariations() {
 }
 
 function captureValues() {
-  const quantity = Math.max(1, Math.round(Number(elements.quantity.value || 1)));
+  const rawQuantity = Number(elements.quantity.value);
+  const quantity = Math.max(0, Math.round(Number.isFinite(rawQuantity) ? rawQuantity : 0));
   const wasteGramsPerUnit = Number(elements.wastePerUnit.value);
   const tareGrams = Number(elements.tare.value);
   return {
@@ -1188,7 +1203,7 @@ function renderWastePresets() {
 }
 
 function syncWasteTotal() {
-  const values = captureValues();
+  const values = calculationValuesForReading(state.liveScale);
   const total = Number.isFinite(values.waste_total_grams) ? values.waste_total_grams : 0;
   elements.wasteTotal.textContent = `${Math.max(0, total).toLocaleString("es-PE")} g`;
   renderWastePresets();
@@ -1207,7 +1222,7 @@ function useCatalogWaste() {
 
 function captureNetValidation(
   weightKg = Number(state.liveScale.currentWeightKg),
-  values = captureValues()
+  values = calculationValuesForReading(state.liveScale)
 ) {
   if (!Number.isSafeInteger(values.waste_grams_per_unit)
     || values.waste_grams_per_unit < 0
@@ -1233,7 +1248,7 @@ function captureNetValidation(
 function captureValidation(
   weightKg = Number(state.liveScale.currentWeightKg),
   selection = currentSelection(),
-  values = captureValues()
+  values = calculationValuesForReading(state.liveScale)
 ) {
   const netValidation = captureNetValidation(weightKg, values);
   if (netValidation.message) return netValidation;
@@ -1258,25 +1273,30 @@ function captureValidation(
 function renderCapturePreview() {
   const selection = currentSelection();
   const scaleWeight = Number(state.liveScale.currentWeightKg);
+  const hasDisplayedWeight = Number.isFinite(scaleWeight) && scaleWeight >= 0;
   const hasWeight = Number.isFinite(scaleWeight) && scaleWeight > 0;
   syncWasteTotal();
-  const validation = captureValidation(hasWeight ? scaleWeight : 0, selection);
+  const values = calculationValuesForReading(state.liveScale);
+  const validation = captureValidation(hasWeight ? scaleWeight : 0, selection, values);
   const priceMessage = validation.target === elements.unitPrice ? validation.message : "";
-  const wasteMessage = priceMessage ? "" : validation.message;
+  const manualMessage = isManualReading(state.liveScale) && hasWeight
+    ? "El peso manual se usa como neto; no se aplican merma ni tara."
+    : "";
+  const wasteMessage = manualMessage || (priceMessage ? "" : validation.message);
   elements.priceMode.classList.toggle("is-error", Boolean(priceMessage));
   elements.priceMode.textContent = priceMessage || (selection ? priceModeLabel(selection.price_mode) : "Selecciona producto");
-  elements.wasteHint.classList.toggle("is-error", Boolean(wasteMessage));
+  elements.wasteHint.classList.toggle("is-error", Boolean(!manualMessage && wasteMessage));
   elements.wasteHint.textContent = wasteMessage;
   const line = calculateLine({
-    quantity: elements.quantity.value,
+    ...values,
     read_weight_kg: hasWeight ? scaleWeight : 0,
-    waste_grams_per_unit: elements.wastePerUnit.value,
-    tare_grams: elements.tare.value,
-    unit_price: elements.unitPrice.value,
     price_mode: selection?.price_mode
   });
 
-  elements.netPreview.textContent = hasWeight ? formatWeight(line.net_weight_kg) : "--- kg";
+  elements.liveWeight.innerHTML = `${hasDisplayedWeight ? line.net_weight_kg.toFixed(3) : "---"}<small>kg</small>`;
+  elements.grossPreview.textContent = isManualReading(state.liveScale) && hasWeight
+    ? "No aplica"
+    : (hasDisplayedWeight ? formatWeight(scaleWeight) : "--- kg");
   elements.amountPreview.textContent = hasWeight && selection
     ? `Importe ${formatMoney(line.amount, state.catalog.currency)}`
     : `Importe ${currencyLabel(state.catalog.currency)} --`;
@@ -1296,15 +1316,13 @@ function renderScale(scaleState = state.scale?.getState?.() || state.liveScale) 
   scaleState = effectiveCaptureReading(scaleState);
   state.liveScale = scaleState || {};
   const weight = Number(scaleState.currentWeightKg);
-  const hasWeight = Number.isFinite(weight) && weight >= 0;
-  elements.liveWeight.innerHTML = `${hasWeight ? weight.toFixed(3) : "---"}<small>kg</small>`;
   elements.weightSource.textContent = scaleState.readingSource === "manual"
-    ? "Peso manual"
+    ? "Peso neto · Manual"
     : scaleState.connectionMode === "ble"
-      ? "Balanza Bluetooth"
+      ? "Peso neto · Balanza Bluetooth"
       : scaleState.connectionMode === "serial"
-        ? "Balanza serial"
-        : "Sin lectura";
+        ? "Peso neto · Balanza serial"
+        : "Peso neto · Sin lectura";
   if (state.pendingManualReading) {
     elements.readingState.textContent = "Listo para agregar";
   } else if (scaleState.isCaptureReady) {
@@ -1401,7 +1419,6 @@ function renderActiveSummary() {
   const draft = activeDraft();
   const totals = calculateDraft(draft.items);
   const client = clientById(draft.client_id);
-  elements.activeList.textContent = String(state.activeIndex + 1);
   elements.clientActionLabel.textContent = client ? client.name : "Asignar cliente";
   elements.clientActionDetail.textContent = client?.document || "Venta al público";
   elements.ticketTotal.textContent = formatMoney(totals.amount, state.catalog.currency);
@@ -1439,6 +1456,7 @@ function selectProduct(productId) {
   if (!product) return;
   state.selectedProductId = product.id;
   state.selectedVariationId = null;
+  resetCaptureQuantity();
   useCatalogWaste();
   useCatalogPrice();
   renderSelectedProduct();
@@ -1452,6 +1470,7 @@ function selectVariation(variationId) {
   const normalized = variationId === "base" ? null : Number(variationId);
   if (normalized !== null && !product.variations.some((variation) => variation.id === normalized)) return;
   state.selectedVariationId = normalized;
+  resetCaptureQuantity();
   useCatalogWaste();
   useCatalogPrice();
   renderSelectedProduct();
@@ -1492,7 +1511,8 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
     return false;
   }
 
-  const validation = captureValidation(weight);
+  const values = calculationValuesForReading(scaleState);
+  const validation = captureValidation(weight, selection, values);
   if (validation.message) {
     validation.target?.focus();
     setMessage(validation.message, "error");
@@ -1500,10 +1520,8 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
   }
 
   const calculated = calculateLine({
-    quantity: elements.quantity.value,
+    ...values,
     read_weight_kg: weight,
-    waste_grams_per_unit: elements.wastePerUnit.value,
-    tare_grams: elements.tare.value,
     unit_price: elements.unitPrice.value,
     price_mode: selection.price_mode
   });
@@ -1613,18 +1631,33 @@ function editingItem() {
   return activeDraft().items.find((item) => item.local_id === state.editingLocalId) || null;
 }
 
+function editingWeightSource(item = editingItem()) {
+  if (!item) return "MANUAL";
+  const editedWeight = roundTo(elements.editWeight.value, 3);
+  return item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
+    && roundTo(item.read_weight_kg, 3) === editedWeight
+    ? PRODUCT_DISPATCH_SCALE_CODE
+    : "MANUAL";
+}
+
 function renderEditCalculation() {
+  const item = editingItem();
   const product = state.catalog.products.find((entry) => entry.id === Number(elements.editProduct.value));
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
-  const line = calculateLine({
+  const weightSource = editingWeightSource(item);
+  const line = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
     read_weight_kg: elements.editWeight.value,
     waste_grams_per_unit: elements.editWastePerUnit.value,
     tare_grams: elements.editTare.value,
     unit_price: elements.editPrice.value,
-    price_mode: selection?.price_mode
-  });
+    price_mode: selection?.price_mode,
+    weight_source: weightSource
+  }));
+  const manualNet = weightSource === "MANUAL";
+  elements.editWastePerUnit.disabled = manualNet;
+  elements.editTare.disabled = manualNet;
   elements.editWasteTotal.textContent = `${line.waste_total_grams.toLocaleString("es-PE")} g`;
   elements.editCalculated.textContent = `Neto ${formatWeight(line.net_weight_kg)} · ${formatMoney(line.amount, state.catalog.currency)}`;
 }
@@ -1638,7 +1671,7 @@ function openEditDialog(localId, listIndex) {
   fillEditVariationOptions(item.variation_id);
   elements.editQuantity.value = String(item.quantity);
   elements.editWeight.value = Number(item.read_weight_kg).toFixed(3);
-  elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / item.quantity));
+  elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / Math.max(1, item.quantity)));
   elements.editTare.value = String(item.tare_grams || 0);
   elements.editPrice.value = Number(item.unit_price).toFixed(2);
   state.numericKeypad?.refreshLabel(elements.editPrice);
@@ -1654,6 +1687,7 @@ function changeEditingProduct(useCatalogDefaults = true) {
   const product = state.catalog.products.find((entry) => entry.id === Number(elements.editProduct.value));
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
+  elements.editQuantity.value = "0";
   if (selection && useCatalogDefaults) {
     elements.editPrice.value = Number(selection.price).toFixed(2);
     state.numericKeypad?.refreshLabel(elements.editPrice);
@@ -1681,14 +1715,16 @@ function saveEditingItem(event) {
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
   if (!selection) return;
-  const calculated = calculateLine({
+  const nextWeightSource = editingWeightSource(item);
+  const calculated = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
     read_weight_kg: elements.editWeight.value,
     waste_grams_per_unit: elements.editWastePerUnit.value,
     tare_grams: elements.editTare.value,
     unit_price: elements.editPrice.value,
-    price_mode: selection.price_mode
-  });
+    price_mode: selection.price_mode,
+    weight_source: nextWeightSource
+  }));
   if (calculated.waste_total_grams > PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS) {
     elements.editWastePerUnit.focus();
     setMessage("Merma total supera el máximo.", "error");
@@ -1708,7 +1744,7 @@ function saveEditingItem(event) {
     return;
   }
 
-  const weightChanged = roundTo(item.read_weight_kg, 3) !== calculated.read_weight_kg;
+  const weightChanged = nextWeightSource === "MANUAL" && item.weight_source === PRODUCT_DISPATCH_SCALE_CODE;
   Object.assign(item, {
     product_id: selection.product_id,
     variation_id: selection.variation_id,
@@ -1718,7 +1754,7 @@ function saveEditingItem(event) {
     catalog_price: selection.price,
     catalog_waste_grams_per_unit: selection.waste_grams_per_unit,
     ...calculated,
-    weight_source: weightChanged ? "MANUAL" : item.weight_source,
+    weight_source: nextWeightSource,
     scale_reading: weightChanged ? null : item.scale_reading,
     physical_reading_id: weightChanged ? null : item.physical_reading_id
   });
@@ -1754,24 +1790,12 @@ function showTicketToast(ticket, printed, printError = null) {
   elements.retryPrint.hidden = !printError;
 }
 
-function closeReservedPrintWindow(printWindow) {
-  try { printWindow?.close(); } catch { /* La ventana pudo cerrarse manualmente. */ }
-}
-
 async function saveActiveDraft(shouldPrint = false) {
   const draft = activeDraft();
   if (!draft.items.length || state.saving) return;
   const finishedIndex = state.activeIndex;
   const finishedDraftId = draft.id;
   const payload = buildTicketPayload(draft);
-  let printWindow = null;
-  if (shouldPrint) {
-    printWindow = window.open("", "_blank", "popup=yes,width=420,height=720");
-    if (printWindow) {
-      printWindow.document.write('<!doctype html><html><body style="font-family:sans-serif;padding:28px;text-align:center">Guardando ticket…</body></html>');
-      printWindow.document.close();
-    }
-  }
 
   state.saving = true;
   renderActiveSummary();
@@ -1797,11 +1821,13 @@ async function saveActiveDraft(shouldPrint = false) {
           productTicketTitle: state.catalog.product_ticket_title,
           ticketMessage: state.catalog.ticket_message,
           timezone: state.catalog.branch?.timezone,
-          printWindow
+          onSuccess: () => showTicketToast(ticket, true),
+          onError: (error) => {
+            showTicketToast(ticket, false, errorMessage(error));
+            setMessage("El ticket se guardó. La impresión puede reintentarse sin volver a guardar.", "error");
+          }
         });
-        showTicketToast(ticket, true);
       } catch (error) {
-        closeReservedPrintWindow(printWindow);
         showTicketToast(ticket, false, errorMessage(error));
         setMessage("El ticket se guardó. La impresión puede reintentarse sin volver a guardar.", "error");
       }
@@ -1809,7 +1835,6 @@ async function saveActiveDraft(shouldPrint = false) {
       showTicketToast(ticket, false);
     }
   } catch (error) {
-    closeReservedPrintWindow(printWindow);
     setMessage(errorMessage(error), "error");
   } finally {
     state.saving = false;
@@ -1820,19 +1845,22 @@ async function saveActiveDraft(shouldPrint = false) {
 
 function retryPrint() {
   if (!state.pendingPrintTicket) return;
+  const ticket = state.pendingPrintTicket;
   try {
-    printProductDispatchTicket(state.pendingPrintTicket, {
+    printProductDispatchTicket(ticket, {
       currency: state.catalog.currency,
       productTicketTitle: state.catalog.product_ticket_title,
       ticketMessage: state.catalog.ticket_message,
-      timezone: state.catalog.branch?.timezone
+      timezone: state.catalog.branch?.timezone,
+      onSuccess: () => {
+        state.pendingPrintTicket = null;
+        showTicketToast(ticket, true);
+        setMessage("La impresión se abrió correctamente.", "success");
+      },
+      onError: (error) => showTicketToast(ticket, false, errorMessage(error))
     });
-    const ticket = state.pendingPrintTicket;
-    state.pendingPrintTicket = null;
-    showTicketToast(ticket, true);
-    setMessage("La impresión se abrió correctamente.", "success");
   } catch (error) {
-    showTicketToast(state.pendingPrintTicket, false, errorMessage(error));
+    showTicketToast(ticket, false, errorMessage(error));
   }
 }
 
@@ -2228,7 +2256,11 @@ elements.quantity.addEventListener("input", () => {
   renderCapturePreview();
 });
 elements.quantity.addEventListener("change", () => {
-  elements.quantity.value = String(Math.max(1, Math.min(100000, Math.round(Number(elements.quantity.value || 1)))));
+  const quantity = Number(elements.quantity.value);
+  elements.quantity.value = String(Math.max(0, Math.min(
+    100000,
+    Math.round(Number.isFinite(quantity) ? quantity : 0)
+  )));
   state.numericKeypad?.refreshLabel(elements.quantity);
   syncWasteTotal();
   renderCapturePreview();
@@ -2284,7 +2316,7 @@ elements.manualForm.addEventListener("submit", (event) => {
     renderScale(state.scale.getState());
     closeDialog(elements.manualDialog);
     setMessage(
-      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo. Ajusta los datos y presiona Capturar peso.`,
+      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo como neto. Verifica producto, cantidad y precio, y presiona Capturar peso.`,
       "success"
     );
   } catch (error) {
