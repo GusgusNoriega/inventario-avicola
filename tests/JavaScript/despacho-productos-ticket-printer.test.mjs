@@ -20,6 +20,9 @@ test("la plantilla exclusiva de productos imprime control, lista y sus dos tabla
           variation: { name: "Grande" },
           price_mode: "POR_KG",
           unit_price: "21.0000",
+          read_weight_kg: "99.111",
+          waste_total_grams: 850,
+          tare_grams: 500,
           net_weight_kg: "10.0804",
           amount: "211.68"
         },
@@ -57,6 +60,12 @@ test("la plantilla exclusiva de productos imprime control, lista y sus dos tabla
   assert.match(html, /<p class="footer">Gracias por su compra<\/p>/);
   assert.doesNotMatch(html, />Merma</);
   assert.doesNotMatch(html, />Tara</);
+  assert.doesNotMatch(html, /99\.111/);
+  assert.doesNotMatch(html, /850|500/);
+  assert.doesNotMatch(html, /merma|tara/i);
+  assert.doesNotMatch(html, /Peso le[ií]do/i);
+  assert.match(html, /body\{[^}]*font:8\.5px\/1\.12/);
+  assert.match(html, /h1\{[^}]*font-size:12px/);
 });
 
 test("el título propio y los datos del ticket se escapan antes de imprimir", () => {

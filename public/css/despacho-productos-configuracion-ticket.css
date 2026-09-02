@@ -250,34 +250,34 @@ body.product-ticket-config-page {
 
 .ptc-receipt {
   width: min(80mm, 100%);
-  min-height: 480px;
-  padding: 18px 14px;
+  min-height: 390px;
+  padding: 14px 12px;
   color: #111;
   background: #fffef8;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
-  font: 10px/1.25 ui-monospace, Consolas, monospace;
+  font: 8.5px/1.12 ui-monospace, Consolas, monospace;
 }
 
 .ptc-receipt h3 {
   margin: 0;
   text-align: center;
-  font-size: 16px;
-  line-height: 1.12;
+  font-size: 12px;
+  line-height: 1.05;
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
 
 .ptc-receipt-subtitle {
   display: block;
-  margin: 3px 0 13px;
+  margin: 2px 0 6px;
   text-align: center;
-  font-size: 12px;
+  font-size: 9.5px;
 }
 
 .ptc-receipt-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 8px;
+  gap: 2px 6px;
 }
 
 .ptc-receipt-control :nth-child(even) {
@@ -285,9 +285,9 @@ body.product-ticket-config-page {
 }
 
 .ptc-receipt-sale {
-  margin: 13px 0 4px;
+  margin: 7px 0 3px;
   text-align: center;
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 900;
 }
 
@@ -299,14 +299,14 @@ body.product-ticket-config-page {
 
 .ptc-receipt th,
 .ptc-receipt td {
-  padding: 3px 2px;
+  padding: 1.5px 1px;
   overflow-wrap: anywhere;
 }
 
 .ptc-receipt th {
   border-top: 1px solid #111;
   border-bottom: 1px solid #111;
-  font-size: 8px;
+  font-size: 7px;
 }
 
 .ptc-receipt th:not(:first-child),
@@ -315,26 +315,26 @@ body.product-ticket-config-page {
 }
 
 .ptc-receipt-detail {
-  margin-top: 16px;
-  font-size: 8px;
+  margin-top: 6px;
+  font-size: 7px;
 }
 
 .ptc-receipt-total {
-  margin: 14px 0 0;
-  padding-top: 5px;
+  margin: 5px 0 0;
+  padding-top: 3px;
   display: flex;
   justify-content: flex-end;
-  gap: 20px;
+  gap: 10px;
   border-top: 1px solid #111;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 900;
 }
 
 .ptc-receipt-observ {
-  min-height: 34px;
-  margin: 27px 0 0;
+  min-height: 16px;
+  margin: 10px 0 0;
   border-bottom: 1px solid #111;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 900;
 }
 
