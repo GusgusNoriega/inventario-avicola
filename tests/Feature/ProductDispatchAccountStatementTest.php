@@ -501,9 +501,14 @@ class ProductDispatchAccountStatementTest extends TestCase
         $this->assertTrue($discountRow['show_balance']);
     }
 
-    public function test_catalog_lists_only_eligible_branch_clients_and_currencies_including_inactive_clients(): void
+    public function test_catalog_lists_active_external_company_clients_and_historical_branch_clients(): void
     {
         $this->simpleProductDocument('PD-CATALOGO-PEN', '2026-07-05', '10.00');
+        $activeWithoutHistory = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Nuevo Sin Despachos',
+            '20888888880',
+        );
         $inactiveClient = $this->createClient(
             (int) $this->user->empresa_id,
             'Cliente Histórico Inactivo',
@@ -536,6 +541,20 @@ class ProductDispatchAccountStatementTest extends TestCase
             [$this->simpleLine('15.00')],
             TicketDespachoProducto::STATUS_DELETED,
         );
+        $inactiveWithoutHistory = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Inactivo Sin Historial',
+            '20888888885',
+            Tercero::STATUS_INACTIVE,
+        );
+        $internalClient = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Interno Activo',
+            '20888888886',
+        );
+        DB::table('terceros')
+            ->where('id', $internalClient)
+            ->update(['es_cliente_interno' => true]);
         $otherBranchId = $this->createBranch(
             (int) $this->user->empresa_id,
             'CATALOGO-AJENO',
@@ -601,9 +620,15 @@ class ProductDispatchAccountStatementTest extends TestCase
             ->assertJsonPath('data.branch.timezone', 'America/Lima');
 
         $clientIds = collect($response->json('data.clients'))->pluck('id');
-        $this->assertEqualsCanonicalizing([$this->clientId, $inactiveClient], $clientIds->all());
-        $this->assertNotContains($deletedOnlyClient, $clientIds);
-        $this->assertNotContains($otherBranchClient, $clientIds);
+        $this->assertEqualsCanonicalizing([
+            $this->clientId,
+            $activeWithoutHistory,
+            $inactiveClient,
+            $deletedOnlyClient,
+            $otherBranchClient,
+        ], $clientIds->all());
+        $this->assertNotContains($inactiveWithoutHistory, $clientIds);
+        $this->assertNotContains($internalClient, $clientIds);
         $this->assertNotContains($foreignClient, $clientIds);
         $this->assertSame(['PEN', 'USD'], $response->json('data.currencies'));
 
@@ -611,6 +636,41 @@ class ProductDispatchAccountStatementTest extends TestCase
         $this->assertSame('Cliente Histórico Inactivo', $historical['name']);
         $this->assertSame('DNI', $historical['document_type']);
         $this->assertSame('20888888881', $historical['document']);
+
+        $this->getJson($this->statementUrl(clientId: $inactiveClient, currency: 'USD'))
+            ->assertOk()
+            ->assertJsonPath('data.client.id', $inactiveClient)
+            ->assertJsonPath('data.sales_total', '15.00')
+            ->assertJsonPath('data.ending_balance', '15.00')
+            ->assertJsonPath('data.ticket_count', 1);
+    }
+
+    public function test_active_external_client_without_tickets_can_generate_an_empty_statement(): void
+    {
+        $newClient = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente Recién Registrado',
+            '20888888887',
+        );
+
+        $catalog = $this->getJson('/api/v1/despacho-productos/estado-cuenta/catalogo')
+            ->assertOk();
+        $this->assertContains(
+            $newClient,
+            collect($catalog->json('data.clients'))->pluck('id')->all(),
+        );
+
+        $this->getJson($this->statementUrl(clientId: $newClient))
+            ->assertOk()
+            ->assertJsonPath('data.client.id', $newClient)
+            ->assertJsonPath('data.client.name', 'Cliente Recién Registrado')
+            ->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.sales_total', '0.00')
+            ->assertJsonPath('data.payments_total', '0.00')
+            ->assertJsonPath('data.ending_balance', '0.00')
+            ->assertJsonPath('data.ticket_count', 0)
+            ->assertJsonPath('data.payment_count', 0)
+            ->assertJsonCount(0, 'data.rows');
     }
 
     public function test_statement_uses_branch_timezone_for_inclusive_payment_date_boundaries(): void
@@ -785,6 +845,21 @@ class ProductDispatchAccountStatementTest extends TestCase
             [$this->simpleLine('10.00')],
         );
         $this->getJson($this->statementUrl(clientId: $otherBranchClient))
+            ->assertOk()
+            ->assertJsonPath('data.client.id', $otherBranchClient)
+            ->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.sales_total', '0.00')
+            ->assertJsonPath('data.payments_total', '0.00')
+            ->assertJsonPath('data.ending_balance', '0.00')
+            ->assertJsonCount(0, 'data.rows');
+
+        $inactiveWithoutHistory = $this->createClient(
+            (int) $this->user->empresa_id,
+            'Cliente inactivo sin historial',
+            '20777777773',
+            Tercero::STATUS_INACTIVE,
+        );
+        $this->getJson($this->statementUrl(clientId: $inactiveWithoutHistory))
             ->assertUnprocessable()
             ->assertJsonValidationErrors('client_id');
 

@@ -315,6 +315,7 @@ function mountProductDispatchAccountStatement() {
       catalog: { clients: [], currencies: [], default_currency: "PEN", branch: null },
       clientId: positiveInteger(query.get("client_id")),
       loadingCatalog: true,
+      refreshingCatalog: false,
       loadingReport: false,
       reportFilters: null,
       report: null,
@@ -585,10 +586,50 @@ function mountProductDispatchAccountStatement() {
       }
     }
 
+    async function refreshClientCatalog() {
+      if (state.loadingCatalog || state.refreshingCatalog) return;
+
+      state.refreshingCatalog = true;
+      elements.clientList.setAttribute("aria-busy", "true");
+      const previousClientId = state.clientId;
+      const preferredCurrency = elements.currency.value;
+
+      try {
+        const response = await apiRequest(`${apiBase}/catalogo`, { cache: "no-store" });
+        state.catalog = normalizeProductDispatchAccountCatalog(response);
+        elements.branchLabel.textContent = state.catalog.branch?.name
+          ? `Sucursal: ${state.catalog.branch.name}`
+          : "Sucursal actual";
+        renderCurrencyOptions(preferredCurrency);
+
+        if (!selectedClient()) {
+          state.clientId = null;
+          if (previousClientId) {
+            state.reportFilters = null;
+            state.report = null;
+            resetReportPresentation("El cliente seleccionado ya no está disponible. Elige otro cliente.");
+            updatePdfActions();
+          }
+        }
+
+        renderSelectedClient();
+        renderClientList(elements.clientSearch.value);
+      } catch (error) {
+        setMessage(
+          error.message || "No pudimos actualizar los clientes. Mostramos la lista disponible.",
+          "error",
+        );
+      } finally {
+        state.refreshingCatalog = false;
+        elements.clientList.removeAttribute("aria-busy");
+      }
+    }
+
     function openClientSelector() {
       elements.clientSearch.value = "";
       renderClientList();
       openDialog(elements.clientDialog, elements.clientSearch);
+      void refreshClientCatalog();
     }
 
     function openPdfPreview() {
@@ -613,7 +654,7 @@ function mountProductDispatchAccountStatement() {
     async function loadCatalog() {
       setMessage("Cargando clientes y monedas disponibles…");
       try {
-        const response = await apiRequest(`${apiBase}/catalogo`);
+        const response = await apiRequest(`${apiBase}/catalogo`, { cache: "no-store" });
         state.catalog = normalizeProductDispatchAccountCatalog(response);
         state.loadingCatalog = false;
         elements.branchLabel.textContent = state.catalog.branch?.name

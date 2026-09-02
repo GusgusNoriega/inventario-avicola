@@ -7,9 +7,11 @@ use App\Models\Pago;
 use App\Models\PagoAplicacion;
 use App\Models\ProductoDespacho;
 use App\Models\Tercero;
+use App\Models\TerceroRole;
 use App\Models\TicketDespachoProducto;
 use App\Support\FinancialMoney;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -24,20 +26,28 @@ class ProductDispatchAccountStatementService
     public function catalog(int $companyId, object $branch): array
     {
         $eligible = $this->eligibleDocumentsQuery($companyId, (int) $branch->id);
-        $clients = (clone $eligible)
-            ->join('terceros as client', function ($join) use ($companyId): void {
-                $join->on('client.id', '=', 'ticket.cliente_id')
-                    ->where('client.empresa_id', '=', $companyId);
+        $historicalClientIds = (clone $eligible)
+            ->select('ticket.cliente_id');
+        $clients = Tercero::query()
+            ->where('terceros.empresa_id', $companyId)
+            ->where(function (EloquentBuilder $clients) use ($historicalClientIds): void {
+                $clients
+                    ->where(function (EloquentBuilder $activeExternalClients): void {
+                        $activeExternalClients
+                            ->where('terceros.estado', Tercero::STATUS_ACTIVE)
+                            ->where('terceros.es_cliente_interno', false)
+                            ->conRol(TerceroRole::CLIENT);
+                    })
+                    ->orWhereIn('terceros.id', $historicalClientIds);
             })
             ->select([
-                'client.id',
-                'client.nombre_razon_social',
-                'client.tipo_documento',
-                'client.numero_documento',
+                'terceros.id',
+                'terceros.nombre_razon_social',
+                'terceros.tipo_documento',
+                'terceros.numero_documento',
             ])
-            ->distinct()
-            ->orderBy('client.nombre_razon_social')
-            ->orderBy('client.id')
+            ->orderBy('terceros.nombre_razon_social')
+            ->orderBy('terceros.id')
             ->get()
             ->map(fn (object $client): array => [
                 'id' => (int) $client->id,
@@ -362,13 +372,17 @@ class ProductDispatchAccountStatementService
         $client = Tercero::query()
             ->where('empresa_id', $companyId)
             ->find($clientId);
+        $isActiveExternalClient = $client
+            && $client->estado === Tercero::STATUS_ACTIVE
+            && ! $client->es_cliente_interno
+            && $client->roles()->where('rol', TerceroRole::CLIENT)->exists();
         $hasHistory = $client && $this->eligibleDocumentsQuery($companyId, $branchId)
             ->where('ticket.cliente_id', $clientId)
             ->exists();
 
-        if (! $hasHistory) {
+        if (! $isActiveExternalClient && ! $hasHistory) {
             throw ValidationException::withMessages([
-                'client_id' => 'El cliente no tiene despachos de productos vigentes en esta sucursal.',
+                'client_id' => 'El cliente no está disponible para consultar en Despacho de productos.',
             ]);
         }
 
