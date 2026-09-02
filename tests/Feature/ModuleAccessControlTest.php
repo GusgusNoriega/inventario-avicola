@@ -27,6 +27,8 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos/despacho',
             '/despacho-productos/configuracion-ticket',
             '/despacho-productos/tickets',
+            '/despacho-productos/estado-cuenta',
+            '/despacho-productos/estado-cuenta/pdf',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -60,6 +62,8 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos/despacho',
             '/despacho-productos/configuracion-ticket',
             '/despacho-productos/tickets',
+            '/despacho-productos/estado-cuenta',
+            '/despacho-productos/estado-cuenta/pdf',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -141,6 +145,7 @@ class ModuleAccessControlTest extends TestCase
         $this->get('/despacho-productos/despacho')->assertOk();
         $this->get('/despacho-productos/configuracion-ticket')->assertOk();
         $this->get('/despacho-productos/tickets')->assertOk();
+        $this->get('/despacho-productos/estado-cuenta')->assertOk();
         $this->get('/')
             ->assertOk()
             ->assertSee(route('despacho-productos.menu'), false);
@@ -200,6 +205,67 @@ class ModuleAccessControlTest extends TestCase
 
         $this->actingAs($moduleUser)
             ->get('/despacho-productos/tickets')
+            ->assertOk();
+    }
+
+    public function test_product_dispatch_account_statement_routes_require_the_module_and_management_permission(): void
+    {
+        foreach ([
+            'despacho-productos.estado-cuenta',
+            'despacho-productos.estado-cuenta.pdf',
+        ] as $routeName) {
+            $route = app('router')->getRoutes()->getByName($routeName);
+
+            $this->assertNotNull($route, "No se registró la ruta {$routeName}.");
+            $this->assertContains(
+                'module:MODULO_DESPACHO_PRODUCTOS',
+                $route->gatherMiddleware(),
+            );
+            $this->assertContains(
+                'permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
+                $route->gatherMiddleware(),
+            );
+        }
+
+        $apiRoutes = collect(app('router')->getRoutes()->getRoutes());
+        foreach ([
+            'api/v1/despacho-productos/estado-cuenta/catalogo',
+            'api/v1/despacho-productos/estado-cuenta',
+        ] as $uri) {
+            $apiRoute = $apiRoutes->first(fn ($candidate): bool => $candidate->uri() === $uri
+                && in_array('GET', $candidate->methods(), true));
+
+            $this->assertNotNull($apiRoute, "No se registró GET {$uri}.");
+            $this->assertContains(
+                'module:MODULO_DESPACHO_PRODUCTOS',
+                $apiRoute->gatherMiddleware(),
+            );
+            $this->assertContains(
+                'permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
+                $apiRoute->gatherMiddleware(),
+            );
+        }
+
+        $permissionOnlyUser = User::factory()->create();
+        $this->grantModules(
+            $permissionOnlyUser,
+            ['PRODUCTOS_DESPACHO_TICKETS_GESTIONAR'],
+            'ESTADO_CUENTA_PRODUCTOS_SIN_MODULO',
+        );
+
+        $this->actingAs($permissionOnlyUser)
+            ->get('/despacho-productos/estado-cuenta')
+            ->assertForbidden();
+
+        $moduleUser = User::factory()->create();
+        $this->grantModules(
+            $moduleUser,
+            ['MODULO_DESPACHO_PRODUCTOS'],
+            'MODULO_PRODUCTOS_CON_ESTADO_CUENTA',
+        );
+
+        $this->actingAs($moduleUser)
+            ->get('/despacho-productos/estado-cuenta')
             ->assertOk();
     }
 
@@ -296,6 +362,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos/despacho',
             '/despacho-productos/configuracion-ticket',
             '/despacho-productos/tickets',
+            '/despacho-productos/estado-cuenta',
             '/precios-jornada',
             '/tickets-dia',
             '/reporte-proveedores',

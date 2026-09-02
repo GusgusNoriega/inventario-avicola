@@ -101,6 +101,22 @@
           </span>
           <span class="product-dispatch-menu-action">Ver tickets <span aria-hidden="true">→</span></span>
         </a>
+
+        <a class="product-dispatch-menu-card card is-statement" href="{{ route('despacho-productos.estado-cuenta') }}">
+          <span class="product-dispatch-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M5 3h14v18H5z"></path>
+              <path d="M8 7h8M8 11h4M8 15h3"></path>
+              <path d="M14 14h2.5a2 2 0 0 1 0 4H14zM15.5 13v6"></path>
+            </svg>
+          </span>
+          <span class="product-dispatch-menu-copy">
+            <small>Consulta y reporte PDF</small>
+            <strong>Estado de cuenta</strong>
+            <span>Revisa las ventas y abonos de cada cliente en este módulo, consulta su deuda y prepara el reporte para enviarlo.</span>
+          </span>
+          <span class="product-dispatch-menu-action">Consultar cuenta <span aria-hidden="true">→</span></span>
+        </a>
       </nav>
     </section>
 

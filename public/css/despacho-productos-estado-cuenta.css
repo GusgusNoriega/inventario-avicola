@@ -1,0 +1,1042 @@
+:root {
+  color-scheme: dark;
+}
+
+html.product-dispatch-account-root,
+body.product-dispatch-account-page {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+html.product-dispatch-account-root {
+  background: #05080c;
+}
+
+body.product-dispatch-account-page {
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  color: var(--text-main);
+  background:
+    radial-gradient(circle at 8% 2%, rgba(117, 87, 170, 0.19), transparent 34rem),
+    radial-gradient(circle at 93% 16%, rgba(43, 199, 255, 0.1), transparent 31rem),
+    radial-gradient(circle at 50% 100%, rgba(32, 199, 106, 0.06), transparent 34rem),
+    #05080c;
+}
+
+.pdas-shell {
+  width: min(1600px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 22px 0 48px;
+}
+
+.pdas-header,
+.pdas-query,
+.pdas-ledger,
+.pdas-summary-card {
+  min-width: 0;
+}
+
+.pdas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  margin-bottom: 16px;
+  border-color: rgba(117, 87, 170, 0.5);
+  background: linear-gradient(142deg, rgba(89, 55, 143, 0.23), rgba(8, 14, 22, 0.98) 57%);
+}
+
+.pdas-header h1,
+.pdas-query-heading h2,
+.pdas-report-heading h2,
+.pdas-ledger-heading h3,
+.pdas-dialog-header h2 {
+  margin: 0;
+  color: #fff;
+}
+
+.pdas-header h1 {
+  margin-top: 3px;
+  font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+}
+
+.pdas-header-copy > p:last-child {
+  max-width: 850px;
+  margin: 9px 0 0;
+  color: #a8bdd5;
+  line-height: 1.5;
+}
+
+.pdas-back {
+  flex: 0 0 auto;
+  min-height: 52px;
+}
+
+.pdas-back svg,
+.pdas-client-button svg,
+.pdas-consult svg,
+.pdas-report-actions svg,
+.pdas-client-search svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pdas-query {
+  padding: 21px;
+  margin-bottom: 16px;
+  border-color: #293f55;
+  background: rgba(8, 15, 23, 0.96);
+}
+
+.pdas-query-heading,
+.pdas-report-heading,
+.pdas-ledger-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.pdas-query-heading {
+  margin-bottom: 18px;
+}
+
+.pdas-query-heading h2,
+.pdas-report-heading h2 {
+  margin-top: 3px;
+  font-size: clamp(1.3rem, 2.5vw, 1.72rem);
+}
+
+.pdas-query-heading > p {
+  max-width: 440px;
+  margin: 0;
+  color: #8fa7bd;
+  text-align: right;
+  line-height: 1.45;
+}
+
+.pdas-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.35fr) minmax(150px, 0.55fr) minmax(150px, 0.55fr) minmax(130px, 0.42fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.pdas-client-control,
+.pdas-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.pdas-control-label,
+.pdas-field > span {
+  color: #b9cadb;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pdas-control-label b,
+.pdas-field b {
+  color: #ff9e9e;
+}
+
+.pdas-field input,
+.pdas-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  padding: 11px 12px;
+  border: 1px solid #344d64;
+  border-radius: 9px;
+  color: #f8fbff;
+  background: #07111a;
+  font: inherit;
+  font-weight: 750;
+  color-scheme: dark;
+}
+
+.pdas-field input:focus,
+.pdas-field select:focus,
+.pdas-client-button:focus-visible,
+.pdas-client-search:focus-within {
+  border-color: #65d7ff;
+  box-shadow: 0 0 0 3px rgba(43, 199, 255, 0.13);
+  outline: none;
+}
+
+.pdas-field input[aria-invalid="true"],
+.pdas-field select[aria-invalid="true"],
+.pdas-client-button[aria-invalid="true"] {
+  border-color: #ff7777;
+  box-shadow: 0 0 0 3px rgba(255, 91, 91, 0.1);
+}
+
+.pdas-field select:disabled,
+.pdas-client-button:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.pdas-client-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 74px;
+  padding: 10px 13px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid #624794;
+  border-radius: 10px;
+  color: #e9ddff;
+  background: linear-gradient(145deg, rgba(36, 22, 62, 0.97), rgba(10, 10, 19, 0.98));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pdas-client-button:hover:not(:disabled) {
+  border-color: #a57ee8;
+  background: linear-gradient(145deg, rgba(49, 29, 82, 0.98), rgba(12, 11, 22, 0.98));
+}
+
+.pdas-client-button-icon {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #7657aa;
+  border-radius: 10px;
+  color: #d7c0ff;
+  background: #21143a;
+}
+
+.pdas-client-button-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.pdas-client-button > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.pdas-client-button strong,
+.pdas-client-button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdas-client-button strong {
+  color: #fff;
+  font-size: 0.98rem;
+}
+
+.pdas-client-button small {
+  color: #ad9dc8;
+  font-size: 0.74rem;
+}
+
+.pdas-client-button-action {
+  color: #ceb6f7;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pdas-consult {
+  min-height: 54px;
+  padding-inline: 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pdas-consult svg,
+.pdas-report-actions svg {
+  width: 20px;
+  height: 20px;
+}
+
+.pdas-selected-client {
+  min-width: 0;
+  margin-top: 14px;
+  padding: 10px 13px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgba(117, 87, 170, 0.48);
+  border-radius: 9px;
+  color: #d7c0ff;
+  background: rgba(33, 20, 58, 0.55);
+}
+
+.pdas-selected-client[hidden] {
+  display: none;
+}
+
+.pdas-selected-client > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #06120b;
+  background: #69dda0;
+  font-weight: 1000;
+}
+
+.pdas-selected-client div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pdas-selected-client small {
+  color: #9d8ab9;
+  font-size: 0.67rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pdas-selected-client strong {
+  overflow: hidden;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdas-selected-client em {
+  color: #c7b5e3;
+  font-size: 0.8rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.pdas-message {
+  min-height: 23px;
+  margin: -4px 2px 10px;
+  color: #9db2c5;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.pdas-message.is-error {
+  color: #ff9e9e;
+}
+
+.pdas-message.is-success {
+  color: #8fe0b1;
+}
+
+.pdas-report {
+  display: grid;
+  gap: 15px;
+}
+
+.pdas-report[aria-busy="true"] {
+  cursor: wait;
+}
+
+.pdas-report-heading {
+  padding: 0 2px;
+}
+
+.pdas-report-heading > div:first-child > p:last-child {
+  margin: 5px 0 0;
+  color: #8fa7bd;
+}
+
+.pdas-report-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 9px;
+}
+
+.pdas-report-actions .btn {
+  min-height: 49px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pdas-report-actions a.is-disabled,
+.pdas-report-actions a[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.pdas-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pdas-summary-card {
+  padding: 17px 18px;
+  display: grid;
+  gap: 5px;
+  border-color: #34455a;
+  background: linear-gradient(145deg, rgba(20, 30, 42, 0.96), rgba(8, 13, 20, 0.98));
+}
+
+.pdas-summary-card.is-opening {
+  border-color: rgba(117, 87, 170, 0.55);
+  background: linear-gradient(145deg, rgba(34, 23, 53, 0.96), rgba(8, 13, 20, 0.98));
+}
+
+.pdas-summary-card.is-sales {
+  border-color: rgba(43, 145, 205, 0.58);
+  background: linear-gradient(145deg, rgba(10, 36, 55, 0.96), rgba(7, 14, 21, 0.98));
+}
+
+.pdas-summary-card.is-payments {
+  border-color: rgba(45, 135, 92, 0.58);
+  background: linear-gradient(145deg, rgba(11, 43, 29, 0.96), rgba(8, 15, 13, 0.98));
+}
+
+.pdas-summary-card.is-balance {
+  border-color: rgba(187, 139, 28, 0.62);
+  background: linear-gradient(145deg, rgba(49, 37, 10, 0.96), rgba(17, 14, 7, 0.98));
+}
+
+.pdas-summary-card > span {
+  color: #a8bdd5;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.pdas-summary-card strong {
+  overflow: hidden;
+  color: #f6fbff;
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdas-summary-card.is-opening strong {
+  color: #d7c0ff;
+}
+
+.pdas-summary-card.is-sales strong {
+  color: #83ceff;
+}
+
+.pdas-summary-card.is-payments strong {
+  color: #8fe0b1;
+}
+
+.pdas-summary-card.is-balance strong {
+  color: #ffd75a;
+}
+
+.pdas-summary-card small {
+  color: #7690a7;
+}
+
+.pdas-ledger {
+  padding: 20px;
+  border-color: #293f55;
+  background: rgba(8, 15, 23, 0.97);
+}
+
+.pdas-ledger-heading {
+  margin-bottom: 14px;
+}
+
+.pdas-ledger-heading h3 {
+  font-size: 1.13rem;
+}
+
+.pdas-ledger-heading p {
+  margin: 4px 0 0;
+  color: #8198ad;
+  font-size: 0.79rem;
+  line-height: 1.45;
+}
+
+.pdas-ledger-heading > span {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #334a60;
+  border-radius: 999px;
+  color: #afc4d7;
+  background: #0a1520;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.pdas-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #273b4e;
+  border-radius: 10px;
+  background: #071019;
+  scrollbar-color: #576f86 #0a1119;
+  touch-action: pan-x pan-y;
+}
+
+.pdas-table-wrap:focus-visible {
+  outline: 3px solid rgba(43, 199, 255, 0.2);
+  outline-offset: 2px;
+}
+
+.pdas-table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+  color: #dce8f2;
+  font-size: 0.78rem;
+}
+
+.pdas-table th,
+.pdas-table td {
+  padding: 11px 10px;
+  border-right: 1px solid #213446;
+  border-bottom: 1px solid #213446;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pdas-table th:last-child,
+.pdas-table td:last-child {
+  border-right: 0;
+}
+
+.pdas-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #bcd0e1;
+  background: #102031;
+  font-size: 0.66rem;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pdas-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.pdas-table tbody tr:nth-child(even):not(.pdas-empty-row) td {
+  background: rgba(17, 30, 42, 0.48);
+}
+
+.pdas-table tbody tr.is-day-start:not(:first-child) td {
+  border-top: 2px solid #3e5670;
+}
+
+.pdas-table tbody tr.is-payment td {
+  background: rgba(9, 35, 24, 0.48);
+}
+
+.pdas-table tbody tr.is-payment:nth-child(even) td {
+  background: rgba(12, 43, 30, 0.62);
+}
+
+.pdas-table .is-number {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pdas-document-cell {
+  color: #c6d8e8;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.pdas-kind-cell {
+  min-width: 180px;
+}
+
+.pdas-kind-cell strong,
+.pdas-kind-cell small {
+  display: block;
+}
+
+.pdas-kind-cell strong {
+  color: #f4f8fb;
+}
+
+.pdas-kind-cell small {
+  margin-top: 3px;
+  color: #8299af;
+  font-size: 0.68rem;
+}
+
+.pdas-table .is-sale-value {
+  color: #83ceff;
+  font-weight: 900;
+}
+
+.pdas-table .is-payment-value {
+  color: #8fe0b1;
+  font-weight: 900;
+}
+
+.pdas-table .is-balance-value {
+  color: #ffd75a;
+  font-weight: 900;
+}
+
+.pdas-empty-row td {
+  height: 200px;
+  padding: 35px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.pdas-empty-row strong,
+.pdas-empty-row span {
+  display: block;
+}
+
+.pdas-empty-row strong {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.pdas-empty-row span {
+  margin-top: 5px;
+  color: #8198ad;
+}
+
+.pdas-dialog {
+  width: min(760px, calc(100% - 28px));
+  max-width: none;
+  max-height: calc(100dvh - 28px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #3a526a;
+  border-radius: 14px;
+  color: var(--text-main);
+  background: #08111a;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72);
+}
+
+.pdas-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(3px);
+}
+
+.pdas-dialog-card {
+  min-width: 0;
+  max-height: calc(100dvh - 30px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.pdas-dialog-header {
+  padding: 20px 22px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #293f55;
+  background: linear-gradient(145deg, rgba(37, 24, 60, 0.92), rgba(8, 17, 26, 0.98));
+}
+
+.pdas-dialog-header h2 {
+  margin-top: 3px;
+  font-size: 1.4rem;
+}
+
+.pdas-dialog-header > div > p:last-child {
+  margin: 6px 0 0;
+  color: #93a9bd;
+  font-size: 0.8rem;
+}
+
+.pdas-dialog-close {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border: 1px solid #455c72;
+  border-radius: 9px;
+  color: #d9e6ef;
+  background: #101c27;
+  font: inherit;
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pdas-dialog-close:hover,
+.pdas-dialog-close:focus-visible {
+  border-color: #70d9ff;
+  color: #fff;
+  outline: none;
+}
+
+.pdas-client-search {
+  margin: 17px 20px 10px;
+  min-height: 51px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid #344d64;
+  border-radius: 10px;
+  background: #050c13;
+}
+
+.pdas-client-search svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #7e99b0;
+}
+
+.pdas-client-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #fff;
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.pdas-client-list {
+  min-height: 180px;
+  padding: 6px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.pdas-client-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 62px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid #283d51;
+  border-radius: 9px;
+  color: #eaf3fa;
+  background: #0a151f;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pdas-client-option + .pdas-client-option {
+  margin-top: 8px;
+}
+
+.pdas-client-option:hover,
+.pdas-client-option:focus-visible,
+.pdas-client-option[data-selected="true"] {
+  border-color: #8763bd;
+  background: #1b132c;
+  outline: none;
+}
+
+.pdas-client-option > span:first-child {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #e3d3ff;
+  background: #2d1d4a;
+  font-weight: 950;
+}
+
+.pdas-client-option > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.pdas-client-option strong,
+.pdas-client-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdas-client-option small {
+  color: #849cb1;
+  font-size: 0.72rem;
+}
+
+.pdas-client-option em {
+  color: #cdb6f7;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pdas-client-empty {
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  color: #8299af;
+  text-align: center;
+}
+
+.pdas-client-empty strong {
+  color: #fff;
+}
+
+.pdas-pdf-dialog {
+  width: min(1280px, calc(100% - 24px));
+  height: min(900px, calc(100dvh - 24px));
+  max-height: none;
+}
+
+.pdas-pdf-dialog-card {
+  height: 100%;
+  max-height: none;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.pdas-pdf-header {
+  padding-top: 15px;
+  padding-bottom: 13px;
+}
+
+.pdas-pdf-frame-wrap {
+  position: relative;
+  min-height: 0;
+  padding: 12px;
+  background: #04080c;
+}
+
+.pdas-pdf-frame-wrap iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid #30485e;
+  border-radius: 8px;
+  background: #f4f4f4;
+}
+
+.pdas-pdf-loading {
+  position: absolute;
+  inset: 12px;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: #cbd9e5;
+  background: rgba(5, 11, 17, 0.96);
+}
+
+.pdas-pdf-loading[hidden] {
+  display: none;
+}
+
+.pdas-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(137, 189, 221, 0.22);
+  border-top-color: #63d8ff;
+  border-radius: 50%;
+  animation: pdas-spin 0.75s linear infinite;
+}
+
+@keyframes pdas-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pdas-pdf-actions {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  border-top: 1px solid #293f55;
+  background: #09121b;
+}
+
+.pdas-pdf-actions .btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+@media (max-width: 1180px) {
+  .pdas-filter-grid {
+    grid-template-columns: minmax(280px, 1.25fr) repeat(3, minmax(135px, 0.55fr));
+  }
+
+  .pdas-consult {
+    grid-column: 1 / -1;
+  }
+
+  .pdas-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .pdas-shell {
+    width: min(100% - 20px, 720px);
+    padding: 10px 0 26px;
+  }
+
+  .pdas-header,
+  .pdas-query-heading,
+  .pdas-report-heading,
+  .pdas-ledger-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pdas-header {
+    padding: 20px;
+  }
+
+  .pdas-back,
+  .pdas-report-actions,
+  .pdas-report-actions .btn {
+    width: 100%;
+  }
+
+  .pdas-query-heading {
+    gap: 7px;
+  }
+
+  .pdas-query-heading > p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .pdas-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pdas-client-control,
+  .pdas-consult {
+    grid-column: 1 / -1;
+  }
+
+  .pdas-report-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pdas-ledger {
+    padding: 15px;
+  }
+
+  .pdas-pdf-dialog {
+    width: calc(100% - 12px);
+    height: calc(100dvh - 12px);
+  }
+
+  .pdas-pdf-frame-wrap {
+    padding: 7px;
+  }
+
+  .pdas-pdf-loading {
+    inset: 7px;
+  }
+}
+
+@media (max-width: 520px) {
+  .pdas-query {
+    padding: 17px;
+  }
+
+  .pdas-filter-grid,
+  .pdas-summary,
+  .pdas-report-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .pdas-field,
+  .pdas-client-control,
+  .pdas-consult {
+    grid-column: auto;
+  }
+
+  .pdas-selected-client {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pdas-selected-client em {
+    grid-column: 2;
+  }
+
+  .pdas-summary-card {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .pdas-summary-card strong {
+    grid-row: span 2;
+    text-align: right;
+  }
+
+  .pdas-client-button-action,
+  .pdas-client-option em {
+    display: none;
+  }
+
+  .pdas-client-button,
+  .pdas-client-option {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pdas-dialog {
+    width: calc(100% - 10px);
+    max-height: calc(100dvh - 10px);
+  }
+
+  .pdas-dialog-header,
+  .pdas-client-list {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .pdas-client-search {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+
+  .pdas-pdf-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdas-spinner {
+    animation-duration: 1.8s;
+  }
+}

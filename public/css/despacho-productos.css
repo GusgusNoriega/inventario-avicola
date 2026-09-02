@@ -118,6 +118,11 @@ body.product-catalog-page {
   background: linear-gradient(160deg, #1b132c, #0d0915);
 }
 
+.product-dispatch-menu-card.is-statement {
+  border-color: #27776a;
+  background: linear-gradient(160deg, #0b2924, #07110f);
+}
+
 .product-dispatch-menu-card.is-disabled {
   opacity: 0.68;
   cursor: not-allowed;
@@ -164,6 +169,12 @@ a.product-dispatch-menu-card:focus-visible {
   background: #21143a;
 }
 
+.is-statement .product-dispatch-menu-icon {
+  border-color: #328f7f;
+  color: #8be7d5;
+  background: #0b302a;
+}
+
 .product-dispatch-menu-icon svg,
 .product-catalog-new svg,
 .product-catalog-input-wrap svg,
@@ -205,6 +216,10 @@ a.product-dispatch-menu-card:focus-visible {
 
 .is-history .product-dispatch-menu-copy small {
   color: #c9a9ff;
+}
+
+.is-statement .product-dispatch-menu-copy small {
+  color: #8be7d5;
 }
 
 .product-dispatch-menu-copy strong {
@@ -251,6 +266,12 @@ a.product-dispatch-menu-card:focus-visible {
   border-color: #7657aa;
   color: #dec9ff;
   background: rgba(33, 20, 58, 0.8);
+}
+
+.is-statement .product-dispatch-menu-action {
+  border-color: #328f7f;
+  color: #b1f1e4;
+  background: rgba(11, 48, 42, 0.8);
 }
 
 .product-catalog-summary {

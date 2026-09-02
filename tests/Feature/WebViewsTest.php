@@ -103,14 +103,18 @@ class WebViewsTest extends TestCase
             ->assertSee('Tickets de despacho')
             ->assertSee('Consulta y corrección')
             ->assertSee('Ver tickets')
+            ->assertSee('Consulta y reporte PDF')
+            ->assertSee('Estado de cuenta')
+            ->assertSee('Consultar cuenta')
             ->assertSee('href="'.route('despacho-productos.productos').'"', false)
             ->assertSee('href="'.route('despacho-productos.despacho').'"', false)
             ->assertSee('href="'.route('despacho-productos.configuracion-ticket').'"', false)
             ->assertSee('href="'.route('despacho-productos.tickets').'"', false)
+            ->assertSee('href="'.route('despacho-productos.estado-cuenta').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
-            4,
+            5,
             substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
         );
 
@@ -288,6 +292,64 @@ class WebViewsTest extends TestCase
         $this->assertMatchesRegularExpression(
             '/html\.product-dispatch-tickets-root,\s*body\.product-dispatch-tickets-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
             $ticketStylesheet,
+        );
+
+        $accountStatement = $this->get('/despacho-productos/estado-cuenta');
+        $accountStatement
+            ->assertOk()
+            ->assertSee('Estado de cuenta del cliente')
+            ->assertSee('únicamente a este módulo')
+            ->assertSee('id="productDispatchAccountStatement"', false)
+            ->assertSee('data-api-base="/despacho-productos/estado-cuenta"', false)
+            ->assertSee('data-pdf-url="'.route('despacho-productos.estado-cuenta.pdf').'"', false)
+            ->assertSee('id="pdasFilters"', false)
+            ->assertSee('id="pdasChooseClient"', false)
+            ->assertSee('id="pdasDateFrom"', false)
+            ->assertSee('name="date_from"', false)
+            ->assertSee('id="pdasDateTo"', false)
+            ->assertSee('name="date_to"', false)
+            ->assertSee('id="pdasCurrency"', false)
+            ->assertSee('name="currency"', false)
+            ->assertSee('id="pdasConsult"', false)
+            ->assertSee('id="pdasSelectedClient"', false)
+            ->assertSee('id="pdasReport"', false)
+            ->assertSee('id="pdasOpeningBalance"', false)
+            ->assertSee('id="pdasSalesTotal"', false)
+            ->assertSee('id="pdasPaymentsTotal"', false)
+            ->assertSee('id="pdasEndingBalance"', false)
+            ->assertSee('id="pdasRows"', false)
+            ->assertSee('id="pdasPreviewPdf"', false)
+            ->assertSee('Vista previa PDF')
+            ->assertSee('id="pdasDownloadPdf"', false)
+            ->assertSee('Descargar PDF')
+            ->assertSee('id="pdasClientDialog"', false)
+            ->assertSee('id="pdasPdfDialog"', false)
+            ->assertSee('id="pdasPdfFrame"', false)
+            ->assertSee('id="pdasOpenPdfTab"', false)
+            ->assertSee('href="'.route('despacho-productos.menu').'"', false)
+            ->assertSee(asset('js/despacho-productos-estado-cuenta.js'), false)
+            ->assertSee(asset('css/despacho-productos-estado-cuenta.css'), false);
+
+        $accountStatementJavascript = (string) file_get_contents(
+            public_path('js/despacho-productos-estado-cuenta.js'),
+        );
+        $accountStatementStylesheet = (string) file_get_contents(
+            public_path('css/despacho-productos-estado-cuenta.css'),
+        );
+
+        $this->assertStringContainsString('${apiBase}/catalogo', $accountStatementJavascript);
+        $this->assertStringContainsString(
+            '${apiBase}?${buildProductDispatchAccountQuery(validation.values)}',
+            $accountStatementJavascript,
+        );
+        $this->assertStringContainsString('buildProductDispatchAccountPdfUrl', $accountStatementJavascript);
+        $this->assertStringContainsString('params.set("preview", "1")', $accountStatementJavascript);
+        $this->assertStringContainsString('elements.pdfFrame.src = previewUrl', $accountStatementJavascript);
+        $this->assertStringContainsString('.pdas-table-wrap', $accountStatementStylesheet);
+        $this->assertStringContainsString('overflow-x: auto', $accountStatementStylesheet);
+        $this->assertMatchesRegularExpression(
+            '/html\.product-dispatch-account-root,\s*body\.product-dispatch-account-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
+            $accountStatementStylesheet,
         );
     }
 

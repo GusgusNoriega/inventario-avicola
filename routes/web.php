@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Web\AuthController as WebAuthController;
 use App\Http\Controllers\Web\LiveChickenReceptionJourneyReportController;
+use App\Http\Controllers\Web\ProductDispatchAccountStatementReportController;
 use App\Http\Controllers\Web\ReportController;
 use Illuminate\Support\Facades\Route;
 
@@ -95,6 +96,14 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             Route::view('/despacho-productos/tickets', 'despacho-productos-tickets')
                 ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR')
                 ->name('despacho-productos.tickets');
+            Route::view('/despacho-productos/estado-cuenta', 'despacho-productos-estado-cuenta')
+                ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR')
+                ->name('despacho-productos.estado-cuenta');
+            Route::get(
+                '/despacho-productos/estado-cuenta/pdf',
+                [ProductDispatchAccountStatementReportController::class, 'pdf'],
+            )->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR')
+                ->name('despacho-productos.estado-cuenta.pdf');
             Route::view(
                 '/despacho-productos/configuracion-ticket',
                 'despacho-productos-configuracion-ticket',
