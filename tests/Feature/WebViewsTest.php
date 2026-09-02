@@ -302,7 +302,7 @@ class WebViewsTest extends TestCase
         $accountStatement
             ->assertOk()
             ->assertSee('Estado de cuenta del cliente')
-            ->assertSee('únicamente a este módulo')
+            ->assertSee('deuda anterior registrada en Finanzas')
             ->assertSee('id="productDispatchAccountStatement"', false)
             ->assertSee('data-api-base="/despacho-productos/estado-cuenta"', false)
             ->assertSee('data-pdf-url="'.route('despacho-productos.estado-cuenta.pdf').'"', false)
@@ -319,6 +319,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="pdasReport"', false)
             ->assertSee('id="pdasOpeningBalance"', false)
             ->assertSee('id="pdasSalesTotal"', false)
+            ->assertSee('id="pdasPriorDebtTotal"', false)
+            ->assertSee('id="pdasPriorDebtCount"', false)
             ->assertSee('id="pdasPaymentsTotal"', false)
             ->assertSee('id="pdasEndingBalance"', false)
             ->assertSee('id="pdasRows"', false)
@@ -347,6 +349,7 @@ class WebViewsTest extends TestCase
             $accountStatementJavascript,
         );
         $this->assertStringContainsString('buildProductDispatchAccountPdfUrl', $accountStatementJavascript);
+        $this->assertStringContainsString('PRIOR_DEBT', $accountStatementJavascript);
         $this->assertStringContainsString('params.set("preview", "1")', $accountStatementJavascript);
         $this->assertStringContainsString('elements.pdfFrame.src = previewUrl', $accountStatementJavascript);
         $this->assertStringContainsString('.pdas-table-wrap', $accountStatementStylesheet);
