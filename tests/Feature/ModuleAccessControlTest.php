@@ -25,6 +25,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos',
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
+            '/despacho-productos/clientes',
             '/despacho-productos/configuracion-ticket',
             '/despacho-productos/tickets',
             '/despacho-productos/estado-cuenta',
@@ -60,6 +61,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos',
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
+            '/despacho-productos/clientes',
             '/despacho-productos/configuracion-ticket',
             '/despacho-productos/tickets',
             '/despacho-productos/estado-cuenta',
@@ -143,6 +145,7 @@ class ModuleAccessControlTest extends TestCase
         $this->get('/despacho-productos')->assertOk();
         $this->get('/despacho-productos/productos')->assertOk();
         $this->get('/despacho-productos/despacho')->assertOk();
+        $this->get('/despacho-productos/clientes')->assertOk();
         $this->get('/despacho-productos/configuracion-ticket')->assertOk();
         $this->get('/despacho-productos/tickets')->assertOk();
         $this->get('/despacho-productos/estado-cuenta')->assertOk();
@@ -205,6 +208,80 @@ class ModuleAccessControlTest extends TestCase
 
         $this->actingAs($moduleUser)
             ->get('/despacho-productos/tickets')
+            ->assertOk();
+    }
+
+    public function test_product_dispatch_quick_client_routes_require_the_module_and_dispatch_permission(): void
+    {
+        $webRoute = app('router')->getRoutes()->getByName('despacho-productos.clientes');
+
+        $this->assertNotNull($webRoute);
+        $this->assertContains(
+            'module:MODULO_DESPACHO_PRODUCTOS',
+            $webRoute->gatherMiddleware(),
+        );
+        $this->assertContains(
+            'permission:PRODUCTOS_DESPACHO_DESPACHAR',
+            $webRoute->gatherMiddleware(),
+        );
+
+        $apiRoutes = collect(app('router')->getRoutes()->getRoutes());
+        foreach ([
+            ['method' => 'GET', 'uri' => 'api/v1/despacho-productos/clientes'],
+            ['method' => 'POST', 'uri' => 'api/v1/despacho-productos/clientes'],
+            ['method' => 'PUT', 'uri' => 'api/v1/despacho-productos/clientes/{cliente}'],
+            ['method' => 'DELETE', 'uri' => 'api/v1/despacho-productos/clientes/{cliente}'],
+        ] as $expected) {
+            $apiRoute = $apiRoutes->first(fn ($candidate): bool => $candidate->uri() === $expected['uri']
+                && in_array($expected['method'], $candidate->methods(), true));
+
+            $this->assertNotNull(
+                $apiRoute,
+                "No se registró {$expected['method']} {$expected['uri']}.",
+            );
+            $this->assertContains(
+                'module:MODULO_DESPACHO_PRODUCTOS',
+                $apiRoute->gatherMiddleware(),
+            );
+            $this->assertContains(
+                'permission:PRODUCTOS_DESPACHO_DESPACHAR',
+                $apiRoute->gatherMiddleware(),
+            );
+        }
+
+        $permissionOnlyUser = User::factory()->create();
+        $this->grantModules(
+            $permissionOnlyUser,
+            ['PRODUCTOS_DESPACHO_DESPACHAR'],
+            'CLIENTES_PRODUCTOS_SIN_MODULO',
+        );
+
+        $this->actingAs($permissionOnlyUser)
+            ->get('/despacho-productos/clientes')
+            ->assertForbidden();
+
+        $directoryOnlyUser = User::factory()->create();
+        $this->grantModules(
+            $directoryOnlyUser,
+            ['MODULO_DIRECTORIO'],
+            'DIRECTORIO_SIN_DESPACHO_PRODUCTOS',
+        );
+        Sanctum::actingAs($directoryOnlyUser, ['api']);
+
+        $this->getJson('/api/v1/despacho-productos/clientes')->assertForbidden();
+        $this->postJson('/api/v1/despacho-productos/clientes', [])->assertForbidden();
+        $this->putJson('/api/v1/despacho-productos/clientes/1', [])->assertForbidden();
+        $this->deleteJson('/api/v1/despacho-productos/clientes/1')->assertForbidden();
+
+        $moduleUser = User::factory()->create();
+        $this->grantModules(
+            $moduleUser,
+            ['MODULO_DESPACHO_PRODUCTOS'],
+            'MODULO_PRODUCTOS_CON_CLIENTES',
+        );
+
+        $this->actingAs($moduleUser)
+            ->get('/despacho-productos/clientes')
             ->assertOk();
     }
 
@@ -360,6 +437,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos',
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
+            '/despacho-productos/clientes',
             '/despacho-productos/configuracion-ticket',
             '/despacho-productos/tickets',
             '/despacho-productos/estado-cuenta',

@@ -98,6 +98,9 @@ class WebViewsTest extends TestCase
             ->assertSee('Administrar productos')
             ->assertSee('Despachar productos')
             ->assertSee('Abrir despacho')
+            ->assertSee('Registro rápido')
+            ->assertSee('Agregar clientes')
+            ->assertSee('Gestionar clientes')
             ->assertSee('Configurar ticket')
             ->assertSee('Comprobante exclusivo')
             ->assertSee('Tickets de despacho')
@@ -108,13 +111,14 @@ class WebViewsTest extends TestCase
             ->assertSee('Consultar cuenta')
             ->assertSee('href="'.route('despacho-productos.productos').'"', false)
             ->assertSee('href="'.route('despacho-productos.despacho').'"', false)
+            ->assertSee('href="'.route('despacho-productos.clientes').'"', false)
             ->assertSee('href="'.route('despacho-productos.configuracion-ticket').'"', false)
             ->assertSee('href="'.route('despacho-productos.tickets').'"', false)
             ->assertSee('href="'.route('despacho-productos.estado-cuenta').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
-            5,
+            6,
             substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
         );
 
@@ -351,6 +355,55 @@ class WebViewsTest extends TestCase
             '/html\.product-dispatch-account-root,\s*body\.product-dispatch-account-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
             $accountStatementStylesheet,
         );
+    }
+
+    public function test_product_dispatch_quick_client_view_only_exposes_basic_external_client_management(): void
+    {
+        $clients = $this->get('/despacho-productos/clientes');
+
+        $clients
+            ->assertOk()
+            ->assertSee('Agregar clientes')
+            ->assertSee('clientes externos')
+            ->assertSee('id="productDispatchQuickClients"', false)
+            ->assertSee('data-api-base="/despacho-productos/clientes"', false)
+            ->assertSee('id="pdqcForm"', false)
+            ->assertSee('name="nombre_razon_social"', false)
+            ->assertSee('name="numero_documento"', false)
+            ->assertSee('name="direccion"', false)
+            ->assertSee('id="pdqcEditBadge"', false)
+            ->assertSee('id="pdqcCancelEdit"', false)
+            ->assertSee('id="pdqcSearch"', false)
+            ->assertSee('id="pdqcClientList"', false)
+            ->assertSee('id="pdqcClientCount"', false)
+            ->assertSee('href="'.route('despacho-productos.menu').'"', false)
+            ->assertSee(asset('js/despacho-productos-clientes.js'), false)
+            ->assertSee(asset('css/despacho-productos-clientes.css'), false)
+            ->assertDontSee('name="precios', false)
+            ->assertDontSee('name="es_cliente_interno"', false)
+            ->assertDontSee('name="motivo"', false)
+            ->assertDontSee('Precio pollo');
+
+        $javascript = (string) file_get_contents(
+            public_path('js/despacho-productos-clientes.js'),
+        );
+        $stylesheet = (string) file_get_contents(
+            public_path('css/despacho-productos-clientes.css'),
+        );
+
+        $this->assertStringContainsString('method: editingId ? "PUT" : "POST"', $javascript);
+        $this->assertStringContainsString('method: "DELETE"', $javascript);
+        $this->assertStringContainsString('window.confirm(', $javascript);
+        $this->assertStringContainsString('data-action="edit"', $javascript);
+        $this->assertStringContainsString('data-action="delete"', $javascript);
+        $this->assertStringNotContainsString('precios', $javascript);
+        $this->assertStringNotContainsString('es_cliente_interno', $javascript);
+        $this->assertStringNotContainsString('motivo', mb_strtolower($javascript, 'UTF-8'));
+        $this->assertMatchesRegularExpression(
+            '/html\.product-dispatch-clients-root,\s*body\.product-dispatch-clients-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
+            $stylesheet,
+        );
+        $this->assertStringContainsString('@media (max-width:', $stylesheet);
     }
 
     public function test_install_application_view_exposes_the_direct_pwa_prompt(): void
@@ -1685,6 +1738,12 @@ class WebViewsTest extends TestCase
         $this->get('/directorio')
             ->assertOk()
             ->assertSee('Clientes y proveedores')
+            ->assertSee('id="internalClient"', false)
+            ->assertSee('id="priceVivo"', false)
+            ->assertSee('id="pricePelado"', false)
+            ->assertSee('id="priceBeneficiado"', false)
+            ->assertSee('id="openGlobalPriceModalBtn"', false)
+            ->assertSee('Cambiar precio global')
             ->assertSee(asset('js/clientes.js'), false);
     }
 

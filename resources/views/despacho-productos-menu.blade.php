@@ -70,6 +70,21 @@
           <span class="product-dispatch-menu-action">Abrir despacho <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="product-dispatch-menu-card card is-clients" href="{{ route('despacho-productos.clientes') }}">
+          <span class="product-dispatch-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="9" cy="8" r="3.5"></circle>
+              <path d="M3.5 19c.6-3.5 2.4-5.2 5.5-5.2s4.9 1.7 5.5 5.2M17 8v6M14 11h6"></path>
+            </svg>
+          </span>
+          <span class="product-dispatch-menu-copy">
+            <small>Registro rápido</small>
+            <strong>Agregar clientes</strong>
+            <span>Crea, consulta, edita o elimina clientes externos desde una pantalla sencilla del módulo.</span>
+          </span>
+          <span class="product-dispatch-menu-action">Gestionar clientes <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="product-dispatch-menu-card card is-ticket" href="{{ route('despacho-productos.configuracion-ticket') }}">
           <span class="product-dispatch-menu-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
