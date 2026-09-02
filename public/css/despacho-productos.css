@@ -85,7 +85,7 @@ body.product-catalog-page {
 
 .product-dispatch-menu-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
   gap: 16px;
 }
 
@@ -111,6 +111,11 @@ body.product-catalog-page {
 .product-dispatch-menu-card.is-ticket {
   border-color: #846b2a;
   background: linear-gradient(160deg, #241d0d, #100d08);
+}
+
+.product-dispatch-menu-card.is-history {
+  border-color: #624794;
+  background: linear-gradient(160deg, #1b132c, #0d0915);
 }
 
 .product-dispatch-menu-card.is-disabled {
@@ -153,6 +158,12 @@ a.product-dispatch-menu-card:focus-visible {
   background: #2d240e;
 }
 
+.is-history .product-dispatch-menu-icon {
+  border-color: #7657aa;
+  color: #c9a9ff;
+  background: #21143a;
+}
+
 .product-dispatch-menu-icon svg,
 .product-catalog-new svg,
 .product-catalog-input-wrap svg,
@@ -190,6 +201,10 @@ a.product-dispatch-menu-card:focus-visible {
 
 .is-ticket .product-dispatch-menu-copy small {
   color: #ffd75a;
+}
+
+.is-history .product-dispatch-menu-copy small {
+  color: #c9a9ff;
 }
 
 .product-dispatch-menu-copy strong {
@@ -230,6 +245,12 @@ a.product-dispatch-menu-card:focus-visible {
   border-color: #8d742d;
   color: #ffe691;
   background: rgba(45, 36, 14, 0.8);
+}
+
+.is-history .product-dispatch-menu-action {
+  border-color: #7657aa;
+  color: #dec9ff;
+  background: rgba(33, 20, 58, 0.8);
 }
 
 .product-catalog-summary {

@@ -26,6 +26,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
             '/despacho-productos/configuracion-ticket',
+            '/despacho-productos/tickets',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -58,6 +59,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
             '/despacho-productos/configuracion-ticket',
+            '/despacho-productos/tickets',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -127,7 +129,7 @@ class ModuleAccessControlTest extends TestCase
         }
     }
 
-    public function test_product_dispatch_module_unlocks_its_menu_catalog_and_dispatch_views(): void
+    public function test_product_dispatch_module_unlocks_its_menu_catalog_dispatch_and_ticket_views(): void
     {
         $user = User::factory()->create();
         $this->grantModules($user, ['MODULO_DESPACHO_PRODUCTOS']);
@@ -138,9 +140,66 @@ class ModuleAccessControlTest extends TestCase
         $this->get('/despacho-productos/productos')->assertOk();
         $this->get('/despacho-productos/despacho')->assertOk();
         $this->get('/despacho-productos/configuracion-ticket')->assertOk();
+        $this->get('/despacho-productos/tickets')->assertOk();
         $this->get('/')
             ->assertOk()
             ->assertSee(route('despacho-productos.menu'), false);
+    }
+
+    public function test_product_dispatch_ticket_view_requires_its_module_and_management_permission(): void
+    {
+        $route = app('router')->getRoutes()->getByName('despacho-productos.tickets');
+
+        $this->assertNotNull($route);
+        $this->assertContains(
+            'module:MODULO_DESPACHO_PRODUCTOS',
+            $route->gatherMiddleware(),
+        );
+        $this->assertContains(
+            'permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
+            $route->gatherMiddleware(),
+        );
+
+        $apiRoutes = collect(app('router')->getRoutes()->getRoutes());
+        foreach ([
+            ['method' => 'GET', 'uri' => 'api/v1/despacho-productos/tickets'],
+            ['method' => 'GET', 'uri' => 'api/v1/despacho-productos/tickets/{ticket}'],
+            ['method' => 'PUT', 'uri' => 'api/v1/despacho-productos/tickets/{ticket}'],
+        ] as $expected) {
+            $apiRoute = $apiRoutes->first(fn ($candidate): bool => $candidate->uri() === $expected['uri']
+                && in_array($expected['method'], $candidate->methods(), true));
+
+            $this->assertNotNull(
+                $apiRoute,
+                "No se registró {$expected['method']} {$expected['uri']}.",
+            );
+            $this->assertContains(
+                'permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
+                $apiRoute->gatherMiddleware(),
+            );
+        }
+
+        $permissionOnlyUser = User::factory()->create();
+        $this->grantModules(
+            $permissionOnlyUser,
+            ['PRODUCTOS_DESPACHO_TICKETS_GESTIONAR'],
+            'TICKETS_PRODUCTOS_SIN_MODULO',
+        );
+
+        $this->actingAs($permissionOnlyUser)
+            ->get('/despacho-productos/tickets')
+            ->assertForbidden();
+
+        $moduleUser = User::factory()->create();
+        $this->grantModules(
+            $moduleUser,
+            ['MODULO_DESPACHO_PRODUCTOS'],
+            'MODULO_PRODUCTOS_CON_TICKETS',
+        );
+
+        $this->actingAs($moduleUser)
+            ->get('/despacho-productos/tickets')
+            ->assertOk();
     }
 
     public function test_modules_from_multiple_roles_are_unioned_for_routes_and_menu(): void
@@ -235,6 +294,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
             '/despacho-productos/configuracion-ticket',
+            '/despacho-productos/tickets',
             '/precios-jornada',
             '/tickets-dia',
             '/reporte-proveedores',

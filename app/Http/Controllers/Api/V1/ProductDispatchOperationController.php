@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ProductDispatch\ListProductDispatchTicketsRequest;
 use App\Http\Requests\ProductDispatch\StoreProductDispatchTicketRequest;
 use App\Http\Requests\ProductDispatch\UpdateProductDispatchConfigurationRequest;
+use App\Http\Requests\ProductDispatch\UpdateProductDispatchTicketRequest;
 use App\Models\Balanza;
 use App\Models\ProductoDespacho;
 use App\Models\Tercero;
@@ -15,6 +17,7 @@ use App\Services\OperationContextService;
 use App\Services\ProductDispatchConfigurationService;
 use App\Services\ProductDispatchOperationService;
 use App\Services\TicketMessageService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -174,25 +177,56 @@ class ProductDispatchOperationController extends Controller
             'data' => $this->formatTicket(
                 $result['ticket'],
                 $dispatchConfiguration['product_ticket_title'],
-                $this->ticketMessages->current($companyId),
             ),
         ], $result['already_registered'] ? 200 : 201);
+    }
+
+    public function index(ListProductDispatchTicketsRequest $request): JsonResponse
+    {
+        $companyId = $this->context->companyId($request);
+        $branch = $this->context->branch($request);
+        // Keep the aggregate, page and eager-loaded lines on one database
+        // snapshot so a concurrent correction cannot produce a mixed response.
+        $result = DB::transaction(fn (): array => $this->dispatches->tickets(
+            $companyId,
+            $branch,
+            $request->validated(),
+        ));
+        $dispatchConfiguration = $this->configuration->configuration(
+            $companyId,
+            (int) $branch->id,
+        );
+
+        return response()->json([
+            'data' => [
+                'tickets' => $result['tickets']
+                    ->map(fn (TicketDespachoProducto $ticket): array => $this->formatTicket(
+                        $ticket,
+                        $dispatchConfiguration['product_ticket_title'],
+                    ))
+                    ->values(),
+                'summary' => $result['summary'],
+                'pagination' => $result['pagination'],
+                'applied_filters' => $result['applied_filters'],
+            ],
+        ]);
     }
 
     public function show(Request $request, int $ticket): JsonResponse
     {
         $companyId = $this->context->companyId($request);
         $branch = $this->context->branch($request);
-        $dispatch = TicketDespachoProducto::query()
+        $dispatch = DB::transaction(fn (): TicketDespachoProducto => TicketDespachoProducto::query()
             ->where('empresa_id', $companyId)
             ->where('sucursal_id', $branch->id)
             ->with([
                 'sucursal',
                 'cliente',
+                'creador',
                 'pesadas.producto',
                 'pesadas.variacion',
             ])
-            ->findOrFail($ticket);
+            ->findOrFail($ticket));
         $dispatchConfiguration = $this->configuration->configuration(
             $companyId,
             (int) $branch->id,
@@ -202,7 +236,34 @@ class ProductDispatchOperationController extends Controller
             'data' => $this->formatTicket(
                 $dispatch,
                 $dispatchConfiguration['product_ticket_title'],
-                $this->ticketMessages->current($companyId),
+            ),
+        ]);
+    }
+
+    public function update(
+        UpdateProductDispatchTicketRequest $request,
+        int $ticket,
+    ): JsonResponse {
+        $companyId = $this->context->companyId($request);
+        $branch = $this->context->branch($request);
+        $updated = $this->dispatches->updateTicket(
+            $companyId,
+            $branch,
+            $this->context->actor($request, (int) $branch->id),
+            $ticket,
+            $request->validated(),
+            $request->ip(),
+        );
+        $dispatchConfiguration = $this->configuration->configuration(
+            $companyId,
+            (int) $branch->id,
+        );
+
+        return response()->json([
+            'message' => 'Ticket de despacho actualizado correctamente.',
+            'data' => $this->formatTicket(
+                $updated,
+                $dispatchConfiguration['product_ticket_title'],
             ),
         ]);
     }
@@ -211,10 +272,10 @@ class ProductDispatchOperationController extends Controller
     private function formatTicket(
         TicketDespachoProducto $ticket,
         string $ticketTitle,
-        ?string $ticketMessage,
     ): array {
         $effectiveTicketTitle = trim((string) $ticket->titulo_ticket_snapshot)
             ?: $ticketTitle;
+        $branchTimezone = (string) ($ticket->sucursal?->zona_horaria ?: config('app.timezone'));
 
         return [
             'id' => (int) $ticket->id,
@@ -226,10 +287,30 @@ class ProductDispatchOperationController extends Controller
             'status' => $ticket->estado,
             'operating_date' => $ticket->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->registrado_at?->toISOString(),
+            'registered_at_local' => $ticket->registrado_at
+                ?->copy()
+                ->setTimezone($branchTimezone)
+                ->format('Y-m-d\TH:i:s'),
+            'updated_at' => $ticket->updated_at?->toISOString(),
+            'version' => $ticket->updated_at?->toISOString(),
             'product_ticket_title' => $effectiveTicketTitle,
             'ticket_title' => $effectiveTicketTitle,
-            'ticket_message' => $ticketMessage,
+            'ticket_message' => $ticket->mensaje_ticket_snapshot,
             'currency' => $ticket->moneda,
+            'branch' => $ticket->sucursal
+                ? [
+                    'id' => (int) $ticket->sucursal->id,
+                    'code' => $ticket->sucursal->codigo,
+                    'name' => $ticket->sucursal->nombre,
+                    'timezone' => $ticket->sucursal->zona_horaria,
+                ]
+                : null,
+            'creator' => $ticket->creador
+                ? [
+                    'id' => (int) $ticket->creador->id,
+                    'name' => $ticket->creador->nombre,
+                ]
+                : null,
             'customer_type' => $ticket->tipo_cliente,
             'customer_label' => $ticket->cliente_nombre_snapshot,
             'client' => $ticket->cliente_id
@@ -251,7 +332,13 @@ class ProductDispatchOperationController extends Controller
                 'subtotal' => (float) $ticket->subtotal,
                 'amount' => (float) $ticket->total,
             ],
-            'weighings' => $ticket->pesadas->map(function ($weighing): array {
+            'weighings' => $ticket->pesadas->map(function ($weighing) use ($branchTimezone): array {
+                $weighedAt = $weighing->getRawOriginal('pesada_at')
+                    ? CarbonImmutable::parse(
+                        (string) $weighing->getRawOriginal('pesada_at'),
+                        $branchTimezone,
+                    )
+                    : null;
                 $productImageUrl = $weighing->producto
                     ? $this->productImageUrl($weighing->producto)
                     : null;
@@ -290,7 +377,8 @@ class ProductDispatchOperationController extends Controller
                     'tare_grams' => (int) $weighing->tara_gramos,
                     'net_weight_kg' => (float) $weighing->peso_neto_kg,
                     'amount' => (float) $weighing->importe,
-                    'weighed_at' => $weighing->pesada_at?->toISOString(),
+                    'weighed_at' => $weighedAt?->toISOString(),
+                    'weighed_at_local' => $weighedAt?->format('Y-m-d\TH:i:s'),
                 ];
             })->values(),
         ];

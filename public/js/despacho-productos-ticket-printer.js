@@ -189,12 +189,10 @@ function printableHtml(response, options = {}) {
     || "Venta al público";
   const listNumber = Number(ticket.list_number ?? ticket.numero_lista ?? options.listNumber);
   const listSuffix = Number.isInteger(listNumber) && listNumber > 0 ? ` - ${listNumber}` : "";
-  const footerMessage = String(
-    ticket.ticket_message
-    || ticket.message
-    || options.ticketMessage
-    || ""
-  ).trim();
+  const footerMessageValue = Object.prototype.hasOwnProperty.call(ticket, "ticket_message")
+    ? ticket.ticket_message
+    : (ticket.message ?? options.ticketMessage ?? "");
+  const footerMessage = String(footerMessageValue ?? "").trim();
   const registered = ticket.registered_at || ticket.fecha_registro || new Date().toISOString();
   const when = dateParts(registered, options.timezone);
   const summaryEmptyRow = '<tr><td colspan="3" class="empty">Sin detalle</td></tr>';

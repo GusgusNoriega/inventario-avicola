@@ -9,6 +9,7 @@ use App\Models\Tercero;
 use App\Models\TicketDespachoProducto;
 use App\Models\User;
 use App\Models\VariacionProductoDespacho;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -683,6 +684,9 @@ class ProductDispatchOperationApiTest extends TestCase
 
     public function test_ticket_keeps_its_list_number_and_own_title_snapshot_when_configuration_changes(): void
     {
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update([
+            'mensaje_ticket' => 'Mensaje original del despacho',
+        ]);
         $this->putJson('/api/v1/despacho-productos/configuracion', [
             'product_ticket_title' => 'CONTROL DE DESPACHO ORIGINAL',
         ])->assertOk();
@@ -695,24 +699,30 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonPath('already_registered', false)
             ->assertJsonPath('data.list_number', 4)
             ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
-            ->assertJsonPath('data.ticket_title', 'CONTROL DE DESPACHO ORIGINAL');
+            ->assertJsonPath('data.ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
+            ->assertJsonPath('data.ticket_message', 'Mensaje original del despacho');
         $ticketId = (int) $created->json('data.id');
 
         $this->assertDatabaseHas('tickets_despacho_productos', [
             'id' => $ticketId,
             'numero_lista' => 4,
             'titulo_ticket_snapshot' => 'CONTROL DE DESPACHO ORIGINAL',
+            'mensaje_ticket_snapshot' => 'Mensaje original del despacho',
         ]);
 
         $this->putJson('/api/v1/despacho-productos/configuracion', [
             'product_ticket_title' => 'CONTROL DE DESPACHO NUEVO',
         ])->assertOk();
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update([
+            'mensaje_ticket' => 'Mensaje nuevo de la empresa',
+        ]);
 
         $this->getJson("/api/v1/despacho-productos/tickets/{$ticketId}")
             ->assertOk()
             ->assertJsonPath('data.list_number', 4)
             ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
-            ->assertJsonPath('data.ticket_title', 'CONTROL DE DESPACHO ORIGINAL');
+            ->assertJsonPath('data.ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
+            ->assertJsonPath('data.ticket_message', 'Mensaje original del despacho');
 
         $retryPayload = $payload;
         $retryPayload['list_number'] = 7;
@@ -721,18 +731,21 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonPath('already_registered', true)
             ->assertJsonPath('data.id', $ticketId)
             ->assertJsonPath('data.list_number', 4)
-            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL');
+            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
+            ->assertJsonPath('data.ticket_message', 'Mensaje original del despacho');
 
         $newTicket = $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [
             $this->weighing(product: $this->eggs),
         ], 8))
             ->assertCreated()
             ->assertJsonPath('data.list_number', 8)
-            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO NUEVO');
+            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO NUEVO')
+            ->assertJsonPath('data.ticket_message', 'Mensaje nuevo de la empresa');
         $this->assertDatabaseHas('tickets_despacho_productos', [
             'id' => (int) $newTicket->json('data.id'),
             'numero_lista' => 8,
             'titulo_ticket_snapshot' => 'CONTROL DE DESPACHO NUEVO',
+            'mensaje_ticket_snapshot' => 'Mensaje nuevo de la empresa',
         ]);
     }
 
@@ -1201,6 +1214,1165 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->assertDatabaseCount('tickets_despacho_productos', 1);
     }
 
+    public function test_ticket_management_list_returns_full_details_filters_pagination_and_summary(): void
+    {
+        $tickets = collect();
+
+        foreach (range(0, 10) as $index) {
+            $weighings = $index === 0
+                ? [$this->weighing(
+                    product: $this->turkey,
+                    variation: $this->largeTurkey,
+                    quantity: 2,
+                )]
+                : [$this->weighing(product: $this->eggs)];
+            $clientId = $index === 0 ? $this->clientId : null;
+            $created = $this->postJson(
+                '/api/v1/despacho-productos/tickets',
+                $this->payload($clientId, $weighings, ($index % 8) + 1),
+            )->assertCreated();
+            $ticket = $created->json('data');
+            $date = now('America/Lima')->subDays(20 - $index)->format('Y-m-d');
+            $registeredAt = "{$date} 10:00:00";
+
+            DB::table('tickets_despacho_productos')
+                ->where('id', $ticket['id'])
+                ->update([
+                    'fecha_operativa' => $date,
+                    'registrado_at' => $registeredAt,
+                ]);
+            DB::table('pesadas_despacho_productos')
+                ->where('ticket_despacho_producto_id', $ticket['id'])
+                ->update(['pesada_at' => $registeredAt]);
+
+            $tickets->push([
+                ...$ticket,
+                'operating_date' => $date,
+            ]);
+        }
+
+        $oldest = $tickets->first();
+        $page = $this->getJson('/api/v1/despacho-productos/tickets?per_page=10&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.tickets')
+            ->assertJsonPath('data.tickets.0.id', $oldest['id'])
+            ->assertJsonPath('data.tickets.0.code', $oldest['code'])
+            ->assertJsonPath('data.tickets.0.client.id', $this->clientId)
+            ->assertJsonPath('data.tickets.0.weighings.0.product.id', $this->turkey->id)
+            ->assertJsonPath('data.tickets.0.weighings.0.variation.id', $this->largeTurkey->id)
+            ->assertJsonPath('data.pagination.current_page', 2)
+            ->assertJsonPath('data.pagination.last_page', 2)
+            ->assertJsonPath('data.pagination.per_page', 10)
+            ->assertJsonPath('data.pagination.total', 11)
+            ->assertJsonPath('data.pagination.from', 11)
+            ->assertJsonPath('data.pagination.to', 11)
+            ->assertJsonPath('data.summary.tickets', 11)
+            ->assertJsonPath('data.summary.quantity', 12)
+            ->assertJsonPath('data.applied_filters.search', null)
+            ->assertJsonPath('data.applied_filters.date_from', null)
+            ->assertJsonPath('data.applied_filters.date_to', null);
+
+        $this->assertEqualsWithDelta(11.080, $page->json('data.summary.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(28.70, $page->json('data.summary.amount'), 0.001);
+        $page->assertJsonPath('data.summary.currency', 'PEN')
+            ->assertJsonCount(1, 'data.summary.amounts')
+            ->assertJsonPath('data.summary.amounts.0.currency', 'PEN');
+
+        $this->getJson('/api/v1/despacho-productos/tickets?per_page=10&page=999')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.tickets')
+            ->assertJsonPath('data.pagination.current_page', 2)
+            ->assertJsonPath('data.pagination.last_page', 2)
+            ->assertJsonPath('data.pagination.from', 11)
+            ->assertJsonPath('data.pagination.to', 11);
+
+        DB::table('tickets_despacho_productos')
+            ->where('id', $oldest['id'])
+            ->update(['moneda' => 'USD']);
+        $this->getJson('/api/v1/despacho-productos/tickets')
+            ->assertOk()
+            ->assertJsonPath('data.summary.currency', null)
+            ->assertJsonPath('data.summary.amount', null)
+            ->assertJsonCount(2, 'data.summary.amounts')
+            ->assertJsonPath('data.summary.amounts.0.currency', 'PEN')
+            ->assertJsonPath('data.summary.amounts.1.currency', 'USD');
+
+        foreach ([
+            $oldest['code'],
+            'Cliente avícola',
+            '20123456789',
+            'Pavo grande',
+        ] as $search) {
+            $this->getJson('/api/v1/despacho-productos/tickets?search='.urlencode($search).'&per_page=20')
+                ->assertOk()
+                ->assertJsonCount(1, 'data.tickets')
+                ->assertJsonPath('data.tickets.0.id', $oldest['id'])
+                ->assertJsonPath('data.summary.tickets', 1)
+                ->assertJsonPath('data.applied_filters.search', $search);
+        }
+
+        $rangeStart = $tickets->get(2)['operating_date'];
+        $rangeEnd = $tickets->get(3)['operating_date'];
+        $this->getJson(
+            "/api/v1/despacho-productos/tickets?date_from={$rangeStart}&date_to={$rangeEnd}&per_page=20",
+        )
+            ->assertOk()
+            ->assertJsonCount(2, 'data.tickets')
+            ->assertJsonPath('data.summary.tickets', 2)
+            ->assertJsonPath('data.applied_filters.date_from', $rangeStart)
+            ->assertJsonPath('data.applied_filters.date_to', $rangeEnd);
+
+        $this->getJson('/api/v1/despacho-productos/tickets?date_from=2026-08-20&date_to=2026-08-19')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('date_to');
+        $this->getJson('/api/v1/despacho-productos/tickets?per_page=30')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('per_page');
+    }
+
+    public function test_ticket_management_is_scoped_to_company_and_branch_for_list_detail_and_update(): void
+    {
+        $ownTicket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $update = $this->updatePayload($ownTicket);
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'OTRA-TICKETS',
+            'nombre' => 'Otra sucursal de tickets',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+        $otherBranchTicket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload(null, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $this->getJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}")
+            ->assertNotFound();
+        $this->putJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}", $update)
+            ->assertNotFound();
+
+        $this->user->update(['sucursal_id' => $this->branchId]);
+        $this->getJson('/api/v1/despacho-productos/tickets?per_page=20')
+            ->assertOk()
+            ->assertJsonCount(1, 'data.tickets')
+            ->assertJsonPath('data.tickets.0.id', $ownTicket['id'])
+            ->assertJsonPath('data.summary.tickets', 1);
+        $this->getJson("/api/v1/despacho-productos/tickets/{$otherBranchTicket['id']}")
+            ->assertNotFound();
+
+        $foreignUser = User::factory()->create();
+        $foreignBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $foreignUser->empresa_id,
+            'codigo' => 'AJENA-TICKETS',
+            'nombre' => 'Sucursal ajena de tickets',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $foreignUser->update(['sucursal_id' => $foreignBranchId]);
+        $this->grantModules(
+            $foreignUser,
+            ['MODULO_DESPACHO_PRODUCTOS'],
+            'PRODUCTOS_TICKETS_AJENOS',
+        );
+        Sanctum::actingAs($foreignUser, ['api']);
+
+        $this->getJson('/api/v1/despacho-productos/tickets?per_page=20')
+            ->assertOk()
+            ->assertJsonCount(0, 'data.tickets')
+            ->assertJsonPath('data.summary.tickets', 0);
+        $this->getJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}")
+            ->assertNotFound();
+        $this->putJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}", $update)
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ownTicket['id'],
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'total' => $ownTicket['totals']['amount'],
+        ]);
+    }
+
+    public function test_ticket_correction_recalculates_every_projection_and_can_add_and_remove_lines(): void
+    {
+        $created = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [
+                $this->weighing(
+                    product: $this->turkey,
+                    variation: $this->largeTurkey,
+                    quantity: 2,
+                    price: '21.00',
+                    readWeight: '10.000',
+                    waste: 100,
+                ),
+                $this->weighing(product: $this->eggs, quantity: 12),
+            ], 2),
+        )->assertCreated();
+        $ticket = $created->json('data');
+        $keptWeighingId = (int) $ticket['weighings'][0]['id'];
+        $removedWeighingId = (int) $ticket['weighings'][1]['id'];
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        $newClientId = $this->createClient(
+            $this->user->empresa_id,
+            'Cliente corregido',
+            '20987654321',
+        );
+        $registeredAt = now('America/Lima')->subDay()->setTime(10, 45);
+        $payload = [
+            'version' => $ticket['version'],
+            'correction_reason' => 'Corrección integral solicitada por caja',
+            'ticket_title' => 'TICKET CORREGIDO DE PRODUCTOS',
+            'list_number' => 7,
+            'client_id' => $newClientId,
+            'registered_at' => $registeredAt->format('Y-m-d\TH:i'),
+            'weighings' => [
+                [
+                    'id' => $keptWeighingId,
+                    'product_id' => $this->eggs->id,
+                    'variation_id' => null,
+                    'quantity' => 4,
+                    'price_mode' => ProductoDespacho::PRICE_MODE_UNIT,
+                    'unit_price' => '0.80',
+                    'waste_grams_per_unit' => 3,
+                    'waste_total_grams' => 12,
+                    'tare_grams' => 12,
+                    'read_weight_kg' => '2.000',
+                ],
+                [
+                    'id' => null,
+                    'product_id' => $this->turkey->id,
+                    'variation_id' => $this->largeTurkey->id,
+                    'quantity' => 2,
+                    'price_mode' => ProductoDespacho::PRICE_MODE_KG,
+                    'unit_price' => '21.00',
+                    'waste_grams_per_unit' => 50,
+                    'waste_total_grams' => 100,
+                    'tare_grams' => 100,
+                    'read_weight_kg' => '10.000',
+                ],
+            ],
+        ];
+
+        $this->travel(1)->seconds();
+        $response = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.id', $ticket['id'])
+            ->assertJsonPath('data.code', $ticket['code'])
+            ->assertJsonPath('data.ticket_title', 'TICKET CORREGIDO DE PRODUCTOS')
+            ->assertJsonPath('data.list_number', 7)
+            ->assertJsonPath('data.client.id', $newClientId)
+            ->assertJsonPath('data.customer_type', TicketDespachoProducto::CUSTOMER_REGISTERED)
+            ->assertJsonPath('data.operating_date', $registeredAt->format('Y-m-d'))
+            ->assertJsonPath('data.totals.weighings', 2)
+            ->assertJsonPath('data.totals.quantity', 6)
+            ->assertJsonPath('data.totals.waste_grams', 112)
+            ->assertJsonPath('data.totals.tare_grams', 112)
+            ->assertJsonPath('data.weighings.0.id', $keptWeighingId)
+            ->assertJsonPath('data.weighings.0.product.id', $this->eggs->id)
+            ->assertJsonPath('data.weighings.1.product.id', $this->turkey->id)
+            ->assertJsonPath('data.weighings.1.variation.id', $this->largeTurkey->id);
+
+        $this->assertNotSame($ticket['version'], $response->json('data.version'));
+        $this->assertEqualsWithDelta(12, $response->json('data.totals.read_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(12, $response->json('data.totals.net_weight_kg'), 0.0001);
+        $this->assertEqualsWithDelta(213.20, $response->json('data.totals.amount'), 0.001);
+        $newWeighingId = (int) $response->json('data.weighings.1.id');
+        $this->assertNotContains($newWeighingId, [$keptWeighingId, $removedWeighingId]);
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'numero_lista' => 7,
+            'titulo_ticket_snapshot' => 'TICKET CORREGIDO DE PRODUCTOS',
+            'fecha_operativa' => $registeredAt->format('Y-m-d'),
+            'cliente_id' => $newClientId,
+            'cliente_numero_documento_snapshot' => '20987654321',
+            'cliente_nombre_snapshot' => 'Cliente corregido',
+            'cantidad_total' => 6,
+            'peso_leido_total_kg' => 12,
+            'merma_total_gramos' => 112,
+            'tara_total_gramos' => 112,
+            'peso_neto_total_kg' => 12,
+            'subtotal' => 213.20,
+            'total' => 213.20,
+        ]);
+        $this->assertDatabaseMissing('pesadas_despacho_productos', [
+            'id' => $removedWeighingId,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $keptWeighingId,
+            'ticket_despacho_producto_id' => $ticket['id'],
+            'numero' => 1,
+            'producto_despacho_id' => $this->eggs->id,
+            'variacion_producto_despacho_id' => null,
+            'modo_precio_snapshot' => ProductoDespacho::PRICE_MODE_UNIT,
+            'precio_venta_snapshot' => 0.80,
+            'cantidad' => 4,
+            'merma_aplicada_gramos_unidad' => 3,
+            'merma_total_gramos' => 12,
+            'tara_gramos' => 12,
+            'peso_neto_kg' => 2,
+            'importe' => 3.20,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $newWeighingId,
+            'ticket_despacho_producto_id' => $ticket['id'],
+            'numero' => 2,
+            'producto_despacho_id' => $this->turkey->id,
+            'variacion_producto_despacho_id' => $this->largeTurkey->id,
+            'modo_precio_snapshot' => ProductoDespacho::PRICE_MODE_KG,
+            'precio_venta_snapshot' => 21,
+            'cantidad' => 2,
+            'merma_aplicada_gramos_unidad' => 50,
+            'merma_total_gramos' => 100,
+            'tara_gramos' => 100,
+            'peso_neto_kg' => 10,
+            'importe' => 210,
+        ]);
+
+        $this->assertDatabaseCount('comprobantes', 1);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'tercero_id' => $newClientId,
+            'fecha_emision' => $registeredAt->format('Y-m-d'),
+            'fecha_vencimiento' => $registeredAt->format('Y-m-d'),
+            'subtotal' => 213.20,
+            'total' => 213.20,
+            'saldo_pendiente' => 213.20,
+            'estado' => 'PENDIENTE',
+            'contraparte_numero_documento_snapshot' => '20987654321',
+            'contraparte_nombre_snapshot' => 'Cliente corregido',
+        ]);
+        $this->assertSame(
+            2,
+            DB::table('comprobante_detalles')->where('comprobante_id', $documentId)->count(),
+        );
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $documentId,
+            'producto_despacho_id' => $this->eggs->id,
+            'variacion_producto_despacho_id' => null,
+            'cantidad_unidades' => 4,
+            'modo_precio' => ProductoDespacho::PRICE_MODE_UNIT,
+            'precio_unitario' => 0.80,
+            'subtotal' => 3.20,
+        ]);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $documentId,
+            'producto_despacho_id' => $this->turkey->id,
+            'variacion_producto_despacho_id' => $this->largeTurkey->id,
+            'cantidad_unidades' => 2,
+            'modo_precio' => ProductoDespacho::PRICE_MODE_KG,
+            'precio_kg' => 21,
+            'subtotal' => 210,
+        ]);
+        $this->assertDatabaseHas('comprobante_tickets_despacho_productos', [
+            'comprobante_id' => $documentId,
+            'ticket_despacho_producto_id' => $ticket['id'],
+            'importe_aplicado' => 213.20,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'usuario_id' => $this->user->id,
+            'entidad' => 'tickets_despacho_productos',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CORREGIR',
+        ]);
+        $audit = DB::table('auditoria_eventos')
+            ->where('entidad', 'tickets_despacho_productos')
+            ->where('entidad_id', (string) $ticket['id'])
+            ->where('accion', 'CORREGIR')
+            ->first();
+        $this->assertNotNull($audit?->datos_antes);
+        $this->assertStringContainsString(
+            'Corrección integral solicitada por caja',
+            (string) $audit?->datos_despues,
+        );
+    }
+
+    public function test_ticket_correction_rejects_a_stale_version_without_overwriting_the_first_change(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload(null, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $payload = $this->updatePayload($ticket, [
+            'ticket_title' => 'PRIMERA CORRECCIÓN VÁLIDA',
+            'correction_reason' => 'Primera corrección válida',
+        ]);
+
+        $this->travel(1)->seconds();
+        $updated = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'PRIMERA CORRECCIÓN VÁLIDA');
+        $this->assertNotSame($payload['version'], $updated->json('data.version'));
+
+        $stalePayload = $payload;
+        $stalePayload['ticket_title'] = 'CAMBIO QUE NO DEBE GUARDARSE';
+        $stalePayload['correction_reason'] = 'Intento con una versión anterior';
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $stalePayload,
+        )->assertConflict();
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'titulo_ticket_snapshot' => 'PRIMERA CORRECCIÓN VÁLIDA',
+        ]);
+        $this->assertDatabaseMissing('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'titulo_ticket_snapshot' => 'CAMBIO QUE NO DEBE GUARDARSE',
+        ]);
+        $this->assertSame(
+            1,
+            DB::table('auditoria_eventos')
+                ->where('entidad', 'tickets_despacho_productos')
+                ->where('entidad_id', (string) $ticket['id'])
+                ->where('accion', 'CORREGIR')
+                ->count(),
+        );
+    }
+
+    public function test_invalid_ticket_correction_rolls_back_ticket_lines_document_and_audit(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $weighingId = (int) $ticket['weighings'][0]['id'];
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        $payload = $this->updatePayload($ticket, [
+            'ticket_title' => 'ESTE TÍTULO NO DEBE GUARDARSE',
+            'correction_reason' => 'Prueba de reversión total',
+        ]);
+        $payload['weighings'][0]['tare_grams'] = 2000;
+
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )->assertUnprocessable();
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'titulo_ticket_snapshot' => $ticket['ticket_title'],
+            'cantidad_total' => 1,
+            'total' => 0.75,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $weighingId,
+            'tara_gramos' => 0,
+            'peso_neto_kg' => 1.002,
+            'importe' => 0.75,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'total' => 0.75,
+            'saldo_pendiente' => 0.75,
+        ]);
+        $this->assertSame(
+            1,
+            DB::table('comprobante_detalles')->where('comprobante_id', $documentId)->count(),
+        );
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'tickets_despacho_productos',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CORREGIR',
+        ]);
+    }
+
+    public function test_ticket_correction_cannot_reactivate_a_voided_financial_document(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        DB::table('comprobantes')->where('id', $documentId)->update([
+            'estado' => 'ANULADO',
+            'saldo_pendiente' => 0,
+            'anulada_por' => $this->user->id,
+            'anulada_at' => now(),
+            'motivo_anulacion' => 'Anulación previa de prueba',
+        ]);
+
+        $payload = $this->updatePayload($ticket, [
+            'ticket_title' => 'CAMBIO QUE NO DEBE REACTIVAR',
+            'correction_reason' => 'Intentar corregir un comprobante anulado',
+        ]);
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings');
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'titulo_ticket_snapshot' => $ticket['ticket_title'],
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'estado' => 'ANULADO',
+            'saldo_pendiente' => 0,
+            'anulada_por' => $this->user->id,
+            'motivo_anulacion' => 'Anulación previa de prueba',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'tickets_despacho_productos',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CORREGIR',
+        ]);
+    }
+
+    public function test_ticket_total_cannot_be_reduced_below_registered_payments_and_rolls_back_atomically(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [
+                $this->weighing(product: $this->eggs, quantity: 100),
+            ]),
+        )->assertCreated()->json('data');
+        $weighingId = (int) $ticket['weighings'][0]['id'];
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        $paymentId = (int) DB::table('pagos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->clientId,
+            'codigo' => 'COBRO-PRODUCTOS-001',
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $this->clientId,
+            'direccion' => 'ENTRADA',
+            'fecha_hora' => now(),
+            'metodo' => 'EFECTIVO',
+            'moneda' => 'PEN',
+            'importe' => '50.00',
+            'estado' => 'REGISTRADO',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        DB::table('pago_aplicaciones')->insert([
+            'pago_id' => $paymentId,
+            'comprobante_id' => $documentId,
+            'lado' => 'CXC',
+            'importe_aplicado' => '50.00',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+        ]);
+        DB::table('comprobantes')->where('id', $documentId)->update([
+            'saldo_pendiente' => '25.00',
+            'estado' => 'PARCIAL',
+        ]);
+        $otherClientId = $this->createClient(
+            $this->user->empresa_id,
+            'Cliente que no debe recibir la deuda cobrada',
+            '20444444444',
+        );
+        $clientChangePayload = $this->updatePayload($ticket, [
+            'client_id' => $otherClientId,
+            'correction_reason' => 'Intento de trasladar una venta con cobros',
+        ]);
+
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $clientChangePayload,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('client_id');
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'cliente_id' => $this->clientId,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'tercero_id' => $this->clientId,
+            'total' => 75,
+            'saldo_pendiente' => 25,
+            'estado' => 'PARCIAL',
+        ]);
+        $this->assertDatabaseHas('pagos', [
+            'id' => $paymentId,
+            'cliente_id' => $this->clientId,
+            'estado' => 'REGISTRADO',
+        ]);
+
+        $payload = $this->updatePayload($ticket, [
+            'ticket_title' => 'TOTAL INFERIOR NO VÁLIDO',
+            'correction_reason' => 'Intento de reducir una venta ya cobrada',
+        ]);
+        $payload['weighings'][0] = [
+            ...$payload['weighings'][0],
+            'quantity' => 40,
+            'waste_grams_per_unit' => 2,
+            'waste_total_grams' => 80,
+        ];
+
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )->assertUnprocessable();
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'titulo_ticket_snapshot' => $ticket['ticket_title'],
+            'cantidad_total' => 100,
+            'total' => 75,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $weighingId,
+            'cantidad' => 100,
+            'merma_total_gramos' => 200,
+            'importe' => 75,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'total' => 75,
+            'saldo_pendiente' => 25,
+            'estado' => 'PARCIAL',
+        ]);
+        $this->assertDatabaseHas('pago_aplicaciones', [
+            'pago_id' => $paymentId,
+            'comprobante_id' => $documentId,
+            'importe_aplicado' => 50,
+        ]);
+        $this->assertDatabaseHas('comprobante_tickets_despacho_productos', [
+            'comprobante_id' => $documentId,
+            'ticket_despacho_producto_id' => $ticket['id'],
+            'importe_aplicado' => 75,
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'tickets_despacho_productos',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CORREGIR',
+        ]);
+    }
+
+    public function test_ticket_correction_preserves_historical_snapshots_but_rejects_new_inactive_selections(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [
+                $this->weighing(
+                    product: $this->turkey,
+                    variation: $this->largeTurkey,
+                    quantity: 2,
+                    price: '21.00',
+                    readWeight: '10.000',
+                    waste: 60,
+                ),
+            ]),
+        )->assertCreated()->json('data');
+        $payload = $this->updatePayload($ticket, [
+            'ticket_title' => 'CORRECCIÓN CON CATÁLOGO HISTÓRICO',
+            'correction_reason' => 'Conservar selección histórica inactiva',
+        ]);
+
+        $this->turkey->update([
+            'nombre' => 'Pavo renombrado',
+            'nombre_normalizado' => 'pavo renombrado',
+            'modo_precio' => ProductoDespacho::PRICE_MODE_UNIT,
+            'precio_venta' => '99.0000',
+            'merma_gramos_unidad' => 999,
+            'estado' => ProductoDespacho::STATUS_INACTIVE,
+        ]);
+        $this->largeTurkey->update([
+            'nombre' => 'Pavo grande renombrado',
+            'nombre_normalizado' => 'pavo grande renombrado',
+            'modo_precio' => ProductoDespacho::PRICE_MODE_UNIT,
+            'precio_venta' => '88.0000',
+            'merma_gramos_unidad' => 888,
+            'estado' => VariacionProductoDespacho::STATUS_INACTIVE,
+        ]);
+        DB::table('terceros')->where('id', $this->clientId)->update([
+            'numero_documento' => '20000000000',
+            'nombre_razon_social' => 'Cliente renombrado',
+            'estado' => Tercero::STATUS_INACTIVE,
+            'updated_at' => now(),
+        ]);
+
+        $updated = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.client.document', '20123456789')
+            ->assertJsonPath('data.client.name', 'Cliente avícola')
+            ->assertJsonPath('data.weighings.0.product.name', 'Pavo')
+            ->assertJsonPath('data.weighings.0.variation.name', 'Pavo grande')
+            ->assertJsonPath('data.weighings.0.price_mode', ProductoDespacho::PRICE_MODE_KG)
+            ->assertJsonPath('data.weighings.0.catalog_waste_grams_per_unit', 30);
+        $this->assertEqualsWithDelta(20, $updated->json('data.weighings.0.catalog_price'), 0.0001);
+        $this->assertEqualsWithDelta(21, $updated->json('data.weighings.0.unit_price'), 0.0001);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $ticket['weighings'][0]['id'],
+            'producto_nombre_snapshot' => 'Pavo',
+            'variacion_nombre_snapshot' => 'Pavo grande',
+            'modo_precio_snapshot' => ProductoDespacho::PRICE_MODE_KG,
+            'precio_catalogo_snapshot' => 20,
+            'merma_catalogo_gramos_unidad' => 30,
+        ]);
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'cliente_id' => $this->clientId,
+            'cliente_numero_documento_snapshot' => '20123456789',
+            'cliente_nombre_snapshot' => 'Cliente avícola',
+        ]);
+
+        $changedInactiveSelection = $this->updatePayload($updated->json('data'), [
+            'correction_reason' => 'Intento de cambiar la selección de un producto inactivo',
+        ]);
+        $changedInactiveSelection['weighings'][0] = [
+            ...$changedInactiveSelection['weighings'][0],
+            'variation_id' => null,
+            'price_mode' => ProductoDespacho::PRICE_MODE_UNIT,
+            'unit_price' => '99.00',
+            'waste_grams_per_unit' => 999,
+            'waste_total_grams' => 1998,
+        ];
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $changedInactiveSelection,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.product_id');
+
+        $inactiveProduct = $this->createProduct(
+            'Producto inactivo nuevo',
+            ProductoDespacho::PRICE_MODE_KG,
+            '7.0000',
+            10,
+            ProductoDespacho::STATUS_INACTIVE,
+        );
+        $invalidProduct = $this->updatePayload($updated->json('data'), [
+            'correction_reason' => 'Intento de seleccionar producto inactivo',
+        ]);
+        $invalidProduct['weighings'][0] = [
+            ...$invalidProduct['weighings'][0],
+            'product_id' => $inactiveProduct->id,
+            'variation_id' => null,
+            'price_mode' => ProductoDespacho::PRICE_MODE_KG,
+            'unit_price' => '7.00',
+            'waste_grams_per_unit' => 10,
+            'waste_total_grams' => 20,
+        ];
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $invalidProduct,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.product_id');
+
+        $inactiveVariation = $this->createVariation(
+            $this->eggs,
+            'Variación inactiva nueva',
+            ProductoDespacho::PRICE_MODE_UNIT,
+            '0.90',
+            3,
+            VariacionProductoDespacho::STATUS_INACTIVE,
+        );
+        $invalidVariation = $this->updatePayload($updated->json('data'), [
+            'correction_reason' => 'Intento de seleccionar variación inactiva',
+        ]);
+        $invalidVariation['weighings'][0] = [
+            ...$invalidVariation['weighings'][0],
+            'product_id' => $this->eggs->id,
+            'variation_id' => $inactiveVariation->id,
+            'price_mode' => ProductoDespacho::PRICE_MODE_UNIT,
+            'unit_price' => '0.90',
+            'waste_grams_per_unit' => 3,
+            'waste_total_grams' => 6,
+        ];
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $invalidVariation,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('weighings.0.variation_id');
+
+        $inactiveClientId = $this->createClient(
+            $this->user->empresa_id,
+            'Cliente inactivo nuevo',
+            '20777777777',
+            Tercero::STATUS_INACTIVE,
+        );
+        $invalidClient = $this->updatePayload($updated->json('data'), [
+            'client_id' => $inactiveClientId,
+            'correction_reason' => 'Intento de seleccionar cliente inactivo',
+        ]);
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $invalidClient,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('client_id');
+
+        $this->assertSame(
+            1,
+            DB::table('auditoria_eventos')
+                ->where('entidad', 'tickets_despacho_productos')
+                ->where('entidad_id', (string) $ticket['id'])
+                ->where('accion', 'CORREGIR')
+                ->count(),
+        );
+    }
+
+    public function test_ticket_correction_unlinks_scale_evidence_when_time_or_weight_changes(): void
+    {
+        $capturedAt = now('America/Lima')->subSeconds(30)->toIso8601String();
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [[
+                ...$this->weighing(
+                    product: $this->turkey,
+                    quantity: 1,
+                    price: '18.00',
+                    readWeight: '4.500',
+                    waste: 25,
+                ),
+                'weight_source' => Balanza::CODE_PRODUCT_DISPATCH,
+                'scale_reading' => [
+                    'raw_frame' => 'ST,GS,+004.500kg',
+                    'connection_mode' => 'serial',
+                    'device_name' => 'COM7',
+                    'captured_at' => $capturedAt,
+                ],
+            ]]),
+        )->assertCreated()->json('data');
+        $weighingId = (int) $ticket['weighings'][0]['id'];
+        $readingId = (int) DB::table('pesadas_despacho_productos')
+            ->where('id', $weighingId)
+            ->value('lectura_balanza_id');
+        $registeredBefore = (string) DB::table('tickets_despacho_productos')
+            ->where('id', $ticket['id'])
+            ->value('registrado_at');
+        $weighedBefore = (string) DB::table('pesadas_despacho_productos')
+            ->where('id', $weighingId)
+            ->value('pesada_at');
+        $newRegisteredAt = now('America/Lima')->subHours(2)->startOfMinute();
+        $preservePayload = $this->updatePayload($ticket, [
+            'registered_at' => $newRegisteredAt->format('Y-m-d\TH:i'),
+            'correction_reason' => 'Ajustar hora sin cambiar el peso capturado',
+        ]);
+
+        $corrected = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $preservePayload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.weighings.0.id', $weighingId)
+            ->assertJsonPath('data.weighings.0.weight_source', 'MANUAL');
+        $registeredAfter = (string) DB::table('tickets_despacho_productos')
+            ->where('id', $ticket['id'])
+            ->value('registrado_at');
+        $weighedAfter = (string) DB::table('pesadas_despacho_productos')
+            ->where('id', $weighingId)
+            ->value('pesada_at');
+
+        $this->assertGreaterThan(0, $readingId);
+        $this->assertSame(
+            strtotime($registeredAfter) - strtotime($registeredBefore),
+            strtotime($weighedAfter) - strtotime($weighedBefore),
+        );
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $weighingId,
+            'lectura_balanza_id' => null,
+            'origen_peso' => 'MANUAL',
+            'peso_leido_kg' => 4.5,
+        ]);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $readingId,
+            'trama_cruda' => 'ST,GS,+004.500kg',
+        ]);
+
+        $changedPayload = $this->updatePayload($corrected->json('data'), [
+            'registered_at' => $corrected->json('data.registered_at_local'),
+            'correction_reason' => 'Corregir un peso que ya no conserva la lectura',
+        ]);
+        $changedPayload['weighings'][0]['read_weight_kg'] = '4.750';
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $changedPayload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.weighings.0.weight_source', 'MANUAL');
+
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $weighingId,
+            'lectura_balanza_id' => null,
+            'origen_peso' => 'MANUAL',
+            'peso_leido_kg' => 4.75,
+        ]);
+        $this->assertDatabaseCount('lecturas_balanza', 1);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $readingId,
+            'trama_cruda' => 'ST,GS,+004.500kg',
+        ]);
+    }
+
+    public function test_ticket_correction_rejects_invalid_ambiguous_and_out_of_range_local_times(): void
+    {
+        DB::table('sucursales')->where('id', $this->branchId)->update([
+            'zona_horaria' => 'America/Los_Angeles',
+        ]);
+        $this->travelTo(CarbonImmutable::parse('2026-12-01 12:00:00', 'America/Los_Angeles'));
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $storedRegisteredAt = (string) DB::table('tickets_despacho_productos')
+            ->where('id', $ticket['id'])
+            ->value('registrado_at');
+
+        foreach ([
+            '2026-03-08T02:30:00',
+            '2026-11-01T01:30:00',
+            '1969-12-31T23:59:59',
+        ] as $invalidLocalTime) {
+            $payload = $this->updatePayload($ticket, [
+                'registered_at' => $invalidLocalTime,
+                'correction_reason' => 'Intentar una fecha local inválida',
+            ]);
+
+            $this->putJson(
+                "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+                $payload,
+            )
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('registered_at');
+        }
+
+        $this->assertSame(
+            $storedRegisteredAt,
+            (string) DB::table('tickets_despacho_productos')
+                ->where('id', $ticket['id'])
+                ->value('registrado_at'),
+        );
+    }
+
+    public function test_new_line_uses_the_historical_operating_clock_when_ticket_time_is_unchanged(): void
+    {
+        $historicalTime = now('America/Lima')->subDays(2)->setTime(10, 15, 27);
+        $originalWeighing = $this->weighing(product: $this->eggs);
+        $originalWeighing['weighed_at'] = $historicalTime->toIso8601String();
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$originalWeighing]),
+        )->assertCreated()->json('data');
+        $originalWeighedAt = (string) DB::table('pesadas_despacho_productos')
+            ->where('id', $ticket['weighings'][0]['id'])
+            ->value('pesada_at');
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        $payload = $this->updatePayload($ticket, [
+            'registered_at' => $ticket['registered_at_local'],
+            'correction_reason' => 'Agregar una pesada a un despacho histórico',
+        ]);
+        $payload['weighings'][] = [
+            'id' => null,
+            'product_id' => $this->eggs->id,
+            'variation_id' => null,
+            'quantity' => 2,
+            'price_mode' => ProductoDespacho::PRICE_MODE_UNIT,
+            'unit_price' => '0.75',
+            'waste_grams_per_unit' => 2,
+            'waste_total_grams' => 4,
+            'tare_grams' => 0,
+            'read_weight_kg' => '1.000',
+        ];
+
+        $updated = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonCount(2, 'data.weighings')
+            ->assertJsonPath('data.operating_date', $ticket['operating_date']);
+        $newWeighingId = (int) $updated->json('data.weighings.1.id');
+
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $newWeighingId,
+            'pesada_at' => $originalWeighedAt,
+            'origen_peso' => 'MANUAL',
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'fecha_emision' => $ticket['operating_date'],
+            'fecha_vencimiento' => $ticket['operating_date'],
+        ]);
+    }
+
+    public function test_title_only_correction_preserves_ticket_and_weighing_seconds(): void
+    {
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update([
+            'hora_corte_operativo' => '21:00:00',
+        ]);
+        $this->travelTo(now('America/Lima')->startOfDay()->setTime(20, 30, 37));
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $ticketBefore = (string) DB::table('tickets_despacho_productos')
+            ->where('id', $ticket['id'])
+            ->value('registrado_at');
+        $weighingBefore = (string) DB::table('pesadas_despacho_productos')
+            ->where('id', $ticket['weighings'][0]['id'])
+            ->value('pesada_at');
+        $this->assertStringEndsWith(':37', $ticketBefore);
+        $this->assertStringEndsWith(':37', $weighingBefore);
+        $this->assertStringEndsWith(':37', $ticket['registered_at_local']);
+        $operatingDateBefore = now('America/Lima')->format('Y-m-d');
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        $this->assertSame($operatingDateBefore, $ticket['operating_date']);
+
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update([
+            'hora_corte_operativo' => '20:00:00',
+        ]);
+
+        $payload = $this->updatePayload($ticket, [
+            'registered_at' => $ticket['registered_at_local'],
+            'ticket_title' => 'CORRECCIÓN SIN CAMBIAR LA HORA',
+            'correction_reason' => 'Corregir únicamente el título impreso',
+        ]);
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'CORRECCIÓN SIN CAMBIAR LA HORA')
+            ->assertJsonPath('data.registered_at_local', $ticket['registered_at_local']);
+
+        $this->assertSame(
+            $ticketBefore,
+            (string) DB::table('tickets_despacho_productos')
+                ->where('id', $ticket['id'])
+                ->value('registrado_at'),
+        );
+        $this->assertSame(
+            $weighingBefore,
+            (string) DB::table('pesadas_despacho_productos')
+                ->where('id', $ticket['weighings'][0]['id'])
+                ->value('pesada_at'),
+        );
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'fecha_operativa' => $operatingDateBefore,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'fecha_emision' => $operatingDateBefore,
+            'fecha_vencimiento' => $operatingDateBefore,
+        ]);
+    }
+
+    public function test_scale_and_weighing_keep_the_branch_clock_outside_the_app_timezone(): void
+    {
+        DB::table('sucursales')->where('id', $this->branchId)->update([
+            'zona_horaria' => 'America/Los_Angeles',
+        ]);
+        $this->travelTo(now('America/Los_Angeles')->startOfDay()->setTime(10, 30, 37));
+        $weighedAt = now('America/Los_Angeles')->subMinute();
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [[
+                ...$this->weighing(product: $this->eggs),
+                'weight_source' => Balanza::CODE_PRODUCT_DISPATCH,
+                'weighed_at' => $weighedAt->toIso8601String(),
+                'scale_reading' => [
+                    'raw_frame' => 'ST,GS,+001.000kg',
+                    'captured_at' => $weighedAt->toIso8601String(),
+                ],
+            ]]),
+        )->assertCreated()->json('data');
+        $expectedBranchClock = $weighedAt->format('Y-m-d H:i:s');
+        $weighing = DB::table('pesadas_despacho_productos')
+            ->where('id', $ticket['weighings'][0]['id'])
+            ->first();
+        $readingClock = (string) DB::table('lecturas_balanza')
+            ->where('id', $weighing->lectura_balanza_id)
+            ->value('capturada_at');
+
+        $this->assertSame($expectedBranchClock, (string) $weighing->pesada_at);
+        $this->assertSame($expectedBranchClock, $readingClock);
+        $this->assertSame(
+            $weighedAt->getTimestamp(),
+            strtotime((string) $ticket['weighings'][0]['weighed_at']),
+        );
+
+        $payload = $this->updatePayload($ticket, [
+            'registered_at' => $ticket['registered_at_local'],
+            'ticket_title' => 'CORRECCIÓN EN OTRA ZONA HORARIA',
+            'correction_reason' => 'Validar que se conserve el reloj de la sucursal',
+        ]);
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )->assertOk();
+
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $ticket['weighings'][0]['id'],
+            'pesada_at' => $expectedBranchClock,
+            'lectura_balanza_id' => $weighing->lectura_balanza_id,
+        ]);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $weighing->lectura_balanza_id,
+            'capturada_at' => $expectedBranchClock,
+        ]);
+    }
+
+    public function test_ticket_search_treats_sql_wildcards_and_escape_character_as_literals(): void
+    {
+        $literalClientId = $this->createClient(
+            $this->user->empresa_id,
+            'Cliente 100% _ ! literal',
+            '20666666666',
+        );
+        $literalTicket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($literalClientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $plainClientId = $this->createClient(
+            $this->user->empresa_id,
+            'Cliente sin caracteres especiales',
+            '20555555555',
+        );
+        $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($plainClientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated();
+
+        foreach (['%', '_', '!'] as $literal) {
+            $this->getJson('/api/v1/despacho-productos/tickets?search='.urlencode($literal))
+                ->assertOk()
+                ->assertJsonCount(1, 'data.tickets')
+                ->assertJsonPath('data.tickets.0.id', $literalTicket['id'])
+                ->assertJsonPath('data.summary.tickets', 1)
+                ->assertJsonPath('data.applied_filters.search', $literal);
+        }
+    }
+
     public function test_operation_endpoints_require_the_product_dispatch_module(): void
     {
         $unauthorized = User::factory()->create();
@@ -1222,6 +2394,9 @@ class ProductDispatchOperationApiTest extends TestCase
             'waste_presets' => [0, 50, 100],
         ])->assertForbidden();
         $this->postJson('/api/v1/despacho-productos/tickets', [])->assertForbidden();
+        $this->getJson('/api/v1/despacho-productos/tickets')->assertForbidden();
+        $this->getJson('/api/v1/despacho-productos/tickets/1')->assertForbidden();
+        $this->putJson('/api/v1/despacho-productos/tickets/1', [])->assertForbidden();
     }
 
     /**
@@ -1236,6 +2411,40 @@ class ProductDispatchOperationApiTest extends TestCase
             'client_id' => $clientId,
             'weighings' => $weighings,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $ticket
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function updatePayload(array $ticket, array $overrides = []): array
+    {
+        $payload = [
+            'version' => $ticket['version'],
+            'correction_reason' => 'Corrección de prueba con trazabilidad',
+            'ticket_title' => $ticket['ticket_title'],
+            'list_number' => $ticket['list_number'],
+            'client_id' => $ticket['client']['id'] ?? null,
+            'registered_at' => now('America/Lima')->subMinute()->format('Y-m-d\TH:i'),
+            'weighings' => collect($ticket['weighings'])
+                ->map(fn (array $weighing): array => [
+                    'id' => $weighing['id'],
+                    'product_id' => $weighing['product']['id'],
+                    'variation_id' => $weighing['variation']['id'] ?? null,
+                    'quantity' => $weighing['quantity'],
+                    'price_mode' => $weighing['price_mode'],
+                    'unit_price' => number_format((float) $weighing['unit_price'], 2, '.', ''),
+                    'waste_grams_per_unit' => $weighing['waste_grams_per_unit'],
+                    'waste_total_grams' => $weighing['waste_total_grams'],
+                    'tare_grams' => $weighing['tare_grams'],
+                    'read_weight_kg' => number_format((float) $weighing['read_weight_kg'], 3, '.', ''),
+                ])
+                ->values()
+                ->all(),
+        ];
+
+        return [...$payload, ...$overrides];
     }
 
     /** @return array<string, mixed> */

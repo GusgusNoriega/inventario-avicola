@@ -84,6 +84,23 @@
           </span>
           <span class="product-dispatch-menu-action">Configurar <span aria-hidden="true">→</span></span>
         </a>
+
+        <a class="product-dispatch-menu-card card is-history" href="{{ route('despacho-productos.tickets') }}">
+          <span class="product-dispatch-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"></path>
+              <path d="M9 8h6M9 12h4M9 16h3"></path>
+              <circle cx="16.5" cy="15.5" r="2.5"></circle>
+              <path d="m18.3 17.3 2.2 2.2"></path>
+            </svg>
+          </span>
+          <span class="product-dispatch-menu-copy">
+            <small>Consulta y corrección</small>
+            <strong>Tickets de despacho</strong>
+            <span>Busca, revisa, edita por completo o vuelve a imprimir cualquier ticket de productos.</span>
+          </span>
+          <span class="product-dispatch-menu-action">Ver tickets <span aria-hidden="true">→</span></span>
+        </a>
       </nav>
     </section>
 

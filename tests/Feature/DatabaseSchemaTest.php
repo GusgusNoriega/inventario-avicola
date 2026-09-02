@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(118, $migrationFiles);
+        $this->assertCount(120, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -32,7 +32,8 @@ class DatabaseSchemaTest extends TestCase
                 '2026_07_12_000009_add_financial_permissions.php',
                 '2026_07_14_000004_add_purchase_permissions.php',
                 '2026_07_14_000005_backfill_legacy_dispatch_purchases.php',
-                '2026_07_15_000001_set_standard_tray_weight.php' => 0,
+                '2026_07_15_000001_set_standard_tray_weight.php',
+                '2026_09_02_000001_add_product_dispatch_ticket_management_permission.php' => 0,
                 '2026_08_01_000002_add_provider_report_module.php',
                 '2026_08_14_000001_add_second_wholesale_dispatch_module.php',
                 '2026_08_15_000002_add_java_680_to_tipos_java_table.php' => 0,
@@ -184,7 +185,7 @@ class DatabaseSchemaTest extends TestCase
             'costos_compra_pesadas' => ['pesada_id', 'proveedor_id', 'precio_historial_id', 'precio_kg', 'peso_kg', 'importe', 'estado', 'origen', 'created_by'],
             'comprobantes' => ['operacion', 'naturaleza', 'codigo', 'origen_codigo', 'origen_clave', 'total', 'saldo_pendiente', 'contraparte_tipo_documento_snapshot', 'contraparte_numero_documento_snapshot', 'contraparte_nombre_snapshot', 'contraparte_direccion_snapshot', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'comprobante_detalles' => ['comprobante_id', 'tipo_pollo_id', 'producto_despacho_id', 'variacion_producto_despacho_id', 'descripcion', 'cantidad_aves', 'cantidad_unidades', 'peso_neto_kg', 'modo_precio', 'precio_kg', 'precio_unitario', 'subtotal'],
-            'tickets_despacho_productos' => ['empresa_id', 'sucursal_id', 'referencia_externa', 'numero_lista', 'codigo', 'titulo_ticket_snapshot', 'fecha_operativa', 'cliente_id', 'tipo_cliente', 'cliente_nombre_snapshot', 'cantidad_total', 'peso_leido_total_kg', 'merma_total_gramos', 'tara_total_gramos', 'peso_neto_total_kg', 'subtotal', 'total', 'estado', 'registrado_at', 'created_by'],
+            'tickets_despacho_productos' => ['empresa_id', 'sucursal_id', 'referencia_externa', 'numero_lista', 'codigo', 'titulo_ticket_snapshot', 'mensaje_ticket_snapshot', 'fecha_operativa', 'cliente_id', 'tipo_cliente', 'cliente_nombre_snapshot', 'cantidad_total', 'peso_leido_total_kg', 'merma_total_gramos', 'tara_total_gramos', 'peso_neto_total_kg', 'subtotal', 'total', 'estado', 'registrado_at', 'created_by'],
             'pesadas_despacho_productos' => ['ticket_despacho_producto_id', 'numero', 'producto_despacho_id', 'variacion_producto_despacho_id', 'lectura_balanza_id', 'producto_nombre_snapshot', 'variacion_nombre_snapshot', 'modo_precio_snapshot', 'precio_catalogo_snapshot', 'precio_venta_snapshot', 'origen_precio', 'cantidad', 'origen_peso', 'peso_leido_kg', 'merma_catalogo_gramos_unidad', 'merma_aplicada_gramos_unidad', 'merma_total_gramos', 'tara_gramos', 'peso_neto_kg', 'importe', 'pesada_at', 'created_by'],
             'pagos' => ['empresa_id', 'codigo', 'tercero_id', 'tipo', 'cliente_id', 'proveedor_id', 'cuenta_origen_id', 'cuenta_destino_id', 'metodo_pago_id', 'direccion', 'fecha_hora', 'metodo', 'referencia', 'importe', 'estado', 'idempotency_key', 'reversa_de_pago_id', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'pago_aplicaciones' => ['pago_id', 'comprobante_id', 'lado', 'importe_aplicado', 'created_by', 'created_at'],
@@ -234,6 +235,14 @@ class DatabaseSchemaTest extends TestCase
         $productTicketColumns = collect(Schema::getColumns('tickets_despacho_productos'))->keyBy('name');
         $this->assertTrue($productTicketColumns->get('numero_lista')['nullable']);
         $this->assertTrue($productTicketColumns->get('titulo_ticket_snapshot')['nullable']);
+        $this->assertTrue($productTicketColumns->get('mensaje_ticket_snapshot')['nullable']);
+        $productTicketIndexes = collect(Schema::getIndexes('tickets_despacho_productos'))
+            ->keyBy('name');
+        $this->assertSame(
+            ['empresa_id', 'sucursal_id', 'registrado_at', 'id'],
+            $productTicketIndexes
+                ->get('ticket_producto_empresa_sucursal_registro_index')['columns'],
+        );
         $this->assertFalse(Schema::hasColumn('cuentas_financieras', 'saldo_actual'));
 
         $paymentIndexes = collect(Schema::getIndexes('pagos'))->keyBy('name');
@@ -371,6 +380,75 @@ class DatabaseSchemaTest extends TestCase
                     ->select('id'))
                 ->count()
         );
+    }
+
+    public function test_product_dispatch_ticket_permission_migration_backfills_related_roles_and_rolls_back(): void
+    {
+        $user = User::factory()->create();
+        $modulePermissionId = (int) DB::table('permisos')
+            ->where('codigo', 'MODULO_DESPACHO_PRODUCTOS')
+            ->value('id');
+        $dispatchPermissionId = (int) DB::table('permisos')
+            ->where('codigo', 'PRODUCTOS_DESPACHO_DESPACHAR')
+            ->value('id');
+        $unrelatedPermissionId = (int) DB::table('permisos')
+            ->where('codigo', 'MODULO_DIRECTORIO')
+            ->value('id');
+        $roleIds = collect([
+            'MODULO_PRODUCTOS_EXISTENTE' => $modulePermissionId,
+            'DESPACHAR_PRODUCTOS_EXISTENTE' => $dispatchPermissionId,
+            'ROL_NO_RELACIONADO' => $unrelatedPermissionId,
+        ])->mapWithKeys(function (int $permissionId, string $code) use ($user): array {
+            $roleId = (int) DB::table('roles')->insertGetId([
+                'empresa_id' => $user->empresa_id,
+                'codigo' => $code,
+                'nombre' => str_replace('_', ' ', $code),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            DB::table('rol_permisos')->insert([
+                'rol_id' => $roleId,
+                'permiso_id' => $permissionId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return [$code => $roleId];
+        });
+        $migration = require database_path(
+            'migrations/2026_09_02_000001_add_product_dispatch_ticket_management_permission.php'
+        );
+
+        $migration->down();
+        $this->assertDatabaseMissing('permisos', [
+            'codigo' => 'PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
+        ]);
+
+        $migration->up();
+        $ticketPermissionId = (int) DB::table('permisos')
+            ->where('codigo', 'PRODUCTOS_DESPACHO_TICKETS_GESTIONAR')
+            ->value('id');
+
+        $this->assertGreaterThan(0, $ticketPermissionId);
+        foreach ([
+            $roleIds['MODULO_PRODUCTOS_EXISTENTE'],
+            $roleIds['DESPACHAR_PRODUCTOS_EXISTENTE'],
+        ] as $roleId) {
+            $this->assertDatabaseHas('rol_permisos', [
+                'rol_id' => $roleId,
+                'permiso_id' => $ticketPermissionId,
+            ]);
+        }
+        $this->assertDatabaseMissing('rol_permisos', [
+            'rol_id' => $roleIds['ROL_NO_RELACIONADO'],
+            'permiso_id' => $ticketPermissionId,
+        ]);
+
+        $migration->down();
+        $this->assertDatabaseMissing('permisos', [
+            'codigo' => 'PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
+        ]);
+        $migration->up();
     }
 
     public function test_active_purchase_document_migration_rolls_back_and_can_be_applied_again(): void
@@ -555,6 +633,83 @@ class DatabaseSchemaTest extends TestCase
         ]));
     }
 
+    public function test_product_dispatch_ticket_message_snapshot_migration_rolls_back_and_reapplies(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_09_02_000002_add_message_snapshot_to_product_dispatch_tickets.php'
+        );
+
+        $this->assertTrue(Schema::hasColumn(
+            'tickets_despacho_productos',
+            'mensaje_ticket_snapshot',
+        ));
+        $this->assertTrue(collect(Schema::getIndexes('tickets_despacho_productos'))
+            ->contains(fn (array $index): bool => $index['name']
+                === 'ticket_producto_empresa_sucursal_registro_index'));
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn(
+            'tickets_despacho_productos',
+            'mensaje_ticket_snapshot',
+        ));
+        $this->assertFalse(collect(Schema::getIndexes('tickets_despacho_productos'))
+            ->contains(fn (array $index): bool => $index['name']
+                === 'ticket_producto_empresa_sucursal_registro_index'));
+
+        $user = User::factory()->create();
+        DB::table('empresas')->where('id', $user->empresa_id)->update([
+            'mensaje_ticket' => 'Mensaje heredado al desplegar',
+        ]);
+        $branchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'codigo' => 'SNAPSHOT-MSG',
+            'nombre' => 'Sucursal snapshot mensaje',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $legacyTicketId = DB::table('tickets_despacho_productos')->insertGetId([
+            'empresa_id' => $user->empresa_id,
+            'sucursal_id' => $branchId,
+            'referencia_externa' => (string) Str::uuid(),
+            'numero_lista' => 1,
+            'codigo' => 'DP-MENSAJE-LEGACY',
+            'titulo_ticket_snapshot' => 'DESPACHO LEGACY',
+            'fecha_operativa' => now()->toDateString(),
+            'tipo_cliente' => 'VENTA_PUBLICO',
+            'cliente_nombre_snapshot' => 'Venta al público',
+            'moneda' => 'PEN',
+            'cantidad_total' => 1,
+            'peso_leido_total_kg' => 1,
+            'merma_total_gramos' => 0,
+            'tara_total_gramos' => 0,
+            'peso_neto_total_kg' => 1,
+            'subtotal' => 1,
+            'total' => 1,
+            'estado' => 'REGISTRADO',
+            'registrado_at' => now(),
+            'created_by' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn(
+            'tickets_despacho_productos',
+            'mensaje_ticket_snapshot',
+        ));
+        $this->assertTrue(collect(Schema::getIndexes('tickets_despacho_productos'))
+            ->contains(fn (array $index): bool => $index['name']
+                === 'ticket_producto_empresa_sucursal_registro_index'));
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $legacyTicketId,
+            'mensaje_ticket_snapshot' => 'Mensaje heredado al desplegar',
+        ]);
+    }
+
     public function test_database_seeder_keeps_financial_catalogs_and_admin_permissions(): void
     {
         $this->seed();
@@ -597,13 +752,14 @@ class DatabaseSchemaTest extends TestCase
 
         foreach ([$administratorId, $operatorId] as $roleId) {
             $this->assertSame(
-                2,
+                3,
                 DB::table('rol_permisos')
                     ->where('rol_id', $roleId)
                     ->whereIn('permiso_id', DB::table('permisos')
                         ->whereIn('codigo', [
                             'PRODUCTOS_DESPACHO_GESTIONAR',
                             'PRODUCTOS_DESPACHO_DESPACHAR',
+                            'PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
                         ])
                         ->select('id'))
                     ->count()

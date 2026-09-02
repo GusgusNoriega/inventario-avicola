@@ -211,3 +211,19 @@ test("el impresor tolera una respuesta envuelta como data.ticket", () => {
   assert.match(html, /PD-ENVUELTO/);
   assert.equal((html.match(/Sin detalle/g) || []).length, 2);
 });
+
+test("un mensaje nulo del ticket elimina un pie almacenado previamente", () => {
+  const html = buildProductDispatchTicketHtml({
+    data: {
+      code: "PD-SIN-PIE",
+      ticket_message: null,
+      weighings: [],
+      totals: { amount: 0 }
+    }
+  }, {
+    ticketMessage: "Mensaje anterior del catálogo"
+  });
+
+  assert.doesNotMatch(html, /Mensaje anterior del catálogo/);
+  assert.doesNotMatch(html, /class="footer"/);
+});

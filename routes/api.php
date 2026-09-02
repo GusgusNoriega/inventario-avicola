@@ -373,16 +373,21 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('permission:PRODUCTOS_DESPACHO_GESTIONAR');
         });
     Route::prefix('despacho-productos')
-        ->middleware([
-            ...$productDispatchMiddleware,
-            'permission:PRODUCTOS_DESPACHO_DESPACHAR',
-        ])
+        ->middleware($productDispatchMiddleware)
         ->group(function (): void {
             Route::get('/catalogo', [ProductDispatchOperationController::class, 'catalog']);
-            Route::put('/configuracion', [ProductDispatchOperationController::class, 'updateConfiguration']);
-            Route::post('/tickets', [ProductDispatchOperationController::class, 'store']);
+            Route::get('/tickets', [ProductDispatchOperationController::class, 'index'])
+                ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR');
+            Route::put('/tickets/{ticket}', [ProductDispatchOperationController::class, 'update'])
+                ->whereNumber('ticket')
+                ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR');
+            Route::put('/configuracion', [ProductDispatchOperationController::class, 'updateConfiguration'])
+                ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR');
+            Route::post('/tickets', [ProductDispatchOperationController::class, 'store'])
+                ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR');
             Route::get('/tickets/{ticket}', [ProductDispatchOperationController::class, 'show'])
-                ->whereNumber('ticket');
+                ->whereNumber('ticket')
+                ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR');
         });
     Route::get('/despacho-minorista/catalogo', [RetailDispatchController::class, 'catalog'])
         ->middleware($retailOneMiddleware);

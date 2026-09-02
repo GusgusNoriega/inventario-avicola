@@ -100,13 +100,17 @@ class WebViewsTest extends TestCase
             ->assertSee('Abrir despacho')
             ->assertSee('Configurar ticket')
             ->assertSee('Comprobante exclusivo')
+            ->assertSee('Tickets de despacho')
+            ->assertSee('Consulta y corrección')
+            ->assertSee('Ver tickets')
             ->assertSee('href="'.route('despacho-productos.productos').'"', false)
             ->assertSee('href="'.route('despacho-productos.despacho').'"', false)
             ->assertSee('href="'.route('despacho-productos.configuracion-ticket').'"', false)
+            ->assertSee('href="'.route('despacho-productos.tickets').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
-            3,
+            4,
             substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
         );
 
@@ -222,6 +226,52 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('height: 100dvh', $stylesheet);
         $this->assertStringContainsString('color-scheme: dark', $stylesheet);
         $this->assertStringContainsString('touch-action: pan-x', $stylesheet);
+
+        $tickets = $this->get('/despacho-productos/tickets');
+        $tickets
+            ->assertOk()
+            ->assertSee('Tickets de despacho')
+            ->assertSee('Consulta el detalle completo de cada venta')
+            ->assertSee('id="productDispatchTickets"', false)
+            ->assertSee('data-api-base="/despacho-productos"', false)
+            ->assertSee('id="pdtSummaryTickets"', false)
+            ->assertSee('id="pdtSummaryAmount"', false)
+            ->assertSee('id="pdtFilters"', false)
+            ->assertSee('id="pdtSearch"', false)
+            ->assertSee('name="date_from"', false)
+            ->assertSee('name="date_to"', false)
+            ->assertSee('<option value="50">50 tickets</option>', false)
+            ->assertSee('id="pdtTicketList"', false)
+            ->assertSee('id="pdtPagination"', false)
+            ->assertSee('id="pdtEditorDialog"', false)
+            ->assertSee('name="ticket_title"', false)
+            ->assertSee('name="list_number"', false)
+            ->assertSee('name="client_id"', false)
+            ->assertSee('name="registered_at"', false)
+            ->assertSee('name="correction_reason"', false)
+            ->assertSee('id="pdtEditorLines"', false)
+            ->assertSee('id="pdtAddLine"', false)
+            ->assertSee('id="pdtSaveTicket"', false)
+            ->assertSee('href="'.route('despacho-productos.despacho').'"', false)
+            ->assertSee('href="'.route('despacho-productos.menu').'"', false)
+            ->assertSee(asset('js/despacho-productos-tickets.js'), false)
+            ->assertSee(asset('css/despacho-productos-tickets.css'), false);
+
+        $ticketJavascript = (string) file_get_contents(
+            public_path('js/despacho-productos-tickets.js'),
+        );
+        $ticketStylesheet = (string) file_get_contents(
+            public_path('css/despacho-productos-tickets.css'),
+        );
+
+        $this->assertStringContainsString('correction_reason', $ticketJavascript);
+        $this->assertStringContainsString('version', $ticketJavascript);
+        $this->assertStringContainsString('printProductDispatchTicket', $ticketJavascript);
+        $this->assertStringContainsString('Volver a imprimir', $ticketJavascript);
+        $this->assertStringContainsString('/tickets', $ticketJavascript);
+        $this->assertStringContainsString('.pdt-ticket-list', $ticketStylesheet);
+        $this->assertStringContainsString('.pdt-editor-dialog', $ticketStylesheet);
+        $this->assertStringContainsString('@media (max-width:', $ticketStylesheet);
     }
 
     public function test_install_application_view_exposes_the_direct_pwa_prompt(): void

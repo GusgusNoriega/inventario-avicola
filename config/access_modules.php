@@ -72,6 +72,7 @@ return [
             'technical_permissions' => [
                 'PRODUCTOS_DESPACHO_GESTIONAR',
                 'PRODUCTOS_DESPACHO_DESPACHAR',
+                'PRODUCTOS_DESPACHO_TICKETS_GESTIONAR',
             ],
             'legacy_permissions' => [],
         ],

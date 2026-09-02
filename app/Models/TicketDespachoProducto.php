@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'numero_lista',
     'codigo',
     'titulo_ticket_snapshot',
+    'mensaje_ticket_snapshot',
     'fecha_operativa',
     'cliente_id',
     'tipo_cliente',
