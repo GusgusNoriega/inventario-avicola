@@ -272,6 +272,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('.pdt-ticket-list', $ticketStylesheet);
         $this->assertStringContainsString('.pdt-editor-dialog', $ticketStylesheet);
         $this->assertStringContainsString('@media (max-width:', $ticketStylesheet);
+        $this->assertMatchesRegularExpression(
+            '/html\.product-dispatch-tickets-root,\s*body\.product-dispatch-tickets-page\s*\{[^}]*height:\s*auto;[^}]*overflow-y:\s*auto;/s',
+            $ticketStylesheet,
+        );
     }
 
     public function test_install_application_view_exposes_the_direct_pwa_prompt(): void

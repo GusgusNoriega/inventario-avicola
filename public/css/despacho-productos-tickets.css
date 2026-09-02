@@ -2,8 +2,15 @@
   color-scheme: dark;
 }
 
-html.product-dispatch-tickets-root {
+html.product-dispatch-tickets-root,
+body.product-dispatch-tickets-page {
+  height: auto;
   min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+html.product-dispatch-tickets-root {
   background: #05080c;
 }
 
@@ -12,7 +19,6 @@ body.product-dispatch-tickets-page {
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
-  overflow-x: hidden;
   color: var(--text-main);
   background:
     radial-gradient(circle at 8% 1%, rgba(117, 87, 170, 0.18), transparent 34rem),
