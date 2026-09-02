@@ -1356,6 +1356,9 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertNotFound();
         $this->putJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}", $update)
             ->assertNotFound();
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}", [
+            'version' => $ownTicket['version'],
+        ])->assertNotFound();
 
         $this->user->update(['sucursal_id' => $this->branchId]);
         $this->getJson('/api/v1/despacho-productos/tickets?per_page=20')
@@ -1392,6 +1395,9 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertNotFound();
         $this->putJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}", $update)
             ->assertNotFound();
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ownTicket['id']}", [
+            'version' => $ownTicket['version'],
+        ])->assertNotFound();
 
         $this->assertDatabaseHas('tickets_despacho_productos', [
             'id' => $ownTicket['id'],
@@ -2342,6 +2348,292 @@ class ProductDispatchOperationApiTest extends TestCase
         ]);
     }
 
+    public function test_ticket_correction_accepts_an_omitted_or_blank_reason_and_rejects_malformed_values(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $payload = $this->updatePayload($ticket, [
+            'ticket_title' => 'EDICIÓN SIN MOTIVO',
+        ]);
+        unset($payload['correction_reason']);
+
+        $this->travel(1)->seconds();
+        $updated = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $payload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'EDICIÓN SIN MOTIVO')
+            ->json('data');
+
+        $ticketAudit = DB::table('auditoria_eventos')
+            ->where('entidad', 'tickets_despacho_productos')
+            ->where('entidad_id', (string) $ticket['id'])
+            ->where('accion', 'CORREGIR')
+            ->latest('id')
+            ->firstOrFail();
+        $ticketAfter = json_decode((string) $ticketAudit->datos_despues, true, 512, JSON_THROW_ON_ERROR);
+        $this->assertArrayNotHasKey('correction_reason', $ticketAfter);
+        $this->assertArrayNotHasKey('motivo_correccion', $ticketAfter);
+
+        $blankPayload = $this->updatePayload($updated, [
+            'correction_reason' => '   ',
+            'ticket_title' => 'EDICIÓN CON MOTIVO VACÍO',
+        ]);
+        $this->travel(1)->seconds();
+        $blankUpdated = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $blankPayload,
+        )
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'EDICIÓN CON MOTIVO VACÍO')
+            ->json('data');
+
+        foreach (['x', ['motivo inválido']] as $invalidReason) {
+            $invalid = $this->updatePayload($blankUpdated, [
+                'correction_reason' => $invalidReason,
+            ]);
+            $this->putJson(
+                "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+                $invalid,
+            )
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('correction_reason');
+        }
+
+        $malformed = $this->updatePayload($blankUpdated, [
+            'ticket_title' => ['título inválido'],
+            'registered_at' => ['fecha inválida'],
+        ]);
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $malformed,
+        )
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['ticket_title', 'registered_at']);
+    }
+
+    public function test_ticket_can_be_logically_deleted_without_a_reason_and_preserves_traceability(): void
+    {
+        $capturedAt = now('America/Lima')->subSeconds(30)->toIso8601String();
+        $originalPayload = $this->payload($this->clientId, [[
+            ...$this->weighing(
+                product: $this->turkey,
+                readWeight: '4.500',
+                waste: 25,
+            ),
+            'weight_source' => Balanza::CODE_PRODUCT_DISPATCH,
+            'scale_reading' => [
+                'raw_frame' => 'ST,GS,+004.500kg',
+                'connection_mode' => 'serial',
+                'device_name' => 'COM7',
+                'captured_at' => $capturedAt,
+            ],
+        ]]);
+        $ticket = $this->postJson('/api/v1/despacho-productos/tickets', $originalPayload)
+            ->assertCreated()
+            ->json('data');
+        $weighingId = (int) $ticket['weighings'][0]['id'];
+        $readingId = (int) DB::table('pesadas_despacho_productos')
+            ->where('id', $weighingId)
+            ->value('lectura_balanza_id');
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('version');
+
+        $this->travel(1)->seconds();
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $ticket['version'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Ticket de despacho eliminado correctamente.');
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'codigo' => $ticket['code'],
+            'referencia_externa' => $originalPayload['draft_id'],
+            'estado' => TicketDespachoProducto::STATUS_DELETED,
+        ]);
+        $this->assertDatabaseHas('pesadas_despacho_productos', [
+            'id' => $weighingId,
+            'ticket_despacho_producto_id' => $ticket['id'],
+            'lectura_balanza_id' => $readingId,
+        ]);
+        $this->assertDatabaseHas('lecturas_balanza', [
+            'id' => $readingId,
+            'trama_cruda' => 'ST,GS,+004.500kg',
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'saldo_pendiente' => 0,
+            'estado' => 'ANULADO',
+            'anulada_por' => $this->user->id,
+            'motivo_anulacion' => null,
+        ]);
+        $this->assertDatabaseHas('comprobante_detalles', [
+            'comprobante_id' => $documentId,
+            'producto_despacho_id' => $this->turkey->id,
+        ]);
+        $this->assertDatabaseHas('comprobante_tickets_despacho_productos', [
+            'comprobante_id' => $documentId,
+            'ticket_despacho_producto_id' => $ticket['id'],
+        ]);
+
+        $this->getJson('/api/v1/despacho-productos/tickets')
+            ->assertOk()
+            ->assertJsonCount(0, 'data.tickets')
+            ->assertJsonPath('data.summary.tickets', 0);
+        $this->getJson("/api/v1/despacho-productos/tickets/{$ticket['id']}")
+            ->assertNotFound();
+        $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $this->updatePayload($ticket),
+        )->assertNotFound();
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $ticket['version'],
+        ])->assertNotFound();
+
+        $this->postJson('/api/v1/despacho-productos/tickets', $originalPayload)
+            ->assertConflict();
+        $newTicket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload(null, [$this->weighing(product: $this->eggs)]),
+        )->assertCreated()->json('data');
+        $this->assertNotSame($ticket['code'], $newTicket['code']);
+        $this->assertStringEndsWith('-002', $newTicket['code']);
+        $this->assertDatabaseCount('tickets_despacho_productos', 2);
+        $this->assertDatabaseCount('comprobantes', 2);
+
+        $ticketAudit = DB::table('auditoria_eventos')
+            ->where('entidad', 'tickets_despacho_productos')
+            ->where('entidad_id', (string) $ticket['id'])
+            ->where('accion', 'ELIMINAR')
+            ->firstOrFail();
+        $ticketBefore = json_decode((string) $ticketAudit->datos_antes, true, 512, JSON_THROW_ON_ERROR);
+        $ticketAfter = json_decode((string) $ticketAudit->datos_despues, true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(TicketDespachoProducto::STATUS_REGISTERED, $ticketBefore['estado']);
+        $this->assertSame(TicketDespachoProducto::STATUS_DELETED, $ticketAfter['estado']);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'empresa_id' => $this->user->empresa_id,
+            'usuario_id' => $this->user->id,
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $documentId,
+            'accion' => 'ANULAR',
+        ]);
+    }
+
+    public function test_ticket_deletion_rejects_stale_versions_and_any_historical_payment_application(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs, quantity: 10)]),
+        )->assertCreated()->json('data');
+        $originalVersion = $ticket['version'];
+        $update = $this->updatePayload($ticket, [
+            'ticket_title' => 'VERSIÓN MÁS RECIENTE',
+        ]);
+        unset($update['correction_reason']);
+        $this->travel(1)->seconds();
+        $updated = $this->putJson(
+            "/api/v1/despacho-productos/tickets/{$ticket['id']}",
+            $update,
+        )->assertOk()->json('data');
+
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $originalVersion,
+        ])->assertConflict();
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'estado' => TicketDespachoProducto::STATUS_REGISTERED,
+            'titulo_ticket_snapshot' => 'VERSIÓN MÁS RECIENTE',
+        ]);
+
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")
+            ->value('id');
+        DB::table('comprobantes')->where('id', $documentId)->update([
+            'saldo_pendiente' => '6.50',
+            'estado' => 'PARCIAL',
+        ]);
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $updated['version'],
+        ])
+            ->assertConflict()
+            ->assertJsonPath(
+                'message',
+                'El comprobante asociado tiene un saldo financiero inconsistente y no puede eliminarse.',
+            );
+        DB::table('comprobantes')->where('id', $documentId)->update([
+            'saldo_pendiente' => '7.50',
+            'estado' => 'PENDIENTE',
+        ]);
+        $paymentId = (int) DB::table('pagos')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->clientId,
+            'codigo' => 'COBRO-ANULADO-PRODUCTOS',
+            'tipo' => 'COBRO_CLIENTE',
+            'cliente_id' => $this->clientId,
+            'direccion' => 'ENTRADA',
+            'fecha_hora' => now(),
+            'metodo' => 'EFECTIVO',
+            'moneda' => 'PEN',
+            'importe' => '1.00',
+            'estado' => 'ANULADO',
+            'anulada_por' => $this->user->id,
+            'anulada_at' => now(),
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('pago_aplicaciones')->insert([
+            'pago_id' => $paymentId,
+            'comprobante_id' => $documentId,
+            'lado' => 'CXC',
+            'importe_aplicado' => '1.00',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+        ]);
+
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $updated['version'],
+        ])
+            ->assertConflict()
+            ->assertJsonPath(
+                'message',
+                'No se puede eliminar el ticket porque ya tiene cobros o pagos aplicados.',
+            );
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'],
+            'estado' => TicketDespachoProducto::STATUS_REGISTERED,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId,
+            'estado' => 'PENDIENTE',
+            'saldo_pendiente' => 7.50,
+        ]);
+        $this->assertDatabaseHas('pago_aplicaciones', [
+            'pago_id' => $paymentId,
+            'comprobante_id' => $documentId,
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'tickets_despacho_productos',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'ELIMINAR',
+        ]);
+        $this->assertDatabaseMissing('auditoria_eventos', [
+            'entidad' => 'comprobantes',
+            'entidad_id' => (string) $documentId,
+            'accion' => 'ANULAR',
+        ]);
+    }
+
     public function test_ticket_search_treats_sql_wildcards_and_escape_character_as_literals(): void
     {
         $literalClientId = $this->createClient(
@@ -2397,6 +2689,7 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->getJson('/api/v1/despacho-productos/tickets')->assertForbidden();
         $this->getJson('/api/v1/despacho-productos/tickets/1')->assertForbidden();
         $this->putJson('/api/v1/despacho-productos/tickets/1', [])->assertForbidden();
+        $this->deleteJson('/api/v1/despacho-productos/tickets/1', [])->assertForbidden();
     }
 
     /**

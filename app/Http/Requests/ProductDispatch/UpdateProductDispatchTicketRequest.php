@@ -18,7 +18,7 @@ class UpdateProductDispatchTicketRequest extends FormRequest
     {
         return [
             'version' => ['required', 'date'],
-            'correction_reason' => ['required', 'string', 'min:3', 'max:250'],
+            'correction_reason' => ['nullable', 'string', 'min:3', 'max:250'],
             'ticket_title' => ['required', 'string', 'max:180'],
             'list_number' => ['required', 'integer', 'between:1,8'],
             'client_id' => ['nullable', 'integer', 'min:1'],
@@ -78,15 +78,31 @@ class UpdateProductDispatchTicketRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $registeredAt = trim((string) $this->input('registered_at', ''));
+        $registeredAt = $this->input('registered_at');
 
-        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $registeredAt) === 1) {
-            $registeredAt .= ':00';
+        if (is_string($registeredAt)) {
+            $registeredAt = trim($registeredAt);
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $registeredAt) === 1) {
+                $registeredAt .= ':00';
+            }
+        }
+
+        $correctionReason = $this->input('correction_reason');
+        $ticketTitle = $this->input('ticket_title');
+
+        if (is_string($correctionReason)) {
+            $correctionReason = trim($correctionReason);
+            $correctionReason = $correctionReason !== '' ? $correctionReason : null;
+        }
+
+        if (is_string($ticketTitle)) {
+            $ticketTitle = trim($ticketTitle);
         }
 
         $this->merge([
-            'correction_reason' => trim((string) $this->input('correction_reason', '')),
-            'ticket_title' => trim((string) $this->input('ticket_title', '')),
+            'correction_reason' => $correctionReason,
+            'ticket_title' => $ticketTitle,
             'registered_at' => $registeredAt,
         ]);
     }
@@ -96,7 +112,6 @@ class UpdateProductDispatchTicketRequest extends FormRequest
     {
         return [
             'version.required' => 'Actualiza el detalle del ticket antes de guardar.',
-            'correction_reason.required' => 'Indica el motivo de la corrección.',
             'correction_reason.min' => 'El motivo de la corrección debe tener al menos 3 caracteres.',
             'ticket_title.required' => 'Indica el título que debe conservar el ticket.',
             'list_number.between' => 'El número de lista debe estar entre 1 y 8.',

@@ -162,6 +162,154 @@ class ProductDispatchSaleDocumentService
         return $documentId;
     }
 
+    public function voidForDeletedTicket(
+        int $companyId,
+        TicketDespachoProducto $ticket,
+        User $actor,
+        ?string $ip = null,
+    ): void {
+        $originKey = "VENTA:TICKET_PRODUCTOS:{$ticket->id}";
+        $documentIds = DB::table('comprobante_tickets_despacho_productos')
+            ->where('ticket_despacho_producto_id', $ticket->id)
+            ->pluck('comprobante_id')
+            ->merge(
+                DB::table('comprobantes')
+                    ->where('empresa_id', $companyId)
+                    ->where('origen_clave', $originKey)
+                    ->pluck('id'),
+            )
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($documentIds->isEmpty()) {
+            return;
+        }
+
+        $documents = DB::table('comprobantes')
+            ->where('empresa_id', $companyId)
+            ->whereIn('id', $documentIds->all())
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($documents->count() !== 1
+            || $documents->count() !== $documentIds->count()
+            || (string) $documents->first()->origen_clave !== $originKey) {
+            abort(409, 'El comprobante financiero asociado al ticket es inconsistente y no puede eliminarse.');
+        }
+
+        $applications = DB::table('pago_aplicaciones')
+            ->whereIn('comprobante_id', $documentIds->all())
+            ->orderBy('comprobante_id')
+            ->orderBy('pago_id')
+            ->lockForUpdate()
+            ->get(['pago_id', 'comprobante_id', 'lado', 'importe_aplicado']);
+
+        if ($applications->isNotEmpty()) {
+            abort(409, 'No se puede eliminar el ticket porque ya tiene cobros o pagos aplicados.');
+        }
+
+        $hasInconsistentBalance = $documents->contains(
+            fn (object $document): bool => $document->estado !== Comprobante::STATUS_VOIDED
+                && ($document->estado !== Comprobante::STATUS_PENDING
+                    || FinancialMoney::compare(
+                        (string) $document->total,
+                        (string) $document->saldo_pendiente,
+                    ) !== 0),
+        );
+
+        if ($hasInconsistentBalance) {
+            abort(409, 'El comprobante asociado tiene un saldo financiero inconsistente y no puede eliminarse.');
+        }
+
+        $hasOtherLinks = DB::table('comprobante_tickets_despacho_productos')
+            ->whereIn('comprobante_id', $documentIds->all())
+            ->where('ticket_despacho_producto_id', '!=', $ticket->id)
+            ->exists()
+            || DB::table('comprobante_tickets')
+                ->whereIn('comprobante_id', $documentIds->all())
+                ->exists()
+            || DB::table('comprobante_pesadas')
+                ->whereIn('comprobante_id', $documentIds->all())
+                ->exists()
+            || DB::table('compras')
+                ->whereIn('comprobante_id', $documentIds->all())
+                ->exists();
+
+        if ($hasOtherLinks) {
+            abort(409, 'El comprobante financiero asociado tiene otros documentos vinculados y no puede eliminarse.');
+        }
+
+        $details = DB::table('comprobante_detalles')
+            ->whereIn('comprobante_id', $documentIds->all())
+            ->orderBy('id')
+            ->get()
+            ->groupBy('comprobante_id');
+        $links = DB::table('comprobante_tickets_despacho_productos')
+            ->whereIn('comprobante_id', $documentIds->all())
+            ->get()
+            ->groupBy('comprobante_id');
+
+        foreach ($documents as $document) {
+            $documentId = (int) $document->id;
+            $now = now();
+            $after = [
+                ...(array) $document,
+                'saldo_pendiente' => '0.00',
+                'estado' => Comprobante::STATUS_VOIDED,
+                'updated_at' => $now,
+            ];
+
+            if ($document->estado !== Comprobante::STATUS_VOIDED) {
+                $after['anulada_por'] = (int) $actor->id;
+                $after['anulada_at'] = $now;
+                $after['motivo_anulacion'] = null;
+            }
+
+            DB::table('comprobantes')->where('id', $documentId)->update([
+                'saldo_pendiente' => $after['saldo_pendiente'],
+                'estado' => $after['estado'],
+                'anulada_por' => $after['anulada_por'],
+                'anulada_at' => $after['anulada_at'],
+                'motivo_anulacion' => $after['motivo_anulacion'],
+                'updated_at' => $after['updated_at'],
+            ]);
+
+            $this->audit->record(
+                $companyId,
+                (int) $actor->id,
+                'comprobantes',
+                $documentId,
+                'ANULAR',
+                [
+                    ...(array) $document,
+                    'detalles' => $details->get($documentId, collect())
+                        ->map(fn (object $detail): array => (array) $detail)
+                        ->values()
+                        ->all(),
+                    'tickets_despacho_productos' => $links->get($documentId, collect())
+                        ->map(fn (object $link): array => (array) $link)
+                        ->values()
+                        ->all(),
+                ],
+                [
+                    ...$after,
+                    'detalles' => $details->get($documentId, collect())
+                        ->map(fn (object $detail): array => (array) $detail)
+                        ->values()
+                        ->all(),
+                    'tickets_despacho_productos' => $links->get($documentId, collect())
+                        ->map(fn (object $link): array => (array) $link)
+                        ->values()
+                        ->all(),
+                ],
+                $ip,
+            );
+        }
+    }
+
     private function syncDetails(
         int $documentId,
         TicketDespachoProducto $ticket,

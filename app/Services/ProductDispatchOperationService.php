@@ -52,7 +52,8 @@ class ProductDispatchOperationService
 
         $query = TicketDespachoProducto::query()
             ->where('empresa_id', $companyId)
-            ->where('sucursal_id', (int) $branch->id);
+            ->where('sucursal_id', (int) $branch->id)
+            ->where('estado', TicketDespachoProducto::STATUS_REGISTERED);
 
         if ($search !== null) {
             $escaped = str_replace(
@@ -211,6 +212,10 @@ class ProductDispatchOperationService
                     ]);
                 }
 
+                if ($existing->estado === TicketDespachoProducto::STATUS_DELETED) {
+                    abort(409, 'Este despacho ya fue eliminado y no puede volver a registrarse con el mismo identificador.');
+                }
+
                 return [
                     'ticket' => $this->loadTicket($existing),
                     'already_registered' => true,
@@ -362,6 +367,7 @@ class ProductDispatchOperationService
             $ticket = TicketDespachoProducto::query()
                 ->where('empresa_id', $companyId)
                 ->where('sucursal_id', (int) $branch->id)
+                ->where('estado', TicketDespachoProducto::STATUS_REGISTERED)
                 ->lockForUpdate()
                 ->findOrFail($ticketId);
 
@@ -602,13 +608,21 @@ class ProductDispatchOperationService
             }
 
             $updatedTicket = $this->loadTicket($ticket->fresh());
+            $correctionReason = trim((string) ($data['correction_reason'] ?? ''));
             $this->saleDocuments->sync(
                 $companyId,
                 $updatedTicket,
                 $actor,
                 $ip,
-                trim((string) $data['correction_reason']),
+                $correctionReason !== '' ? $correctionReason : null,
             );
+            $after = $this->ticketAuditValues($updatedTicket);
+
+            if ($correctionReason !== '') {
+                $after['correction_reason'] = $correctionReason;
+                $after['motivo_correccion'] = $correctionReason;
+            }
+
             $this->audit->record(
                 $companyId,
                 (int) $actor->id,
@@ -616,15 +630,96 @@ class ProductDispatchOperationService
                 (int) $updatedTicket->id,
                 'CORREGIR',
                 $before,
-                [
-                    ...$this->ticketAuditValues($updatedTicket),
-                    'correction_reason' => trim((string) $data['correction_reason']),
-                    'motivo_correccion' => trim((string) $data['correction_reason']),
-                ],
+                $after,
                 $ip,
             );
 
             return $updatedTicket;
+        }, 3);
+    }
+
+    /**
+     * @param  object{id: int, zona_horaria: string}  $branch
+     */
+    public function deleteTicket(
+        int $companyId,
+        object $branch,
+        User $actor,
+        int $ticketId,
+        string $version,
+        ?string $ip = null,
+    ): void {
+        DB::transaction(function () use (
+            $companyId,
+            $branch,
+            $actor,
+            $ticketId,
+            $version,
+            $ip,
+        ): void {
+            $company = DB::table('empresas')
+                ->where('id', $companyId)
+                ->lockForUpdate()
+                ->first(['id']);
+
+            if (! $company) {
+                abort(404);
+            }
+
+            $lockedBranch = DB::table('sucursales')
+                ->where('id', $branch->id)
+                ->where('empresa_id', $companyId)
+                ->where('estado', 'ACTIVO')
+                ->lockForUpdate()
+                ->first(['id']);
+
+            if (! $lockedBranch) {
+                abort(404);
+            }
+
+            $ticket = TicketDespachoProducto::query()
+                ->where('empresa_id', $companyId)
+                ->where('sucursal_id', (int) $branch->id)
+                ->where('estado', TicketDespachoProducto::STATUS_REGISTERED)
+                ->lockForUpdate()
+                ->findOrFail($ticketId);
+            $this->assertCurrentVersion($ticket, $version);
+            $weighings = PesadaDespachoProducto::query()
+                ->where('ticket_despacho_producto_id', $ticket->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $ticket->load(['sucursal', 'cliente', 'creador']);
+            $ticket->setRelation('pesadas', $weighings);
+            $before = $this->ticketAuditValues($ticket);
+
+            $this->saleDocuments->voidForDeletedTicket(
+                $companyId,
+                $ticket,
+                $actor,
+                $ip,
+            );
+            $nextUpdatedAt = now()->startOfSecond();
+
+            if ($ticket->updated_at && $nextUpdatedAt->getTimestamp() <= $ticket->updated_at->getTimestamp()) {
+                $nextUpdatedAt = $ticket->updated_at->copy()->addSecond();
+            }
+
+            $ticket->estado = TicketDespachoProducto::STATUS_DELETED;
+            $ticket->setUpdatedAt($nextUpdatedAt);
+            $ticket->save();
+            $ticket->setRelation('pesadas', $weighings);
+
+            $this->audit->record(
+                $companyId,
+                (int) $actor->id,
+                'tickets_despacho_productos',
+                $ticketId,
+                'ELIMINAR',
+                $before,
+                $this->ticketAuditValues($ticket),
+                $ip,
+            );
         }, 3);
     }
 
@@ -634,7 +729,7 @@ class ProductDispatchOperationService
 
         if (! $ticket->updated_at
             || $expected->getTimestamp() !== $ticket->updated_at->getTimestamp()) {
-            abort(409, 'El ticket fue modificado por otro usuario. Actualiza el detalle antes de guardar.');
+            abort(409, 'El ticket fue modificado por otro usuario. Actualiza el detalle antes de continuar.');
         }
     }
 

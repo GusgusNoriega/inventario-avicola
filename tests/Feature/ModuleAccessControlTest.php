@@ -165,6 +165,7 @@ class ModuleAccessControlTest extends TestCase
             ['method' => 'GET', 'uri' => 'api/v1/despacho-productos/tickets'],
             ['method' => 'GET', 'uri' => 'api/v1/despacho-productos/tickets/{ticket}'],
             ['method' => 'PUT', 'uri' => 'api/v1/despacho-productos/tickets/{ticket}'],
+            ['method' => 'DELETE', 'uri' => 'api/v1/despacho-productos/tickets/{ticket}'],
         ] as $expected) {
             $apiRoute = $apiRoutes->first(fn ($candidate): bool => $candidate->uri() === $expected['uri']
                 && in_array($expected['method'], $candidate->methods(), true));

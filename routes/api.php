@@ -381,6 +381,9 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/tickets/{ticket}', [ProductDispatchOperationController::class, 'update'])
                 ->whereNumber('ticket')
                 ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR');
+            Route::delete('/tickets/{ticket}', [ProductDispatchOperationController::class, 'destroy'])
+                ->whereNumber('ticket')
+                ->middleware('permission:PRODUCTOS_DESPACHO_TICKETS_GESTIONAR');
             Route::put('/configuracion', [ProductDispatchOperationController::class, 'updateConfiguration'])
                 ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR');
             Route::post('/tickets', [ProductDispatchOperationController::class, 'store'])

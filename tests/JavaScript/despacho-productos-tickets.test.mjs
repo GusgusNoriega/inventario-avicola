@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyProductDispatchCatalogDefaults,
+  buildProductDispatchTicketDeletePayload,
   buildProductDispatchTicketQuery,
   buildProductDispatchTicketUpdatePayload,
   normalizeProductDispatchTicketForEditor,
@@ -160,6 +161,33 @@ test("el payload de corrección recalcula merma y solo envía el contrato editab
   assert.equal(payload.weighings[0].waste_total_grams, 225);
   assert.equal("id" in payload.weighings[1], false);
   assert.equal(payload.weighings[1].price_mode, "POR_UNIDAD");
+});
+
+test("permite guardar una corrección sin motivo", () => {
+  const payload = buildProductDispatchTicketUpdatePayload({
+    version: 8,
+    correction_reason: "   ",
+    ticket_title: "DESPACHO",
+    list_number: 1,
+    registered_at: "2026-09-02T10:30",
+    weighings: [],
+  });
+
+  assert.equal(payload.correction_reason, "");
+});
+
+test("la eliminación envía la versión actual del ticket", () => {
+  assert.deepEqual(buildProductDispatchTicketDeletePayload({
+    version: " 2026-09-02T14:30:00.000000Z ",
+  }), {
+    version: "2026-09-02T14:30:00.000000Z",
+  });
+
+  assert.deepEqual(buildProductDispatchTicketDeletePayload({
+    updated_at: "2026-09-02T15:00:00Z",
+  }), {
+    version: "2026-09-02T15:00:00Z",
+  });
 });
 
 test("la huella del editor detecta cambios y trata :00 como el mismo minuto", () => {

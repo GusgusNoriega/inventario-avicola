@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ProductDispatch\DeleteProductDispatchTicketRequest;
 use App\Http\Requests\ProductDispatch\ListProductDispatchTicketsRequest;
 use App\Http\Requests\ProductDispatch\StoreProductDispatchTicketRequest;
 use App\Http\Requests\ProductDispatch\UpdateProductDispatchConfigurationRequest;
@@ -219,6 +220,7 @@ class ProductDispatchOperationController extends Controller
         $dispatch = DB::transaction(fn (): TicketDespachoProducto => TicketDespachoProducto::query()
             ->where('empresa_id', $companyId)
             ->where('sucursal_id', $branch->id)
+            ->where('estado', TicketDespachoProducto::STATUS_REGISTERED)
             ->with([
                 'sucursal',
                 'cliente',
@@ -265,6 +267,27 @@ class ProductDispatchOperationController extends Controller
                 $updated,
                 $dispatchConfiguration['product_ticket_title'],
             ),
+        ]);
+    }
+
+    public function destroy(
+        DeleteProductDispatchTicketRequest $request,
+        int $ticket,
+    ): JsonResponse {
+        $companyId = $this->context->companyId($request);
+        $branch = $this->context->branch($request);
+
+        $this->dispatches->deleteTicket(
+            $companyId,
+            $branch,
+            $this->context->actor($request, (int) $branch->id),
+            $ticket,
+            (string) $request->validated('version'),
+            $request->ip(),
+        );
+
+        return response()->json([
+            'message' => 'Ticket de despacho eliminado correctamente.',
         ]);
     }
 

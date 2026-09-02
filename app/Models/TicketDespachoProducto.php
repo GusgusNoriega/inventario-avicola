@@ -37,6 +37,8 @@ class TicketDespachoProducto extends Model
 {
     public const STATUS_REGISTERED = 'REGISTRADO';
 
+    public const STATUS_DELETED = 'ELIMINADO';
+
     public const CUSTOMER_REGISTERED = 'CLIENTE_REGISTRADO';
 
     public const CUSTOMER_PUBLIC = 'VENTA_PUBLICO';

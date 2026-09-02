@@ -256,6 +256,12 @@ export function buildProductDispatchTicketUpdatePayload(draft = {}) {
   };
 }
 
+export function buildProductDispatchTicketDeletePayload(ticket = {}) {
+  return {
+    version: String(ticket.version ?? ticket.updated_at ?? ticket.actualizado_at ?? "").trim(),
+  };
+}
+
 export function productDispatchEditorFingerprint(draft = {}) {
   return JSON.stringify({
     ticket_title: String(draft.ticket_title || ""),
@@ -379,6 +385,7 @@ function mountProductDispatchTickets() {
       returnFocus: null,
       currency: "PEN",
       printing: new Set(),
+      deleting: new Set(),
     };
 
     const integerFormatter = new Intl.NumberFormat("es-PE", { maximumFractionDigits: 0 });
@@ -561,6 +568,7 @@ function mountProductDispatchTickets() {
         : [];
       const title = String(ticket.product_ticket_title || ticket.ticket_title || "DESPACHO DE PRODUCTOS");
       const updated = ticket.updated_at || ticket.actualizado_at;
+      const ticketVersion = buildProductDispatchTicketDeletePayload(ticket).version;
       const rows = weighings.length
         ? weighings.map((line) => renderTicketLine(line, currency)).join("")
         : '<tr><td class="pdt-empty-line" colspan="12">Este ticket no contiene pesadas.</td></tr>';
@@ -587,6 +595,10 @@ function mountProductDispatchTickets() {
             <button class="pdt-ticket-action" type="button" data-pdt-print-ticket="${ticketId}" aria-label="Volver a imprimir ticket ${escapeHtml(code)}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V3h10v6M7 18H4V9h16v9h-3M7 14h10v7H7z"></path></svg>
               Reimprimir
+            </button>
+            <button class="pdt-ticket-action is-delete" type="button" data-pdt-delete-ticket="${ticketId}" data-pdt-ticket-code="${escapeHtml(code)}" data-pdt-ticket-version="${escapeHtml(ticketVersion)}" aria-label="Eliminar ticket ${escapeHtml(code)}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"></path></svg>
+              Eliminar
             </button>
           </div>
         </header>
@@ -1082,7 +1094,7 @@ function mountProductDispatchTickets() {
       elements.correctionReason.value = "";
       elements.editorLoading.hidden = true;
       elements.editorContent.hidden = false;
-      setEditorMessage("Revisa todos los datos. El motivo de corrección es obligatorio.");
+      setEditorMessage("Revisa todos los datos. El motivo de corrección es opcional.");
       renderEditorLines();
       updateTimeChangeWarning();
       syncGeneralEditorValues();
@@ -1212,8 +1224,9 @@ function mountProductDispatchTickets() {
           "Confirma que entiendes el efecto de la corrección sobre las horas y el origen de las pesadas.",
         );
       }
-      if (elements.correctionReason.value.trim().length < 3) {
-        return markInvalid(elements.correctionReason, "El motivo de la corrección debe tener al menos 3 caracteres.");
+      const correctionReasonLength = elements.correctionReason.value.trim().length;
+      if (correctionReasonLength > 0 && correctionReasonLength < 3) {
+        return markInvalid(elements.correctionReason, "Si escribes un motivo, debe tener al menos 3 caracteres.");
       }
       if (!state.editorTicket.weighings.length) {
         setEditorMessage("Agrega al menos una pesada antes de guardar.", "error");
@@ -1344,6 +1357,60 @@ function mountProductDispatchTickets() {
       }
     }
 
+    async function deleteTicket(ticketId, ticketCode, ticketVersion, button) {
+      if (!ticketId || state.deleting.has(ticketId)) return;
+      if (state.printing.has(ticketId)) {
+        setMessage(`Espera a que termine la impresión de ${ticketCode} antes de eliminarlo.`, "error");
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `¿Eliminar el ticket ${ticketCode}?\n\nDesaparecerá de esta vista y se anulará su cuenta por cobrar relacionada. Esta acción no se puede deshacer.`,
+      );
+      if (!confirmed) return;
+
+      const card = button.closest(".pdt-ticket-card");
+      const actionStates = Array.from(card?.querySelectorAll(".pdt-ticket-action") || []).map((control) => ({
+        control,
+        disabled: control.disabled,
+      }));
+      const originalMarkup = button.innerHTML;
+      const currentPage = state.data?.pagination?.current_page || 1;
+      const filters = state.lastRequest || filtersFromForm();
+      state.deleting.add(ticketId);
+      card?.classList.add("is-deleting");
+      card?.setAttribute("aria-busy", "true");
+      actionStates.forEach(({ control }) => { control.disabled = true; });
+      button.textContent = "Eliminando…";
+      setMessage(`Eliminando el ticket ${ticketCode}…`);
+
+      try {
+        await apiRequest(`${apiBase}/tickets/${ticketId}`, {
+          method: "DELETE",
+          body: JSON.stringify(buildProductDispatchTicketDeletePayload({ version: ticketVersion })),
+        });
+        const refreshed = await loadTickets({
+          page: currentPage,
+          filters,
+          successMessage: `Ticket ${ticketCode} eliminado correctamente.`,
+        });
+        if (!refreshed) {
+          setMessage(`El ticket ${ticketCode} se eliminó, pero no pudimos refrescar la lista. Intenta recargarla.`, "error");
+        }
+      } catch (error) {
+        console.error(error);
+        setMessage(errorMessage(error, `No se pudo eliminar el ticket ${ticketCode}.`), "error");
+      } finally {
+        state.deleting.delete(ticketId);
+        if (card?.isConnected) {
+          card.classList.remove("is-deleting");
+          card.removeAttribute("aria-busy");
+          actionStates.forEach(({ control, disabled }) => { control.disabled = disabled; });
+          button.innerHTML = originalMarkup;
+        }
+      }
+    }
+
     elements.filters.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!validateDateRange() || !elements.filters.reportValidity()) return;
@@ -1388,7 +1455,17 @@ function mountProductDispatchTickets() {
         return;
       }
       const print = event.target.closest("[data-pdt-print-ticket]");
-      if (print) void reprintTicket(positiveInteger(print.dataset.pdtPrintTicket), print);
+      if (print) {
+        void reprintTicket(positiveInteger(print.dataset.pdtPrintTicket), print);
+        return;
+      }
+      const remove = event.target.closest("[data-pdt-delete-ticket]");
+      if (remove) {
+        const ticketId = positiveInteger(remove.dataset.pdtDeleteTicket);
+        const ticketCode = String(remove.dataset.pdtTicketCode || `#${ticketId}`);
+        const ticketVersion = String(remove.dataset.pdtTicketVersion || "");
+        void deleteTicket(ticketId, ticketCode, ticketVersion, remove);
+      }
     });
 
     elements.addLine.addEventListener("click", () => {

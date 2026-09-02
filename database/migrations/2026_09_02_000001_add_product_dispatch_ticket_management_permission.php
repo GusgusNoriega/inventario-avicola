@@ -14,7 +14,7 @@ return new class extends Migration
         DB::table('permisos')->updateOrInsert(
             ['codigo' => self::PERMISSION_CODE],
             [
-                'descripcion' => 'Consultar, corregir y reimprimir tickets de despacho de productos',
+                'descripcion' => 'Consultar, corregir, eliminar y reimprimir tickets de despacho de productos',
                 'created_at' => $now,
                 'updated_at' => $now,
             ],

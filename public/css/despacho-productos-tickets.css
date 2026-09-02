@@ -194,6 +194,12 @@ body.product-dispatch-tickets-page {
   color: #ffce54;
 }
 
+.pdt-field > span:first-child small {
+  color: #748da4;
+  font-size: 0.75em;
+  font-weight: 750;
+}
+
 .pdt-field input,
 .pdt-field select,
 .pdt-field textarea {
@@ -462,6 +468,23 @@ body.product-dispatch-tickets-page {
   border-color: #6c5299;
   color: #ddc8ff;
   background: #1c1230;
+}
+
+.pdt-ticket-action.is-delete {
+  border-color: #7d4542;
+  color: #ffaaa5;
+  background: #251210;
+}
+
+.pdt-ticket-action.is-delete:hover,
+.pdt-ticket-action.is-delete:focus-visible {
+  border-color: #ff8d86;
+  color: #fff;
+  background: #3a1714;
+}
+
+.pdt-ticket-card.is-deleting {
+  opacity: 0.68;
 }
 
 .pdt-ticket-action:disabled {
@@ -1245,6 +1268,10 @@ body.product-dispatch-tickets-page {
   .pdt-ticket-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .pdt-ticket-action.is-delete {
+    grid-column: 1 / -1;
   }
 
   .pdt-ticket-detail-head {

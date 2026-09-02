@@ -188,17 +188,16 @@
               </label>
 
               <label class="pdt-field pdt-wide-field" for="pdtCorrectionReason">
-                <span>Motivo de la corrección <b>*</b></span>
+                <span>Motivo de la corrección <small>(opcional)</small></span>
                 <textarea
                   id="pdtCorrectionReason"
                   name="correction_reason"
                   rows="3"
                   minlength="3"
                   maxlength="250"
-                  required
-                  placeholder="Explica brevemente por qué se modifica este ticket"
+                  placeholder="Si lo deseas, deja una nota sobre este cambio"
                 ></textarea>
-                <small>Este motivo queda asociado a la corrección para mantener la trazabilidad.</small>
+                <small>Si escribes un motivo, quedará asociado a la corrección para mantener la trazabilidad.</small>
               </label>
             </div>
 

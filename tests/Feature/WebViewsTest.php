@@ -257,6 +257,15 @@ class WebViewsTest extends TestCase
             ->assertSee(asset('js/despacho-productos-tickets.js'), false)
             ->assertSee(asset('css/despacho-productos-tickets.css'), false);
 
+        $this->assertMatchesRegularExpression(
+            '/<textarea[^>]*name="correction_reason"[^>]*minlength="3"[^>]*>/s',
+            (string) $tickets->getContent(),
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/<textarea[^>]*name="correction_reason"[^>]*\srequired(?:\s|>)/s',
+            (string) $tickets->getContent(),
+        );
+
         $ticketJavascript = (string) file_get_contents(
             public_path('js/despacho-productos-tickets.js'),
         );
@@ -268,6 +277,10 @@ class WebViewsTest extends TestCase
         $this->assertStringContainsString('version', $ticketJavascript);
         $this->assertStringContainsString('printProductDispatchTicket', $ticketJavascript);
         $this->assertStringContainsString('Volver a imprimir', $ticketJavascript);
+        $this->assertStringContainsString('data-pdt-delete-ticket', $ticketJavascript);
+        $this->assertStringContainsString('data-pdt-ticket-version', $ticketJavascript);
+        $this->assertStringContainsString('method: "DELETE"', $ticketJavascript);
+        $this->assertStringContainsString('El motivo de corrección es opcional.', $ticketJavascript);
         $this->assertStringContainsString('/tickets', $ticketJavascript);
         $this->assertStringContainsString('.pdt-ticket-list', $ticketStylesheet);
         $this->assertStringContainsString('.pdt-editor-dialog', $ticketStylesheet);
