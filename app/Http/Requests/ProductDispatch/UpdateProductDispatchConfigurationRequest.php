@@ -35,6 +35,7 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
                 ),
             ],
             'customer_display_title' => ['sometimes', 'required', 'string', 'max:120'],
+            'product_ticket_title' => ['sometimes', 'required', 'string', 'max:180'],
         ];
     }
 
@@ -44,6 +45,13 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
             && is_string($this->input('customer_display_title'))) {
             $this->merge([
                 'customer_display_title' => trim($this->input('customer_display_title')),
+            ]);
+        }
+
+        if ($this->exists('product_ticket_title')
+            && is_string($this->input('product_ticket_title'))) {
+            $this->merge([
+                'product_ticket_title' => trim($this->input('product_ticket_title')),
             ]);
         }
     }
@@ -57,10 +65,11 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
 
                 if (! array_key_exists('waste_presets', $input)
                     && ! array_key_exists('quick_product_ids', $input)
-                    && ! array_key_exists('customer_display_title', $input)) {
+                    && ! array_key_exists('customer_display_title', $input)
+                    && ! array_key_exists('product_ticket_title', $input)) {
                     $validator->errors()->add(
                         'configuration',
-                        'Indica la configuración de mermas, productos rápidos o pantalla cliente que deseas guardar.',
+                        'Indica la configuración de mermas, productos rápidos, pantalla cliente o ticket que deseas guardar.',
                     );
                 }
             },
@@ -87,6 +96,9 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
             'customer_display_title.required' => 'Indica el título de la pantalla cliente.',
             'customer_display_title.string' => 'El título de la pantalla cliente debe ser texto.',
             'customer_display_title.max' => 'El título de la pantalla cliente puede tener hasta 120 caracteres.',
+            'product_ticket_title.required' => 'Indica el título del ticket de este despacho.',
+            'product_ticket_title.string' => 'El título del ticket debe ser texto.',
+            'product_ticket_title.max' => 'El título del ticket puede tener hasta 180 caracteres.',
         ];
     }
 }

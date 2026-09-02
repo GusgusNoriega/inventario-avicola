@@ -1794,8 +1794,9 @@ async function saveActiveDraft(shouldPrint = false) {
       try {
         printProductDispatchTicket(ticket, {
           currency: state.catalog.currency,
-          ticketTitle: state.catalog.ticket_title,
+          productTicketTitle: state.catalog.product_ticket_title,
           ticketMessage: state.catalog.ticket_message,
+          timezone: state.catalog.branch?.timezone,
           printWindow
         });
         showTicketToast(ticket, true);
@@ -1822,8 +1823,9 @@ function retryPrint() {
   try {
     printProductDispatchTicket(state.pendingPrintTicket, {
       currency: state.catalog.currency,
-      ticketTitle: state.catalog.ticket_title,
-      ticketMessage: state.catalog.ticket_message
+      productTicketTitle: state.catalog.product_ticket_title,
+      ticketMessage: state.catalog.ticket_message,
+      timezone: state.catalog.branch?.timezone
     });
     const ticket = state.pendingPrintTicket;
     state.pendingPrintTicket = null;

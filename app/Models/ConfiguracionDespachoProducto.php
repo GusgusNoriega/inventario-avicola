@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'producto_rapido_3_id',
     'producto_rapido_4_id',
     'titulo_pantalla_cliente',
+    'titulo_ticket_despacho',
 ])]
 class ConfiguracionDespachoProducto extends Model
 {

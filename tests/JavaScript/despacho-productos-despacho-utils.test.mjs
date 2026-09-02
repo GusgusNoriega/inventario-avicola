@@ -163,10 +163,11 @@ test("el payload conserva dos decimales de precio y evidencia solo para la balan
         device_name: "COM7"
       }
     }]
-  });
+  }, 4);
 
   assert.deepEqual(buildTicketPayload(draft), {
     draft_id: "22222222-2222-4222-8222-222222222222",
+    list_number: 4,
     client_id: 5,
     weighings: [{
       product_id: 7,
@@ -201,16 +202,26 @@ test("el catálogo acepta el contrato del API y normaliza clientes para búsqued
     }],
     clients: [{ id: 4, name: "Tienda Norte", document_number: "901234567" }],
     currency: "S/",
-    ticket_title: "AVÍCOLA DE PRUEBA",
+    product_ticket_title: "CONTROL DE DESPACHO AVÍCOLA",
+    ticket_title: "TÍTULO GENERAL QUE NO DEBE USARSE",
     customer_display_title: "LA CENTRAL DE LOS POLLOS"
   } });
 
   assert.equal(catalog.products[0].price, 0.75);
   assert.equal(catalog.products[0].price_mode, PRODUCT_PRICE_MODE_UNIT);
   assert.equal(catalog.clients[0].document, "901234567");
-  assert.equal(catalog.ticket_title, "AVÍCOLA DE PRUEBA");
+  assert.equal(catalog.product_ticket_title, "CONTROL DE DESPACHO AVÍCOLA");
+  assert.equal(catalog.ticket_title, "CONTROL DE DESPACHO AVÍCOLA");
   assert.equal(catalog.customer_display_title, "LA CENTRAL DE LOS POLLOS");
   assert.deepEqual(catalog.waste_presets, [0, 50, 100]);
+});
+
+test("el título propio del ticket se limita y conserva un alias compatible", () => {
+  assert.equal(normalizeCatalog().product_ticket_title, "DESPACHO DE PRODUCTOS");
+
+  const catalog = normalizeCatalog({ product_ticket_title: `  ${"T".repeat(200)}  ` });
+  assert.equal(catalog.product_ticket_title, "T".repeat(180));
+  assert.equal(catalog.ticket_title, catalog.product_ticket_title);
 });
 
 test("el título de pantalla cliente se limita y tiene un valor seguro por defecto", () => {
@@ -281,5 +292,6 @@ test("dos pesadas del mismo ticket conservan precios e importes independientes",
 
   assert.deepEqual(draft.items.map((item) => item.unit_price), [10, 12.5]);
   assert.deepEqual(draft.items.map((item) => item.amount), [20, 25]);
+  assert.equal(buildTicketPayload(draft).list_number, 1);
   assert.deepEqual(buildTicketPayload(draft).weighings.map((item) => item.unit_price), ["10.00", "12.50"]);
 });

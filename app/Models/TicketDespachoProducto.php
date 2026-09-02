@@ -11,7 +11,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'empresa_id',
     'sucursal_id',
     'referencia_externa',
+    'numero_lista',
     'codigo',
+    'titulo_ticket_snapshot',
     'fecha_operativa',
     'cliente_id',
     'tipo_cliente',
@@ -77,6 +79,7 @@ class TicketDespachoProducto extends Model
     {
         return [
             'fecha_operativa' => 'date',
+            'numero_lista' => 'integer',
             'cantidad_total' => 'integer',
             'peso_leido_total_kg' => 'decimal:3',
             'merma_total_gramos' => 'integer',

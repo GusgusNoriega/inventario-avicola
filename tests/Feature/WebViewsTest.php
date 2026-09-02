@@ -98,14 +98,43 @@ class WebViewsTest extends TestCase
             ->assertSee('Administrar productos')
             ->assertSee('Despachar productos')
             ->assertSee('Abrir despacho')
+            ->assertSee('Configurar ticket')
+            ->assertSee('Comprobante exclusivo')
             ->assertSee('href="'.route('despacho-productos.productos').'"', false)
             ->assertSee('href="'.route('despacho-productos.despacho').'"', false)
+            ->assertSee('href="'.route('despacho-productos.configuracion-ticket').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
-            2,
+            3,
             substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
         );
+
+        $ticketConfiguration = $this->get('/despacho-productos/configuracion-ticket');
+        $ticketConfiguration
+            ->assertOk()
+            ->assertSee('Configurar ticket')
+            ->assertSee('Solo para esta vista')
+            ->assertSee('Los demás modelos de ticket no cambiarán.')
+            ->assertSee('name="product_ticket_title"', false)
+            ->assertSee('id="productTicketTitlePreview"', false)
+            ->assertSee('CONTROL DE DESPACHO')
+            ->assertSee('CONTROL DE PESO')
+            ->assertSee('VENTA AL PÚBLICO - 1')
+            ->assertSee('href="'.route('despacho-productos.menu').'"', false)
+            ->assertSee(asset('js/despacho-productos-configuracion-ticket.js'), false)
+            ->assertSee(asset('css/despacho-productos-configuracion-ticket.css'), false);
+
+        $ticketConfigurationJavascript = (string) file_get_contents(
+            public_path('js/despacho-productos-configuracion-ticket.js'),
+        );
+        $ticketConfigurationStylesheet = (string) file_get_contents(
+            public_path('css/despacho-productos-configuracion-ticket.css'),
+        );
+        $this->assertStringContainsString('product_ticket_title', $ticketConfigurationJavascript);
+        $this->assertStringContainsString('${apiBase}/catalogo', $ticketConfigurationJavascript);
+        $this->assertStringContainsString('${apiBase}/configuracion', $ticketConfigurationJavascript);
+        $this->assertStringContainsString('width: min(80mm, 100%)', $ticketConfigurationStylesheet);
 
         $catalog = $this->get('/despacho-productos/productos');
         $catalog

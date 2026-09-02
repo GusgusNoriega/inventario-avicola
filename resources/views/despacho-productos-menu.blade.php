@@ -69,6 +69,21 @@
           </span>
           <span class="product-dispatch-menu-action">Abrir despacho <span aria-hidden="true">→</span></span>
         </a>
+
+        <a class="product-dispatch-menu-card card is-ticket" href="{{ route('despacho-productos.configuracion-ticket') }}">
+          <span class="product-dispatch-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"></path>
+              <path d="M9 8h6M9 12h6M9 16h4"></path>
+            </svg>
+          </span>
+          <span class="product-dispatch-menu-copy">
+            <small>Comprobante exclusivo</small>
+            <strong>Configurar ticket</strong>
+            <span>Define el encabezado que se imprimirá únicamente en los tickets de este despacho.</span>
+          </span>
+          <span class="product-dispatch-menu-action">Configurar <span aria-hidden="true">→</span></span>
+        </a>
       </nav>
     </section>
 

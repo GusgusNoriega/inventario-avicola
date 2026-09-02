@@ -121,6 +121,14 @@ export function normalizeCatalog(payload = {}) {
     phone: String(client.phone ?? client.telefono ?? "")
   })).filter((client) => Number.isInteger(client.id) && client.id > 0);
 
+  const productTicketTitle = String(
+    source.product_ticket_title
+    || source.titulo_ticket_despacho
+    || source.ticket_title
+    || source.titulo_ticket
+    || "DESPACHO DE PRODUCTOS"
+  ).trim().slice(0, 180) || "DESPACHO DE PRODUCTOS";
+
   return {
     products,
     clients,
@@ -128,7 +136,8 @@ export function normalizeCatalog(payload = {}) {
     company: source.company || source.empresa || null,
     user: source.user || source.usuario || null,
     currency: String(source.currency || source.moneda || "S/").trim() || "S/",
-    ticket_title: String(source.ticket_title || source.titulo_ticket || "DESPACHO DE PRODUCTOS"),
+    product_ticket_title: productTicketTitle,
+    ticket_title: productTicketTitle,
     ticket_message: String(source.ticket_message || source.mensaje_ticket || "Gracias por su compra"),
     scale: source.scale || source.balanza || null,
     waste_presets: normalizeWastePresets(source.waste_presets),
@@ -308,6 +317,7 @@ export function updateWeighing(items = [], localId, changes = {}) {
 export function buildTicketPayload(draft) {
   return {
     draft_id: draft.id,
+    list_number: Math.min(8, Math.max(1, Math.round(Number(draft.number) || 1))),
     client_id: draft.client_id || null,
     weighings: draft.items.map((item) => ({
       product_id: Number(item.product_id),

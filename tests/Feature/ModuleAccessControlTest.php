@@ -25,6 +25,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos',
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
+            '/despacho-productos/configuracion-ticket',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -56,6 +57,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos',
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
+            '/despacho-productos/configuracion-ticket',
             '/precios-jornada',
             '/reporte-proveedores',
             '/finanzas',
@@ -135,6 +137,7 @@ class ModuleAccessControlTest extends TestCase
         $this->get('/despacho-productos')->assertOk();
         $this->get('/despacho-productos/productos')->assertOk();
         $this->get('/despacho-productos/despacho')->assertOk();
+        $this->get('/despacho-productos/configuracion-ticket')->assertOk();
         $this->get('/')
             ->assertOk()
             ->assertSee(route('despacho-productos.menu'), false);
@@ -231,6 +234,7 @@ class ModuleAccessControlTest extends TestCase
             '/despacho-productos',
             '/despacho-productos/productos',
             '/despacho-productos/despacho',
+            '/despacho-productos/configuracion-ticket',
             '/precios-jornada',
             '/tickets-dia',
             '/reporte-proveedores',

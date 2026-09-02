@@ -36,8 +36,9 @@ class ProductDispatchOperationService
         object $branch,
         User $actor,
         array $data,
+        string $ticketTitle,
     ): array {
-        return DB::transaction(function () use ($companyId, $branch, $actor, $data): array {
+        return DB::transaction(function () use ($companyId, $branch, $actor, $data, $ticketTitle): array {
             $company = DB::table('empresas')
                 ->where('id', $companyId)
                 ->lockForUpdate()
@@ -103,7 +104,9 @@ class ProductDispatchOperationService
                 'empresa_id' => $companyId,
                 'sucursal_id' => $branch->id,
                 'referencia_externa' => $data['draft_id'],
+                'numero_lista' => (int) ($data['list_number'] ?? 1),
                 'codigo' => $this->nextTicketCode($companyId, $operatingDate),
+                'titulo_ticket_snapshot' => $ticketTitle,
                 'fecha_operativa' => $operatingDate->format('Y-m-d'),
                 'cliente_id' => $client?->id,
                 'tipo_cliente' => $client
@@ -521,6 +524,8 @@ class ProductDispatchOperationService
             'datos_despues' => json_encode([
                 'codigo' => $ticket->codigo,
                 'referencia_externa' => $ticket->referencia_externa,
+                'numero_lista' => $ticket->numero_lista,
+                'titulo_ticket_snapshot' => $ticket->titulo_ticket_snapshot,
                 'cliente_id' => $ticket->cliente_id,
                 'tipo_cliente' => $ticket->tipo_cliente,
                 'total' => $ticket->total,

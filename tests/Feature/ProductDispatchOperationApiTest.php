@@ -270,6 +270,119 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertJsonValidationErrors('customer_display_title');
     }
 
+    public function test_product_ticket_title_is_configurable_per_branch_without_changing_other_ticket_titles(): void
+    {
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update([
+                'titulo_ticket' => 'TITULO GENERAL DE LA EMPRESA',
+                'nombre_comercial' => 'Avicola Central',
+                'razon_social' => 'Avicola Central S.A.C.',
+            ]);
+
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'TITULO GENERAL DE LA EMPRESA')
+            ->assertJsonPath('data.ticket_title', 'TITULO GENERAL DE LA EMPRESA');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => '  PALACIO DE LOS POLLOS  ',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'PALACIO DE LOS POLLOS');
+
+        $this->assertDatabaseHas('configuraciones_despacho_productos', [
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'titulo_ticket_despacho' => 'PALACIO DE LOS POLLOS',
+        ]);
+        $this->assertSame(
+            'TITULO GENERAL DE LA EMPRESA',
+            DB::table('empresas')
+                ->where('id', $this->user->empresa_id)
+                ->value('titulo_ticket'),
+        );
+
+        $this->grantModules(
+            $this->user,
+            ['MODULO_DESPACHO_MAYORISTA'],
+            'ROL_MAYORISTA_AISLAMIENTO_TICKET',
+        );
+        $this->getJson('/api/v1/operacion/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.ticket_title', 'TITULO GENERAL DE LA EMPRESA');
+
+        $otherBranchId = DB::table('sucursales')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'codigo' => 'TICKET-SECUNDARIA',
+            'nombre' => 'Sucursal ticket secundaria',
+            'zona_horaria' => 'America/Lima',
+            'estado' => 'ACTIVO',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->user->update(['sucursal_id' => $otherBranchId]);
+
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'TITULO GENERAL DE LA EMPRESA');
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => 'TITULO SUCURSAL DOS',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'TITULO SUCURSAL DOS');
+
+        $this->user->update(['sucursal_id' => $this->branchId]);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'PALACIO DE LOS POLLOS');
+    }
+
+    public function test_product_ticket_title_fallbacks_and_validation_are_enforced(): void
+    {
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update([
+                'titulo_ticket' => '   ',
+                'nombre_comercial' => '  Avicola Comercial  ',
+                'razon_social' => 'Avicola Legal S.A.C.',
+            ]);
+
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'Avicola Comercial');
+
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update(['nombre_comercial' => '   ']);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'Avicola Legal S.A.C.');
+
+        DB::table('empresas')
+            ->where('id', $this->user->empresa_id)
+            ->update(['razon_social' => '   ']);
+        $this->getJson('/api/v1/despacho-productos/catalogo')
+            ->assertOk()
+            ->assertJsonPath('data.product_ticket_title', 'DESPACHO DE PRODUCTOS');
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => '   ',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('product_ticket_title');
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => ['no', 'es', 'texto'],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('product_ticket_title');
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => str_repeat('T', 181),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('product_ticket_title');
+    }
+
     public function test_quick_products_are_ordered_configurable_and_scoped_by_company_and_branch(): void
     {
         $hen = $this->createProduct(
@@ -566,6 +679,87 @@ class ProductDispatchOperationApiTest extends TestCase
             'accion' => 'REGISTRAR',
         ]);
         $this->assertDatabaseCount('lecturas_balanza', 0);
+    }
+
+    public function test_ticket_keeps_its_list_number_and_own_title_snapshot_when_configuration_changes(): void
+    {
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => 'CONTROL DE DESPACHO ORIGINAL',
+        ])->assertOk();
+
+        $payload = $this->payload(null, [
+            $this->weighing(product: $this->eggs, quantity: 2),
+        ], 4);
+        $created = $this->postJson('/api/v1/despacho-productos/tickets', $payload)
+            ->assertCreated()
+            ->assertJsonPath('already_registered', false)
+            ->assertJsonPath('data.list_number', 4)
+            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
+            ->assertJsonPath('data.ticket_title', 'CONTROL DE DESPACHO ORIGINAL');
+        $ticketId = (int) $created->json('data.id');
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticketId,
+            'numero_lista' => 4,
+            'titulo_ticket_snapshot' => 'CONTROL DE DESPACHO ORIGINAL',
+        ]);
+
+        $this->putJson('/api/v1/despacho-productos/configuracion', [
+            'product_ticket_title' => 'CONTROL DE DESPACHO NUEVO',
+        ])->assertOk();
+
+        $this->getJson("/api/v1/despacho-productos/tickets/{$ticketId}")
+            ->assertOk()
+            ->assertJsonPath('data.list_number', 4)
+            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL')
+            ->assertJsonPath('data.ticket_title', 'CONTROL DE DESPACHO ORIGINAL');
+
+        $retryPayload = $payload;
+        $retryPayload['list_number'] = 7;
+        $this->postJson('/api/v1/despacho-productos/tickets', $retryPayload)
+            ->assertOk()
+            ->assertJsonPath('already_registered', true)
+            ->assertJsonPath('data.id', $ticketId)
+            ->assertJsonPath('data.list_number', 4)
+            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO ORIGINAL');
+
+        $newTicket = $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [
+            $this->weighing(product: $this->eggs),
+        ], 8))
+            ->assertCreated()
+            ->assertJsonPath('data.list_number', 8)
+            ->assertJsonPath('data.product_ticket_title', 'CONTROL DE DESPACHO NUEVO');
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => (int) $newTicket->json('data.id'),
+            'numero_lista' => 8,
+            'titulo_ticket_snapshot' => 'CONTROL DE DESPACHO NUEVO',
+        ]);
+    }
+
+    public function test_list_number_defaults_to_one_and_rejects_values_outside_the_visible_lists(): void
+    {
+        $withoutList = $this->payload(null, [
+            $this->weighing(product: $this->eggs),
+        ]);
+        unset($withoutList['list_number']);
+
+        $created = $this->postJson('/api/v1/despacho-productos/tickets', $withoutList)
+            ->assertCreated()
+            ->assertJsonPath('data.list_number', 1);
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => (int) $created->json('data.id'),
+            'numero_lista' => 1,
+        ]);
+
+        foreach ([0, 9] as $invalidListNumber) {
+            $this->postJson('/api/v1/despacho-productos/tickets', $this->payload(null, [
+                $this->weighing(product: $this->eggs),
+            ], $invalidListNumber))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('list_number');
+        }
+
+        $this->assertDatabaseCount('tickets_despacho_productos', 1);
     }
 
     public function test_same_product_weighings_keep_independent_prices_and_sum_their_amounts(): void
@@ -1034,10 +1228,11 @@ class ProductDispatchOperationApiTest extends TestCase
      * @param  list<array<string, mixed>>  $weighings
      * @return array<string, mixed>
      */
-    private function payload(?int $clientId, array $weighings): array
+    private function payload(?int $clientId, array $weighings, int $listNumber = 1): array
     {
         return [
             'draft_id' => (string) Str::uuid(),
+            'list_number' => $listNumber,
             'client_id' => $clientId,
             'weighings' => $weighings,
         ];

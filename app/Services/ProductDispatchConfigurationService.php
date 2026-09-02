@@ -17,7 +17,8 @@ class ProductDispatchConfigurationService
      *     waste_presets: list<int>,
      *     quick_product_ids: list<int>,
      *     quick_products_configured: bool,
-     *     customer_display_title: string
+     *     customer_display_title: string,
+     *     product_ticket_title: string
      * }
      */
     public function configuration(int $companyId, int $branchId): array
@@ -33,19 +34,21 @@ class ProductDispatchConfigurationService
     }
 
     /**
-     * @param  array{waste_presets?: list<int>, quick_product_ids?: list<int>, customer_display_title?: string}  $changes
+     * @param  array{waste_presets?: list<int>, quick_product_ids?: list<int>, customer_display_title?: string, product_ticket_title?: string}  $changes
      * @return array{
      *     waste_presets: list<int>,
      *     quick_product_ids: list<int>,
      *     quick_products_configured: bool,
-     *     customer_display_title: string
+     *     customer_display_title: string,
+     *     product_ticket_title: string
      * }
      */
     public function update(int $companyId, int $branchId, array $changes): array
     {
         if (! array_key_exists('waste_presets', $changes)
             && ! array_key_exists('quick_product_ids', $changes)
-            && ! array_key_exists('customer_display_title', $changes)) {
+            && ! array_key_exists('customer_display_title', $changes)
+            && ! array_key_exists('product_ticket_title', $changes)) {
             throw ValidationException::withMessages([
                 'configuration' => 'No se indicó ninguna configuración para guardar.',
             ]);
@@ -119,6 +122,10 @@ class ProductDispatchConfigurationService
             $updates['titulo_pantalla_cliente'] = trim((string) $changes['customer_display_title']);
         }
 
+        if (array_key_exists('product_ticket_title', $changes)) {
+            $updates['titulo_ticket_despacho'] = trim((string) $changes['product_ticket_title']);
+        }
+
         $this->ensureDefaults($companyId, $branchId);
 
         DB::transaction(function () use ($companyId, $branchId, $updates): void {
@@ -171,7 +178,8 @@ class ProductDispatchConfigurationService
      *     waste_presets: list<int>,
      *     quick_product_ids: list<int>,
      *     quick_products_configured: bool,
-     *     customer_display_title: string
+     *     customer_display_title: string,
+     *     product_ticket_title: string
      * }
      */
     private function format(
@@ -190,7 +198,36 @@ class ProductDispatchConfigurationService
                 $configuration,
                 $companyId,
             ),
+            'product_ticket_title' => $this->effectiveProductTicketTitle(
+                $configuration,
+                $companyId,
+            ),
         ];
+    }
+
+    private function effectiveProductTicketTitle(
+        ConfiguracionDespachoProducto $configuration,
+        int $companyId,
+    ): string {
+        $configuredTitle = trim((string) $configuration->titulo_ticket_despacho);
+
+        if ($configuredTitle !== '') {
+            return $configuredTitle;
+        }
+
+        $company = DB::table('empresas')
+            ->where('id', $companyId)
+            ->first(['titulo_ticket', 'nombre_comercial', 'razon_social']);
+
+        foreach (['titulo_ticket', 'nombre_comercial', 'razon_social'] as $field) {
+            $candidate = trim((string) ($company?->{$field} ?? ''));
+
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+
+        return 'DESPACHO DE PRODUCTOS';
     }
 
     private function effectiveCustomerDisplayTitle(

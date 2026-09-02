@@ -15,7 +15,6 @@ use App\Services\OperationContextService;
 use App\Services\ProductDispatchConfigurationService;
 use App\Services\ProductDispatchOperationService;
 use App\Services\TicketMessageService;
-use App\Services\TicketTitleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +25,6 @@ class ProductDispatchOperationController extends Controller
         private readonly OperationContextService $context,
         private readonly ProductDispatchConfigurationService $configuration,
         private readonly ProductDispatchOperationService $dispatches,
-        private readonly TicketTitleService $ticketTitles,
         private readonly TicketMessageService $ticketMessages,
     ) {}
 
@@ -98,7 +96,8 @@ class ProductDispatchOperationController extends Controller
 
         return response()->json([
             'data' => [
-                'ticket_title' => $this->ticketTitles->current($companyId),
+                'product_ticket_title' => $dispatchConfiguration['product_ticket_title'],
+                'ticket_title' => $dispatchConfiguration['product_ticket_title'],
                 'ticket_message' => $this->ticketMessages->current($companyId),
                 'currency' => (string) (DB::table('empresas')->where('id', $companyId)->value('moneda') ?: 'PEN'),
                 'waste_presets' => $dispatchConfiguration['waste_presets'],
@@ -155,11 +154,16 @@ class ProductDispatchOperationController extends Controller
     {
         $companyId = $this->context->companyId($request);
         $branch = $this->context->branch($request);
+        $dispatchConfiguration = $this->configuration->configuration(
+            $companyId,
+            (int) $branch->id,
+        );
         $result = $this->dispatches->register(
             $companyId,
             $branch,
             $this->context->actor($request, (int) $branch->id),
             $request->validated(),
+            $dispatchConfiguration['product_ticket_title'],
         );
 
         return response()->json([
@@ -169,7 +173,7 @@ class ProductDispatchOperationController extends Controller
             'already_registered' => $result['already_registered'],
             'data' => $this->formatTicket(
                 $result['ticket'],
-                $this->ticketTitles->current($companyId),
+                $dispatchConfiguration['product_ticket_title'],
                 $this->ticketMessages->current($companyId),
             ),
         ], $result['already_registered'] ? 200 : 201);
@@ -189,11 +193,15 @@ class ProductDispatchOperationController extends Controller
                 'pesadas.variacion',
             ])
             ->findOrFail($ticket);
+        $dispatchConfiguration = $this->configuration->configuration(
+            $companyId,
+            (int) $branch->id,
+        );
 
         return response()->json([
             'data' => $this->formatTicket(
                 $dispatch,
-                $this->ticketTitles->current($companyId),
+                $dispatchConfiguration['product_ticket_title'],
                 $this->ticketMessages->current($companyId),
             ),
         ]);
@@ -205,14 +213,21 @@ class ProductDispatchOperationController extends Controller
         string $ticketTitle,
         ?string $ticketMessage,
     ): array {
+        $effectiveTicketTitle = trim((string) $ticket->titulo_ticket_snapshot)
+            ?: $ticketTitle;
+
         return [
             'id' => (int) $ticket->id,
             'draft_id' => $ticket->referencia_externa,
             'code' => $ticket->codigo,
+            'list_number' => $ticket->numero_lista !== null
+                ? (int) $ticket->numero_lista
+                : null,
             'status' => $ticket->estado,
             'operating_date' => $ticket->fecha_operativa?->format('Y-m-d'),
             'registered_at' => $ticket->registrado_at?->toISOString(),
-            'ticket_title' => $ticketTitle,
+            'product_ticket_title' => $effectiveTicketTitle,
+            'ticket_title' => $effectiveTicketTitle,
             'ticket_message' => $ticketMessage,
             'currency' => $ticket->moneda,
             'customer_type' => $ticket->tipo_cliente,

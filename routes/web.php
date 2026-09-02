@@ -92,6 +92,11 @@ Route::middleware(['auth', 'active'])->group(function (): void {
             Route::view('/despacho-productos/despacho', 'despacho-productos-despacho')
                 ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR')
                 ->name('despacho-productos.despacho');
+            Route::view(
+                '/despacho-productos/configuracion-ticket',
+                'despacho-productos-configuracion-ticket',
+            )->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR')
+                ->name('despacho-productos.configuracion-ticket');
             Route::view('/despacho-productos/pantalla-cliente', 'despacho-productos-pantalla-cliente')
                 ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR')
                 ->name('despacho-productos.pantalla-cliente');

@@ -22,6 +22,7 @@ class StoreProductDispatchTicketRequest extends FormRequest
     {
         return [
             'draft_id' => ['required', 'uuid'],
+            'list_number' => ['sometimes', 'required', 'integer', 'between:1,8'],
             'client_id' => ['nullable', 'integer', 'min:1'],
             'weighings' => ['required', 'array', 'min:1', 'max:100'],
             'weighings.*' => ['array'],
@@ -86,6 +87,9 @@ class StoreProductDispatchTicketRequest extends FormRequest
         return [
             'draft_id.required' => 'No se recibió el identificador de esta lista.',
             'draft_id.uuid' => 'El identificador de la lista no es válido.',
+            'list_number.required' => 'No se recibió el número de la lista.',
+            'list_number.integer' => 'El número de la lista no es válido.',
+            'list_number.between' => 'El número de la lista debe estar entre 1 y 8.',
             'weighings.required' => 'Agrega al menos una pesada antes de guardar.',
             'weighings.min' => 'Agrega al menos una pesada antes de guardar.',
             'weighings.max' => 'Un ticket puede contener hasta 100 pesadas.',

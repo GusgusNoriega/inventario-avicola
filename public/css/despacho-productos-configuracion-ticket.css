@@ -1,0 +1,371 @@
+:root {
+  color-scheme: dark;
+  --ptc-bg: #050807;
+  --ptc-panel: #0a1511;
+  --ptc-line: #28483d;
+  --ptc-text: #f5fff9;
+  --ptc-muted: #9db4aa;
+  --ptc-accent: #3cdfad;
+  --ptc-accent-strong: #20c997;
+  --ptc-gold: #ffd75a;
+}
+
+html.product-ticket-config-root,
+body.product-ticket-config-page {
+  min-height: 100%;
+  margin: 0;
+}
+
+.product-ticket-config-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--ptc-text);
+  background:
+    radial-gradient(circle at 7% 8%, rgba(60, 223, 173, 0.13), transparent 30%),
+    radial-gradient(circle at 92% 4%, rgba(255, 215, 90, 0.09), transparent 27%),
+    var(--ptc-bg);
+}
+
+.ptc-shell {
+  width: min(1180px, calc(100% - 32px));
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 22px 0;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.ptc-header,
+.ptc-editor,
+.ptc-preview-panel {
+  border: 1px solid var(--ptc-line);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(10, 24, 18, 0.98), rgba(5, 12, 9, 0.98));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+}
+
+.ptc-header {
+  min-height: 82px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ptc-brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.ptc-brand > span {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #03110c;
+  background: var(--ptc-accent);
+  font-weight: 950;
+}
+
+.ptc-brand p,
+.ptc-brand h1,
+.ptc-editor h2,
+.ptc-preview-heading h2,
+.ptc-kicker,
+.ptc-help,
+.ptc-status {
+  margin: 0;
+}
+
+.ptc-brand p,
+.ptc-kicker {
+  color: var(--ptc-accent);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ptc-brand h1 {
+  margin-top: 2px;
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+}
+
+.ptc-back {
+  min-height: 44px;
+  padding: 10px 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #315f50;
+  border-radius: 12px;
+  color: #c9eee0;
+  background: #0c2019;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.ptc-back:hover,
+.ptc-back:focus-visible {
+  border-color: var(--ptc-accent);
+  outline: none;
+}
+
+.ptc-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(430px, 1.2fr);
+  gap: 18px;
+}
+
+.ptc-editor,
+.ptc-preview-panel {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 30px);
+}
+
+.ptc-editor {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+}
+
+.ptc-editor h2,
+.ptc-preview-heading h2 {
+  margin-top: 4px;
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
+}
+
+.ptc-help {
+  margin-top: 10px;
+  max-width: 48ch;
+  color: var(--ptc-muted);
+  line-height: 1.5;
+}
+
+.ptc-field {
+  display: grid;
+  gap: 8px;
+  color: #d9eee5;
+  font-weight: 850;
+}
+
+.ptc-field textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 15px 16px;
+  border: 1px solid #365c4e;
+  border-radius: 14px;
+  color: #fff;
+  background: #07110d;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.ptc-field textarea:focus {
+  border-color: var(--ptc-accent);
+  box-shadow: 0 0 0 3px rgba(60, 223, 173, 0.16);
+  outline: none;
+}
+
+.ptc-field small {
+  justify-self: end;
+  color: var(--ptc-muted);
+}
+
+.ptc-status {
+  min-height: 22px;
+  color: var(--ptc-muted);
+  font-weight: 750;
+}
+
+.ptc-status.is-success {
+  color: #71efbd;
+}
+
+.ptc-status.is-error {
+  color: #ff8c9f;
+}
+
+.ptc-save {
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  color: #001b12;
+  background: linear-gradient(135deg, #62edbd, #20c997);
+  font: inherit;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.ptc-save:disabled {
+  opacity: 0.48;
+  cursor: wait;
+}
+
+.ptc-preview-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border-color: #5c512b;
+  background: linear-gradient(145deg, rgba(27, 24, 13, 0.98), rgba(9, 10, 7, 0.98));
+}
+
+.ptc-preview-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ptc-preview-heading > span {
+  padding: 7px 10px;
+  border: 1px solid #776329;
+  border-radius: 999px;
+  color: var(--ptc-gold);
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.ptc-receipt-wrap {
+  min-height: 530px;
+  padding: 26px;
+  display: grid;
+  place-items: start center;
+  border: 1px solid #403a25;
+  border-radius: 16px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    #080a08;
+  background-size: 18px 18px;
+  overflow: auto;
+}
+
+.ptc-receipt {
+  width: min(80mm, 100%);
+  min-height: 480px;
+  padding: 18px 14px;
+  color: #111;
+  background: #fffef8;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  font: 10px/1.25 ui-monospace, Consolas, monospace;
+}
+
+.ptc-receipt h3 {
+  margin: 0;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.12;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ptc-receipt-subtitle {
+  display: block;
+  margin: 3px 0 13px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.ptc-receipt-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+}
+
+.ptc-receipt-control :nth-child(even) {
+  text-align: right;
+}
+
+.ptc-receipt-sale {
+  margin: 13px 0 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ptc-receipt table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.ptc-receipt th,
+.ptc-receipt td {
+  padding: 3px 2px;
+  overflow-wrap: anywhere;
+}
+
+.ptc-receipt th {
+  border-top: 1px solid #111;
+  border-bottom: 1px solid #111;
+  font-size: 8px;
+}
+
+.ptc-receipt th:not(:first-child),
+.ptc-receipt td:not(:first-child) {
+  text-align: right;
+}
+
+.ptc-receipt-detail {
+  margin-top: 16px;
+  font-size: 8px;
+}
+
+.ptc-receipt-total {
+  margin: 14px 0 0;
+  padding-top: 5px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 20px;
+  border-top: 1px solid #111;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.ptc-receipt-observ {
+  min-height: 34px;
+  margin: 27px 0 0;
+  border-bottom: 1px solid #111;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+@media (max-width: 820px) {
+  .ptc-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .ptc-shell {
+    width: min(100% - 20px, 1180px);
+    padding: 10px 0;
+  }
+
+  .ptc-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ptc-back {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ptc-preview-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ptc-receipt-wrap {
+    padding: 12px;
+  }
+}

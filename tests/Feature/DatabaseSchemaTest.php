@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(117, $migrationFiles);
+        $this->assertCount(118, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -47,6 +47,7 @@ class DatabaseSchemaTest extends TestCase
                 '2026_08_28_000002_create_product_dispatch_catalog.php' => 2,
                 '2026_08_28_000003_create_product_dispatch_operation.php' => 4,
                 '2026_09_01_000001_create_product_dispatch_configuration_and_tare_columns.php' => 3,
+                '2026_09_01_000004_add_product_dispatch_ticket_template_fields.php' => 2,
                 default => 1,
             };
 
@@ -168,7 +169,7 @@ class DatabaseSchemaTest extends TestCase
             'ajustes_peso_minorista' => ['empresa_id', 'estacion', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
             'ajustes_peso_mayorista_2' => ['empresa_id', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'estado'],
             'configuraciones_despacho_minorista' => ['empresa_id', 'sucursal_id', 'estacion', 'metodo_pago_id', 'cuenta_destino_id'],
-            'configuraciones_despacho_productos' => ['empresa_id', 'sucursal_id', 'merma_preset_1_gramos_unidad', 'merma_preset_2_gramos_unidad', 'merma_preset_3_gramos_unidad', 'productos_rapidos_configurados', 'producto_rapido_1_id', 'producto_rapido_2_id', 'producto_rapido_3_id', 'producto_rapido_4_id', 'titulo_pantalla_cliente'],
+            'configuraciones_despacho_productos' => ['empresa_id', 'sucursal_id', 'merma_preset_1_gramos_unidad', 'merma_preset_2_gramos_unidad', 'merma_preset_3_gramos_unidad', 'productos_rapidos_configurados', 'producto_rapido_1_id', 'producto_rapido_2_id', 'producto_rapido_3_id', 'producto_rapido_4_id', 'titulo_pantalla_cliente', 'titulo_ticket_despacho'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'ajuste_peso_mayorista_2_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'ajuste_peso_mayorista_2_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'configuraciones_recepcion_pollo_vivo' => ['sucursal_id', 'propietario_externo_predeterminado_id', 'almacen_columna_1_id', 'almacen_columna_2_id', 'almacen_columna_3_id', 'almacen_columna_4_id', 'cliente_columna_3_id', 'cliente_columna_4_id', 'aves_por_java_macho', 'aves_por_java_hembra', 'cantidad_javas_predeterminada', 'tipo_java_predeterminado_id', 'updated_by'],
@@ -183,7 +184,7 @@ class DatabaseSchemaTest extends TestCase
             'costos_compra_pesadas' => ['pesada_id', 'proveedor_id', 'precio_historial_id', 'precio_kg', 'peso_kg', 'importe', 'estado', 'origen', 'created_by'],
             'comprobantes' => ['operacion', 'naturaleza', 'codigo', 'origen_codigo', 'origen_clave', 'total', 'saldo_pendiente', 'contraparte_tipo_documento_snapshot', 'contraparte_numero_documento_snapshot', 'contraparte_nombre_snapshot', 'contraparte_direccion_snapshot', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'comprobante_detalles' => ['comprobante_id', 'tipo_pollo_id', 'producto_despacho_id', 'variacion_producto_despacho_id', 'descripcion', 'cantidad_aves', 'cantidad_unidades', 'peso_neto_kg', 'modo_precio', 'precio_kg', 'precio_unitario', 'subtotal'],
-            'tickets_despacho_productos' => ['empresa_id', 'sucursal_id', 'referencia_externa', 'codigo', 'fecha_operativa', 'cliente_id', 'tipo_cliente', 'cliente_nombre_snapshot', 'cantidad_total', 'peso_leido_total_kg', 'merma_total_gramos', 'tara_total_gramos', 'peso_neto_total_kg', 'subtotal', 'total', 'estado', 'registrado_at', 'created_by'],
+            'tickets_despacho_productos' => ['empresa_id', 'sucursal_id', 'referencia_externa', 'numero_lista', 'codigo', 'titulo_ticket_snapshot', 'fecha_operativa', 'cliente_id', 'tipo_cliente', 'cliente_nombre_snapshot', 'cantidad_total', 'peso_leido_total_kg', 'merma_total_gramos', 'tara_total_gramos', 'peso_neto_total_kg', 'subtotal', 'total', 'estado', 'registrado_at', 'created_by'],
             'pesadas_despacho_productos' => ['ticket_despacho_producto_id', 'numero', 'producto_despacho_id', 'variacion_producto_despacho_id', 'lectura_balanza_id', 'producto_nombre_snapshot', 'variacion_nombre_snapshot', 'modo_precio_snapshot', 'precio_catalogo_snapshot', 'precio_venta_snapshot', 'origen_precio', 'cantidad', 'origen_peso', 'peso_leido_kg', 'merma_catalogo_gramos_unidad', 'merma_aplicada_gramos_unidad', 'merma_total_gramos', 'tara_gramos', 'peso_neto_kg', 'importe', 'pesada_at', 'created_by'],
             'pagos' => ['empresa_id', 'codigo', 'tercero_id', 'tipo', 'cliente_id', 'proveedor_id', 'cuenta_origen_id', 'cuenta_destino_id', 'metodo_pago_id', 'direccion', 'fecha_hora', 'metodo', 'referencia', 'importe', 'estado', 'idempotency_key', 'reversa_de_pago_id', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],
             'pago_aplicaciones' => ['pago_id', 'comprobante_id', 'lado', 'importe_aplicado', 'created_by', 'created_at'],
@@ -229,6 +230,10 @@ class DatabaseSchemaTest extends TestCase
         $this->assertTrue(collect(Schema::getColumns('empresas'))->keyBy('name')->get('mensaje_ticket')['nullable']);
         $this->assertFalse(collect(Schema::getColumns('empresas'))->keyBy('name')->get('titulo_ticket')['nullable']);
         $this->assertTrue(collect(Schema::getColumns('empresas'))->keyBy('name')->get('paleta_reportes')['nullable']);
+        $this->assertTrue(collect(Schema::getColumns('configuraciones_despacho_productos'))->keyBy('name')->get('titulo_ticket_despacho')['nullable']);
+        $productTicketColumns = collect(Schema::getColumns('tickets_despacho_productos'))->keyBy('name');
+        $this->assertTrue($productTicketColumns->get('numero_lista')['nullable']);
+        $this->assertTrue($productTicketColumns->get('titulo_ticket_snapshot')['nullable']);
         $this->assertFalse(Schema::hasColumn('cuentas_financieras', 'saldo_actual'));
 
         $paymentIndexes = collect(Schema::getIndexes('pagos'))->keyBy('name');
@@ -509,6 +514,45 @@ class DatabaseSchemaTest extends TestCase
             'id' => $ticketId,
             'tara_total_gramos' => 0,
         ]);
+    }
+
+    public function test_product_dispatch_ticket_template_fields_migration_rolls_back_and_reapplies(): void
+    {
+        $migration = require database_path(
+            'migrations/2026_09_01_000004_add_product_dispatch_ticket_template_fields.php'
+        );
+
+        $this->assertTrue(Schema::hasColumn(
+            'configuraciones_despacho_productos',
+            'titulo_ticket_despacho',
+        ));
+        $this->assertTrue(Schema::hasColumns('tickets_despacho_productos', [
+            'numero_lista',
+            'titulo_ticket_snapshot',
+        ]));
+
+        $migration->down();
+
+        $this->assertFalse(Schema::hasColumn(
+            'configuraciones_despacho_productos',
+            'titulo_ticket_despacho',
+        ));
+        $this->assertFalse(Schema::hasColumn('tickets_despacho_productos', 'numero_lista'));
+        $this->assertFalse(Schema::hasColumn(
+            'tickets_despacho_productos',
+            'titulo_ticket_snapshot',
+        ));
+
+        $migration->up();
+
+        $this->assertTrue(Schema::hasColumn(
+            'configuraciones_despacho_productos',
+            'titulo_ticket_despacho',
+        ));
+        $this->assertTrue(Schema::hasColumns('tickets_despacho_productos', [
+            'numero_lista',
+            'titulo_ticket_snapshot',
+        ]));
     }
 
     public function test_database_seeder_keeps_financial_catalogs_and_admin_permissions(): void
