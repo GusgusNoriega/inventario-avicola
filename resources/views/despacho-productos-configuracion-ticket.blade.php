@@ -71,14 +71,21 @@
             </div>
             <p class="ptc-receipt-sale">VENTA AL PÚBLICO - 1</p>
             <table>
-              <thead><tr><th>PROD.</th><th>CANT.</th><th>P. NETO</th></tr></thead>
-              <tbody><tr><td>PRODUCTO</td><td>2</td><td>6.800</td></tr></tbody>
+              <thead><tr><th>TIPO</th><th>C/A</th><th>P NETO</th></tr></thead>
+              <tbody>
+                <tr><td>GALLO</td><td>1</td><td>0.65</td></tr>
+                <tr><td>HUEVO</td><td>6</td><td>1</td></tr>
+                <tr><td>GALLO</td><td>1</td><td>0.95</td></tr>
+              </tbody>
             </table>
             <table class="ptc-receipt-detail">
-              <thead><tr><th>PRODUCTO</th><th>C/A</th><th>P. NETO</th><th>PRECIO</th><th>TOTAL</th></tr></thead>
-              <tbody><tr><td>PRODUCTO</td><td>2</td><td>6.800</td><td>5.50/kg</td><td>37.40</td></tr></tbody>
+              <thead><tr><th>PRODUCTO</th><th>C/A</th><th>P NETO</th><th>PRECIO</th><th>TOTAL</th></tr></thead>
+              <tbody>
+                <tr><td>GALLO</td><td>2</td><td>1.6</td><td>8</td><td>12.80</td></tr>
+                <tr><td>HUEVO</td><td>6</td><td>1</td><td>0.8</td><td>4.80</td></tr>
+              </tbody>
             </table>
-            <p class="ptc-receipt-total"><span>TOT S/</span><b>37.40</b></p>
+            <p class="ptc-receipt-total"><span>TOT S/</span><b>17.60</b></p>
             <p class="ptc-receipt-observ">OBSERV:</p>
           </article>
         </div>
