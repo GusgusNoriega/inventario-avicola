@@ -272,7 +272,7 @@ button { color: inherit; }
 .pdd-capture-touch:disabled { cursor: not-allowed; opacity: .38; filter: grayscale(.5); }
 
 .pdd-config-panel { display: grid; grid-template-rows: auto auto auto 1fr; }
-.pdd-fields-grid { display: grid; grid-template-columns: minmax(165px, 1.05fr) .8fr minmax(200px, 1.25fr) 1.1fr; gap: 9px; }
+.pdd-fields-grid { display: grid; grid-template-columns: minmax(165px, 1.05fr) minmax(0, 1.3fr) minmax(200px, 1.25fr) minmax(110px, .6fr); gap: 9px; }
 .pdd-fields-grid > label,
 .pdd-gross-preview { min-width: 0; display: grid; align-content: center; gap: 3px; padding: 7px 8px; border: 1px solid var(--pdd-line); border-radius: 13px; background: var(--pdd-surface-raised); }
 .pdd-fields-grid label > span:first-child,
