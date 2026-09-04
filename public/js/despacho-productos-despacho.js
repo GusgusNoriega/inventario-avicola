@@ -1381,7 +1381,7 @@ function renderProductGrid(query = "") {
 }
 
 function itemDisplayName(item) {
-  return item.variation_name ? `${item.product_name} · ${item.variation_name}` : item.product_name;
+  return item.variation_name || item.product_name;
 }
 
 function renderLists() {

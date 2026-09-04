@@ -202,9 +202,12 @@ test("las imágenes rápidas no aumentan la fila y dejan el espacio restante a l
 });
 
 test("cada lista muestra producto, cantidad y neto en una tabla compacta editable", () => {
+  const displayNameFlow = sourceBetween(dispatchSource, "function itemDisplayName", "function renderLists");
   const listRender = sourceBetween(dispatchSource, "function renderLists", "function renderActiveSummary");
   const listInteraction = sourceBetween(dispatchSource, 'elements.lists.addEventListener("click"', "elements.assignClient.addEventListener");
 
+  assert.match(displayNameFlow, /return\s+item\.variation_name\s*\|\|\s*item\.product_name/);
+  assert.doesNotMatch(displayNameFlow, /item\.product_name\s*\}[^`]*item\.variation_name/);
   assert.match(listRender, /<table class="pdd-weighing-table">/);
   assert.match(listRender, /<caption class="sr-only">Pesadas de la lista/);
   assert.match(listRender, /<abbr title="Producto">Prod\.<\/abbr>/);
