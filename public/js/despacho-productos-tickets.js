@@ -540,7 +540,7 @@ function mountProductDispatchTickets() {
       const amount = Number(line.amount ?? line.total ?? calculated.amount) || 0;
 
       return `<tr>
-        <td><span class="pdt-line-product"><strong>${escapeHtml(names.product)}</strong><small>${escapeHtml(names.variation || "Producto base")}</small></span></td>
+        <td><span class="pdt-line-product"><strong>${escapeHtml(names.variation || names.product)}</strong><small>${escapeHtml(names.variation ? names.product : "Producto base")}</small></span></td>
         <td>${escapeHtml(formatInteger(line.quantity ?? calculated.quantity))}</td>
         <td>${escapeHtml(priceModeLabel(line.price_mode))}</td>
         <td>${escapeHtml(formatWeight(line.read_weight_kg ?? calculated.read_weight_kg))}</td>
