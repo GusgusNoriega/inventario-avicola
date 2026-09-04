@@ -480,6 +480,17 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        DB::table('pagos_despacho_productos')->insert([
+            'empresa_id' => $companyId,
+            'sucursal_id' => $branchId,
+            'pago_id' => $paymentId,
+            'idempotency_key' => (string) Str::uuid(),
+            'request_hash' => hash('sha256', 'pago-productos-prueba'),
+            'estado' => 'REGISTRADO',
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         DB::table('movimientos_caja_efectivo')->insert([
             'empresa_id' => $companyId,
             'pago_id' => $paymentId,

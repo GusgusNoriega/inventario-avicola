@@ -85,6 +85,21 @@
           <span class="product-dispatch-menu-action">Gestionar clientes <span aria-hidden="true">→</span></span>
         </a>
 
+        <a class="product-dispatch-menu-card card is-clients" href="{{ route('despacho-productos.pagos') }}">
+          <span class="product-dispatch-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M3 6h18v13H3zM3 10h18M7 15h3"></path>
+              <path d="M16 13v4M14 15h4"></path>
+            </svg>
+          </span>
+          <span class="product-dispatch-menu-copy">
+            <small>Ingresos de clientes</small>
+            <strong>Pagos de clientes</strong>
+            <span>Registra, consulta, edita o elimina pagos recibidos por la empresa. El número de transacción es opcional.</span>
+          </span>
+          <span class="product-dispatch-menu-action">Gestionar pagos <span aria-hidden="true">→</span></span>
+        </a>
+
         <a class="product-dispatch-menu-card card is-ticket" href="{{ route('despacho-productos.configuracion-ticket') }}">
           <span class="product-dispatch-menu-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">

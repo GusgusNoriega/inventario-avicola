@@ -1139,6 +1139,104 @@ class ProductDispatchAccountStatementTest extends TestCase
             ->assertJsonValidationErrors('preview');
     }
 
+    public function test_product_payments_without_tickets_appear_in_the_statement_and_follow_full_edits_and_deletion(): void
+    {
+        $methodId = DB::table('metodos_pago')->where('codigo', 'TRANSFERENCIA')->value('id');
+        $payload = [
+            'idempotency_key' => (string) Str::uuid(),
+            'cliente_id' => $this->clientId,
+            'metodo_pago_id' => $methodId,
+            'importe' => '75.00',
+            'moneda' => 'PEN',
+            'fecha_hora' => '2026-07-10T23:30',
+        ];
+        $id = $this->postJson('/api/v1/despacho-productos/pagos', $payload)
+            ->assertCreated()->json('data.id');
+
+        $this->getJson($this->statementUrl())
+            ->assertOk()
+            ->assertJsonPath('data.sales_total', '0.00')
+            ->assertJsonPath('data.payments_total', '75.00')
+            ->assertJsonPath('data.ending_balance', '-75.00')
+            ->assertJsonPath('data.payment_count', 1)
+            ->assertJsonPath('data.rows.0.date', '2026-07-10');
+
+        $this->putJson('/api/v1/despacho-productos/pagos/'.$id, [
+            ...$payload,
+            'importe' => '60.00',
+            'fecha_hora' => '2026-06-30T23:30',
+        ])->assertOk();
+        $this->getJson($this->statementUrl())
+            ->assertOk()
+            ->assertJsonPath('data.opening_balance', '-60.00')
+            ->assertJsonPath('data.payments_total', '0.00')
+            ->assertJsonPath('data.ending_balance', '-60.00');
+
+        $this->deleteJson('/api/v1/despacho-productos/pagos/'.$id)->assertOk();
+        $this->getJson($this->statementUrl())
+            ->assertOk()
+            ->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.ending_balance', '0.00')
+            ->assertJsonCount(0, 'data.rows');
+    }
+
+    public function test_module_payment_is_counted_once_with_allocations_and_is_scoped_to_its_branch(): void
+    {
+        $document = $this->simpleProductDocument('PD-PAGO-UNICO', '2026-07-05', '100.00');
+        $paymentId = $this->createPayment(
+            (int) $this->user->empresa_id, (int) $this->user->id, $this->clientId,
+            'PG-PRODUCTOS', '2026-07-06 12:00:00', '40.00',
+        );
+        $this->linkModulePayment($paymentId, $this->branchId);
+        $this->applyPayment($paymentId, $document['document_id'], '20.00');
+        $otherBranch = $this->createBranch((int) $this->user->empresa_id, 'OTRA-PAGOS', 'Otra sucursal', 'America/Lima');
+        $otherPayment = $this->createPayment(
+            (int) $this->user->empresa_id, (int) $this->user->id, $this->clientId,
+            'PG-OTRA-SUCURSAL', '2026-07-06 12:00:00', '800.00',
+        );
+        $this->linkModulePayment($otherPayment, $otherBranch);
+
+        $this->getJson($this->statementUrl())
+            ->assertOk()
+            ->assertJsonPath('data.payments_total', '40.00')
+            ->assertJsonPath('data.ending_balance', '60.00')
+            ->assertJsonPath('data.payment_count', 1);
+    }
+
+    public function test_inactive_client_with_only_module_payments_remains_available_in_the_statement(): void
+    {
+        $clientId = $this->createClient((int) $this->user->empresa_id, 'Cliente con anticipo', '12345670', Tercero::STATUS_INACTIVE);
+        $paymentId = $this->createPayment(
+            (int) $this->user->empresa_id, (int) $this->user->id, $clientId,
+            'PG-ANTICIPO-USD', '2026-07-06 12:00:00', '12.50',
+        );
+        DB::table('pagos')->where('id', $paymentId)->update(['moneda' => 'USD']);
+        $this->linkModulePayment($paymentId, $this->branchId);
+
+        $catalog = $this->getJson('/api/v1/despacho-productos/estado-cuenta/catalogo')->assertOk();
+        $this->assertContains($clientId, array_column($catalog->json('data.clients'), 'id'));
+        $this->assertContains('USD', $catalog->json('data.currencies'));
+        $this->getJson($this->statementUrl($clientId, currency: 'USD'))
+            ->assertOk()
+            ->assertJsonPath('data.payments_total', '12.50')
+            ->assertJsonPath('data.ending_balance', '-12.50');
+    }
+
+    private function linkModulePayment(int $paymentId, int $branchId): void
+    {
+        DB::table('pagos_despacho_productos')->insert([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $branchId,
+            'pago_id' => $paymentId,
+            'idempotency_key' => (string) Str::uuid(),
+            'request_hash' => hash('sha256', (string) $paymentId),
+            'estado' => Pago::STATUS_REGISTERED,
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     private function statementUrl(
         ?int $clientId = null,
         string $dateFrom = '2026-07-01',

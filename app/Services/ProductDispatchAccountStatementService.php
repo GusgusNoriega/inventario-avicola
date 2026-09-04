@@ -33,11 +33,14 @@ class ProductDispatchAccountStatementService
             ->select('ticket.cliente_id');
         $manualDebtClientIds = (clone $manualDebts)
             ->select('document.tercero_id');
+        $modulePayments = $this->modulePaymentsQuery($companyId, (int) $branch->id);
+        $paymentClientIds = (clone $modulePayments)->select('payment.cliente_id');
         $clients = Tercero::query()
             ->where('terceros.empresa_id', $companyId)
             ->where(function (EloquentBuilder $clients) use (
                 $historicalClientIds,
                 $manualDebtClientIds,
+                $paymentClientIds,
             ): void {
                 $clients
                     ->where(function (EloquentBuilder $activeExternalClients): void {
@@ -47,7 +50,8 @@ class ProductDispatchAccountStatementService
                             ->conRol(TerceroRole::CLIENT);
                     })
                     ->orWhereIn('terceros.id', $historicalClientIds)
-                    ->orWhereIn('terceros.id', $manualDebtClientIds);
+                    ->orWhereIn('terceros.id', $manualDebtClientIds)
+                    ->orWhereIn('terceros.id', $paymentClientIds);
             })
             ->select([
                 'terceros.id',
@@ -79,6 +83,7 @@ class ProductDispatchAccountStatementService
             ->merge((clone $manualDebts)
                 ->distinct()
                 ->pluck('document.moneda'))
+            ->merge((clone $modulePayments)->distinct()->pluck('payment.moneda'))
             ->map(fn (mixed $currency): string => strtoupper(trim((string) $currency)))
             ->filter(fn (string $currency): bool => preg_match('/\A[A-Z]{3}\z/', $currency) === 1)
             ->unique()
@@ -243,7 +248,20 @@ class ProductDispatchAccountStatementService
             $documentIds,
             $dateTo,
             $timezone,
-        );
+        )->concat($this->modulePaymentsQuery($companyId, (int) $branch->id)
+            ->leftJoin('metodos_pago as method', 'method.id', '=', 'payment.metodo_pago_id')
+            ->where('payment.cliente_id', $clientId)
+            ->where('payment.moneda', $currency)
+            ->where('payment.fecha_hora', '<', CarbonImmutable::createFromFormat('!Y-m-d', $dateTo, $timezone)
+                ->addDay()->setTimezone($databaseTimezone)->toDateTimeString())
+            ->get([
+                'payment.id', 'payment.codigo', 'payment.fecha_hora', 'payment.tipo',
+                'payment.direccion', 'payment.metodo', 'payment.referencia', 'payment.observaciones',
+                'method.nombre as payment_method_name', 'payment.importe as applied_amount',
+                DB::raw('NULL as route_received_date'),
+                DB::raw('NULL as route_collection_reference'),
+                DB::raw('NULL as route_collection_code'),
+            ]));
         $openingPayments = '0.00';
         $paymentsTotal = '0.00';
         $paymentRows = collect();
@@ -391,6 +409,19 @@ class ProductDispatchAccountStatementService
             ]);
     }
 
+    private function modulePaymentsQuery(int $companyId, int $branchId): Builder
+    {
+        return DB::table('pagos_despacho_productos as module_payment')
+            ->join('pagos as payment', 'payment.id', '=', 'module_payment.pago_id')
+            ->where('module_payment.empresa_id', $companyId)
+            ->where('module_payment.sucursal_id', $branchId)
+            ->where('module_payment.estado', Pago::STATUS_REGISTERED)
+            ->where('payment.empresa_id', $companyId)
+            ->where('payment.tipo', Pago::TYPE_CUSTOMER_COLLECTION)
+            ->where('payment.estado', Pago::STATUS_REGISTERED)
+            ->whereNull('payment.reversa_de_pago_id');
+    }
+
     /** @param Collection<int, object> $documents */
     private function assertConsistentFinancialLinks(Collection $documents): void
     {
@@ -459,8 +490,11 @@ class ProductDispatchAccountStatementService
         $hasManualDebtHistory = $client && $this->manualCustomerDebtsQuery($companyId)
             ->where('document.tercero_id', $clientId)
             ->exists();
+        $hasPaymentHistory = $client && $this->modulePaymentsQuery($companyId, $branchId)
+            ->where('payment.cliente_id', $clientId)
+            ->exists();
 
-        if (! $isActiveExternalClient && ! $hasHistory && ! $hasManualDebtHistory) {
+        if (! $isActiveExternalClient && ! $hasHistory && ! $hasManualDebtHistory && ! $hasPaymentHistory) {
             throw ValidationException::withMessages([
                 'client_id' => 'El cliente no está disponible para consultar en Despacho de productos.',
             ]);
@@ -620,6 +654,12 @@ class ProductDispatchAccountStatementService
             ->where('payment.moneda', $currency)
             ->where('payment.estado', Pago::STATUS_REGISTERED)
             ->whereNull('payment.reversa_de_pago_id')
+            // Module payments are already included at their full amount, even without allocations.
+            ->whereNotExists(function (Builder $modulePayments): void {
+                $modulePayments->selectRaw('1')
+                    ->from('pagos_despacho_productos')
+                    ->whereColumn('pagos_despacho_productos.pago_id', 'payment.id');
+            })
             ->where(function (Builder $dates) use ($dateTo, $toExclusive): void {
                 $dates->where(function (Builder $received) use ($dateTo): void {
                     $received->whereNotNull('collection_route.fecha_recepcion')

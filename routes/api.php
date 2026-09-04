@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\V1\ManualCustomerDebtController;
 use App\Http\Controllers\Api\V1\OperationCatalogController;
 use App\Http\Controllers\Api\V1\ProductDispatchAccountStatementController;
 use App\Http\Controllers\Api\V1\ProductDispatchClientController;
+use App\Http\Controllers\Api\V1\ProductDispatchCustomerPaymentController;
 use App\Http\Controllers\Api\V1\ProductDispatchOperationController;
 use App\Http\Controllers\Api\V1\ProviderHistoryController;
 use App\Http\Controllers\Api\V1\ProviderReportController;
@@ -378,6 +379,13 @@ Route::prefix('v1')->group(function (): void {
         ->middleware($productDispatchMiddleware)
         ->group(function (): void {
             Route::get('/catalogo', [ProductDispatchOperationController::class, 'catalog']);
+            Route::prefix('pagos')->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR')->group(function (): void {
+                Route::get('/catalogo', [ProductDispatchCustomerPaymentController::class, 'catalog']);
+                Route::get('/', [ProductDispatchCustomerPaymentController::class, 'index']);
+                Route::post('/', [ProductDispatchCustomerPaymentController::class, 'store']);
+                Route::put('/{pago}', [ProductDispatchCustomerPaymentController::class, 'update'])->whereNumber('pago');
+                Route::delete('/{pago}', [ProductDispatchCustomerPaymentController::class, 'destroy'])->whereNumber('pago');
+            });
             Route::get('/clientes', [ProductDispatchClientController::class, 'index'])
                 ->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR');
             Route::post('/clientes', [ProductDispatchClientController::class, 'store'])

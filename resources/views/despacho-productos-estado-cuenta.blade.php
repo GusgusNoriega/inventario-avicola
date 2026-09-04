@@ -19,7 +19,7 @@
       <div class="pdas-header-copy">
         <p class="eyebrow">Despacho de productos</p>
         <h1>Estado de cuenta del cliente</h1>
-        <p>Consulta las ventas de esta sucursal, la deuda anterior registrada en Finanzas y los abonos aplicados, y prepara un PDF para el cliente.</p>
+        <p>Consulta las ventas de esta sucursal, la deuda anterior y los pagos del cliente, y prepara su estado de cuenta en PDF.</p>
       </div>
       <a class="menu-return-btn pdas-back" href="{{ route('despacho-productos.menu') }}" aria-label="Volver a las opciones de Despacho de productos">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

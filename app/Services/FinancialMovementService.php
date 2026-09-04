@@ -33,6 +33,7 @@ class FinancialMovementService
         array $data,
         ?string $ip = null,
         bool $allowMissingMethodReference = false,
+        bool $allowUnassignedCustomerAccount = false,
     ): array {
         $data = $this->normalizePayload($data);
         $this->assertActor($companyId, $actor, $data['tipo']);
@@ -45,6 +46,7 @@ class FinancialMovementService
                     $data,
                     $ip,
                     $allowMissingMethodReference,
+                    $allowUnassignedCustomerAccount,
                 ),
                 3
             );
@@ -80,11 +82,13 @@ class FinancialMovementService
         ?string $ip = null,
         ?int $cashMovementContextId = null,
         ?int $expenseContextId = null,
+        ?int $productPaymentContextId = null,
     ): void {
         abort_unless(
             (int) $actor->empresa_id === $companyId
                 && $actor->isActive()
-                && $actor->hasPermission('PAGOS_REGISTRAR'),
+                && ($actor->hasPermission('PAGOS_REGISTRAR')
+                    || ($productPaymentContextId !== null && $actor->hasPermission('PRODUCTOS_DESPACHO_DESPACHAR'))),
             403,
             'Se requiere el permiso PAGOS_REGISTRAR.',
         );
@@ -97,6 +101,7 @@ class FinancialMovementService
             $ip,
             $cashMovementContextId,
             $expenseContextId,
+            $productPaymentContextId,
         ): void {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -104,6 +109,8 @@ class FinancialMovementService
                 ->lockForUpdate()
                 ->first();
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
+
+            $this->assertProductPaymentContext($companyId, $paymentId, $productPaymentContextId);
 
             if ($payment->estado !== Pago::STATUS_REGISTERED || $payment->reversa_de_pago_id !== null) {
                 throw ValidationException::withMessages([
@@ -477,6 +484,7 @@ class FinancialMovementService
         ?int $collectionContextId = null,
         ?int $cashMovementContextId = null,
         ?int $expenseContextId = null,
+        ?int $productPaymentContextId = null,
     ): array {
         abort_unless(
             (int) $actor->empresa_id === $companyId && $actor->isActive(),
@@ -494,6 +502,7 @@ class FinancialMovementService
             $collectionContextId,
             $cashMovementContextId,
             $expenseContextId,
+            $productPaymentContextId,
         ): array {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -501,6 +510,8 @@ class FinancialMovementService
                 ->lockForUpdate()
                 ->first();
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
+
+            $this->assertProductPaymentContext($companyId, $paymentId, $productPaymentContextId);
 
             $collectionLink = $this->collectionForPayment($companyId, $paymentId);
             if ($collectionLink
@@ -717,6 +728,7 @@ class FinancialMovementService
         array $data,
         ?string $ip,
         bool $allowMissingMethodReference,
+        bool $allowUnassignedCustomerAccount,
     ): array {
         $existing = DB::table('pagos')
             ->where('empresa_id', $companyId)
@@ -732,7 +744,7 @@ class FinancialMovementService
         $accounts = $this->lockedAccounts($companyId, $data);
         $method = $this->activeMethod($data['metodo_pago_id'] ?? null);
         $this->assertThirdParties($companyId, $data);
-        $this->assertFlow($companyId, $data, $accounts, $method, $allowMissingMethodReference);
+        $this->assertFlow($companyId, $data, $accounts, $method, $allowMissingMethodReference, $allowUnassignedCustomerAccount);
         $documents = $this->validateApplications($companyId, $data);
 
         $now = now();
@@ -887,6 +899,7 @@ class FinancialMovementService
         Collection $accounts,
         ?object $method,
         bool $allowMissingMethodReference,
+        bool $allowUnassignedCustomerAccount,
     ): void {
         $type = $data['tipo'];
         $origin = isset($data['cuenta_origen_id']) ? $accounts->get((int) $data['cuenta_origen_id']) : null;
@@ -903,9 +916,12 @@ class FinancialMovementService
 
         switch ($type) {
             case 'COBRO_CLIENTE':
-                $this->required($data, ['cliente_id', 'cuenta_destino_id', 'metodo_pago_id']);
+                $this->required($data, ['cliente_id', 'metodo_pago_id']);
+                if (! $allowUnassignedCustomerAccount || $destination !== null) {
+                    $this->required($data, ['cuenta_destino_id']);
+                    $this->assertOwn($destination, 'cuenta_destino_id');
+                }
                 $this->assertEmpty($data, ['proveedor_id', 'cuenta_origen_id']);
-                $this->assertOwn($destination, 'cuenta_destino_id');
                 $this->assertOnlySides($data, ['CXC']);
                 break;
 
@@ -1119,6 +1135,20 @@ class FinancialMovementService
         }
 
         return $documents;
+    }
+
+    private function assertProductPaymentContext(int $companyId, int $paymentId, ?int $contextId = null): void
+    {
+        $productPayment = DB::table('pagos_despacho_productos')
+            ->where('empresa_id', $companyId)->where('pago_id', $paymentId)->first(['id']);
+        if ($productPayment && (int) $productPayment->id !== (int) $contextId) {
+            throw ValidationException::withMessages([
+                'movimiento' => 'Este pago pertenece a Despacho de productos. Edítalo o elimínalo desde Pagos de clientes.',
+            ]);
+        }
+        if ($contextId !== null && ! $productPayment) {
+            throw ValidationException::withMessages(['movimiento' => 'El asiento no pertenece al pago de cliente indicado.']);
+        }
     }
 
     /** @param array<string, mixed> $data */
