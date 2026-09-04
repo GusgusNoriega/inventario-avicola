@@ -81,7 +81,7 @@
             </div>
             <output id="pddLiveWeight" class="pdd-live-weight" aria-label="Peso neto actual">---<small>kg</small></output>
             <div class="pdd-scale-actions">
-              <button id="pddManualWeight" class="pdd-secondary-touch" type="button" aria-haspopup="dialog" aria-controls="pddManualDialog">
+              <button id="pddManualWeight" class="pdd-secondary-touch" type="button" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false">
                 <span aria-hidden="true">✎</span> Manual
               </button>
               <button id="pddCaptureWeight" class="pdd-capture-touch" type="button" disabled>
@@ -174,7 +174,7 @@
         <div class="pdd-ticket-total">
           <span>Total de la lista</span>
           <strong id="pddTicketTotal">S/ 0.00</strong>
-          <small id="pddTicketSummary">0 pesadas · 0.000 kg netos</small>
+          <small id="pddTicketSummary">0 pesadas · 0.00 kg netos</small>
         </div>
         <button id="pddSave" class="pdd-save-button is-secondary" type="button" disabled>
           <span aria-hidden="true">✓</span><span><b>Guardar</b><small>Sin imprimir</small></span>
@@ -210,23 +210,7 @@
     </section>
   </dialog>
 
-  <dialog id="pddManualDialog" class="pdd-dialog pdd-small-dialog" aria-labelledby="pddManualDialogTitle">
-    <form id="pddManualForm">
-      <header class="pdd-dialog-head">
-        <div><p>Lectura alternativa</p><h2 id="pddManualDialogTitle">Colocar peso manual</h2></div>
-        <button type="button" data-pdd-close="pddManualDialog" aria-label="Cerrar">×</button>
-      </header>
-      <label class="pdd-big-number-input">
-        <span>Peso neto</span>
-        <span><input id="pddManualInput" type="number" min="0.001" max="999999999.999" step="0.001" inputmode="decimal" placeholder="0.000" required><b>kg</b></span>
-      </label>
-      <p>El valor se usará directamente como peso neto, sin aplicar merma ni tara.</p>
-      <footer class="pdd-dialog-actions">
-        <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddManualDialog">Cancelar</button>
-        <button class="pdd-dialog-confirm" type="submit">Mostrar este peso</button>
-      </footer>
-    </form>
-  </dialog>
+  <input id="pddManualInput" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="none" readonly required hidden data-pdd-keypad-label="Colocar peso manual" data-pdd-keypad-value-label="Peso neto (kg)" data-pdd-keypad-confirm-label="Mostrar este peso" data-pdd-keypad-value-name="peso" data-pdd-keypad-value-article="un" data-pdd-keypad-hint="El valor se usará directamente como peso neto, sin aplicar merma ni tara.">
 
   <dialog id="pddNumericKeypad" class="pdd-dialog pdd-keypad-dialog" aria-labelledby="pddNumericKeypadTitle">
     <section>
@@ -239,6 +223,7 @@
         <span id="pddNumericKeypadValueLabel">Valor seleccionado</span>
         <output id="pddNumericKeypadValue" class="pdd-keypad-value" tabindex="-1" aria-labelledby="pddNumericKeypadValueLabel" aria-live="polite">1</output>
       </div>
+      <p id="pddNumericKeypadHint" class="pdd-keypad-hint" hidden></p>
       <p id="pddNumericKeypadMessage" class="pdd-keypad-message" role="status" aria-live="polite"></p>
 
       <div class="pdd-keypad-grid" role="group" aria-label="Números disponibles">
@@ -291,14 +276,14 @@
         <label><span>Producto</span><select id="pddEditProduct" required></select></label>
         <label><span>Variación</span><select id="pddEditVariation"></select></label>
         <label><span>Cantidad</span><input id="pddEditQuantity" type="number" min="0" max="100000" step="1" required></label>
-        <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0.001" max="999999999.999" step="0.001" required></label>
+        <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0" max="1000000000" step="0.01" required></label>
         <label><span>Merma/u (g)</span><input id="pddEditWastePerUnit" type="number" min="0" max="1000000" step="1" required></label>
         <label><span>Merma total (g)</span><output id="pddEditWasteTotal" class="pdd-edit-output">0 g</output></label>
         <label><span>Tara (g)</span><input id="pddEditTare" type="number" min="0" max="1000000000" step="1" required></label>
         <label class="pdd-edit-price-field"><span>Precio</span><input id="pddEditPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico"></label>
       </div>
       <div class="pdd-edit-summary">
-        <span id="pddEditSource">Origen: manual</span><strong id="pddEditCalculated">Neto 0.000 kg · S/ 0.00</strong>
+        <span id="pddEditSource">Origen: manual</span><strong id="pddEditCalculated">Neto 0.00 kg · S/ 0.00</strong>
       </div>
       <footer class="pdd-dialog-actions is-split">
         <button id="pddDeleteWeighing" class="pdd-dialog-delete" type="button">Eliminar pesada</button>

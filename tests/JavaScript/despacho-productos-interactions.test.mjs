@@ -85,6 +85,35 @@ test("el modo decimal del mismo teclado conserva dos decimales y admite punto o 
   assert.match(validateDecimalKeypadBuffer("0", { min: 0.01, decimalPlaces: 2, valueName: "precio" }), /mínimo es 0.01/);
 });
 
+test("el peso nuevo del teclado usa dos decimales y respeta sus límites en kilogramos", () => {
+  const weightOptions = {
+    required: true,
+    min: 0.01,
+    max: 999999999.99,
+    maxLength: 9,
+    decimalPlaces: 2,
+    valueName: "peso",
+    valueArticle: "un"
+  };
+
+  assert.equal(sanitizeDecimalKeypadBuffer("0012,345", 9, 2), "12.34");
+  assert.equal(applyDecimalKeypadKey("12.3", "4", 9, 2), "12.34");
+  assert.equal(applyDecimalKeypadKey("12.34", "5", 9, 2), "12.34");
+  assert.equal(applyDecimalKeypadKey("0.0", "1", 9, 2), "0.01");
+  assert.equal(applyDecimalKeypadKey("999999999", "9", 9, 2), "999999999");
+  assert.equal(validateDecimalKeypadBuffer("0.01", weightOptions), "");
+  assert.equal(validateDecimalKeypadBuffer("12,34", weightOptions), "");
+  assert.equal(validateDecimalKeypadBuffer("999999999.99", weightOptions), "");
+  assert.match(validateDecimalKeypadBuffer("", weightOptions), /Ingresa un peso/);
+  assert.match(validateDecimalKeypadBuffer("0", weightOptions), /mínimo es 0.01/);
+  assert.match(validateDecimalKeypadBuffer("0.00", weightOptions), /mínimo es 0.01/);
+  assert.match(validateDecimalKeypadBuffer("12.345", weightOptions), /hasta 2 decimales/);
+  assert.match(
+    validateDecimalKeypadBuffer("1000000000", { ...weightOptions, maxLength: 10 }),
+    /máximo es 999999999.99/
+  );
+});
+
 test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma total", () => {
   const quantityInput = dispatchView.match(/<input\b[^>]*\bid="pddQuantity"[^>]*>/)?.[0] || "";
   const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWastePerUnit"[^>]*>/)?.[0] || "";
@@ -345,7 +374,7 @@ test("el peso neto queda como lectura principal y el bruto de balanza en el recu
   assert.match(dispatchView, /id="pddLiveWeight"[^>]*aria-label="Peso neto actual"/);
   assert.match(dispatchView, /class="pdd-gross-preview"[\s\S]*?<span>Peso bruto<\/span>[\s\S]*?id="pddGrossPreview"/);
   assert.doesNotMatch(dispatchView, /id="pddNetPreview"|class="pdd-net-preview"/);
-  assert.match(previewFlow, /elements\.liveWeight\.innerHTML\s*=\s*`\$\{hasDisplayedWeight\s*\?\s*line\.net_weight_kg\.toFixed\(3\)/);
+  assert.match(previewFlow, /elements\.liveWeight\.innerHTML\s*=\s*`\$\{hasDisplayedWeight\s*\?\s*formatWeightValue\(line\.net_weight_kg\)/);
   assert.match(previewFlow, /elements\.grossPreview\.textContent[\s\S]*formatWeight\(scaleWeight\)/);
   assert.match(dispatchUtilsSource, /wasteTotalGrams\s*=\s*readWeightKg\s*>\s*0\s*\?\s*wasteGramsPerUnit\s*\*\s*quantity\s*:\s*0/);
   assert.match(dispatchStyles, /\.pdd-gross-preview\s*\{[^}]*background:\s*linear-gradient/);
@@ -357,17 +386,13 @@ test("el peso manual se calcula como neto directo sin merma ni tara", () => {
     "function calculationValuesForReading",
     "function resetCaptureQuantity"
   );
-  const manualDialog = sourceBetween(
-    dispatchView,
-    '<dialog id="pddManualDialog"',
-    '<dialog id="pddClientDialog"'
-  );
+  const manualInput = dispatchView.match(/<input\b[^>]*\bid="pddManualInput"[^>]*>/)?.[0] || "";
 
   assert.match(calculationFlow, /weight_source:\s*isManualReading\(scaleState\)\s*\?\s*"MANUAL"/);
   assert.match(dispatchUtilsSource, /String\(input\.weight_source\s*\|\|\s*""\)\.toUpperCase\(\)\s*===\s*"MANUAL"/);
   assert.match(dispatchUtilsSource, /waste_grams_per_unit:\s*0,[\s\S]*waste_total_grams:\s*0,[\s\S]*tare_grams:\s*0/);
-  assert.match(manualDialog, /<span>Peso neto<\/span>/);
-  assert.match(manualDialog, /directamente como peso neto, sin aplicar merma ni tara/i);
+  assert.match(manualInput, /data-pdd-keypad-value-label="Peso neto[^"]*"/i);
+  assert.match(manualInput, /directamente como peso neto, sin aplicar merma ni tara/i);
 });
 
 test("cambiar producto o subproducto restablece la cantidad a cero", () => {
@@ -458,15 +483,19 @@ test("el teclado confirma con eventos que recalculan cantidad, merma y total", (
 });
 
 test("confirmar el peso manual solo fija la lectura pendiente y no agrega una pesada", () => {
-  const manualSubmitFlow = sourceBetween(
+  const manualCommitFlow = sourceBetween(
     dispatchSource,
-    'elements.manualForm.addEventListener("submit"',
-    'elements.lists.addEventListener("click"'
+    "function setPendingManualWeight",
+    "function effectiveCaptureReading"
   );
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
 
-  assert.match(manualSubmitFlow, /pendingManualReading\s*=/);
-  assert.doesNotMatch(manualSubmitFlow, /addCurrentReading\s*\(/);
-  assert.match(manualSubmitFlow, /closeDialog\(elements\.manualDialog\)/);
+  assert.match(manualCommitFlow, /pendingManualReading\s*=\s*createPendingManualReading\(/);
+  assert.match(manualCommitFlow, /resolveWeightInput\(/);
+  assert.match(manualCommitFlow, /renderScale\(state\.scale\.getState\(\)\)/);
+  assert.doesNotMatch(manualCommitFlow, /addCurrentReading\s*\(/);
+  assert.match(manualCommitFlow, /presiona Capturar peso/);
+  assert.match(keypadBinding, /input:\s*elements\.manualInput,[^}]*onCommit:\s*setPendingManualWeight/);
 });
 
 test("la lectura manual pendiente tiene prioridad hasta pulsar Capturar peso", () => {
@@ -652,15 +681,49 @@ test("en móvil Cantidad ocupa toda la fila para evitar desbordes", () => {
   );
 });
 
-test("el diálogo manual explica que prepara el peso sin prometer agregar la pesada", () => {
-  const manualDialog = sourceBetween(
-    dispatchView,
-    '<dialog id="pddManualDialog"',
-    '<dialog id="pddClientDialog"'
-  );
+test("Manual abre directamente el teclado compartido para preparar el peso neto", () => {
+  const manualInput = dispatchView.match(/<input\b[^>]*\bid="pddManualInput"[^>]*>/)?.[0] || "";
+  const manualButton = dispatchView.match(/<button\b[^>]*\bid="pddManualWeight"[^>]*>/)?.[0] || "";
+  const manualOpenFlow = sourceBetween(dispatchSource, 'elements.manualWeight.addEventListener("click"', 'elements.clearManualWeight.addEventListener("click"');
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
 
-  assert.match(manualDialog, /type="submit"/);
-  assert.doesNotMatch(manualDialog, /agregar pesada/i);
+  assert.match(manualButton, /aria-controls="pddNumericKeypad"/);
+  assert.match(manualInput, /type="number"/);
+  assert.match(manualInput, /\bhidden\b/);
+  assert.match(manualInput, /min="0\.01"/);
+  assert.match(manualInput, /max="999999999\.99"/);
+  assert.match(manualInput, /step="0\.01"/);
+  assert.match(manualInput, /\brequired\b/);
+  assert.match(manualInput, /data-pdd-keypad-confirm-label="Mostrar este peso"/);
+  assert.doesNotMatch(manualInput, /agregar pesada/i);
+  assert.doesNotMatch(dispatchView, /id="pddManualDialog"|id="pddManualForm"/);
+  assert.match(manualOpenFlow, /if\s*\(!currentSelection\(\)\)/);
+  assert.match(manualOpenFlow, /formatWeightValue\(state\.pendingManualReading\.currentWeightKg\)/);
+  assert.match(manualOpenFlow, /state\.numericKeypad(?:\?\.|\.)open\(elements\.manualInput\)/);
+  assert.doesNotMatch(manualOpenFlow, /addCurrentReading\s*\(|pendingManualReading\s*=/);
+  assert.match(keypadBinding, /input:\s*elements\.manualInput,\s*mode:\s*"decimal",\s*decimalPlaces:\s*2,\s*maxLength:\s*9/);
+  assert.match(keypadBinding, /hintOutput:\s*elements\.numericKeypadHint/);
+  assert.match(dispatchView, /id="pddNumericKeypadHint"/);
+});
+
+test("el editor muestra dos decimales y resuelve el peso original para origen cálculo y guardado", () => {
+  const editWeightInput = dispatchView.match(/<input\b[^>]*\bid="pddEditWeight"[^>]*>/)?.[0] || "";
+  const weightResolver = sourceBetween(dispatchSource, "function editingWeightValue", "function editingWeightSource");
+  const sourceFlow = sourceBetween(dispatchSource, "function editingWeightSource", "function renderEditCalculation");
+  const calculationFlow = sourceBetween(dispatchSource, "function renderEditCalculation", "function openEditDialog");
+  const openFlow = sourceBetween(dispatchSource, "function openEditDialog", "function changeEditingProduct");
+  const saveFlow = sourceBetween(dispatchSource, "function saveEditingItem", "function deleteEditingItem");
+
+  assert.match(editWeightInput, /min="0"/);
+  assert.match(editWeightInput, /max="1000000000"/);
+  assert.match(editWeightInput, /step="0\.01"/);
+  assert.match(openFlow, /elements\.editWeight\.value\s*=\s*formatWeightValue\(item\.read_weight_kg\)/);
+  assert.match(weightResolver, /resolveWeightInput\(elements\.editWeight\.value,\s*item\?\.read_weight_kg\)/);
+  for (const flow of [sourceFlow, calculationFlow, saveFlow]) {
+    assert.match(flow, /editingWeightValue\(/);
+    assert.doesNotMatch(flow, /read_weight_kg:\s*elements\.editWeight\.value/);
+  }
+  assert.match(saveFlow, /999999999\.999/);
 });
 
 test("la configuración guarda el título exclusivo de la pantalla cliente", () => {

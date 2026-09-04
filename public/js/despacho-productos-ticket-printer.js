@@ -154,8 +154,8 @@ function summaryRows(items) {
   return items.map((item) => `
     <tr>
       <td class="product">${escapeHtml(displayName(item))}</td>
-      <td class="number">${Number(item.quantity || 0)}</td>
-      <td class="number">${compactDecimal(item.net_weight_kg, 3)}</td>
+      <td class="number">${compactDecimal(item.quantity, 2)}</td>
+      <td class="number">${compactDecimal(item.net_weight_kg, 2)}</td>
     </tr>`).join("");
 }
 
@@ -163,8 +163,8 @@ function detailRows(items) {
   return items.map((item) => `
     <tr>
       <td class="product">${escapeHtml(displayName(item))}</td>
-      <td class="number">${Number(item.quantity || 0)}</td>
-      <td class="number">${compactDecimal(item.net_weight_kg, 3)}</td>
+      <td class="number">${compactDecimal(item.quantity, 2)}</td>
+      <td class="number">${compactDecimal(item.net_weight_kg, 2)}</td>
       <td class="number price">${compactDecimal(item.unit_price, 2)}</td>
       <td class="number strong">${decimal(itemAmount(item), 2)}</td>
     </tr>`).join("");

@@ -75,7 +75,8 @@ test("la plantilla exclusiva de productos imprime control, lista y sus dos tabla
   assert.match(html, /0\.92/);
   assert.match(html, /<table class="details">[\s\S]*Grande<\/td>\s*<td class="number">3<\/td>\s*<td class="number">11<\/td>\s*<td class="number price">21<\/td>\s*<td class="number strong">231\.00<\/td>/);
   assert.doesNotMatch(html, /\/kg|\/und/);
-  assert.match(html, /1\.012/);
+  assert.match(html, /<td class="number">1\.01<\/td>/);
+  assert.doesNotMatch(html, /1\.012/);
   assert.match(html, /TOT S\/<\/span><span>235\.80/);
   assert.match(html, /<p class="footer">Gracias por su compra<\/p>/);
   assert.doesNotMatch(html, />Merma</);
@@ -164,6 +165,49 @@ test("el resumen agrupa solo pesadas equivalentes y conserva su orden", () => {
   assert.equal(grouped[4].quantity, 5);
   assert.equal(grouped[4].net_weight_kg, 1);
   assert.equal(grouped[4].amount, 4);
+});
+
+test("el ticket muestra máximo dos decimales y redondea después de agrupar los gramos originales", () => {
+  const ticket = {
+    code: "PD-PRECISION",
+    registered_at: "2026-08-28T10:00:00-05:00",
+    weighings: [
+      {
+        product_id: 1,
+        product_name: "Pollo",
+        quantity: 1,
+        price_mode: "POR_KG",
+        unit_price: "10.00",
+        net_weight_kg: "1.234",
+        amount: "12.34"
+      },
+      {
+        product_id: 1,
+        product_name: "Pollo",
+        quantity: 1,
+        price_mode: "POR_KG",
+        unit_price: "10.00",
+        net_weight_kg: "1.234",
+        amount: "12.34"
+      }
+    ],
+    totals: { amount: "24.68" }
+  };
+  const original = structuredClone(ticket);
+  const grouped = groupTicketItems(ticket.weighings);
+  const html = buildProductDispatchTicketHtml(ticket);
+  const summary = html.match(/<table class="summary">([\s\S]*?)<\/table>/)?.[1] || "";
+  const details = html.match(/<table class="details">([\s\S]*?)<\/table>/)?.[1] || "";
+  const numericCells = [...html.matchAll(/<td class="number[^"]*">([^<]+)<\/td>/g)].map((match) => match[1]);
+
+  assert.equal(grouped[0].net_weight_kg, 2.468, "La agrupación debe conservar los gramos originales.");
+  assert.deepEqual(ticket, original, "La presentación no debe modificar el ticket recibido.");
+  assert.equal((summary.match(/<td class="number">1\.23<\/td>/g) || []).length, 2);
+  assert.match(details, /<td class="number">2\.47<\/td>/);
+  assert.doesNotMatch(details, /<td class="number">2\.46<\/td>/);
+  assert.ok(numericCells.length > 0);
+  assert.ok(numericCells.every((value) => /^\d+(?:\.\d{1,2})?$/.test(value)), "Todas las celdas numéricas deben usar máximo dos decimales.");
+  assert.match(html, /TOT S\/<\/span><span>24\.68<\/span>/);
 });
 
 test("el título propio y los datos del ticket se escapan antes de imprimir", () => {

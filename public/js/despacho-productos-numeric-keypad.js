@@ -148,6 +148,7 @@ export function bindIntegerKeypad(options = {}) {
     confirmButton,
     titleOutput,
     valueLabelOutput,
+    hintOutput,
     showDialog,
     hideDialog
   } = options;
@@ -209,6 +210,10 @@ export function bindIntegerKeypad(options = {}) {
     const input = binding.input;
     if (titleOutput) titleOutput.textContent = fieldLabel(binding);
     if (valueLabelOutput) valueLabelOutput.textContent = input.dataset.pddKeypadValueLabel || "Valor seleccionado";
+    if (hintOutput) {
+      hintOutput.textContent = input.dataset.pddKeypadHint || "";
+      hintOutput.hidden = !hintOutput.textContent;
+    }
     confirmButton.textContent = input.dataset.pddKeypadConfirmLabel || "Usar valor";
     if (doubleZeroButton) {
       const decimal = bindingMode(binding) === "decimal";

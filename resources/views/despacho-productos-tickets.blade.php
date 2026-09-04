@@ -227,7 +227,7 @@
           <section class="pdt-editor-total" aria-label="Totales recalculados">
             <div><span>Pesadas</span><strong id="pdtEditTotalWeighings">0</strong></div>
             <div><span>Cantidad</span><strong id="pdtEditTotalQuantity">0</strong></div>
-            <div><span>Peso neto</span><strong id="pdtEditTotalNet">0,000 kg</strong></div>
+            <div><span>Peso neto</span><strong id="pdtEditTotalNet">0.00 kg</strong></div>
             <div class="is-amount"><span>Nuevo total</span><strong id="pdtEditTotalAmount">—</strong></div>
           </section>
         </div>

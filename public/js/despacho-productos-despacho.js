@@ -17,6 +17,8 @@ import {
   escapeHtml,
   formatMoney,
   formatWeight,
+  formatWeightValue,
+  resolveWeightInput,
   normalizeCatalog,
   normalizeQuickProductIds,
   normalizeWastePresets,
@@ -174,7 +176,6 @@ const TYPOGRAPHY_GROUPS = [
       { label: "Nombres de tarjetas", description: "Productos, clientes y dispositivos.", variable: "--pdd-fs-dialog-item-title", defaultValue: 13, min: 10, max: 24, step: 0.5, target: ".pdd-product-option b, .pdd-client-option b" },
       { label: "Detalles de tarjetas", description: "Precio, documento y textos secundarios.", variable: "--pdd-fs-dialog-item-detail", defaultValue: 10, min: 9, max: 20, step: 0.5, target: ".pdd-product-option small, .pdd-client-option small" },
       { label: "Botones de ventanas", description: "Cancelar, guardar, aplicar y confirmar.", variable: "--pdd-fs-dialog-actions", defaultValue: 14, min: 10, max: 24, step: 1, target: ".pdd-dialog-actions button" },
-      { label: "Peso manual grande", description: "Número principal al ingresar un peso manual.", variable: "--pdd-fs-manual-weight", defaultValue: 32, min: 22, max: 56, step: 2, target: ".pdd-big-number-input input" },
       { label: "Resumen de edición", description: "Origen, peso neto y total al editar una pesada.", variable: "--pdd-fs-edit-summary", defaultValue: 12, min: 9, max: 22, step: 0.5, target: ".pdd-edit-summary" }
     ]
   }
@@ -269,12 +270,11 @@ const elements = {
   productDialog: document.querySelector("#pddProductDialog"),
   productSearch: document.querySelector("#pddProductSearch"),
   productGrid: document.querySelector("#pddProductGrid"),
-  manualDialog: document.querySelector("#pddManualDialog"),
-  manualForm: document.querySelector("#pddManualForm"),
   manualInput: document.querySelector("#pddManualInput"),
   numericKeypad: document.querySelector("#pddNumericKeypad"),
   numericKeypadTitle: document.querySelector("#pddNumericKeypadTitle"),
   numericKeypadValueLabel: document.querySelector("#pddNumericKeypadValueLabel"),
+  numericKeypadHint: document.querySelector("#pddNumericKeypadHint"),
   numericKeypadValue: document.querySelector("#pddNumericKeypadValue"),
   numericKeypadMessage: document.querySelector("#pddNumericKeypadMessage"),
   numericKeypadClear: document.querySelector("#pddNumericKeypadClear"),
@@ -442,6 +442,19 @@ function createPendingManualReading(rawValue) {
     isFresh: true,
     isCaptureReady: true
   };
+}
+
+function setPendingManualWeight(value) {
+  try {
+    state.pendingManualReading = createPendingManualReading(resolveWeightInput(value, state.pendingManualReading?.currentWeightKg));
+    renderScale(state.scale.getState());
+    setMessage(
+      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo como neto. Verifica producto, cantidad y precio, y presiona Capturar peso.`,
+      "success"
+    );
+  } catch (error) {
+    setMessage(errorMessage(error), "error");
+  }
 }
 
 function effectiveCaptureReading(scaleState = state.scale?.getState?.() || state.liveScale) {
@@ -1285,7 +1298,7 @@ function renderCapturePreview() {
     price_mode: selection?.price_mode
   });
 
-  elements.liveWeight.innerHTML = `${hasDisplayedWeight ? line.net_weight_kg.toFixed(3) : "---"}<small>kg</small>`;
+  elements.liveWeight.innerHTML = `${hasDisplayedWeight ? formatWeightValue(line.net_weight_kg) : "---"}<small>kg</small>`;
   elements.grossPreview.textContent = isManualReading(state.liveScale) && hasWeight
     ? "No aplica"
     : (hasDisplayedWeight ? formatWeight(scaleWeight) : "--- kg");
@@ -1623,9 +1636,13 @@ function editingItem() {
   return activeDraft().items.find((item) => item.local_id === state.editingLocalId) || null;
 }
 
+function editingWeightValue(item = editingItem()) {
+  return resolveWeightInput(elements.editWeight.value, item?.read_weight_kg);
+}
+
 function editingWeightSource(item = editingItem()) {
   if (!item) return "MANUAL";
-  const editedWeight = roundTo(elements.editWeight.value, 3);
+  const editedWeight = roundTo(editingWeightValue(item), 3);
   return item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
     && roundTo(item.read_weight_kg, 3) === editedWeight
     ? PRODUCT_DISPATCH_SCALE_CODE
@@ -1640,7 +1657,7 @@ function renderEditCalculation() {
   const weightSource = editingWeightSource(item);
   const line = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
-    read_weight_kg: elements.editWeight.value,
+    read_weight_kg: editingWeightValue(item),
     waste_grams_per_unit: elements.editWastePerUnit.value,
     tare_grams: elements.editTare.value,
     unit_price: elements.editPrice.value,
@@ -1662,7 +1679,7 @@ function openEditDialog(localId, listIndex) {
   fillEditProductOptions(item.product_id);
   fillEditVariationOptions(item.variation_id);
   elements.editQuantity.value = String(item.quantity);
-  elements.editWeight.value = Number(item.read_weight_kg).toFixed(3);
+  elements.editWeight.value = formatWeightValue(item.read_weight_kg);
   elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / Math.max(1, item.quantity)));
   elements.editTare.value = String(item.tare_grams || 0);
   elements.editPrice.value = Number(item.unit_price).toFixed(2);
@@ -1703,6 +1720,12 @@ function saveEditingItem(event) {
     return;
   }
   if (!elements.editForm.reportValidity()) return;
+  const readWeight = editingWeightValue(item);
+  if (!Number.isFinite(readWeight) || readWeight <= 0 || readWeight > 999999999.999) {
+    elements.editWeight.focus();
+    setMessage("Ingresa un peso válido mayor que cero y dentro del límite permitido.", "error");
+    return;
+  }
   const product = state.catalog.products.find((entry) => entry.id === Number(elements.editProduct.value));
   const variation = product?.variations.find((entry) => entry.id === Number(elements.editVariation.value)) || null;
   const selection = effectiveProduct(product, variation);
@@ -1710,7 +1733,7 @@ function saveEditingItem(event) {
   const nextWeightSource = editingWeightSource(item);
   const calculated = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
-    read_weight_kg: elements.editWeight.value,
+    read_weight_kg: readWeight,
     waste_grams_per_unit: elements.editWastePerUnit.value,
     tare_grams: elements.editTare.value,
     unit_price: elements.editPrice.value,
@@ -2162,12 +2185,14 @@ state.numericKeypad = bindIntegerKeypad({
     { input: elements.quantity, maxLength: 6 },
     { input: elements.wastePerUnit, maxLength: 7 },
     { input: elements.tare, maxLength: 10 },
+    { input: elements.manualInput, mode: "decimal", decimalPlaces: 2, maxLength: 9, valueName: "peso", valueArticle: "un", onCommit: setPendingManualWeight },
     { input: elements.unitPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" },
     { input: elements.editPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" }
   ],
   dialog: elements.numericKeypad,
   titleOutput: elements.numericKeypadTitle,
   valueLabelOutput: elements.numericKeypadValueLabel,
+  hintOutput: elements.numericKeypadHint,
   valueOutput: elements.numericKeypadValue,
   messageOutput: elements.numericKeypadMessage,
   clearButton: elements.numericKeypadClear,
@@ -2296,25 +2321,15 @@ elements.manualWeight.addEventListener("click", () => {
     return;
   }
   elements.manualInput.value = state.pendingManualReading
-    ? state.pendingManualReading.currentWeightKg.toFixed(3)
+    ? formatWeightValue(state.pendingManualReading.currentWeightKg)
     : "";
-  openDialog(elements.manualDialog, elements.manualInput);
+  elements.manualWeight.setAttribute("aria-expanded", "true");
+  state.numericKeypad.open(elements.manualInput);
 });
-elements.manualForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!elements.manualForm.reportValidity()) return;
-  try {
-    state.pendingManualReading = createPendingManualReading(elements.manualInput.value);
-    renderScale(state.scale.getState());
-    closeDialog(elements.manualDialog);
-    setMessage(
-      `Peso manual ${formatWeight(state.pendingManualReading.currentWeightKg)} listo como neto. Verifica producto, cantidad y precio, y presiona Capturar peso.`,
-      "success"
-    );
-  } catch (error) {
-    setMessage(errorMessage(error), "error");
-  }
+elements.numericKeypad.addEventListener("close", () => {
+  elements.manualWeight.setAttribute("aria-expanded", "false");
 });
+
 elements.clearManualWeight.addEventListener("click", () => {
   if (!state.pendingManualReading) return;
   state.pendingManualReading = null;

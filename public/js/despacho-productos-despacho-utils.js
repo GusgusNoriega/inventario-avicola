@@ -388,10 +388,28 @@ export function currencyLabel(currency = "S/") {
   return String(currency || "S/").trim() || "S/";
 }
 
+export function formatWeightValue(value) {
+  return Number(value || 0).toLocaleString("es-PE", {
+    useGrouping: false,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+export function resolveWeightInput(value, originalWeight) {
+  const entered = Number(value);
+  const original = Number(originalWeight);
+  if (String(value ?? "").trim() && Number.isFinite(original) && original > 0
+    && entered === Number(formatWeightValue(original))) {
+    return original;
+  }
+  return entered;
+}
+
 export function formatWeight(value) {
   return `${Number(value || 0).toLocaleString("es-PE", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   })} kg`;
 }
 

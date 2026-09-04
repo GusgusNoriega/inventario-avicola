@@ -12,12 +12,61 @@ import {
   calculateDraft,
   calculateLine,
   effectiveProduct,
+  formatWeight,
+  formatWeightValue,
   normalizeCatalog,
   normalizeDraft,
   normalizeQuickProductIds,
   normalizeWastePresets,
+  resolveWeightInput,
   validateUnitPrice
 } from "../../public/js/despacho-productos-despacho-utils.js";
+
+test("los pesos se muestran con dos decimales sin reducir su precisión de cálculo", () => {
+  assert.equal(formatWeightValue(1.234), "1.23");
+  assert.equal(formatWeightValue(1.235), "1.24");
+  assert.equal(formatWeightValue(1234.567), "1234.57");
+  assert.equal(formatWeightValue(0), "0.00");
+  assert.equal(formatWeight(1234.567), "1,234.57 kg");
+
+  const line = calculateLine({
+    quantity: 1,
+    read_weight_kg: 1.234,
+    unit_price: 100,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+  assert.equal(formatWeight(line.net_weight_kg), "1.23 kg");
+  assert.equal(line.read_weight_kg, 1.234);
+  assert.equal(line.net_weight_kg, 1.234);
+  assert.equal(line.amount, 123.4);
+});
+
+test("editar otro campo conserva los gramos originales detrás del peso visible", () => {
+  assert.equal(resolveWeightInput("1.23", 1.234), 1.234);
+  assert.equal(resolveWeightInput("1.230", 1.234), 1.234);
+  assert.equal(resolveWeightInput("1.25", 1.234), 1.25);
+  assert.equal(resolveWeightInput("0", 1.234), 0);
+  assert.equal(resolveWeightInput("", 0.001), 0, "Vaciar el campo no debe recuperar el peso original.");
+  assert.equal(resolveWeightInput("  ", 0.001), 0);
+
+  const editedLine = calculateLine({
+    quantity: 1,
+    read_weight_kg: resolveWeightInput("1.23", 1.234),
+    unit_price: 200,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+  assert.equal(editedLine.read_weight_kg, 1.234);
+  assert.equal(editedLine.amount, 246.8);
+});
+
+test("los límites redondeados del campo conservan el peso original al guardarlo sin cambio", () => {
+  assert.equal(formatWeightValue(0.001), "0.00");
+  assert.equal(resolveWeightInput("0.00", 0.001), 0.001);
+  assert.equal(formatWeightValue(999999999.999), "1000000000.00");
+  assert.equal(resolveWeightInput("1000000000.00", 999999999.999), 999999999.999);
+  assert.equal(resolveWeightInput("0.01", 0.001), 0.01);
+  assert.equal(resolveWeightInput("999999999.99", 999999999.999), 999999999.99);
+});
 
 test("la estación siempre mantiene ocho listas independientes y recuperables", () => {
   const drafts = buildDraftCollection();

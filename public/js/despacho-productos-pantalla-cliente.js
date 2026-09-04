@@ -6,6 +6,7 @@ import {
   PRODUCT_DISPATCH_CUSTOMER_DISPLAY_RESET_TYPE
 } from "./product-dispatch-customer-display.js";
 import { initializeProductCustomerDisplayTypography } from "./product-dispatch-customer-display-typography.js";
+import { formatWeightValue } from "./despacho-productos-despacho-utils.js";
 
 const query = new URLSearchParams(globalThis.location.search);
 const BRANCH_ID = String(query.get("branch") || "").trim();
@@ -77,8 +78,8 @@ function formatAmount(value, currency = "PEN") {
 
 function formatWeight(value) {
   return `${(normalizeNumber(value) ?? 0).toLocaleString("es-PE", {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   })} kg`;
 }
 
@@ -110,7 +111,7 @@ function clearDisplay(statusMessage = "Esperando despacho", removeStorage = fals
   elements.liveStatus.textContent = "Sin cálculo";
   elements.listHeading.textContent = "Lista 1";
   elements.customer.textContent = "Venta al público";
-  elements.listNet.textContent = "0.000 kg";
+  elements.listNet.textContent = "0.00 kg";
   elements.listAmount.textContent = "S/ 0.00";
   elements.announcement.textContent = "";
   renderEmptyRow();
@@ -236,7 +237,7 @@ function renderPayload(payload) {
   document.title = `${companyTitle} | Sistema Pollos`;
   elements.status.textContent = "En vivo";
   elements.status.classList.remove("is-waiting");
-  elements.liveNet.textContent = previewNet === null ? "---" : previewNet.toFixed(3);
+  elements.liveNet.textContent = previewNet === null ? "---" : formatWeightValue(previewNet);
   elements.liveAmount.textContent = previewNet === null
     ? `${currencyLabel(currency)} 0.00`
     : (previewAmount === null ? `${currencyLabel(currency)} --` : formatAmount(previewAmount, currency));

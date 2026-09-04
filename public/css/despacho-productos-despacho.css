@@ -69,7 +69,6 @@
   --pdd-fs-dialog-item-title: 13px;
   --pdd-fs-dialog-item-detail: 10px;
   --pdd-fs-dialog-actions: 14px;
-  --pdd-fs-manual-weight: 32px;
   --pdd-fs-edit-summary: 12px;
 }
 
@@ -524,11 +523,7 @@ button { color: inherit; }
 .pdd-product-option small { color: var(--pdd-muted); font-size: .64rem; }
 .pdd-empty-dialog { grid-column: 1/-1; display: grid; place-content: center; gap: 5px; min-height: 220px; color: var(--pdd-muted); text-align: center; }
 
-.pdd-big-number-input { display: grid; gap: 8px; margin-top: 18px; }
-.pdd-big-number-input > span:first-child { color: var(--pdd-muted); font-size: .73rem; font-weight: 850; text-transform: uppercase; }
-.pdd-big-number-input > span:last-child { display: grid; grid-template-columns: 1fr 52px; }
-.pdd-big-number-input input { min-width: 0; height: 68px; border: 2px solid #3b6757; border-radius: 14px 0 0 14px; outline: 0; padding: 0 14px; color: var(--pdd-green-dark); font-size: 2rem; font-weight: 900; text-align: right; }
-.pdd-big-number-input b { display: grid; place-items: center; border-radius: 0 14px 14px 0; color: #fff; background: var(--pdd-green); }
+.pdd-keypad-hint { margin: 8px 0 0; color: var(--pdd-muted); font-size: var(--pdd-fs-dialog-body); line-height: 1.4; }
 .pdd-keypad-dialog { width: min(540px, calc(100vw - 24px)); }
 .pdd-keypad-dialog > section { gap: 11px; max-height: min(92dvh, 760px); }
 .pdd-keypad-value-wrap { display: grid; gap: 5px; }
@@ -820,7 +815,6 @@ button { color: inherit; }
 .pdd-scale-message,
 .pdd-raw-reading { font-size: var(--pdd-fs-dialog-body); }
 .pdd-dialog-search input { font-size: var(--pdd-fs-dialog-search); }
-.pdd-big-number-input > span:first-child,
 .pdd-edit-grid label > span,
 .pdd-serial-options label { font-size: var(--pdd-fs-dialog-label); }
 .pdd-edit-grid input,
@@ -840,7 +834,6 @@ button { color: inherit; }
 .pdd-connect-actions button small,
 .pdd-empty-dialog span { font-size: var(--pdd-fs-dialog-item-detail); }
 .pdd-dialog-actions button { font-size: var(--pdd-fs-dialog-actions); }
-.pdd-big-number-input input { font-size: var(--pdd-fs-manual-weight); }
 .pdd-edit-summary { font-size: var(--pdd-fs-edit-summary); }
 
 .pdd-typography-target-highlight {
