@@ -381,7 +381,7 @@ button { color: inherit; }
   border-radius: 14px;
   background: #0b1310;
   scroll-snap-align: start;
-  transition: border-color .16s, box-shadow .16s, transform .16s;
+  transition: border-color .16s, box-shadow .16s, transform .16s, background .16s;
 }
 .pdd-list-card:nth-child(8n + 2) { --pdd-list-accent: #43c7ed; --pdd-list-accent-soft: rgba(67, 199, 237, .14); }
 .pdd-list-card:nth-child(8n + 3) { --pdd-list-accent: #a987ff; --pdd-list-accent-soft: rgba(169, 135, 255, .14); }
@@ -390,20 +390,32 @@ button { color: inherit; }
 .pdd-list-card:nth-child(8n + 6) { --pdd-list-accent: #70a5ff; --pdd-list-accent-soft: rgba(112, 165, 255, .14); }
 .pdd-list-card:nth-child(8n + 7) { --pdd-list-accent: #d8f277; --pdd-list-accent-soft: rgba(216, 242, 119, .14); }
 .pdd-list-card:nth-child(8n + 8) { --pdd-list-accent: #ff8a5c; --pdd-list-accent-soft: rgba(255, 138, 92, .14); }
-.pdd-list-card.is-active { border-color: var(--pdd-list-accent); background: #101b17; box-shadow: 0 10px 28px var(--pdd-list-accent-soft); transform: translateY(-1px); }
+.pdd-list-card.is-active {
+  border-width: 4px;
+  border-color: var(--pdd-list-accent);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .1), transparent 42%),
+    linear-gradient(0deg, var(--pdd-list-accent-soft), var(--pdd-list-accent-soft)),
+    #17382e;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .72), 0 12px 32px var(--pdd-list-accent-soft);
+  transform: translateY(-2px);
+}
 .pdd-list-card-head { width: 100%; display: grid; grid-template-columns: 41px 1fr auto; align-items: center; gap: 8px; padding: 8px; border: 0; border-bottom: 1px solid var(--pdd-line); background: transparent; cursor: pointer; text-align: left; }
+.pdd-list-card.is-active .pdd-list-card-head { border-bottom-color: #07100d; color: #07100d; background: var(--pdd-list-accent); }
 .pdd-list-number { width: 38px; height: 38px; display: grid; place-items: center; color: var(--pdd-list-accent); background: var(--pdd-list-accent-soft); border-radius: 11px; font-size: 1.15rem; font-weight: 950; }
-.pdd-list-card.is-active .pdd-list-number { color: #07100d; background: var(--pdd-list-accent); }
+.pdd-list-card.is-active .pdd-list-number { color: #fff; background: #07100d; }
 .pdd-list-card-head > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; }
 .pdd-list-card-head b { overflow: hidden; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .pdd-list-card-head small { color: var(--pdd-muted); font-size: .65rem; }
+.pdd-list-card.is-active .pdd-list-card-head small { color: rgba(7, 16, 13, .78); }
 .pdd-list-count { padding: 4px 7px; border-radius: 999px; color: var(--pdd-list-accent); background: var(--pdd-list-accent-soft); font-size: .65rem; font-weight: 900; }
+.pdd-list-card.is-active .pdd-list-count { color: #fff; background: #07100d; }
 .pdd-list-items { overflow-y: auto; padding: 0 6px 6px; }
 .pdd-weighing-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .pdd-weighing-quantity-column { width: 52px; }
 .pdd-weighing-net-column { width: 88px; }
 .pdd-weighing-table th { position: sticky; top: 0; z-index: 2; padding: 6px 4px; border-bottom: 1px solid var(--pdd-line); color: var(--pdd-muted); background: #0b1310; font-size: .67rem; font-weight: 900; text-align: left; text-transform: uppercase; letter-spacing: .03em; }
-.pdd-list-card.is-active .pdd-weighing-table th { background: #101b17; }
+.pdd-list-card.is-active .pdd-weighing-table th { color: #effff9; background: #17382e; }
 .pdd-weighing-table th:nth-child(2) { text-align: center; }
 .pdd-weighing-table th:nth-child(3) { text-align: right; }
 .pdd-weighing-table abbr { text-decoration: none; }
@@ -420,6 +432,7 @@ button { color: inherit; }
 .pdd-weighing-net { font-variant-numeric: tabular-nums; font-weight: 850; text-align: right; white-space: nowrap; }
 .pdd-weighing-empty td { height: 105px; padding: 12px; color: #96a9a1; font-size: .8rem; font-weight: 800; text-align: center; }
 .pdd-list-totals { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 8px; border-top: 1px solid var(--pdd-line); background: #101b17; font-size: .67rem; }
+.pdd-list-card.is-active .pdd-list-totals { border-top-color: var(--pdd-list-accent); background: #17382e; }
 .pdd-list-totals strong { text-align: right; }
 .pdd-list-total-amount { color: var(--pdd-list-accent); font-size: .8rem; }
 

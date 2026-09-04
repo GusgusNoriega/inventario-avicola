@@ -231,6 +231,22 @@ test("cada lista muestra producto, cantidad y neto en una tabla compacta editabl
   assert.doesNotMatch(dispatchSource, /Índice de la pesada|Importe de la pesada|\.pdd-weighing-row small/);
 });
 
+test("la columna seleccionada usa un fondo y contorno de alto contraste", () => {
+  const activeCardRule = sourceBetween(
+    dispatchStyles,
+    ".pdd-list-card.is-active {",
+    ".pdd-list-card-head {"
+  );
+
+  assert.match(activeCardRule, /background:\s*[\s\S]*linear-gradient/);
+  assert.match(activeCardRule, /#17382e/);
+  assert.match(activeCardRule, /border-width:\s*4px/);
+  assert.match(activeCardRule, /box-shadow:\s*inset\s+0\s+0\s+0\s+3px\s+rgba\(255,\s*255,\s*255,\s*\.72\)/);
+  assert.match(dispatchStyles, /\.pdd-list-card\.is-active \.pdd-list-card-head\s*\{[^}]*background:\s*var\(--pdd-list-accent\)/);
+  assert.match(dispatchStyles, /\.pdd-list-card\.is-active \.pdd-list-count\s*\{[^}]*background:\s*#07100d/);
+  assert.match(dispatchStyles, /\.pdd-list-card\.is-active \.pdd-list-totals\s*\{[^}]*background:\s*#17382e/);
+});
+
 test("en escritorio se ven cinco listas anchas y las restantes conservan el desplazamiento", () => {
   const baseGrid = dispatchStyles.match(/\.pdd-lists-grid\s*\{([^}]*)\}/)?.[1] || "";
   const tabletResponsive = sourceBetween(dispatchStyles, "@media (max-width: 1120px)", "@media (max-width: 960px)");
