@@ -98,8 +98,8 @@ const TYPOGRAPHY_GROUPS = [
     label: "Campos y peso bruto",
     description: "Cantidad, precio, tara, merma, peso bruto e importe estimado.",
     controls: [
-      { label: "Etiquetas de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid label > span:first-child, .pdd-waste-unit-control > span:first-child" },
-      { label: "Valores de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-fields-grid label > strong, .pdd-touch-number-input input" },
+      { label: "Etiquetas de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-field-caption" },
+      { label: "Valores de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-price-input input, .pdd-touch-number-input input" },
       { label: "Ayudas de campos", description: "Forma de cobro y validaciones.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small, .pdd-waste-hint" },
       { label: "Unidades", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
       { label: "Etiqueta de peso bruto", description: "Texto “Peso bruto”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-gross-preview > span" },
@@ -242,6 +242,7 @@ const elements = {
   unitPrice: document.querySelector("#pddUnitPrice"),
   priceCurrency: document.querySelector("#pddPriceCurrency"),
   priceMode: document.querySelector("#pddPriceMode"),
+  priceError: document.querySelector("#pddPriceError"),
   tare: document.querySelector("#pddTare"),
   wastePerUnit: document.querySelector("#pddWastePerUnit"),
   wastePresets: document.querySelector("#pddWastePresets"),
@@ -1134,7 +1135,7 @@ function renderSelectedProduct() {
     elements.productMedia.innerHTML = '<span class="pdd-media-placeholder"><b>?</b><small>Elige un producto</small></span>';
     elements.unitPrice.disabled = true;
     elements.priceCurrency.textContent = currencyLabel(state.catalog.currency);
-    elements.priceMode.textContent = "Selecciona un producto";
+    elements.priceMode.textContent = "Sin producto";
   } else {
     elements.selectedName.textContent = selection.product_name;
     elements.selectedVariantLabel.textContent = selection.variation_name || "Producto base";
@@ -1272,8 +1273,10 @@ function renderCapturePreview() {
     ? "El peso manual se usa como neto; no se aplican merma ni tara."
     : "";
   const wasteMessage = manualMessage || (priceMessage ? "" : validation.message);
-  elements.priceMode.classList.toggle("is-error", Boolean(priceMessage));
-  elements.priceMode.textContent = priceMessage || (selection ? priceModeLabel(selection.price_mode) : "Selecciona producto");
+  elements.priceMode.textContent = selection ? priceModeLabel(selection.price_mode) : "Sin producto";
+  elements.priceError.textContent = priceMessage;
+  elements.priceError.hidden = !priceMessage;
+  elements.unitPrice.setAttribute("aria-invalid", String(Boolean(priceMessage)));
   elements.wasteHint.classList.toggle("is-error", Boolean(!manualMessage && wasteMessage));
   elements.wasteHint.textContent = wasteMessage;
   const line = calculateLine({

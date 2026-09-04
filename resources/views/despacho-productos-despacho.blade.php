@@ -99,22 +99,22 @@
 
         <div class="pdd-fields-grid">
           <label>
-            <span>Cantidad</span>
+            <span class="pdd-field-caption">Cantidad</span>
             <span class="pdd-touch-number-input">
               <input id="pddQuantity" type="number" min="0" max="100000" step="1" inputmode="none" value="0" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" data-pdd-keypad-value-label="Cantidad seleccionada" data-pdd-keypad-confirm-label="Usar cantidad" data-pdd-keypad-value-name="cantidad" aria-label="Cantidad de aves o elementos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
               <b aria-hidden="true">und</b>
             </span>
           </label>
           <label class="pdd-price-field">
-            <span>Precio</span>
+            <span class="pdd-field-caption">Precio</span>
             <span class="pdd-price-input">
               <b id="pddPriceCurrency" aria-hidden="true">S/</b>
-              <input id="pddUnitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" placeholder="0.00" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" disabled>
+              <input id="pddUnitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" placeholder="0.00" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-describedby="pddPriceMode pddPriceError" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" disabled>
             </span>
-            <small id="pddPriceMode">Selecciona un producto</small>
+            <small id="pddPriceMode">Sin producto</small>
           </label>
           <label>
-            <span>Tara</span>
+            <span class="pdd-field-caption">Tara</span>
             <span class="pdd-touch-number-input">
               <input id="pddTare" type="number" min="0" max="1000000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Tara en gramos" data-pdd-keypad-value-label="Tara seleccionada" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" aria-label="Tara en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
               <b aria-hidden="true">g</b>
@@ -125,11 +125,12 @@
             <strong id="pddGrossPreview">--- kg</strong>
             <small id="pddAmountPreview">Importe pesada S/ --</small>
           </div>
+          <small id="pddPriceError" class="pdd-field-error" role="status" hidden></small>
         </div>
 
         <div class="pdd-waste-strip">
           <label class="pdd-waste-unit-control">
-            <span>Merma/u</span>
+            <span class="pdd-field-caption">Merma/u</span>
             <span class="pdd-touch-number-input">
               <input id="pddWastePerUnit" type="number" min="0" max="1000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Merma por unidad en gramos" data-pdd-keypad-value-label="Merma por unidad" data-pdd-keypad-confirm-label="Usar merma" data-pdd-keypad-value-name="merma por unidad" aria-label="Merma por unidad en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-describedby="pddWasteHint" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
               <b aria-hidden="true">g/u</b>

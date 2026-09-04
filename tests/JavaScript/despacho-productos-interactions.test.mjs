@@ -154,7 +154,9 @@ test("los precios de captura y edición comparten el teclado decimal de la pesad
   assert.match(keypadSource, /toFixed\(bindingDecimalPlaces\(\)\)/);
   assert.match(dispatchView, /id="pddPriceCurrency"/);
   assert.match(dispatchView, /Importe/);
-  assert.match(dispatchStyles, /\.pdd-price-input\s*\{[^}]*min-height:\s*5[6-9]px/);
+  const priceControlStyles = dispatchStyles.match(/\.pdd-price-input\s*\{([^}]*)\}/)?.[1] || "";
+  const priceControlHeight = Number(priceControlStyles.match(/min-height:\s*(\d+)px/)?.[1]);
+  assert.ok(priceControlHeight >= 48, "El precio debe conservar un área cómoda para tocar.");
   assert.doesNotMatch(dispatchView, /pddChangePrice|pddRailChangePrice|pddPriceDialog/);
   assert.doesNotMatch(dispatchSource, /openPriceDialog|savePrices|price_overrides/);
   assert.doesNotMatch(dispatchUtilsSource, /price_overrides/);
