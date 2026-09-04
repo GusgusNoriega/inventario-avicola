@@ -115,10 +115,11 @@ class WebViewsTest extends TestCase
             ->assertSee('href="'.route('despacho-productos.configuracion-ticket').'"', false)
             ->assertSee('href="'.route('despacho-productos.tickets').'"', false)
             ->assertSee('href="'.route('despacho-productos.estado-cuenta').'"', false)
+            ->assertSee('href="'.route('despacho-productos.pagos').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
-            6,
+            7,
             substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
         );
 
@@ -170,7 +171,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="pddLiveWeight"', false)
             ->assertSee('id="pddManualDialog"', false)
             ->assertSee('id="pddWastePerUnit"', false)
-            ->assertSee('id="pddWasteTotal"', false)
+            ->assertDontSee('id="pddWasteTotal"', false)
+            ->assertDontSee('class="pdd-lists-heading"', false)
             ->assertSee('id="pddTare"', false)
             ->assertSee('id="pddWastePresets"', false)
             ->assertSee('id="pddClientDialog"', false)
@@ -302,7 +304,7 @@ class WebViewsTest extends TestCase
         $accountStatement
             ->assertOk()
             ->assertSee('Estado de cuenta del cliente')
-            ->assertSee('deuda anterior registrada en Finanzas')
+            ->assertSee('la deuda anterior y los pagos del cliente')
             ->assertSee('id="productDispatchAccountStatement"', false)
             ->assertSee('data-api-base="/despacho-productos/estado-cuenta"', false)
             ->assertSee('data-pdf-url="'.route('despacho-productos.estado-cuenta.pdf').'"', false)

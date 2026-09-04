@@ -85,11 +85,10 @@ test("el modo decimal del mismo teclado conserva dos decimales y admite punto o 
   assert.match(validateDecimalKeypadBuffer("0", { min: 0.01, decimalPlaces: 2, valueName: "precio" }), /mínimo es 0.01/);
 });
 
-test("cantidad, merma por unidad y tara comparten el teclado; la merma total es solo lectura", () => {
+test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma total", () => {
   const quantityInput = dispatchView.match(/<input\b[^>]*\bid="pddQuantity"[^>]*>/)?.[0] || "";
   const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWastePerUnit"[^>]*>/)?.[0] || "";
   const tareInput = dispatchView.match(/<input\b[^>]*\bid="pddTare"[^>]*>/)?.[0] || "";
-  const wasteTotalOutput = dispatchView.match(/<output\b[^>]*\bid="pddWasteTotal"[^>]*>/)?.[0] || "";
   const keypadBinding = sourceBetween(
     dispatchSource,
     "bindIntegerKeypad({",
@@ -99,7 +98,7 @@ test("cantidad, merma por unidad y tara comparten el teclado; la merma total es 
   assert.ok(quantityInput, "No se encontró el campo de cantidad.");
   assert.ok(wasteInput, "No se encontró el campo de merma por unidad.");
   assert.ok(tareInput, "No se encontró el campo de tara.");
-  assert.ok(wasteTotalOutput, "La merma total debe mostrarse en un output.");
+  assert.doesNotMatch(dispatchView, /id="pddWasteTotal"|pdd-waste-total-display|pdd-lists-heading/);
   assert.match(quantityInput, /\bmin="0"/);
   assert.match(quantityInput, /\bvalue="0"/);
   assert.doesNotMatch(dispatchView, /<input\b[^>]*\bid="pddWasteTotal"/);
@@ -198,7 +197,7 @@ test("las imágenes rápidas no aumentan la fila y dejan el espacio restante a l
   assert.match(desktopHeightContainment, /\.pdd-quick-panel\s*\{[^}]*contain:\s*size/);
   assert.match(dispatchStyles, /\.pdd-quick-product-media\s*\{[^}]*position:\s*relative;[^}]*overflow:\s*hidden/);
   assert.match(dispatchStyles, /\.pdd-quick-product img,\s*\.pdd-quick-product-placeholder\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*height:\s*100%;[^}]*max-height:\s*100%/);
-  assert.match(dispatchStyles, /\.pdd-lists-grid\s*\{[^}]*height:\s*calc\(100%\s*-\s*43px\)/);
+  assert.match(dispatchStyles, /\.pdd-lists-grid\s*\{[^}]*height:\s*100%/);
 });
 
 test("cada lista muestra producto, cantidad y neto en una tabla compacta editable", () => {
@@ -340,11 +339,6 @@ test("el peso neto queda como lectura principal y el bruto de balanza en el recu
     "function renderCapturePreview",
     "function renderScale"
   );
-  const wasteTotalFlow = sourceBetween(
-    dispatchSource,
-    "function syncWasteTotal",
-    "function setWastePerUnit"
-  );
 
   assert.match(dispatchView, /id="pddLiveWeight"[^>]*aria-label="Peso neto actual"/);
   assert.match(dispatchView, /class="pdd-gross-preview"[\s\S]*?<span>Peso bruto<\/span>[\s\S]*?id="pddGrossPreview"/);
@@ -352,7 +346,6 @@ test("el peso neto queda como lectura principal y el bruto de balanza en el recu
   assert.match(previewFlow, /elements\.liveWeight\.innerHTML\s*=\s*`\$\{hasDisplayedWeight\s*\?\s*line\.net_weight_kg\.toFixed\(3\)/);
   assert.match(previewFlow, /elements\.grossPreview\.textContent[\s\S]*formatWeight\(scaleWeight\)/);
   assert.match(dispatchUtilsSource, /wasteTotalGrams\s*=\s*readWeightKg\s*>\s*0\s*\?\s*wasteGramsPerUnit\s*\*\s*quantity\s*:\s*0/);
-  assert.match(wasteTotalFlow, /calculateLine\(\{[\s\S]*read_weight_kg:\s*Number\.isFinite\(scaleWeight\)\s*\?\s*scaleWeight\s*:\s*0[\s\S]*\}\)\.waste_total_grams/);
   assert.match(dispatchStyles, /\.pdd-gross-preview\s*\{[^}]*background:\s*linear-gradient/);
 });
 
@@ -453,11 +446,11 @@ test("el teclado confirma con eventos que recalculan cantidad, merma y total", (
   );
   assert.match(
     dispatchSource,
-    /elements\.quantity\.addEventListener\(["']input["'][\s\S]*?syncWasteTotal\(\);[\s\S]*?renderCapturePreview\(\);/
+    /elements\.quantity\.addEventListener\(["']input["'][\s\S]*?renderWastePresets\(\);[\s\S]*?renderCapturePreview\(\);/
   );
   assert.match(
     dispatchSource,
-    /elements\.wastePerUnit\.addEventListener\(["']input["'][\s\S]*?syncWasteTotal\(\);[\s\S]*?renderCapturePreview\(\);/
+    /elements\.wastePerUnit\.addEventListener\(["']input["'][\s\S]*?renderWastePresets\(\);[\s\S]*?renderCapturePreview\(\);/
   );
   assert.match(dispatchSource, /elements\.tare\.addEventListener\(["']input["'],\s*renderCapturePreview\)/);
 });

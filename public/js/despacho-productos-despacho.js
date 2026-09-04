@@ -121,9 +121,6 @@ const TYPOGRAPHY_GROUPS = [
     label: "Listas de distribución",
     description: "Encabezados, clientes y totales de las ocho listas.",
     controls: [
-      { label: "Etiqueta Distribución", description: "Texto superior de distribución de tickets.", variable: "--pdd-fs-lists-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-lists-heading span" },
-      { label: "Título de las listas", description: "Instrucción principal sobre las ocho listas.", variable: "--pdd-fs-lists-title", defaultValue: 15, min: 11, max: 26, step: 1, target: ".pdd-lists-heading strong" },
-      { label: "Ayuda horizontal", description: "Indicación para deslizar entre las listas.", variable: "--pdd-fs-lists-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-lists-heading small" },
       { label: "Número de lista", description: "Número grande en la cabecera de cada lista.", variable: "--pdd-fs-list-number", defaultValue: 18, min: 14, max: 32, step: 1, target: ".pdd-list-number" },
       { label: "Cliente o nombre de lista", description: "Venta al público, cliente asignado o lista vacía.", variable: "--pdd-fs-list-name", defaultValue: 12, min: 10, max: 22, step: 0.5, target: ".pdd-list-card-head b, .pdd-weighing-empty td" },
       { label: "Detalle y contador", description: "Cliente opcional y cantidad de pesadas.", variable: "--pdd-fs-list-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-list-card-head small, .pdd-list-count" },
@@ -247,7 +244,6 @@ const elements = {
   priceMode: document.querySelector("#pddPriceMode"),
   tare: document.querySelector("#pddTare"),
   wastePerUnit: document.querySelector("#pddWastePerUnit"),
-  wasteTotal: document.querySelector("#pddWasteTotal"),
   wastePresets: document.querySelector("#pddWastePresets"),
   wasteHint: document.querySelector("#pddWasteHint"),
   grossPreview: document.querySelector("#pddGrossPreview"),
@@ -1150,7 +1146,7 @@ function renderSelectedProduct() {
 
   renderVariations();
   renderQuickProducts();
-  syncWasteTotal();
+  renderWastePresets();
   renderCapturePreview();
 }
 
@@ -1202,21 +1198,10 @@ function renderWastePresets() {
   }).join("");
 }
 
-function syncWasteTotal() {
-  const values = calculationValuesForReading(state.liveScale);
-  const scaleWeight = Number(state.liveScale.currentWeightKg);
-  const total = calculateLine({
-    ...values,
-    read_weight_kg: Number.isFinite(scaleWeight) ? scaleWeight : 0
-  }).waste_total_grams;
-  elements.wasteTotal.textContent = `${Math.max(0, total).toLocaleString("es-PE")} g`;
-  renderWastePresets();
-}
-
 function setWastePerUnit(value) {
   elements.wastePerUnit.value = String(Math.max(0, Math.round(Number(value) || 0)));
   state.numericKeypad?.refreshLabel(elements.wastePerUnit);
-  syncWasteTotal();
+  renderWastePresets();
 }
 
 function useCatalogWaste() {
@@ -1279,7 +1264,7 @@ function renderCapturePreview() {
   const scaleWeight = Number(state.liveScale.currentWeightKg);
   const hasDisplayedWeight = Number.isFinite(scaleWeight) && scaleWeight >= 0;
   const hasWeight = Number.isFinite(scaleWeight) && scaleWeight > 0;
-  syncWasteTotal();
+  renderWastePresets();
   const values = calculationValuesForReading(state.liveScale);
   const validation = captureValidation(hasWeight ? scaleWeight : 0, selection, values);
   const priceMessage = validation.target === elements.unitPrice ? validation.message : "";
@@ -1563,7 +1548,7 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
   elements.tare.value = "0";
   state.numericKeypad?.refreshLabel(elements.tare);
   useCatalogPrice();
-  syncWasteTotal();
+  renderWastePresets();
   persistDrafts();
   renderLists();
   renderActiveSummary();
@@ -2256,7 +2241,7 @@ document.addEventListener("click", (event) => {
   if (close) closeDialog(document.querySelector(`#${CSS.escape(close.dataset.pddClose)}`));
 });
 elements.quantity.addEventListener("input", () => {
-  syncWasteTotal();
+  renderWastePresets();
   renderCapturePreview();
 });
 elements.quantity.addEventListener("change", () => {
@@ -2266,7 +2251,7 @@ elements.quantity.addEventListener("change", () => {
     Math.round(Number.isFinite(quantity) ? quantity : 0)
   )));
   state.numericKeypad?.refreshLabel(elements.quantity);
-  syncWasteTotal();
+  renderWastePresets();
   renderCapturePreview();
 });
 elements.unitPrice.addEventListener("input", renderCapturePreview);
@@ -2277,7 +2262,7 @@ elements.unitPrice.addEventListener("change", () => {
   renderCapturePreview();
 });
 elements.wastePerUnit.addEventListener("input", () => {
-  syncWasteTotal();
+  renderWastePresets();
   renderCapturePreview();
 });
 elements.wastePerUnit.addEventListener("change", () => {

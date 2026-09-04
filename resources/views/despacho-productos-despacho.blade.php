@@ -140,10 +140,6 @@
             <button type="button" data-pdd-waste-preset="1" aria-pressed="false"><span>M2</span><strong>50 g</strong></button>
             <button type="button" data-pdd-waste-preset="2" aria-pressed="false"><span>M3</span><strong>100 g</strong></button>
           </div>
-          <span class="pdd-waste-total-display">
-            <span>Merma total</span>
-            <output id="pddWasteTotal" aria-live="polite">0 g</output>
-          </span>
           <small id="pddWasteHint" class="pdd-waste-hint" aria-live="polite"></small>
         </div>
 
@@ -167,9 +163,6 @@
 
     <section class="pdd-workspace" aria-label="Ocho listas de despacho">
       <div class="pdd-lists-area">
-        <div class="pdd-lists-heading">
-          <div><strong>Listas de despacho</strong></div>
-        </div>
         <div id="pddLists" class="pdd-lists-grid"></div>
       </div>
 
