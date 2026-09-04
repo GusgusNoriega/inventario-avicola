@@ -1204,7 +1204,11 @@ function renderWastePresets() {
 
 function syncWasteTotal() {
   const values = calculationValuesForReading(state.liveScale);
-  const total = Number.isFinite(values.waste_total_grams) ? values.waste_total_grams : 0;
+  const scaleWeight = Number(state.liveScale.currentWeightKg);
+  const total = calculateLine({
+    ...values,
+    read_weight_kg: Number.isFinite(scaleWeight) ? scaleWeight : 0
+  }).waste_total_grams;
   elements.wasteTotal.textContent = `${Math.max(0, total).toLocaleString("es-PE")} g`;
   renderWastePresets();
 }

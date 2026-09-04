@@ -321,12 +321,19 @@ test("el peso neto queda como lectura principal y el bruto de balanza en el recu
     "function renderCapturePreview",
     "function renderScale"
   );
+  const wasteTotalFlow = sourceBetween(
+    dispatchSource,
+    "function syncWasteTotal",
+    "function setWastePerUnit"
+  );
 
   assert.match(dispatchView, /id="pddLiveWeight"[^>]*aria-label="Peso neto actual"/);
   assert.match(dispatchView, /class="pdd-gross-preview"[\s\S]*?<span>Peso bruto<\/span>[\s\S]*?id="pddGrossPreview"/);
   assert.doesNotMatch(dispatchView, /id="pddNetPreview"|class="pdd-net-preview"/);
   assert.match(previewFlow, /elements\.liveWeight\.innerHTML\s*=\s*`\$\{hasDisplayedWeight\s*\?\s*line\.net_weight_kg\.toFixed\(3\)/);
   assert.match(previewFlow, /elements\.grossPreview\.textContent[\s\S]*formatWeight\(scaleWeight\)/);
+  assert.match(dispatchUtilsSource, /wasteTotalGrams\s*=\s*readWeightKg\s*>\s*0\s*\?\s*wasteGramsPerUnit\s*\*\s*quantity\s*:\s*0/);
+  assert.match(wasteTotalFlow, /calculateLine\(\{[\s\S]*read_weight_kg:\s*Number\.isFinite\(scaleWeight\)\s*\?\s*scaleWeight\s*:\s*0[\s\S]*\}\)\.waste_total_grams/);
   assert.match(dispatchStyles, /\.pdd-gross-preview\s*\{[^}]*background:\s*linear-gradient/);
 });
 

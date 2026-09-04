@@ -114,6 +114,40 @@ test("los importes por kg usan peso neto y los importes por unidad usan cantidad
   });
 });
 
+test("la merma solo se aplica cuando el peso leído es mayor que cero", () => {
+  const withoutScaleWeight = calculateLine({
+    quantity: 5,
+    read_weight_kg: 0,
+    waste_grams_per_unit: 50,
+    unit_price: 18,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+  const belowScalePrecision = calculateLine({
+    quantity: 5,
+    read_weight_kg: 0.0004,
+    waste_grams_per_unit: 50,
+    unit_price: 18,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+  const withScaleWeight = calculateLine({
+    quantity: 5,
+    read_weight_kg: 0.001,
+    waste_grams_per_unit: 50,
+    unit_price: 18,
+    price_mode: PRODUCT_PRICE_MODE_KG
+  });
+
+  assert.equal(withoutScaleWeight.waste_grams_per_unit, 50);
+  assert.equal(withoutScaleWeight.waste_total_grams, 0);
+  assert.equal(withoutScaleWeight.net_weight_kg, 0);
+  assert.equal(withoutScaleWeight.amount, 0);
+  assert.equal(belowScalePrecision.read_weight_kg, 0);
+  assert.equal(belowScalePrecision.waste_total_grams, 0);
+  assert.equal(belowScalePrecision.net_weight_kg, 0);
+  assert.equal(withScaleWeight.waste_total_grams, 250);
+  assert.equal(withScaleWeight.net_weight_kg, 0.251);
+});
+
 test("el peso manual es el neto exacto aunque existan valores de merma o tara", () => {
   const line = calculateLine(calculationInputForWeightSource({
     quantity: 3,

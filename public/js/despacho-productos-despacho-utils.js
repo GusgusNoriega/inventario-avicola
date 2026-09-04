@@ -204,7 +204,7 @@ export function calculateLine(input = {}) {
   const wasteGramsPerUnit = Math.max(0, Math.round(Number(
     input.waste_grams_per_unit ?? (legacyWasteTotal / Math.max(1, quantity))
   ) || 0));
-  const wasteTotalGrams = wasteGramsPerUnit * quantity;
+  const wasteTotalGrams = readWeightKg > 0 ? wasteGramsPerUnit * quantity : 0;
   const tareGrams = Math.max(0, Math.round(Number(input.tare_grams || 0)));
   const wasteWeightKg = roundTo(wasteTotalGrams / 1000, 3);
   const tareWeightKg = roundTo(tareGrams / 1000, 3);
@@ -274,8 +274,11 @@ export function normalizeDraft(raw, number = 1) {
     ? Number(raw.client_id)
     : null;
   clean.items = (Array.isArray(raw.items) ? raw.items : []).filter((item) => {
-    const quantity = Number(item?.quantity);
+    const rawQuantity = item?.quantity;
+    const quantity = Number(rawQuantity);
     return Number(item?.product_id) > 0
+      && rawQuantity !== null
+      && String(rawQuantity ?? "").trim() !== ""
       && Number.isInteger(quantity)
       && quantity >= 0
       && quantity <= 100000
