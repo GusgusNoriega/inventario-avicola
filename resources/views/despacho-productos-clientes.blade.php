@@ -7,6 +7,7 @@
   <title>Agregar clientes | Despacho de productos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-clientes.css') }}?v={{ filemtime(public_path('css/despacho-productos-clientes.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-dispatch-clients-page">
   <main
@@ -54,8 +55,11 @@
               maxlength="180"
               autocomplete="organization"
               placeholder="Ej: Comercial El Sol"
-              autofocus
               required
+              data-pdd-keyboard="text"
+              readonly
+              inputmode="none"
+              virtualkeyboardpolicy="manual"
             >
           </label>
 
@@ -65,13 +69,16 @@
               id="pdqcDocument"
               name="numero_documento"
               type="text"
-              inputmode="numeric"
+              inputmode="none"
               maxlength="11"
               pattern="(?:\d{8}|\d{11})"
               autocomplete="off"
               aria-describedby="pdqcDocumentHelp"
               placeholder="8 u 11 dígitos"
               required
+              data-pdd-keyboard="digits"
+              readonly
+              virtualkeyboardpolicy="manual"
             >
             <small id="pdqcDocumentHelp">DNI de 8 dígitos o RUC de 11 dígitos.</small>
           </label>
@@ -86,6 +93,10 @@
               autocomplete="street-address"
               placeholder="Ej: Av. Principal 123"
               required
+              data-pdd-keyboard="text"
+              readonly
+              inputmode="none"
+              virtualkeyboardpolicy="manual"
             >
           </label>
 
@@ -119,7 +130,7 @@
             <path d="m15.5 15.5 5 5"></path>
           </svg>
           <span class="pdqc-sr-only">Buscar clientes externos</span>
-          <input id="pdqcSearch" type="search" maxlength="100" autocomplete="off" placeholder="Buscar por nombre o documento">
+          <input id="pdqcSearch" type="search" maxlength="100" autocomplete="off" placeholder="Buscar por nombre o documento" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
         </label>
 
         <p id="pdqcListMessage" class="pdqc-message" role="status" aria-live="polite"></p>
@@ -130,6 +141,7 @@
     @include('partials.system-credit')
   </main>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-clientes.js') }}?v={{ filemtime(public_path('js/despacho-productos-clientes.js')) }}"></script>
 </body>
 </html>

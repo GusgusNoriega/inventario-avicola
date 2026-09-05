@@ -7,6 +7,7 @@
   <title>Despacho de productos | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos.css') }}?v={{ filemtime(public_path('css/despacho-productos.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-dispatch-menu-page">
   <main class="product-dispatch-shell product-dispatch-menu-shell">
@@ -152,5 +153,6 @@
 
     @include('partials.system-credit')
   </main>
+  @include('partials.product-dispatch-keyboards')
 </body>
 </html>

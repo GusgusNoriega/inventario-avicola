@@ -7,6 +7,7 @@
   <title>Pagos de clientes | Despacho de productos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-pagos.css') }}?v={{ filemtime(public_path('css/despacho-productos-pagos.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-dispatch-payments-page">
   <main id="productDispatchPayments" class="pdpy-shell" data-api-base="/despacho-productos/pagos">
@@ -34,14 +35,14 @@
           <fieldset id="pdpyFields" class="pdpy-fields" disabled>
             <div class="pdpy-field pdpy-full">
               <label for="pdpyClientSearch">Buscar cliente</label>
-              <input id="pdpyClientSearch" type="search" maxlength="100" autocomplete="off" placeholder="Nombre o DNI / RUC" aria-describedby="pdpyClientHelp">
+              <input id="pdpyClientSearch" type="search" maxlength="100" autocomplete="off" placeholder="Nombre o DNI / RUC" aria-describedby="pdpyClientHelp" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
               <label for="pdpyClient">Cliente <b aria-hidden="true">*</b></label>
               <select id="pdpyClient" name="cliente_id" required><option value="">Selecciona un cliente</option></select>
               <small id="pdpyClientHelp" role="status" aria-live="polite">Cargando clientes…</small>
             </div>
             <label class="pdpy-field" for="pdpyAmount">
               <span>Importe <b aria-hidden="true">*</b></span>
-              <input id="pdpyAmount" name="importe" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required>
+              <input id="pdpyAmount" name="importe" type="number" min="0.01" step="0.01" inputmode="none" placeholder="0.00" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
             </label>
             <label class="pdpy-field" for="pdpyCurrency">
               <span>Moneda <b aria-hidden="true">*</b></span>
@@ -53,11 +54,11 @@
             </label>
             <label class="pdpy-field pdpy-full" for="pdpyDateTime">
               <span>Fecha y hora <b aria-hidden="true">*</b></span>
-              <input id="pdpyDateTime" name="fecha_hora" type="datetime-local" required>
+              <input id="pdpyDateTime" name="fecha_hora" type="datetime-local" required inputmode="none" virtualkeyboardpolicy="manual">
             </label>
             <label class="pdpy-field pdpy-full" for="pdpyReference">
               <span>Número de transacción <small>(opcional)</small></span>
-              <input id="pdpyReference" name="referencia" type="text" maxlength="100" autocomplete="off" placeholder="Puedes dejarlo vacío">
+              <input id="pdpyReference" name="referencia" type="text" maxlength="100" autocomplete="off" placeholder="Puedes dejarlo vacío" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
             </label>
             <label class="pdpy-field pdpy-full" for="pdpyAccount">
               <span>Cuenta de destino <small>(opcional)</small></span>
@@ -65,7 +66,7 @@
             </label>
             <label class="pdpy-field pdpy-full" for="pdpyNotes">
               <span>Observaciones <small>(opcional)</small></span>
-              <textarea id="pdpyNotes" name="observaciones" rows="2" maxlength="2000" placeholder="Detalle adicional del pago"></textarea>
+              <textarea id="pdpyNotes" name="observaciones" rows="2" maxlength="2000" placeholder="Detalle adicional del pago" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual"></textarea>
             </label>
           </fieldset>
           <div class="pdpy-form-actions">
@@ -83,9 +84,9 @@
           <span id="pdpyCount" class="pdpy-badge pdpy-count" aria-live="polite">— pagos</span>
         </header>
         <form id="pdpyFilters" class="pdpy-filters card">
-          <label class="pdpy-field pdpy-search" for="pdpySearch"><span>Buscar transacciones</span><input id="pdpySearch" type="search" maxlength="120" placeholder="Cliente, documento o número de transacción" autocomplete="off"></label>
-          <label class="pdpy-field" for="pdpyDateFrom"><span>Desde</span><input id="pdpyDateFrom" type="date"></label>
-          <label class="pdpy-field" for="pdpyDateTo"><span>Hasta</span><input id="pdpyDateTo" type="date"></label>
+          <label class="pdpy-field pdpy-search" for="pdpySearch"><span>Buscar transacciones</span><input id="pdpySearch" type="search" maxlength="120" placeholder="Cliente, documento o número de transacción" autocomplete="off" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
+          <label class="pdpy-field" for="pdpyDateFrom"><span>Desde</span><input id="pdpyDateFrom" type="date" inputmode="none" virtualkeyboardpolicy="manual"></label>
+          <label class="pdpy-field" for="pdpyDateTo"><span>Hasta</span><input id="pdpyDateTo" type="date" inputmode="none" virtualkeyboardpolicy="manual"></label>
           <div class="pdpy-filter-actions"><button class="btn btn-primary" type="submit">Buscar</button><button id="pdpyClearFilters" class="btn btn-ghost" type="button">Limpiar filtros</button></div>
         </form>
         <div class="pdpy-list-status"><p id="pdpyListMessage" class="pdpy-message" role="status" aria-live="polite"></p><button id="pdpyReload" class="btn btn-ghost" type="button">Actualizar</button></div>
@@ -101,6 +102,7 @@
     </section>
     @include('partials.system-credit')
   </main>
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-pagos.js') }}?v={{ filemtime(public_path('js/despacho-productos-pagos.js')) }}"></script>
 </body>
 </html>

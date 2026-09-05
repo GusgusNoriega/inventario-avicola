@@ -1,0 +1,74 @@
+.pdk-dialog {
+  box-sizing: border-box;
+  width: min(540px, calc(100vw - 24px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #3b6757;
+  border-radius: 20px;
+  color: #f2f8f5;
+  background: #0c1712;
+  box-shadow: 0 24px 80px #0009;
+  font-family: inherit;
+  font-size: 16px;
+  color-scheme: dark;
+}
+.pdk-dialog::backdrop { background: #020805b8; }
+.pdk-dialog > section, .pdk-dialog > .pdk-card { display: grid; gap: 11px; padding: 20px; }
+.pdk-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.pdk-head p { margin: 0 0 4px; color: #9bafa7; font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.pdk-head h2 { margin: 0; color: #f2f8f5; font-size: 1.2rem; line-height: 1.3; }
+.pdk-dialog button { font-family: inherit; cursor: pointer; touch-action: manipulation; user-select: none; }
+.pdk-head > button { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid #3b6757; border-radius: 11px; color: #f2f8f5; background: #17251f; font-size: 1.65rem; }
+.pdk-value-wrap { display: grid; min-width: 0; gap: 5px; }
+.pdk-value-wrap > span { color: #9bafa7; font-size: .75rem; font-weight: 850; text-transform: uppercase; letter-spacing: .05em; }
+.pdk-value { box-sizing: border-box; display: block; min-height: 82px; padding: 10px 16px; overflow: auto; border: 2px solid #3b6757; border-radius: 14px; color: #d8f277; background: radial-gradient(circle at 80% 50%, #d8f2771f, transparent 55%), #07120e; font-size: clamp(2.2rem, 9vw, 4rem); font-weight: 900; line-height: 1.1; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pdk-hint { margin: 0; color: #a9bdb3; font-size: .85rem; line-height: 1.4; }
+.pdk-hint[hidden] { display: none; }
+.pdk-message { min-height: 18px; margin: 0; color: #ffadb3; font-size: .85rem; font-weight: 700; text-align: center; }
+.pdk-numeric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.pdk-key { min-width: 0; min-height: clamp(54px, 9dvh, 72px); padding: 4px; border: 1px solid #3b6757; border-radius: 13px; color: #f4fff9; background: linear-gradient(180deg, #1b362e, #11251e); font-size: clamp(1.55rem, 5vw, 2.2rem); font-weight: 900; }
+.pdk-key:hover, .pdk-key:focus-visible { border-color: #20c98e; background: linear-gradient(180deg, #245443, #163b2f); }
+.pdk-key:active { transform: translateY(1px); filter: brightness(1.18); }
+.pdk-key.is-backspace { color: #ffe2b7; border-color: #ffb84d85; background: #6d460f52; }
+.pdk-dialog button:focus-visible { outline: 3px solid #d8f277; outline-offset: 2px; }
+.pdk-actions { display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 9px; padding-top: 2px; }
+.pdk-actions button { min-height: 52px; padding: 6px 10px; border: 1px solid #3b6757; border-radius: 11px; font-size: .95rem; font-weight: 850; }
+.pdk-cancel { color: #f2f8f5; background: #17251f; }
+.pdk-confirm { color: #052417; background: #36d49b; }
+.pdk-text-dialog { width: min(960px, calc(100vw - 24px)); }
+.pdk-text-value { max-height: 130px; min-height: 70px; font-size: clamp(1.2rem, 3vw, 1.75rem); font-weight: 650; line-height: 1.4; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pdk-text-selection { color: #fff; background: #276448; }
+.pdk-text-caret { display: inline-block; height: 1.1em; margin-right: -2px; border-left: 2px solid #d8f277; vertical-align: text-bottom; }
+.pdk-text-keys { display: grid; gap: 7px; }
+.pdk-text-row { display: flex; gap: 6px; justify-content: center; }
+.pdk-text-row .pdk-key { flex: 1 1 0; min-height: 49px; border-radius: 10px; font-size: 1.2rem; }
+.pdk-text-row .is-space { flex: 5 1 0; }
+.pdk-text-row .is-wide { flex: 1.8 1 0; font-size: .9rem; }
+.pdk-text-row.is-controls .pdk-key { font-size: .9rem; }
+.pdk-text-row .is-layout { flex: 2 1 0; }
+.pdk-text-navigation .pdk-key { min-height: 44px; font-size: .85rem; }
+.pdk-text-navigation [data-pdk-text-action="select-all"] { flex: 2 1 0; }
+.pdk-dialog button:disabled { opacity: .45; cursor: default; }
+.pdk-key[aria-pressed="true"] { color: #d8f277; border-color: #d8f277; background: #344427; }
+[data-pdd-keyboard] { touch-action: manipulation; cursor: pointer; }
+@media (max-height: 740px) {
+  .pdk-dialog > section, .pdk-dialog > .pdk-card { gap: 6px; padding: 12px; }
+  .pdk-head p { display: none; }
+  .pdk-value { min-height: 52px; font-size: 2.2rem; }
+  .pdk-text-value { min-height: 50px; max-height: 85px; font-size: 1.2rem; }
+  .pdk-numeric-grid, .pdk-text-keys { gap: 5px; }
+  .pdk-key, .pdk-text-row .pdk-key, .pdk-actions button { min-height: 44px; }
+}
+@media (max-width: 600px) {
+  .pdk-dialog > section, .pdk-dialog > .pdk-card { padding: 10px; }
+  .pdk-text-row { gap: 3px; }
+  .pdk-text-row .pdk-key { font-size: .95rem; }
+  .pdk-text-row .is-wide { font-size: .7rem; }
+  .pdk-text-navigation .pdk-key, .pdk-text-row.is-controls .pdk-key { font-size: .7rem; }
+  .pdk-head h2 { font-size: 1rem; }
+  .pdk-actions { gap: 5px; }
+  .pdk-actions button { padding-inline: 5px; font-size: .8rem; }
+}

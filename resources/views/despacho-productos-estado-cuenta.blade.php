@@ -7,6 +7,7 @@
   <title>Estado de cuenta | Despacho de productos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-estado-cuenta.css') }}?v={{ filemtime(public_path('css/despacho-productos-estado-cuenta.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-dispatch-account-page">
   <main
@@ -65,12 +66,12 @@
 
         <label class="pdas-field" for="pdasDateFrom">
           <span>Desde <b>*</b></span>
-          <input id="pdasDateFrom" name="date_from" type="date" required>
+          <input id="pdasDateFrom" name="date_from" type="date" required inputmode="none" virtualkeyboardpolicy="manual">
         </label>
 
         <label class="pdas-field" for="pdasDateTo">
           <span>Hasta <b>*</b></span>
-          <input id="pdasDateTo" name="date_to" type="date" required>
+          <input id="pdasDateTo" name="date_to" type="date" required inputmode="none" virtualkeyboardpolicy="manual">
         </label>
 
         <label class="pdas-field" for="pdasCurrency">
@@ -211,7 +212,7 @@
           <circle cx="10.5" cy="10.5" r="6.5"></circle>
           <path d="m15.5 15.5 5 5"></path>
         </svg>
-        <input id="pdasClientSearch" type="search" maxlength="120" autocomplete="off" placeholder="Nombre o documento">
+        <input id="pdasClientSearch" type="search" maxlength="120" autocomplete="off" placeholder="Nombre o documento" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
       </label>
 
       <div id="pdasClientList" class="pdas-client-list" role="group" aria-label="Clientes disponibles"></div>
@@ -244,6 +245,7 @@
     </div>
   </dialog>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-estado-cuenta.js') }}?v={{ filemtime(public_path('js/despacho-productos-estado-cuenta.js')) }}"></script>
 </body>
 </html>

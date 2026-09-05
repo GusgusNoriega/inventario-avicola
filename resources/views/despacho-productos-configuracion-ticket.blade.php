@@ -7,6 +7,7 @@
   <title>Configurar ticket | Despacho de productos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-configuracion-ticket.css') }}?v={{ filemtime(public_path('css/despacho-productos-configuracion-ticket.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-ticket-config-page">
   <main id="productTicketConfiguration" class="ptc-shell" data-api-base="/despacho-productos">
@@ -41,6 +42,10 @@
             required
             spellcheck="true"
             placeholder="Nombre de la empresa"
+            data-pdd-keyboard="text"
+            readonly
+            inputmode="none"
+            virtualkeyboardpolicy="manual"
           ></textarea>
           <small><span id="productTicketTitleCount">0</span>/180</small>
         </label>
@@ -93,6 +98,7 @@
     </section>
   </main>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-configuracion-ticket.js') }}?v={{ filemtime(public_path('js/despacho-productos-configuracion-ticket.js')) }}"></script>
 </body>
 </html>

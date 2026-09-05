@@ -24,7 +24,8 @@ const dispatchSource = readFileSync(
 const dispatchView = readFileSync(
   new URL("../../resources/views/despacho-productos-despacho.blade.php", import.meta.url),
   "utf8"
-);
+) + readFileSync(new URL("../../resources/views/components/product-dispatch-numeric-keypad.blade.php", import.meta.url), "utf8");
+const sharedKeyboardSource = readFileSync(new URL("../../public/js/despacho-productos-keyboards.js", import.meta.url), "utf8");
 const dispatchStyles = readFileSync(
   new URL("../../public/css/despacho-productos-despacho.css", import.meta.url),
   "utf8"
@@ -155,7 +156,7 @@ test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma
   const tareInput = dispatchView.match(/<input\b[^>]*\bid="pddTare"[^>]*>/)?.[0] || "";
   const keypadBinding = sourceBetween(
     dispatchSource,
-    "bindIntegerKeypad({",
+    "bindProductDispatchNumericKeypad({",
     "elements.productMedia.addEventListener"
   );
 
@@ -182,7 +183,7 @@ test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma
 
   assert.doesNotMatch(dispatchView, /data-pdd-quantity-step|Disminuir cantidad|Aumentar cantidad/);
   assert.doesNotMatch(dispatchSource, /data-pdd-quantity-step/);
-  assert.equal((dispatchSource.match(/\bbindIntegerKeypad\s*\(\{/g) || []).length, 1);
+  assert.equal((dispatchSource.match(/\bbindProductDispatchNumericKeypad\s*\(\{/g) || []).length, 1);
   assert.match(keypadBinding, /elements\.quantity/);
   assert.match(keypadBinding, /elements\.wastePerUnit/);
   assert.match(keypadBinding, /elements\.tare/);
@@ -195,7 +196,7 @@ test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma
 });
 
 test("la captura y el editor muestran tara en kg y abren el teclado de tres decimales", () => {
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindProductDispatchNumericKeypad({", "elements.productMedia.addEventListener");
   for (const id of ["pddTare", "pddEditTare"]) {
     const input = dispatchView.match(new RegExp(`<input\\b[^>]*\\bid="${id}"[^>]*>`))?.[0] || "";
     assert.match(input, /\btype="number"/);
@@ -319,7 +320,7 @@ test("editar conserva la merma registrada sin controles de merma ni cambios por 
 test("los precios de captura y edición comparten el teclado decimal de la pesada", () => {
   const capturePrice = dispatchView.match(/<input\b[^>]*\bid="pddUnitPrice"[^>]*>/)?.[0] || "";
   const editPrice = dispatchView.match(/<input\b[^>]*\bid="pddEditPrice"[^>]*>/)?.[0] || "";
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindProductDispatchNumericKeypad({", "elements.productMedia.addEventListener");
 
   for (const input of [capturePrice, editPrice]) {
     assert.ok(input, "Debe existir el precio editable de la pesada.");
@@ -650,7 +651,7 @@ test("confirmar el peso manual solo fija la lectura pendiente y no agrega una pe
     "function setPendingManualWeight",
     "function effectiveCaptureReading"
   );
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindProductDispatchNumericKeypad({", "elements.productMedia.addEventListener");
 
   assert.match(manualCommitFlow, /pendingManualReading\s*=\s*createPendingManualReading\(/);
   assert.match(manualCommitFlow, /resolveWeightInput\(/);
@@ -847,7 +848,7 @@ test("Manual abre directamente el teclado compartido para preparar el peso neto"
   const manualInput = dispatchView.match(/<input\b[^>]*\bid="pddManualInput"[^>]*>/)?.[0] || "";
   const manualButton = dispatchView.match(/<button\b[^>]*\bid="pddManualWeight"[^>]*>/)?.[0] || "";
   const manualOpenFlow = sourceBetween(dispatchSource, 'elements.manualWeight.addEventListener("click"', 'elements.clearManualWeight.addEventListener("click"');
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindProductDispatchNumericKeypad({", "elements.productMedia.addEventListener");
 
   assert.match(manualButton, /aria-controls="pddNumericKeypad"/);
   assert.match(manualInput, /type="number"/);
@@ -864,7 +865,7 @@ test("Manual abre directamente el teclado compartido para preparar el peso neto"
   assert.match(manualOpenFlow, /state\.numericKeypad(?:\?\.|\.)open\(elements\.manualInput\)/);
   assert.doesNotMatch(manualOpenFlow, /addCurrentReading\s*\(|pendingManualReading\s*=/);
   assert.match(keypadBinding, /input:\s*elements\.manualInput,\s*mode:\s*"decimal",\s*decimalPlaces:\s*2,\s*maxLength:\s*9/);
-  assert.match(keypadBinding, /hintOutput:\s*elements\.numericKeypadHint/);
+  assert.match(sharedKeyboardSource, /hintOutput:\s*document\.getElementById\("pddNumericKeypadHint"\)/);
   assert.match(dispatchView, /id="pddNumericKeypadHint"/);
 });
 

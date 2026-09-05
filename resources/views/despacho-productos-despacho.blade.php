@@ -7,6 +7,7 @@
   <title>Despacho de productos | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-despacho.css') }}?v={{ filemtime(public_path('css/despacho-productos-despacho.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="pdd-page">
   <main
@@ -98,7 +99,7 @@
           <label>
             <span class="pdd-field-caption">Cantidad</span>
             <span class="pdd-touch-number-input">
-              <input id="pddQuantity" type="number" min="0" max="100000" step="1" inputmode="none" value="0" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" data-pdd-keypad-value-label="Cantidad seleccionada" data-pdd-keypad-confirm-label="Usar cantidad" data-pdd-keypad-value-name="cantidad" aria-label="Cantidad de aves o elementos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <input id="pddQuantity" type="number" min="0" max="100000" step="1" inputmode="none" value="0" readonly required data-pdd-keypad-label="Cantidad de aves o elementos" data-pdd-keypad-value-label="Cantidad seleccionada" data-pdd-keypad-confirm-label="Usar cantidad" data-pdd-keypad-value-name="cantidad" aria-label="Cantidad de aves o elementos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual">
               <b aria-hidden="true">und</b>
             </span>
           </label>
@@ -106,14 +107,14 @@
             <span class="pdd-field-caption">Precio</span>
             <span class="pdd-price-input">
               <b id="pddPriceCurrency" aria-hidden="true">S/</b>
-              <input id="pddUnitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" placeholder="0.00" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-describedby="pddPriceMode pddPriceError" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" disabled>
+              <input id="pddUnitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" placeholder="0.00" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-describedby="pddPriceMode pddPriceError" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" disabled data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual">
             </span>
             <small id="pddPriceMode">Sin producto</small>
           </label>
           <label>
             <span class="pdd-field-caption">Tara</span>
             <span class="pdd-touch-number-input">
-              <input id="pddTare" type="number" min="0" max="1000000" step="0.001" inputmode="none" value="0.000" readonly data-pdd-keypad-label="Tara en kilogramos" data-pdd-keypad-value-label="Tara (kg)" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" data-pdd-keypad-hint="Usa hasta 3 decimales: 1.250 kg equivale a 1 kilo y 250 gramos; 0.050 kg son 50 gramos." aria-label="Tara en kilogramos: 0.000. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <input id="pddTare" type="number" min="0" max="1000000" step="0.001" inputmode="none" value="0.000" readonly data-pdd-keypad-label="Tara en kilogramos" data-pdd-keypad-value-label="Tara (kg)" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" data-pdd-keypad-hint="Usa hasta 3 decimales: 1.250 kg equivale a 1 kilo y 250 gramos; 0.050 kg son 50 gramos." aria-label="Tara en kilogramos: 0.000. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual">
               <b aria-hidden="true">kg</b>
             </span>
           </label>
@@ -128,7 +129,7 @@
           <label class="pdd-waste-unit-control">
             <span class="pdd-field-caption">Merma/u</span>
             <span class="pdd-touch-number-input">
-              <input id="pddWastePerUnit" type="number" min="0" max="1000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Merma por unidad en gramos" data-pdd-keypad-value-label="Merma por unidad" data-pdd-keypad-confirm-label="Usar merma" data-pdd-keypad-value-name="merma por unidad" aria-label="Merma por unidad en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-describedby="pddWasteHint" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <input id="pddWastePerUnit" type="number" min="0" max="1000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Merma por unidad en gramos" data-pdd-keypad-value-label="Merma por unidad" data-pdd-keypad-confirm-label="Usar merma" data-pdd-keypad-value-name="merma por unidad" aria-label="Merma por unidad en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-describedby="pddWasteHint" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual">
               <b aria-hidden="true">g/u</b>
             </span>
           </label>
@@ -203,50 +204,13 @@
       </header>
       <label class="pdd-dialog-search">
         <span aria-hidden="true">⌕</span>
-        <input id="pddProductSearch" type="search" autocomplete="off" aria-label="Buscar producto" placeholder="Buscar por nombre o variación…">
+        <input id="pddProductSearch" type="search" autocomplete="off" aria-label="Buscar producto" placeholder="Buscar por nombre o variación…" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
       </label>
       <div id="pddProductGrid" class="pdd-product-grid"></div>
     </section>
   </dialog>
 
-  <input id="pddManualInput" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="none" readonly required hidden data-pdd-keypad-label="Colocar peso manual" data-pdd-keypad-value-label="Peso neto (kg)" data-pdd-keypad-confirm-label="Mostrar este peso" data-pdd-keypad-value-name="peso" data-pdd-keypad-value-article="un" data-pdd-keypad-hint="El valor se usará directamente como peso neto, sin aplicar merma ni tara.">
-
-  <dialog id="pddNumericKeypad" class="pdd-dialog pdd-keypad-dialog" aria-labelledby="pddNumericKeypadTitle">
-    <section>
-      <header class="pdd-dialog-head">
-        <div><p>Teclado táctil</p><h2 id="pddNumericKeypadTitle">Ingresar valor</h2></div>
-        <button type="button" data-pdd-close="pddNumericKeypad" aria-label="Cerrar">×</button>
-      </header>
-
-      <div class="pdd-keypad-value-wrap">
-        <span id="pddNumericKeypadValueLabel">Valor seleccionado</span>
-        <output id="pddNumericKeypadValue" class="pdd-keypad-value" tabindex="-1" aria-labelledby="pddNumericKeypadValueLabel" aria-live="polite">1</output>
-      </div>
-      <p id="pddNumericKeypadHint" class="pdd-keypad-hint" hidden></p>
-      <p id="pddNumericKeypadMessage" class="pdd-keypad-message" role="status" aria-live="polite"></p>
-
-      <div class="pdd-keypad-grid" role="group" aria-label="Números disponibles">
-        <button type="button" data-pdd-keypad-key="7">7</button>
-        <button type="button" data-pdd-keypad-key="8">8</button>
-        <button type="button" data-pdd-keypad-key="9">9</button>
-        <button type="button" data-pdd-keypad-key="4">4</button>
-        <button type="button" data-pdd-keypad-key="5">5</button>
-        <button type="button" data-pdd-keypad-key="6">6</button>
-        <button type="button" data-pdd-keypad-key="1">1</button>
-        <button type="button" data-pdd-keypad-key="2">2</button>
-        <button type="button" data-pdd-keypad-key="3">3</button>
-        <button type="button" data-pdd-keypad-key="00">00</button>
-        <button type="button" data-pdd-keypad-key="0">0</button>
-        <button class="is-backspace" type="button" data-pdd-keypad-key="backspace" aria-label="Borrar último número">⌫</button>
-      </div>
-
-      <footer class="pdd-keypad-actions">
-        <button id="pddNumericKeypadClear" class="pdd-dialog-cancel" type="button">Limpiar</button>
-        <button class="pdd-dialog-cancel" type="button" data-pdd-close="pddNumericKeypad">Cancelar</button>
-        <button id="pddNumericKeypadConfirm" class="pdd-dialog-confirm" type="button">Usar valor</button>
-      </footer>
-    </section>
-  </dialog>
+  <input id="pddManualInput" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="none" readonly required hidden data-pdd-keypad-label="Colocar peso manual" data-pdd-keypad-value-label="Peso neto (kg)" data-pdd-keypad-confirm-label="Mostrar este peso" data-pdd-keypad-value-name="peso" data-pdd-keypad-value-article="un" data-pdd-keypad-hint="El valor se usará directamente como peso neto, sin aplicar merma ni tara." data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual">
 
   <dialog id="pddClientDialog" class="pdd-dialog pdd-client-dialog" aria-labelledby="pddClientDialogTitle">
     <section>
@@ -259,7 +223,7 @@
       </button>
       <label class="pdd-dialog-search">
         <span aria-hidden="true">⌕</span>
-        <input id="pddClientSearch" type="search" autocomplete="off" aria-label="Buscar cliente" placeholder="Buscar nombre, documento o teléfono…">
+        <input id="pddClientSearch" type="search" autocomplete="off" aria-label="Buscar cliente" placeholder="Buscar nombre, documento o teléfono…" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
       </label>
       <div id="pddClientList" class="pdd-client-list"></div>
     </section>
@@ -274,10 +238,10 @@
       <div class="pdd-edit-grid">
         <label><span>Producto</span><select id="pddEditProduct" required></select></label>
         <label><span>Variación</span><select id="pddEditVariation"></select></label>
-        <label><span>Cantidad</span><input id="pddEditQuantity" type="number" min="0" max="100000" step="1" required></label>
-        <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0" max="1000000000" step="0.01" required></label>
-        <label><span>Tara (kg)</span><input id="pddEditTare" type="number" min="0" max="1000000" step="0.001" inputmode="none" readonly required data-pdd-keypad-label="Tara en kilogramos" data-pdd-keypad-value-label="Tara (kg)" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" data-pdd-keypad-hint="Usa hasta 3 decimales: 1.250 kg equivale a 1 kilo y 250 gramos; 0.050 kg son 50 gramos." aria-label="Tara en kilogramos. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico"></label>
-        <label class="pdd-edit-price-field"><span>Precio</span><input id="pddEditPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico"></label>
+        <label><span>Cantidad</span><input id="pddEditQuantity" type="number" min="0" max="100000" step="1" required data-pdd-keyboard="numeric" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
+        <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0" max="1000000000" step="0.01" required data-pdd-keyboard="numeric" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
+        <label><span>Tara (kg)</span><input id="pddEditTare" type="number" min="0" max="1000000" step="0.001" inputmode="none" readonly required data-pdd-keypad-label="Tara en kilogramos" data-pdd-keypad-value-label="Tara (kg)" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" data-pdd-keypad-hint="Usa hasta 3 decimales: 1.250 kg equivale a 1 kilo y 250 gramos; 0.050 kg son 50 gramos." aria-label="Tara en kilogramos. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual"></label>
+        <label class="pdd-edit-price-field"><span>Precio</span><input id="pddEditPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico" data-pdd-keyboard="numeric" virtualkeyboardpolicy="manual"></label>
       </div>
       <div class="pdd-edit-summary">
         <span id="pddEditSource">Origen: manual</span><strong id="pddEditCalculated">Neto 0.00 kg · S/ 0.00</strong>
@@ -337,7 +301,7 @@
         <div id="pddQuickProductSelection" class="pdd-quick-product-selection" aria-label="Productos rápidos seleccionados"></div>
         <label class="pdd-quick-product-search">
           <span aria-hidden="true">⌕</span>
-          <input id="pddQuickProductSearch" type="search" autocomplete="off" placeholder="Buscar producto" aria-label="Buscar producto rápido">
+          <input id="pddQuickProductSearch" type="search" autocomplete="off" placeholder="Buscar producto" aria-label="Buscar producto rápido" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
         </label>
         <div id="pddQuickProductResults" class="pdd-quick-product-results" aria-live="polite"></div>
         <small id="pddQuickProductStatus" class="pdd-quick-product-status" role="status" aria-live="polite"></small>
@@ -354,6 +318,10 @@
             autocomplete="organization"
             placeholder="Título de la empresa"
             required
+            data-pdd-keyboard="text"
+            readonly
+            inputmode="none"
+            virtualkeyboardpolicy="manual"
           >
         </label>
         <button id="pddSaveCustomerDisplayTitle" type="submit">Guardar</button>
@@ -396,10 +364,10 @@
       <form id="pddWastePresetForm" class="pdd-waste-preset-setting">
         <div><strong>Mermas M1–M4</strong><small>Gramos por unidad</small></div>
         <div class="pdd-waste-preset-inputs">
-          <label><span>M1</span><input id="pddWastePreset1" type="number" min="0" max="1000000" step="1" value="0" required></label>
-          <label><span>M2</span><input id="pddWastePreset2" type="number" min="0" max="1000000" step="1" value="50" required></label>
-          <label><span>M3</span><input id="pddWastePreset3" type="number" min="0" max="1000000" step="1" value="100" required></label>
-          <label><span>M4</span><input id="pddWastePreset4" type="number" min="0" max="1000000" step="1" value="150" required></label>
+          <label><span>M1</span><input id="pddWastePreset1" type="number" min="0" max="1000000" step="1" value="0" required data-pdd-keyboard="numeric" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
+          <label><span>M2</span><input id="pddWastePreset2" type="number" min="0" max="1000000" step="1" value="50" required data-pdd-keyboard="numeric" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
+          <label><span>M3</span><input id="pddWastePreset3" type="number" min="0" max="1000000" step="1" value="100" required data-pdd-keyboard="numeric" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
+          <label><span>M4</span><input id="pddWastePreset4" type="number" min="0" max="1000000" step="1" value="150" required data-pdd-keyboard="numeric" readonly inputmode="none" virtualkeyboardpolicy="manual"></label>
         </div>
         <button id="pddSaveWastePresets" type="submit">Guardar</button>
         <small id="pddWastePresetStatus" class="pdd-waste-preset-status" role="status" aria-live="polite"></small>
@@ -444,7 +412,7 @@
 
       <label class="pdd-typography-search">
         <span aria-hidden="true">⌕</span>
-        <input id="pddTypographySearch" type="search" autocomplete="off" placeholder="Buscar: peso, lista, botón, ventana…" aria-label="Buscar un ajuste tipográfico">
+        <input id="pddTypographySearch" type="search" autocomplete="off" placeholder="Buscar: peso, lista, botón, ventana…" aria-label="Buscar un ajuste tipográfico" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
       </label>
 
       <div class="pdd-typography-presets" role="group" aria-label="Perfiles rápidos de tipografía">
@@ -468,6 +436,7 @@
     </footer>
   </aside>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-despacho.js') }}?v={{ filemtime(public_path('js/despacho-productos-despacho.js')) }}"></script>
 </body>
 </html>

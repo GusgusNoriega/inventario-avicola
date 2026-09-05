@@ -298,7 +298,7 @@ function variationCard(variation, index) {
         <div class="variation-fields">
           <label class="field">
             Nombre <b>*</b>
-            <input type="text" maxlength="120" autocomplete="off" placeholder="Ej: Grande" required value="${escapeHtml(variation.name)}" data-variation-field="name" data-variation-index="${index}">
+            <input type="text" maxlength="120" autocomplete="off" placeholder="Ej: Grande" required value="${escapeHtml(variation.name)}" data-variation-field="name" data-variation-index="${index}" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
           </label>
           <label class="field">
             Forma de cobro <b>*</b>
@@ -309,11 +309,11 @@ function variationCard(variation, index) {
           </label>
           <label class="field">
             Precio <b>*</b>
-            <input type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="decimal" placeholder="0.00" required value="${escapeHtml(variation.price)}" data-variation-field="price" data-variation-index="${index}">
+            <input type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="none" placeholder="0.00" required value="${escapeHtml(variation.price)}" data-variation-field="price" data-variation-index="${index}" data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
           <label class="field">
             Merma (g/unidad) <b>*</b>
-            <input type="number" min="0" max="1000000" step="1" inputmode="numeric" required value="${escapeHtml(variation.waste)}" data-variation-field="waste" data-variation-index="${index}">
+            <input type="number" min="0" max="1000000" step="1" inputmode="none" required value="${escapeHtml(variation.waste)}" data-variation-field="waste" data-variation-index="${index}" data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
         </div>
       </div>

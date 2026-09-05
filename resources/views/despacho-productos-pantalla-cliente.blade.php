@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pantalla del cliente | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-pantalla-cliente.css') }}?v={{ filemtime(public_path('css/despacho-productos-pantalla-cliente.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="pdcd-page" data-authenticated-user-id="{{ auth()->id() ?? '' }}">
   <main class="pdcd-shell">
@@ -109,7 +110,7 @@
 
       <label class="pdcd-typography-search" for="productCustomerDisplayTypographySearch">
         <span>Buscar texto</span>
-        <input id="productCustomerDisplayTypographySearch" type="search" placeholder="Peso, título, tabla…" autocomplete="off">
+        <input id="productCustomerDisplayTypographySearch" type="search" placeholder="Peso, título, tabla…" autocomplete="off" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
       </label>
 
       <div class="pdcd-typography-preview" aria-hidden="true">
@@ -145,6 +146,7 @@
     <p id="productCustomerDisplayScreenFeedback" role="status" aria-live="polite"></p>
   </dialog>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-pantalla-cliente.js') }}?v={{ filemtime(public_path('js/despacho-productos-pantalla-cliente.js')) }}"></script>
 </body>
 </html>

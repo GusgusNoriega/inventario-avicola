@@ -7,6 +7,7 @@
   <title>Tickets de despacho | Despacho de productos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos-tickets.css') }}?v={{ filemtime(public_path('css/despacho-productos-tickets.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-dispatch-tickets-page">
   <main
@@ -64,18 +65,18 @@
               <circle cx="10.5" cy="10.5" r="6.5"></circle>
               <path d="m15.5 15.5 5 5"></path>
             </svg>
-            <input id="pdtSearch" name="search" type="search" maxlength="120" autocomplete="off" placeholder="Ej. PD-000123, nombre o producto">
+            <input id="pdtSearch" name="search" type="search" maxlength="120" autocomplete="off" placeholder="Ej. PD-000123, nombre o producto" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
           </span>
         </label>
 
         <label class="pdt-field" for="pdtDateFrom">
           <span>Desde</span>
-          <input id="pdtDateFrom" name="date_from" type="date">
+          <input id="pdtDateFrom" name="date_from" type="date" inputmode="none" virtualkeyboardpolicy="manual">
         </label>
 
         <label class="pdt-field" for="pdtDateTo">
           <span>Hasta</span>
-          <input id="pdtDateTo" name="date_to" type="date">
+          <input id="pdtDateTo" name="date_to" type="date" inputmode="none" virtualkeyboardpolicy="manual">
         </label>
 
         <label class="pdt-field pdt-per-page-field" for="pdtPerPage">
@@ -157,7 +158,7 @@
             <div class="pdt-editor-fields">
               <label class="pdt-field pdt-wide-field" for="pdtTicketTitle">
                 <span>Título del ticket <b>*</b></span>
-                <textarea id="pdtTicketTitle" name="ticket_title" rows="2" maxlength="180" required></textarea>
+                <textarea id="pdtTicketTitle" name="ticket_title" rows="2" maxlength="180" required data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual"></textarea>
               </label>
 
               <label class="pdt-field" for="pdtListNumber">
@@ -183,7 +184,7 @@
 
               <label class="pdt-field" for="pdtRegisteredAt">
                 <span>Fecha y hora <b>*</b></span>
-                <input id="pdtRegisteredAt" name="registered_at" type="datetime-local" step="1" aria-describedby="pdtRegisteredAtHelp" required>
+                <input id="pdtRegisteredAt" name="registered_at" type="datetime-local" step="1" aria-describedby="pdtRegisteredAtHelp" required inputmode="none" virtualkeyboardpolicy="manual">
                 <small id="pdtRegisteredAtHelp">La hora de cada pesada se desplazará junto con el ticket.</small>
               </label>
 
@@ -196,6 +197,10 @@
                   minlength="3"
                   maxlength="250"
                   placeholder="Si lo deseas, deja una nota sobre este cambio"
+                  data-pdd-keyboard="text"
+                  readonly
+                  inputmode="none"
+                  virtualkeyboardpolicy="manual"
                 ></textarea>
                 <small>Si escribes un motivo, quedará asociado a la corrección para mantener la trazabilidad.</small>
               </label>
@@ -242,6 +247,7 @@
     </form>
   </dialog>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos-tickets.js') }}?v={{ filemtime(public_path('js/despacho-productos-tickets.js')) }}"></script>
 </body>
 </html>

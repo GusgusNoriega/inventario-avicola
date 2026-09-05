@@ -7,6 +7,7 @@
   <title>Administrar productos | Sistema Pollos</title>
   <link rel="stylesheet" href="{{ asset('css/style.css') }}">
   <link rel="stylesheet" href="{{ asset('css/despacho-productos.css') }}?v={{ filemtime(public_path('css/despacho-productos.css')) }}">
+  @include('partials.product-dispatch-keyboards-styles')
 </head>
 <body class="product-catalog-page">
   <main class="product-dispatch-shell product-catalog-shell">
@@ -48,7 +49,7 @@
         <span>Buscar producto o variación</span>
         <span class="product-catalog-input-wrap">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5L21 21"></path></svg>
-          <input id="productSearch" type="search" maxlength="120" autocomplete="off" placeholder="Ej: huevo, gallina roja, pavo...">
+          <input id="productSearch" type="search" maxlength="120" autocomplete="off" placeholder="Ej: huevo, gallina roja, pavo..." data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
         </span>
       </label>
 
@@ -114,11 +115,11 @@
             <div class="product-editor-fields">
               <label class="field product-field-wide">
                 Nombre del producto <b>*</b>
-                <input id="productName" name="nombre" type="text" minlength="2" maxlength="120" autocomplete="off" placeholder="Ej: Huevo" required>
+                <input id="productName" name="nombre" type="text" minlength="2" maxlength="120" autocomplete="off" placeholder="Ej: Huevo" required data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual">
               </label>
               <label class="field product-field-wide">
                 Descripción <span>Opcional</span>
-                <textarea id="productDescription" name="descripcion" maxlength="500" rows="3" placeholder="Información útil para identificarlo"></textarea>
+                <textarea id="productDescription" name="descripcion" maxlength="500" rows="3" placeholder="Información útil para identificarlo" data-pdd-keyboard="text" readonly inputmode="none" virtualkeyboardpolicy="manual"></textarea>
               </label>
               <label class="product-active-toggle">
                 <input id="productIsActive" type="checkbox" checked>
@@ -144,11 +145,11 @@
             </label>
             <label class="field">
               Precio de venta <b>*</b>
-              <span class="product-money-input"><span>S/</span><input id="productPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="decimal" placeholder="0.00" required></span>
+              <span class="product-money-input"><span>S/</span><input id="productPrice" type="number" min="0.0001" max="9999999999.9999" step="0.0001" inputmode="none" placeholder="0.00" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual"></span>
             </label>
             <label class="field">
               Merma por unidad (g) <b>*</b>
-              <input id="productWaste" type="number" min="0" max="1000000" step="1" inputmode="numeric" value="0" required>
+              <input id="productWaste" type="number" min="0" max="1000000" step="1" inputmode="none" value="0" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
             </label>
           </div>
           <p class="product-merma-help">Usa 0 si el producto no tiene merma. Este valor queda preparado para el cálculo de peso de la futura vista de despacho.</p>
@@ -190,6 +191,7 @@
     </div>
   </dialog>
 
+  @include('partials.product-dispatch-keyboards')
   <script type="module" src="{{ asset('js/despacho-productos.js') }}?v={{ filemtime(public_path('js/despacho-productos.js')) }}"></script>
 </body>
 </html>

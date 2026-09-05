@@ -576,7 +576,10 @@ export function initializeProductCustomerDisplayTypography({
     const number = document.createElement("input");
     number.id = numberId;
     number.type = "number";
-    number.inputMode = "decimal";
+    number.inputMode = "none";
+    number.readOnly = true;
+    number.dataset.pddKeyboard = "numeric";
+    number.setAttribute("virtualkeyboardpolicy", "manual");
     number.min = control.min;
     number.max = control.max;
     number.step = control.step;

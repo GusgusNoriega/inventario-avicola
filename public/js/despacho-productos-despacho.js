@@ -1,6 +1,6 @@
 import { apiRequest } from "./api-client.js";
 import { RetailScaleController } from "./despacho-minorista-balanza.js";
-import { bindIntegerKeypad } from "./despacho-productos-numeric-keypad.js";
+import { bindProductDispatchNumericKeypad } from "./despacho-productos-keyboards.js";
 import {
   PRODUCT_DISPATCH_MAX_UNIT_PRICE,
   PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS,
@@ -272,13 +272,6 @@ const elements = {
   productGrid: document.querySelector("#pddProductGrid"),
   manualInput: document.querySelector("#pddManualInput"),
   numericKeypad: document.querySelector("#pddNumericKeypad"),
-  numericKeypadTitle: document.querySelector("#pddNumericKeypadTitle"),
-  numericKeypadValueLabel: document.querySelector("#pddNumericKeypadValueLabel"),
-  numericKeypadHint: document.querySelector("#pddNumericKeypadHint"),
-  numericKeypadValue: document.querySelector("#pddNumericKeypadValue"),
-  numericKeypadMessage: document.querySelector("#pddNumericKeypadMessage"),
-  numericKeypadClear: document.querySelector("#pddNumericKeypadClear"),
-  numericKeypadConfirm: document.querySelector("#pddNumericKeypadConfirm"),
   clientDialog: document.querySelector("#pddClientDialog"),
   publicSale: document.querySelector("#pddPublicSale"),
   clientSearch: document.querySelector("#pddClientSearch"),
@@ -889,7 +882,7 @@ function typographyControlMarkup(control, groupIndex, controlIndex) {
         <button type="button" data-pdd-typography-step="-1" data-pdd-typography-variable="${escapeHtml(control.variable)}" aria-label="Disminuir ${escapeHtml(control.label)}">−</button>
         <input id="${inputId}" type="range" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" data-pdd-typography-range="${escapeHtml(control.variable)}" aria-label="${escapeHtml(control.label)}" aria-valuetext="${value} píxeles">
         <label class="pdd-typography-number" for="${numberId}">
-          <input id="${numberId}" type="number" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" inputmode="decimal" data-pdd-typography-number="${escapeHtml(control.variable)}" aria-label="Valor exacto de ${escapeHtml(control.label)} en píxeles">
+          <input id="${numberId}" type="number" min="${control.min}" max="${control.max}" step="${control.step}" value="${value}" inputmode="none" data-pdd-typography-number="${escapeHtml(control.variable)}" aria-label="Valor exacto de ${escapeHtml(control.label)} en píxeles" data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           <span>px</span>
         </label>
         <button type="button" data-pdd-typography-step="1" data-pdd-typography-variable="${escapeHtml(control.variable)}" aria-label="Aumentar ${escapeHtml(control.label)}">＋</button>
@@ -2188,7 +2181,7 @@ function configureProductScaleForCurrentBranch() {
 
 state.scale = createProductScaleController();
 
-state.numericKeypad = bindIntegerKeypad({
+state.numericKeypad = bindProductDispatchNumericKeypad({
   inputs: [
     { input: elements.quantity, maxLength: 6 },
     { input: elements.wastePerUnit, maxLength: 7 },
@@ -2197,21 +2190,7 @@ state.numericKeypad = bindIntegerKeypad({
     { input: elements.manualInput, mode: "decimal", decimalPlaces: 2, maxLength: 9, valueName: "peso", valueArticle: "un", onCommit: setPendingManualWeight },
     { input: elements.unitPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" },
     { input: elements.editPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" }
-  ],
-  dialog: elements.numericKeypad,
-  titleOutput: elements.numericKeypadTitle,
-  valueLabelOutput: elements.numericKeypadValueLabel,
-  hintOutput: elements.numericKeypadHint,
-  valueOutput: elements.numericKeypadValue,
-  messageOutput: elements.numericKeypadMessage,
-  clearButton: elements.numericKeypadClear,
-  confirmButton: elements.numericKeypadConfirm,
-  showDialog(focusTarget) {
-    openDialog(elements.numericKeypad, focusTarget);
-  },
-  hideDialog() {
-    closeDialog(elements.numericKeypad);
-  }
+  ]
 });
 
 elements.productMedia.addEventListener("click", openProductDialog);

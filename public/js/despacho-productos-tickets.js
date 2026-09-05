@@ -988,7 +988,7 @@ function mountProductDispatchTickets() {
           </label>
           <label class="pdt-field" for="${fieldId}Quantity">
             <span>Cantidad <b>*</b></span>
-            <input id="${fieldId}Quantity" data-pdt-line-field="quantity" type="number" min="0" max="100000" step="1" value="${escapeHtml(line.quantity)}" inputmode="numeric" required>
+            <input id="${fieldId}Quantity" data-pdt-line-field="quantity" type="number" min="0" max="100000" step="1" value="${escapeHtml(line.quantity)}" inputmode="none" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
           <label class="pdt-field" for="${fieldId}Mode">
             <span>Forma de cobro (catálogo)</span>
@@ -999,19 +999,19 @@ function mountProductDispatchTickets() {
           </label>
           <label class="pdt-field" for="${fieldId}Price">
             <span>Precio unitario <b>*</b></span>
-            <input id="${fieldId}Price" data-pdt-line-field="unit_price" type="number" min="0.01" max="${PRODUCT_DISPATCH_MAX_UNIT_PRICE}" step="0.01" value="${escapeHtml(line.unit_price)}" inputmode="decimal" required>
+            <input id="${fieldId}Price" data-pdt-line-field="unit_price" type="number" min="0.01" max="${PRODUCT_DISPATCH_MAX_UNIT_PRICE}" step="0.01" value="${escapeHtml(line.unit_price)}" inputmode="none" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
           <label class="pdt-field" for="${fieldId}ReadWeight">
             <span>Peso leído (kg) <b>*</b></span>
-            <input id="${fieldId}ReadWeight" data-pdt-line-field="read_weight_kg" type="number" min="0.001" max="${MAX_READ_WEIGHT_KG}" step="0.001" value="${escapeHtml(line.read_weight_kg)}" inputmode="decimal" required>
+            <input id="${fieldId}ReadWeight" data-pdt-line-field="read_weight_kg" type="number" min="0.001" max="${MAX_READ_WEIGHT_KG}" step="0.001" value="${escapeHtml(line.read_weight_kg)}" inputmode="none" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
           <label class="pdt-field" for="${fieldId}Waste">
             <span>Merma por unidad (g) <b>*</b></span>
-            <input id="${fieldId}Waste" data-pdt-line-field="waste_grams_per_unit" type="number" min="0" max="1000000" step="1" value="${escapeHtml(line.waste_grams_per_unit)}" inputmode="numeric" required>
+            <input id="${fieldId}Waste" data-pdt-line-field="waste_grams_per_unit" type="number" min="0" max="1000000" step="1" value="${escapeHtml(line.waste_grams_per_unit)}" inputmode="none" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
           <label class="pdt-field" for="${fieldId}Tare">
             <span>Tara (g) <b>*</b></span>
-            <input id="${fieldId}Tare" data-pdt-line-field="tare_grams" type="number" min="0" max="1000000000" step="1" value="${escapeHtml(line.tare_grams)}" inputmode="numeric" required>
+            <input id="${fieldId}Tare" data-pdt-line-field="tare_grams" type="number" min="0" max="1000000000" step="1" value="${escapeHtml(line.tare_grams)}" inputmode="none" required data-pdd-keyboard="numeric" readonly virtualkeyboardpolicy="manual">
           </label>
           <div class="pdt-calculated-field"><span>Merma total</span><strong data-pdt-line-waste>${escapeHtml(`${formatInteger(calculated.waste_total_grams)} g`)}</strong></div>
           <div class="pdt-calculated-field"><span>Neto e importe</span><strong data-pdt-line-calculation>${escapeHtml(`${formatWeight(calculated.net_weight_kg)} · ${formatMoney(calculated.amount, state.editorTicket.currency || state.currency)}`)}</strong></div>
