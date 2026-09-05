@@ -113,11 +113,20 @@ export function normalizeProductDispatchGeneralReport(response = {}) {
     days: source.days.map((day) => ({
       ...normalizedTotals(day),
       date: validDate(day.date),
-      products: (Array.isArray(day.products) ? day.products : []).map((product) => ({
-        ...normalizedTotals(product),
-        product_id: product.product_id ?? null,
-        product_name: String(product.product_name ?? "Producto"),
-      })).sort((a, b) => a.product_name.localeCompare(b.product_name, "es", { sensitivity: "base" })),
+      products: (Array.isArray(day.products) ? day.products : []).map((product) => {
+        const productName = String(product.product_name ?? "Producto");
+        const variationId = product.variation_id ?? null;
+        const variationName = String(product.variation_name ?? "").trim()
+          || (variationId !== null ? `Subproducto #${variationId}` : null);
+        return {
+          ...normalizedTotals(product),
+          product_id: product.product_id ?? null,
+          product_name: productName,
+          variation_id: variationId,
+          variation_name: variationName,
+          display_name: String(product.display_name ?? (variationName ? `${productName} · ${variationName}` : productName)),
+        };
+      }).sort((a, b) => a.display_name.localeCompare(b.display_name, "es", { sensitivity: "base", numeric: true })),
     })).filter((day) => day.date).sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
@@ -152,7 +161,7 @@ export function renderProductDispatchGeneralDay(day, index = 0) {
     <div class="pdgr-table-wrap" tabindex="0" role="region" aria-label="Productos del ${escape(formatProductDispatchGeneralDate(day.date))}; tabla desplazable">
       <table class="pdgr-table">
         <thead><tr><th scope="col">Producto</th><th scope="col" class="is-number">Cantidad</th><th scope="col" class="is-number">Peso leído <small>kg</small></th><th scope="col" class="is-number">Merma <small>kg</small></th><th scope="col" class="is-number">Tara <small>kg</small></th><th scope="col" class="is-number">Peso neto <small>kg</small></th><th scope="col" class="is-number">Importe</th></tr></thead>
-        <tbody>${day.products.map((product) => `<tr><th scope="row">${escape(product.product_name)}</th>${numericCells(product)}</tr>`).join("")}</tbody>
+        <tbody>${day.products.map((product) => `<tr><th scope="row">${escape(product.display_name ?? product.product_name)}</th>${numericCells(product)}</tr>`).join("")}</tbody>
         <tfoot><tr><th scope="row">TOTAL DEL DÍA</th>${numericCells(day)}</tr></tfoot>
       </table>
     </div>

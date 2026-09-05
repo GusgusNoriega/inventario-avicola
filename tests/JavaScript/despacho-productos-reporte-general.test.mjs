@@ -131,6 +131,36 @@ test("no presenta una respuesta incompleta como un reporte vacío válido", () =
   assert.throws(() => normalizeProductDispatchGeneralReport({ data: {} }), /incompleto/);
 });
 
+test("muestra el producto y cada subproducto por separado, incluidos los históricos, conservando los totales", () => {
+  const source = report();
+  const base = source.data.days[0].products[0];
+  source.data.days[0].product_count = 4;
+  source.data.days[0].products = [
+    { ...base, variation_id: 11, variation_name: "Pechuga", display_name: "Pollo · Pechuga", quantity: "6" },
+    { ...base, variation_id: null, variation_name: "Menudencia <especial>", quantity: "5" },
+    { ...base, variation_id: null, variation_name: null, display_name: "Pollo", quantity: "10" },
+    { ...base, variation_id: 12, variation_name: "Alas", display_name: "Pollo · Alas", quantity: "3" },
+  ];
+  const normalized = normalizeProductDispatchGeneralReport(source);
+  const day = normalized.days[0];
+  assert.deepEqual(day.products.map((product) => product.display_name), [
+    "Pollo", "Pollo · Alas", "Pollo · Menudencia <especial>", "Pollo · Pechuga",
+  ]);
+  assert.deepEqual(day.products.map((product) => product.quantity), ["10", "3", "5", "6"]);
+  assert.equal(day.products[2].variation_id, null);
+  assert.equal(day.products[2].variation_name, "Menudencia <especial>");
+  assert.equal(day.product_count, 4);
+  assert.equal(day.quantity, "24");
+  assert.equal(normalized.summary.quantity, "24");
+  const html = renderProductDispatchGeneralDay(day);
+  assert.match(html, /<th scope="row">Pollo<\/th>/);
+  assert.match(html, /<th scope="row">Pollo · Alas<\/th>/);
+  assert.match(html, /<th scope="row">Pollo · Pechuga<\/th>/);
+  assert.match(html, /Pollo · Menudencia &lt;especial&gt;/);
+  assert.doesNotMatch(html, /<especial>/);
+  assert.match(html, /TOTAL DEL DÍA<\/th><td class="is-number">24<\/td>/);
+});
+
 test("monta hoy de la sucursal dejando Hasta vacío y bloquea descarga cuando los filtros cambian", async () => {
   const requests = [];
   const app = mounted(async (path, options) => { requests.push({ path, options }); return report(); });

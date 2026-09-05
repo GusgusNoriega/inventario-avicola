@@ -17,7 +17,7 @@
       <div class="pdgr-heading-copy">
         <p class="pdgr-eyebrow">Despacho de productos <span aria-hidden="true">/</span> Reportes</p>
         <h1>Reporte general</h1>
-        <p>Todo lo despachado, producto por producto y día por día.</p>
+        <p>Productos y subproductos, desglosados día por día.</p>
       </div>
       <a class="pdgr-button pdgr-back" href="{{ route('despacho-productos.menu') }}">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5-7 7 7 7M3 12h19"></path></svg>
@@ -92,7 +92,7 @@
 
       <div class="pdgr-detail-heading">
         <h3>Detalle por día</h3>
-        <p>Las variantes se agrupan en su producto.</p>
+        <p>Cada producto y subproducto aparece en una fila independiente.</p>
       </div>
       <div id="pdgrDays" class="pdgr-days"></div>
       <div id="pdgrStatus" class="pdgr-status pdgr-panel" role="status">

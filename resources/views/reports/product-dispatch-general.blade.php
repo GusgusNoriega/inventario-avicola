@@ -86,7 +86,7 @@
       <tbody>
         @foreach ($day['products'] as $product)
           <tr @class(['last-product' => $loop->last])>
-            <td class="product">{{ $product['product_name'] }}<small>{{ $product['weighing_count'] }} {{ $product['weighing_count'] === 1 ? 'pesada' : 'pesadas' }}</small></td>
+            <td class="product">{{ $product['display_name'] }}<small>{{ $product['weighing_count'] }} {{ $product['weighing_count'] === 1 ? 'pesada' : 'pesadas' }}</small></td>
             <td>{{ $number($product['quantity']) }}</td><td>{{ $number($product['read_weight_kg'], 3) }}</td><td>{{ $number($product['waste_weight_kg'], 3) }}</td><td>{{ $number($product['tare_weight_kg'], 3) }}</td><td class="net">{{ $number($product['net_weight_kg'], 3) }}</td>
             <td>@foreach ($product['amounts'] as $amount)<span class="money">{{ $amount['currency'] }} {{ $number($amount['amount'], 2) }}</span>@endforeach</td>
           </tr>
@@ -97,6 +97,6 @@
   @empty
     <div class="empty"><strong>Sin despachos en este periodo</strong>No hay tickets registrados para las fechas seleccionadas en esta sucursal.</div>
   @endforelse
-  <p class="notes">Agrupado por fecha de registro del ticket en {{ $report['branch']['timezone'] }}. Incluye ventas al público y a clientes registrados. Las variaciones se suman en su producto. Se excluyen tickets eliminados. Los importes de monedas diferentes se presentan por separado.</p>
+  <p class="notes">Agrupado por fecha de registro del ticket en {{ $report['branch']['timezone'] }}. Incluye ventas al público y a clientes registrados. Cada producto y subproducto se desglosa en una fila independiente. Se excluyen tickets eliminados. Los importes de monedas diferentes se presentan por separado.</p>
 </body>
 </html>

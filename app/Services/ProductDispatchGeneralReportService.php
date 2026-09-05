@@ -36,6 +36,7 @@ class ProductDispatchGeneralReportService
             ->select([
                 'tickets.id as ticket_id', 'tickets.registrado_at', 'tickets.moneda',
                 'weighings.producto_despacho_id', 'weighings.producto_nombre_snapshot',
+                'weighings.variacion_producto_despacho_id', 'weighings.variacion_nombre_snapshot',
                 'weighings.cantidad', 'weighings.peso_leido_kg', 'weighings.merma_total_gramos',
                 'weighings.tara_gramos', 'weighings.peso_neto_kg', 'weighings.importe',
             ])->cursor();
@@ -50,7 +51,13 @@ class ProductDispatchGeneralReportService
                 ->setTimezone($timezone)->toDateString();
             $productId = $row->producto_despacho_id === null ? null : (int) $row->producto_despacho_id;
             $productName = (string) $row->producto_nombre_snapshot;
-            $productKey = $productId === null ? 'snapshot:'.$productName : 'id:'.$productId;
+            $variationId = $row->variacion_producto_despacho_id === null ? null : (int) $row->variacion_producto_despacho_id;
+            $variationName = trim((string) $row->variacion_nombre_snapshot);
+            $variationName = $variationName !== '' ? $variationName : ($variationId === null ? null : 'Subproducto #'.$variationId);
+            $productKey = json_encode([
+                $productId === null ? ['snapshot', $productName] : ['id', $productId],
+                $variationId !== null ? ['id', $variationId] : ($variationName === null ? ['base'] : ['snapshot', $variationName]),
+            ], JSON_THROW_ON_ERROR);
 
             if (! isset($days[$date])) {
                 $days[$date] = [
@@ -64,6 +71,9 @@ class ProductDispatchGeneralReportService
                 $days[$date]['products'][$productKey] = [
                     'product_id' => $productId,
                     'product_name' => $productName,
+                    'variation_id' => $variationId,
+                    'variation_name' => $variationName,
+                    'display_name' => $productName.($variationName === null ? '' : ' · '.$variationName),
                     ...$this->emptyTotals(),
                 ];
             }
@@ -88,8 +98,9 @@ class ProductDispatchGeneralReportService
             unset($product);
             $day['products'] = array_values($day['products']);
             usort($day['products'], static function (array $left, array $right): int {
-                return strnatcasecmp($left['product_name'], $right['product_name'])
-                    ?: ($left['product_id'] <=> $right['product_id']);
+                return strnatcasecmp($left['display_name'], $right['display_name'])
+                    ?: ($left['product_id'] <=> $right['product_id'])
+                    ?: ($left['variation_id'] <=> $right['variation_id']);
             });
         }
         unset($day);

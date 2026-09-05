@@ -45,8 +45,8 @@ class ProductDispatchGeneralReportTest extends TestCase
         $largeVariation = $this->createVariation('Grande');
         $smallVariation = $this->createVariation('Pequeño');
         $this->createTicket('2026-09-05 15:00:00', [
-            ['quantity' => 2, 'read' => '5.123', 'waste' => 60, 'tare' => 100, 'net' => '5.083', 'amount' => '61.00', 'variation_id' => $largeVariation],
-            ['quantity' => 3, 'read' => '3.111', 'waste' => 90, 'tare' => 101, 'net' => '3.100', 'amount' => '37.20', 'variation_id' => $smallVariation],
+            ['quantity' => 2, 'read' => '5.123', 'waste' => 60, 'tare' => 100, 'net' => '5.083', 'amount' => '61.00', 'variation_id' => $largeVariation, 'variation' => 'Grande'],
+            ['quantity' => 3, 'read' => '3.111', 'waste' => 90, 'tare' => 101, 'net' => '3.100', 'amount' => '37.20', 'variation_id' => $smallVariation, 'variation' => 'Pequeño'],
             ['product_id' => $eggs, 'name' => 'Huevo', 'quantity' => 10, 'read' => '1.000', 'net' => '1.000', 'amount' => '16.10'],
         ]);
         $this->createTicket('2026-09-05 23:00:00', [
@@ -62,7 +62,7 @@ class ProductDispatchGeneralReportTest extends TestCase
             ->assertJsonPath('data.branch.id', $this->branchId)
             ->assertJsonPath('data.branch.timezone', 'America/Lima')
             ->assertJsonPath('data.summary.day_count', 2)
-            ->assertJsonPath('data.summary.product_count', 2)
+            ->assertJsonPath('data.summary.product_count', 4)
             ->assertJsonPath('data.summary.ticket_count', 3)
             ->assertJsonPath('data.summary.weighing_count', 5)
             ->assertJsonPath('data.summary.quantity', '20')
@@ -79,15 +79,33 @@ class ProductDispatchGeneralReportTest extends TestCase
             ->assertJsonPath('data.days.0.ticket_count', 2)
             ->assertJsonPath('data.days.0.quantity', '16')
             ->assertJsonPath('data.days.0.net_weight_kg', '11.183')
-            ->assertJsonPath('data.days.0.product_count', 2)
+            ->assertJsonPath('data.days.0.product_count', 4)
+            ->assertJsonCount(4, 'data.days.0.products')
             ->assertJsonPath('data.days.0.products.0.product_name', 'Huevo')
             ->assertJsonPath('data.days.0.products.1.product_name', 'Pavo')
-            ->assertJsonPath('data.days.0.products.1.quantity', '6')
-            ->assertJsonPath('data.days.0.products.1.weighing_count', 3)
+            ->assertJsonPath('data.days.0.products.1.variation_id', null)
+            ->assertJsonPath('data.days.0.products.1.variation_name', null)
+            ->assertJsonPath('data.days.0.products.1.display_name', 'Pavo')
+            ->assertJsonPath('data.days.0.products.1.quantity', '1')
+            ->assertJsonPath('data.days.0.products.1.weighing_count', 1)
             ->assertJsonPath('data.days.0.products.1.amounts', [
-                ['currency' => 'PEN', 'amount' => '98.20'],
                 ['currency' => 'USD', 'amount' => '12.30'],
             ])
+            ->assertJsonPath('data.days.0.products.2.product_id', $this->productId)
+            ->assertJsonPath('data.days.0.products.2.product_name', 'Pavo')
+            ->assertJsonPath('data.days.0.products.2.variation_id', $largeVariation)
+            ->assertJsonPath('data.days.0.products.2.variation_name', 'Grande')
+            ->assertJsonPath('data.days.0.products.2.display_name', 'Pavo · Grande')
+            ->assertJsonPath('data.days.0.products.2.quantity', '2')
+            ->assertJsonPath('data.days.0.products.2.read_weight_kg', '5.123')
+            ->assertJsonPath('data.days.0.products.2.waste_weight_kg', '0.060')
+            ->assertJsonPath('data.days.0.products.2.tare_weight_kg', '0.100')
+            ->assertJsonPath('data.days.0.products.2.net_weight_kg', '5.083')
+            ->assertJsonPath('data.days.0.products.2.amounts', [['currency' => 'PEN', 'amount' => '61.00']])
+            ->assertJsonPath('data.days.0.products.3.variation_id', $smallVariation)
+            ->assertJsonPath('data.days.0.products.3.display_name', 'Pavo · Pequeño')
+            ->assertJsonPath('data.days.0.products.3.quantity', '3')
+            ->assertJsonPath('data.days.0.products.3.amounts', [['currency' => 'PEN', 'amount' => '37.20']])
             ->assertJsonPath('data.days.1.date', '2026-09-06')
             ->assertJsonPath('data.days.1.products.0.product_id', $this->productId)
             ->assertJsonPath('data.days.1.products.0.quantity', '4');
@@ -117,6 +135,106 @@ class ProductDispatchGeneralReportTest extends TestCase
             ->assertJsonPath('data.days.0.products.0.product_name', 'Pavo')
             ->assertJsonPath('data.days.0.products.1.product_id', $otherProduct)
             ->assertJsonPath('data.days.0.products.1.product_name', 'Pavo');
+    }
+
+    public function test_report_keeps_distinct_variation_ids_and_parent_products_with_the_same_snapshot_name(): void
+    {
+        $firstVariation = $this->createVariation('Grande');
+        $secondVariation = $this->createVariation('Pequeño');
+        $otherProduct = $this->createProduct('Otro catálogo');
+        $otherVariation = $this->createVariation('Especial', $otherProduct);
+        $this->createTicket('2026-09-05 12:00:00', [
+            ['variation_id' => $firstVariation, 'variation' => 'Especial histórico', 'quantity' => 2, 'amount' => '0.10'],
+            ['variation_id' => $secondVariation, 'variation' => 'Especial histórico', 'quantity' => 3, 'amount' => '0.20'],
+            ['product_id' => $otherProduct, 'variation_id' => $otherVariation, 'variation' => 'Especial histórico', 'quantity' => 5, 'amount' => '0.30'],
+        ]);
+        $this->createTicket('2026-09-05 13:00:00', [
+            ['variation_id' => $firstVariation, 'variation' => 'Especial histórico', 'quantity' => 4, 'amount' => '0.40'],
+        ]);
+        DB::table('variaciones_producto_despacho')->where('id', $firstVariation)->update([
+            'nombre' => 'Nombre cambiado',
+            'estado' => 'INACTIVO',
+        ]);
+
+        $this->getJson($this->reportUrl('2026-09-05'))
+            ->assertOk()
+            ->assertJsonPath('data.summary.product_count', 3)
+            ->assertJsonPath('data.summary.ticket_count', 2)
+            ->assertJsonPath('data.summary.weighing_count', 4)
+            ->assertJsonPath('data.summary.quantity', '14')
+            ->assertJsonPath('data.summary.amounts.0.amount', '1.00')
+            ->assertJsonCount(3, 'data.days.0.products')
+            ->assertJsonPath('data.days.0.products.0.variation_id', $firstVariation)
+            ->assertJsonPath('data.days.0.products.0.display_name', 'Pavo · Especial histórico')
+            ->assertJsonPath('data.days.0.products.0.quantity', '6')
+            ->assertJsonPath('data.days.0.products.0.weighing_count', 2)
+            ->assertJsonPath('data.days.0.products.0.amounts.0.amount', '0.50')
+            ->assertJsonPath('data.days.0.products.1.variation_id', $secondVariation)
+            ->assertJsonPath('data.days.0.products.1.quantity', '3')
+            ->assertJsonPath('data.days.0.products.2.product_id', $otherProduct)
+            ->assertJsonPath('data.days.0.products.2.variation_id', $otherVariation)
+            ->assertJsonPath('data.days.0.products.2.quantity', '5');
+    }
+
+    public function test_report_preserves_variation_snapshots_without_an_id_and_does_not_merge_matching_base_names(): void
+    {
+        $otherProduct = $this->createProduct('Otro catálogo');
+        $matchingBaseProduct = $this->createProduct('Pavo · Grande');
+        $this->createTicket('2026-09-05 12:00:00', [
+            ['quantity' => 1],
+            ['variation' => 'Grande', 'quantity' => 2],
+            ['variation' => 'Grande', 'quantity' => 3],
+            ['variation' => 'Pequeño', 'quantity' => 4],
+            ['product_id' => $otherProduct, 'variation' => 'Grande', 'quantity' => 5],
+            ['product_id' => $matchingBaseProduct, 'name' => 'Pavo · Grande', 'quantity' => 6],
+        ]);
+
+        $response = $this->getJson($this->reportUrl('2026-09-05'))
+            ->assertOk()
+            ->assertJsonPath('data.summary.product_count', 5)
+            ->assertJsonPath('data.summary.ticket_count', 1)
+            ->assertJsonPath('data.summary.weighing_count', 6)
+            ->assertJsonPath('data.summary.quantity', '21')
+            ->assertJsonPath('data.summary.amounts.0.amount', '72.00')
+            ->assertJsonCount(5, 'data.days.0.products');
+        $rows = collect($response->json('data.days.0.products'));
+        $parentProductRows = $rows->where('product_id', $this->productId);
+        $this->assertCount(3, $parentProductRows);
+        $this->assertSame('1', $parentProductRows->whereNull('variation_name')->sole()['quantity']);
+        $historicalVariation = $parentProductRows->where('variation_name', 'Grande')->sole();
+        $this->assertNull($historicalVariation['variation_id']);
+        $this->assertSame('Pavo · Grande', $historicalVariation['display_name']);
+        $this->assertSame('5', $historicalVariation['quantity']);
+        $this->assertSame(2, $historicalVariation['weighing_count']);
+        $this->assertSame('4', $parentProductRows->where('variation_name', 'Pequeño')->sole()['quantity']);
+        $this->assertSame('5', $rows->where('product_id', $otherProduct)->sole()['quantity']);
+        $this->assertSame('6', $rows->where('product_name', 'Pavo · Grande')->sole()['quantity']);
+    }
+
+    public function test_report_uses_a_label_for_variations_without_a_snapshot_and_keeps_empty_base_snapshots_together(): void
+    {
+        $variation = $this->createVariation('Grande');
+        $sameNameVariation = $this->createVariation('Otra presentación');
+        $this->createTicket('2026-09-05 12:00:00', [
+            ['quantity' => 1],
+            ['variation' => '   ', 'quantity' => 2],
+            ['variation_id' => $variation, 'variation' => null, 'quantity' => 3],
+            ['variation_id' => $variation, 'variation' => '', 'quantity' => 4],
+            ['variation_id' => $sameNameVariation, 'variation' => 'Subproducto #'.$variation, 'quantity' => 5],
+        ]);
+
+        $this->getJson($this->reportUrl('2026-09-05'))
+            ->assertOk()
+            ->assertJsonPath('data.summary.product_count', 3)
+            ->assertJsonPath('data.summary.weighing_count', 5)
+            ->assertJsonPath('data.summary.quantity', '15')
+            ->assertJsonPath('data.days.0.products.0.variation_name', null)
+            ->assertJsonPath('data.days.0.products.0.quantity', '3')
+            ->assertJsonPath('data.days.0.products.1.variation_id', $variation)
+            ->assertJsonPath('data.days.0.products.1.display_name', 'Pavo · Subproducto #'.$variation)
+            ->assertJsonPath('data.days.0.products.1.quantity', '7')
+            ->assertJsonPath('data.days.0.products.2.variation_id', $sameNameVariation)
+            ->assertJsonPath('data.days.0.products.2.quantity', '5');
     }
 
     public function test_report_excludes_deleted_tickets_other_branches_and_other_companies(): void
@@ -231,8 +349,15 @@ class ProductDispatchGeneralReportTest extends TestCase
     public function test_pdf_receives_the_same_scoped_report_as_the_api(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-09-06 18:00:00', 'UTC'));
-        $this->createTicket('2026-09-05 12:00:00', [['quantity' => 2, 'amount' => '0.10']]);
-        $this->createTicket('2026-09-06 12:00:00', [['quantity' => 3, 'amount' => '0.20']], ['moneda' => 'USD']);
+        $largeVariation = $this->createVariation('Grande');
+        $smallVariation = $this->createVariation('Pequeño');
+        $this->createTicket('2026-09-05 12:00:00', [
+            ['quantity' => 1, 'amount' => '0.04'],
+            ['variation_id' => $largeVariation, 'variation' => 'Grande', 'quantity' => 1, 'amount' => '0.06'],
+        ]);
+        $this->createTicket('2026-09-06 12:00:00', [
+            ['variation_id' => $smallVariation, 'variation' => 'Pequeño', 'quantity' => 3, 'amount' => '0.20'],
+        ], ['moneda' => 'USD']);
         $this->createTicket('2026-09-05 12:00:00', [['name' => 'Producto ajeno', 'amount' => '900.00']], [
             'sucursal_id' => $this->createBranch((int) $this->user->empresa_id),
         ]);
@@ -257,6 +382,9 @@ class ProductDispatchGeneralReportTest extends TestCase
         $this->assertSame((int) $this->user->empresa_id, (int) $pdfData['company']->id);
         $this->assertSame($apiReport, $pdfData['report']);
         $this->assertSame(2, $pdfData['report']['summary']['ticket_count']);
+        $this->assertSame(3, $pdfData['report']['summary']['product_count']);
+        $this->assertSame(['Pavo', 'Pavo · Grande'], array_column($pdfData['report']['days'][0]['products'], 'display_name'));
+        $this->assertSame(['Pavo · Pequeño'], array_column($pdfData['report']['days'][1]['products'], 'display_name'));
         $this->assertSame([
             ['currency' => 'PEN', 'amount' => '0.10'],
             ['currency' => 'USD', 'amount' => '0.20'],
@@ -327,10 +455,10 @@ class ProductDispatchGeneralReportTest extends TestCase
         ]);
     }
 
-    private function createVariation(string $name): int
+    private function createVariation(string $name, ?int $productId = null): int
     {
         return (int) DB::table('variaciones_producto_despacho')->insertGetId([
-            'producto_despacho_id' => $this->productId,
+            'producto_despacho_id' => $productId ?? $this->productId,
             'nombre' => $name,
             'nombre_normalizado' => mb_strtolower($name),
             'modo_precio' => ProductoDespacho::PRICE_MODE_KG,
@@ -381,7 +509,7 @@ class ProductDispatchGeneralReportTest extends TestCase
                 'producto_despacho_id' => $line['product_id'] ?? $this->productId,
                 'variacion_producto_despacho_id' => $line['variation_id'] ?? null,
                 'producto_nombre_snapshot' => $line['name'] ?? 'Pavo',
-                'variacion_nombre_snapshot' => isset($line['variation_id']) ? 'Variación histórica' : null,
+                'variacion_nombre_snapshot' => array_key_exists('variation', $line) ? $line['variation'] : (isset($line['variation_id']) ? 'Variación histórica' : null),
                 'modo_precio_snapshot' => ProductoDespacho::PRICE_MODE_KG,
                 'precio_catalogo_snapshot' => '12.0000',
                 'precio_venta_snapshot' => '12.0000',
