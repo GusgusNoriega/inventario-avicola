@@ -289,8 +289,6 @@ const elements = {
   editVariation: document.querySelector("#pddEditVariation"),
   editQuantity: document.querySelector("#pddEditQuantity"),
   editWeight: document.querySelector("#pddEditWeight"),
-  editWastePerUnit: document.querySelector("#pddEditWastePerUnit"),
-  editWasteTotal: document.querySelector("#pddEditWasteTotal"),
   editTare: document.querySelector("#pddEditTare"),
   editPrice: document.querySelector("#pddEditPrice"),
   editSource: document.querySelector("#pddEditSource"),
@@ -1637,6 +1635,11 @@ function editingItem() {
   return activeDraft().items.find((item) => item.local_id === state.editingLocalId) || null;
 }
 
+function editingWastePerUnit(item = editingItem()) {
+  return item?.waste_grams_per_unit
+    ?? Math.round((item?.waste_total_grams || 0) / Math.max(1, item?.quantity || 0));
+}
+
 function editingWeightValue(item = editingItem()) {
   return resolveWeightInput(elements.editWeight.value, item?.read_weight_kg);
 }
@@ -1659,16 +1662,14 @@ function renderEditCalculation() {
   const line = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
     read_weight_kg: editingWeightValue(item),
-    waste_grams_per_unit: elements.editWastePerUnit.value,
+    waste_grams_per_unit: editingWastePerUnit(item),
     tare_grams: tareKilogramsToGrams(elements.editTare.value),
     unit_price: elements.editPrice.value,
     price_mode: selection?.price_mode,
     weight_source: weightSource
   }));
   const manualNet = weightSource === "MANUAL";
-  elements.editWastePerUnit.disabled = manualNet;
   elements.editTare.disabled = manualNet;
-  elements.editWasteTotal.textContent = `${line.waste_total_grams.toLocaleString("es-PE")} g`;
   elements.editCalculated.textContent = `Neto ${formatWeight(line.net_weight_kg)} · ${formatMoney(line.amount, state.catalog.currency)}`;
 }
 
@@ -1681,7 +1682,6 @@ function openEditDialog(localId, listIndex) {
   fillEditVariationOptions(item.variation_id);
   elements.editQuantity.value = String(item.quantity);
   elements.editWeight.value = formatWeightValue(item.read_weight_kg);
-  elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / Math.max(1, item.quantity)));
   elements.editTare.value = formatTareKilograms(item.tare_grams);
   state.numericKeypad?.refreshLabel(elements.editTare);
   elements.editPrice.value = Number(item.unit_price).toFixed(2);
@@ -1702,7 +1702,6 @@ function changeEditingProduct(useCatalogDefaults = true) {
   if (selection && useCatalogDefaults) {
     elements.editPrice.value = Number(selection.price).toFixed(2);
     state.numericKeypad?.refreshLabel(elements.editPrice);
-    elements.editWastePerUnit.value = String(selection.waste_grams_per_unit);
   } else if (!selection && item) {
     elements.editPrice.value = Number(item.unit_price).toFixed(2);
     state.numericKeypad?.refreshLabel(elements.editPrice);
@@ -1743,14 +1742,14 @@ function saveEditingItem(event) {
   const calculated = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
     read_weight_kg: readWeight,
-    waste_grams_per_unit: elements.editWastePerUnit.value,
+    waste_grams_per_unit: editingWastePerUnit(item),
     tare_grams: tareGrams,
     unit_price: elements.editPrice.value,
     price_mode: selection.price_mode,
     weight_source: nextWeightSource
   }));
   if (calculated.waste_total_grams > PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS) {
-    elements.editWastePerUnit.focus();
+    elements.editQuantity.focus();
     setMessage("Merma total supera el máximo.", "error");
     return;
   }
@@ -2366,7 +2365,7 @@ elements.editProduct.addEventListener("change", () => {
   changeEditingProduct(true);
 });
 elements.editVariation.addEventListener("change", () => changeEditingProduct(true));
-[elements.editQuantity, elements.editWeight, elements.editWastePerUnit, elements.editTare, elements.editPrice].forEach((input) => input.addEventListener("input", renderEditCalculation));
+[elements.editQuantity, elements.editWeight, elements.editTare, elements.editPrice].forEach((input) => input.addEventListener("input", renderEditCalculation));
 elements.editForm.addEventListener("submit", saveEditingItem);
 elements.deleteWeighing.addEventListener("click", deleteEditingItem);
 elements.save.addEventListener("click", () => void saveActiveDraft(false));

@@ -184,6 +184,8 @@ class WebViewsTest extends TestCase
             ->assertSee('id="pddWastePresets"', false)
             ->assertSee('id="pddClientDialog"', false)
             ->assertSee('id="pddEditDialog"', false)
+            ->assertDontSee('id="pddEditWastePerUnit"', false)
+            ->assertDontSee('id="pddEditWasteTotal"', false)
             ->assertSee('id="pddUnitPrice"', false)
             ->assertDontSee('id="pddPriceDialog"', false)
             ->assertDontSee('id="pddChangePrice"', false)

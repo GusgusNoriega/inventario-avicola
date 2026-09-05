@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import * as dispatchUtils from "../../public/js/despacho-productos-despacho-utils.js";
 
 import {
   PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS,
@@ -258,6 +259,61 @@ test("el editor convierte la tara de kg a gramos y recupera los tres decimales o
   assert.match(saveFlow, /tareKilogramsToGrams\(elements\.editTare\.value\)/);
   assert.doesNotMatch(calculationFlow, /tare_grams:\s*elements\.editTare\.value/);
   assert.doesNotMatch(saveFlow, /tare_grams:\s*elements\.editTare\.value/);
+});
+
+test("editar conserva la merma registrada sin controles de merma ni cambios por el catálogo", () => {
+  const calculationFlow = sourceBetween(dispatchSource, "function editingItem", "function openEditDialog");
+  const saveFlow = sourceBetween(dispatchSource, "function changeEditingProduct", "function deleteEditingItem");
+
+  for (const legacy of [false, true]) {
+    const item = {
+      local_id: "pesada-1", product_id: 1, quantity: 4,
+      read_weight_kg: 70, waste_total_grams: 500,
+      ...(legacy ? {} : { waste_grams_per_unit: 125 }),
+      tare_grams: 1000, unit_price: 5,
+      weight_source: dispatchUtils.PRODUCT_DISPATCH_SCALE_CODE
+    };
+    const elements = {
+      editProduct: { value: "1" }, editVariation: { value: "" },
+      editQuantity: { value: "4" }, editWeight: { value: "70.00" },
+      editTare: { value: "1.000", max: "1000000" }, editPrice: { value: "5.00" },
+      editForm: { reportValidity: () => true }, editCalculated: {}, editDialog: {}
+    };
+    const state = {
+      editingLocalId: item.local_id, saving: false,
+      catalog: {
+        currency: "PEN",
+        products: [{ id: 1, name: "Pollo", price: 10, price_mode: "KG", waste_grams_per_unit: 900, variations: [] }]
+      }
+    };
+    const dependencies = {
+      ...dispatchUtils, elements, state, activeDraft: () => ({ items: [item] }),
+      persistDrafts() {}, renderLists() {}, renderActiveSummary() {}, closeDialog() {}, setMessage() {}
+    };
+    const editor = new Function(...Object.keys(dependencies), `${calculationFlow}\n${saveFlow}\nreturn { renderEditCalculation, changeEditingProduct, saveEditingItem };`)(...Object.values(dependencies));
+
+    editor.renderEditCalculation();
+    assert.equal(elements.editCalculated.textContent, `Neto ${dispatchUtils.formatWeight(69.5)} · ${dispatchUtils.formatMoney(347.5, "PEN")}`);
+    editor.saveEditingItem({ preventDefault() {} });
+    assert.equal(item.waste_grams_per_unit, 125);
+    assert.equal(item.waste_total_grams, 500);
+
+    editor.changeEditingProduct();
+    elements.editQuantity.value = "6";
+    editor.renderEditCalculation();
+    assert.equal(elements.editCalculated.textContent, `Neto ${dispatchUtils.formatWeight(69.75)} · ${dispatchUtils.formatMoney(697.5, "PEN")}`);
+    editor.saveEditingItem({ preventDefault() {} });
+    assert.equal(item.quantity, 6);
+    assert.equal(item.waste_grams_per_unit, 125);
+    assert.equal(item.waste_total_grams, 750);
+    assert.equal(item.amount, 697.5);
+
+    elements.editWeight.value = "80.00";
+    editor.saveEditingItem({ preventDefault() {} });
+    assert.equal(item.weight_source, "MANUAL");
+    assert.equal(item.waste_total_grams, 0);
+    assert.equal(item.net_weight_kg, 80);
+  }
 });
 
 test("los precios de captura y edición comparten el teclado decimal de la pesada", () => {
