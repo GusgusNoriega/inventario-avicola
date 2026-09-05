@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Comprobante;
+use App\Models\Pago;
 use App\Models\ProductoDespacho;
 use App\Models\TicketDespachoProducto;
 use App\Models\User;
@@ -200,12 +201,15 @@ class ProductDispatchSaleDocumentService
             abort(409, 'El comprobante financiero asociado al ticket es inconsistente y no puede eliminarse.');
         }
 
-        $applications = DB::table('pago_aplicaciones')
-            ->whereIn('comprobante_id', $documentIds->all())
-            ->orderBy('comprobante_id')
-            ->orderBy('pago_id')
+        $applications = DB::table('pago_aplicaciones as application')
+            ->join('pagos as payment', 'payment.id', '=', 'application.pago_id')
+            ->whereIn('application.comprobante_id', $documentIds->all())
+            ->where('payment.estado', Pago::STATUS_REGISTERED)
+            ->whereNull('payment.reversa_de_pago_id')
+            ->orderBy('application.comprobante_id')
+            ->orderBy('application.pago_id')
             ->lockForUpdate()
-            ->get(['pago_id', 'comprobante_id', 'lado', 'importe_aplicado']);
+            ->get(['application.pago_id', 'application.comprobante_id', 'application.lado', 'application.importe_aplicado']);
 
         if ($applications->isNotEmpty()) {
             abort(409, 'No se puede eliminar el ticket porque ya tiene cobros o pagos aplicados.');

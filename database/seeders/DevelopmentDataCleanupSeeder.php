@@ -27,6 +27,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         'movimientos_caja_efectivo',
         'gastos_empresa',
         'pagos_despacho_productos',
+        'ajustes_despacho_productos',
         'pagos',
         'comprobante_tickets_despacho_productos',
         'comprobante_tickets',

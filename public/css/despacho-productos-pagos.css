@@ -3,12 +3,39 @@ html.product-dispatch-payments-root, body.product-dispatch-payments-page { heigh
 body.product-dispatch-payments-page { margin: 0; background: radial-gradient(circle at 8% 5%, rgba(42, 182, 110, .14), transparent 31%), radial-gradient(circle at 92% 3%, rgba(75, 142, 222, .12), transparent 29%), #05080c; }
 .pdpy-shell { width: min(1520px, calc(100% - 32px)); min-height: 100vh; min-height: 100dvh; margin: 0 auto; padding: 24px 0; display: grid; align-content: start; gap: 20px; }
 .pdpy-header { padding: 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-color: #29415b; background: linear-gradient(135deg, #0f2030, #070d14); }
-.pdpy-header h1, .pdpy-heading h2 { margin: 0; color: #fff; }
+.pdpy-header h1, .pdpy-heading h2, .pdpy-client-control h2, .pdpy-dialog-header h2 { margin: 0; color: #fff; }
 .pdpy-header h1 { font-size: clamp(1.8rem, 4vw, 2.65rem); }
 .pdpy-header p:not(.eyebrow) { margin: 9px 0 0; color: #a8bdd5; line-height: 1.5; }
 .pdpy-header .pdpy-branch { color: #8fd8ac; font-size: .84rem; }
 .pdpy-back { flex: 0 0 auto; }
 .pdpy-back svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.pdpy-client-panel { min-width: 0; padding: 22px; display: grid; grid-template-columns: minmax(300px, .9fr) minmax(0, 1.6fr); align-items: center; gap: 24px; border-color: #293f55; background: rgba(8, 15, 23, .96); }
+.pdpy-client-control { min-width: 0; display: grid; gap: 11px; }
+.pdpy-client-control h2 { font-size: 1.3rem; }
+.pdpy-client-button { width: 100%; min-width: 0; min-height: 74px; padding: 10px 13px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid #624794; border-radius: 10px; color: #e9ddff; background: linear-gradient(145deg, rgba(36, 22, 62, .97), rgba(10, 10, 19, .98)); font: inherit; text-align: left; cursor: pointer; }
+.pdpy-client-button:hover:not(:disabled) { border-color: #a57ee8; background: linear-gradient(145deg, rgba(49, 29, 82, .98), rgba(12, 11, 22, .98)); }
+.pdpy-client-button-icon { width: 43px; height: 43px; display: grid; place-items: center; border: 1px solid #7657aa; border-radius: 10px; color: #d7c0ff; background: #21143a; }
+.pdpy-client-button-icon svg { width: 26px; height: 26px; }
+.pdpy-client-button svg, .pdpy-client-search svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pdpy-client-button > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.pdpy-client-button strong, .pdpy-client-button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdpy-client-button strong { color: #fff; font-size: .98rem; }
+.pdpy-client-button small { color: #ad9dc8; font-size: .74rem; }
+.pdpy-client-button-action { color: #ceb6f7; font-size: .7rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.pdpy-client-button[aria-invalid="true"] { border-color: #ff7777; box-shadow: 0 0 0 3px rgba(255, 91, 91, .1); }
+.pdpy-summary { min-width: 0; display: grid; grid-template-columns: 1.25fr 1fr 1fr; align-self: stretch; gap: 12px; }
+.pdpy-summary-card { min-width: 0; padding: 17px; display: flex; flex-direction: column; justify-content: center; gap: 7px; border: 1px solid #34455a; border-radius: 12px; background: linear-gradient(145deg, #141e2a, #080d14); }
+.pdpy-summary-card > span { color: #b4c7d9; font-size: .69rem; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
+.pdpy-summary-card strong { color: #f6fbff; font-size: clamp(1.15rem, 1.85vw, 1.8rem); line-height: 1.2; overflow-wrap: anywhere; }
+.pdpy-summary-card small { color: #91a7ba; font-size: .73rem; line-height: 1.45; }
+.pdpy-balance-card, .pdpy-balance-card.is-debt { border-color: #87672b; background: linear-gradient(145deg, #31250d, #110e07); }
+.pdpy-balance-card strong, .pdpy-balance-card.is-debt strong { color: #ffd878; }
+.pdpy-balance-card.is-credit, .pdpy-summary-card.is-credits { border-color: #2d7050; background: linear-gradient(145deg, #0b2b1d, #080f0d); }
+.pdpy-balance-card.is-credit strong, .pdpy-summary-card.is-credits strong { color: #8fe0b1; }
+.pdpy-balance-card.is-settled { border-color: #355570; background: linear-gradient(145deg, #0d2233, #080e15); }
+.pdpy-balance-card.is-settled strong { color: #a9d9fc; }
+.pdpy-summary-card.is-charges { border-color: #2b5471; background: linear-gradient(145deg, #0a2437, #070e15); }
+.pdpy-summary-card.is-charges strong { color: #83ceff; }
 .pdpy-workspace { min-width: 0; display: grid; grid-template-columns: minmax(300px, 370px) minmax(0, 1fr); align-items: start; gap: 20px; }
 .pdpy-form-panel { min-width: 0; padding: 22px; border-color: #2f7350; background: linear-gradient(150deg, #0c2118, #070e0b); }
 .pdpy-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -38,6 +65,8 @@ body.product-dispatch-payments-page { margin: 0; background: radial-gradient(cir
 .pdpy-message { min-height: 1.35em; margin: 0; color: #a3b9cc; font-size: .84rem; line-height: 1.5; }
 .pdpy-message.is-success { color: #83e5ab; }
 .pdpy-message.is-error { color: #ff948d; }
+.pdpy-balance-preview { margin: 0; padding: 12px; border: 1px solid #3d604f; border-radius: 9px; color: #b6e5cd; background: #0b1b14; font-size: .84rem; line-height: 1.5; }
+.pdpy-list-subtitle { margin: 6px 0 0; color: #91a7bb; font-size: .83rem; line-height: 1.5; }
 .pdpy-list-panel { min-width: 0; display: grid; align-content: start; gap: 15px; }
 .pdpy-filters { padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: 13px; border-color: #29415b; background: #0b141e; }
 .pdpy-search { grid-column: 1 / -1; }
@@ -45,7 +74,7 @@ body.product-dispatch-payments-page { margin: 0; background: radial-gradient(cir
 .pdpy-list-status { display: flex; justify-content: space-between; align-items: center; gap: 15px; }
 .pdpy-list-status .btn { flex: 0 0 auto; }
 .pdpy-table-container { min-width: 0; overflow-x: auto; border-color: #29415b; background: #09121b; }
-.pdpy-table { width: 100%; min-width: 850px; border-collapse: collapse; font-size: .81rem; }
+.pdpy-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: .81rem; }
 .pdpy-table th { padding: 15px 13px; color: #b4cadd; background: #102131; font-size: .75rem; font-weight: 800; text-align: left; }
 .pdpy-table td { padding: 16px 13px; color: #d8e4ee; border-top: 1px solid #203448; vertical-align: top; }
 .pdpy-table td strong, .pdpy-table td small { display: block; }
@@ -53,6 +82,13 @@ body.product-dispatch-payments-page { margin: 0; background: radial-gradient(cir
 .pdpy-table td small { margin-top: 5px; color: #9eb3c7; font-size: .73rem; line-height: 1.45; }
 .pdpy-table tbody tr:hover { background: #0d1c29; }
 .pdpy-table .pdpy-money { text-align: right; white-space: nowrap; color: #9be4b7; }
+.pdpy-table th.pdpy-money { color: #b4cadd; }
+.pdpy-table .pdpy-charge { color: #f2c565; }
+.pdpy-table .pdpy-credit { color: #9be4b7; }
+.pdpy-table .pdpy-balance { color: #c7dbef; }
+.pdpy-table .pdpy-movement-type { display: inline-flex; margin-top: 6px; padding: 4px 7px; border: 1px solid #3c5368; border-radius: 6px; color: #bfcee0; background: #0c1a27; font-size: .67rem; font-weight: 800; }
+.pdpy-table .pdpy-movement-type.is-debt { border-color: #765b2b; color: #f2c565; background: #281e0c; }
+.pdpy-table .pdpy-movement-type.is-credit, .pdpy-table .pdpy-movement-type.is-payment { border-color: #315e48; color: #9be4b7; background: #0c2317; }
 .pdpy-table .pdpy-wrap { min-width: 115px; max-width: 235px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .pdpy-table .pdpy-client { min-width: 150px; }
 .pdpy-table .pdpy-date { white-space: nowrap; }
@@ -60,8 +96,36 @@ body.product-dispatch-payments-page { margin: 0; background: radial-gradient(cir
 .pdpy-row-actions { display: flex; flex-direction: column; gap: 7px; }
 .pdpy-row-actions button { min-height: 35px; padding: 7px 10px; border: 1px solid #365d7e; border-radius: 7px; color: #b8dcfb; background: #0b2031; font: inherit; font-weight: 700; cursor: pointer; }
 .pdpy-row-actions .is-danger { border-color: #7c423f; color: #ffc2bd; background: #2d1414; }
+.pdpy-row-actions a { min-height: 35px; box-sizing: border-box; padding: 7px 10px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #365d7e; border-radius: 7px; color: #b8dcfb; background: #0b2031; font: inherit; font-weight: 700; text-decoration: none; }
 .pdpy-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 13px; color: #a8bdd5; font-size: .82rem; }
 .pdpy-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.pdpy-dialog { width: min(760px, calc(100% - 28px)); max-width: none; max-height: calc(100dvh - 28px); padding: 0; overflow: hidden; border: 1px solid #3a526a; border-radius: 14px; color: var(--text-main); background: #08111a; box-shadow: 0 28px 80px rgba(0, 0, 0, .72); }
+.pdpy-dialog::backdrop { background: rgba(0, 0, 0, .76); backdrop-filter: blur(3px); }
+.pdpy-dialog-card { min-width: 0; max-height: calc(100dvh - 30px); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); }
+.pdpy-dialog-header { padding: 20px 22px 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-bottom: 1px solid #293f55; background: linear-gradient(145deg, rgba(37, 24, 60, .92), rgba(8, 17, 26, .98)); }
+.pdpy-dialog-header h2 { margin-top: 3px; font-size: 1.4rem; }
+.pdpy-dialog-header > div > p:last-child { margin: 6px 0 0; color: #93a9bd; font-size: .8rem; }
+.pdpy-dialog-close { width: 44px; height: 44px; flex: 0 0 auto; border: 1px solid #455c72; border-radius: 9px; color: #d9e6ef; background: #101c27; font: inherit; font-size: 1.45rem; line-height: 1; cursor: pointer; }
+.pdpy-dialog-close:hover, .pdpy-dialog-close:focus-visible { border-color: #70d9ff; color: #fff; outline: 2px solid #70d9ff; outline-offset: 2px; }
+.pdpy-client-search { margin: 17px 20px 8px; min-height: 51px; display: flex; align-items: center; gap: 9px; padding: 0 13px; border: 1px solid #344d64; border-radius: 10px; background: #050c13; }
+.pdpy-client-search:focus-within { border-color: #65d7ff; box-shadow: 0 0 0 3px rgba(43, 199, 255, .13); }
+.pdpy-client-search svg { width: 22px; height: 22px; flex: 0 0 auto; color: #7e99b0; }
+.pdpy-client-search input { width: 100%; min-width: 0; min-height: 49px; border: 0; outline: 0; color: #fff; background: transparent; font: inherit; font-size: 1rem; }
+.pdpy-client-search input::placeholder { color: #8296ab; opacity: 1; }
+.pdpy-client-count { margin: 0 20px 8px; color: #91a7bb; font-size: .75rem; line-height: 1.5; }
+.pdpy-client-list { min-height: 180px; padding: 6px 20px 20px; overflow-y: auto; overscroll-behavior: contain; }
+.pdpy-client-option { width: 100%; min-width: 0; min-height: 62px; padding: 10px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid #283d51; border-radius: 9px; color: #eaf3fa; background: #0a151f; font: inherit; text-align: left; cursor: pointer; }
+.pdpy-client-option + .pdpy-client-option { margin-top: 8px; }
+.pdpy-client-option:hover, .pdpy-client-option:focus-visible, .pdpy-client-option[data-selected="true"] { border-color: #8763bd; background: #1b132c; outline: none; }
+.pdpy-client-option:focus-visible { box-shadow: 0 0 0 2px #bca0e9; }
+.pdpy-client-option > span:first-child { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; color: #e3d3ff; background: #2d1d4a; font-weight: 950; }
+.pdpy-client-option > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.pdpy-client-option strong, .pdpy-client-option small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdpy-client-option small { color: #849cb1; font-size: .72rem; }
+.pdpy-client-option em { color: #cdb6f7; font-size: .7rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
+.pdpy-client-empty { min-height: 180px; display: grid; place-content: center; gap: 5px; color: #8299af; text-align: center; }
+.pdpy-client-empty strong { color: #fff; }
+@media (max-width: 1200px) { .pdpy-client-panel { grid-template-columns: 1fr; gap: 18px; } .pdpy-client-control { grid-template-columns: minmax(180px, .55fr) minmax(0, 1fr); align-items: center; } .pdpy-client-control > .pdpy-message { grid-column: 2; } .pdpy-summary-card { min-height: 115px; } }
 @media (max-width: 1100px) { .pdpy-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pdpy-filter-actions { grid-column: 1 / -1; } }
 @media (max-width: 900px) { .pdpy-workspace { grid-template-columns: 1fr; } .pdpy-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pdpy-field.pdpy-full { grid-column: auto; } .pdpy-field:first-child { grid-column: 1 / -1; } .pdpy-form-actions { justify-content: flex-end; } .pdpy-form-actions > .btn:first-child { flex: 0 1 220px; } }
-@media (max-width: 580px) { .pdpy-shell { width: calc(100% - 20px); padding: 10px 0 20px; } .pdpy-header { padding: 20px; flex-direction: column; align-items: flex-start; gap: 18px; } .pdpy-header .pdpy-back { width: 100%; justify-content: center; } .pdpy-form-panel { padding: 18px; } .pdpy-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pdpy-field.pdpy-full { grid-column: 1 / -1; } .pdpy-form-actions > .btn:first-child { flex: 1; } .pdpy-filters { padding: 13px; } .pdpy-filter-actions > button { flex: 1; } .pdpy-pagination { justify-content: space-between; gap: 7px; } .pdpy-heading h2 { font-size: 1.35rem; } }
+@media (max-width: 580px) { .pdpy-shell { width: calc(100% - 20px); padding: 10px 0 20px; } .pdpy-header { padding: 20px; flex-direction: column; align-items: flex-start; gap: 18px; } .pdpy-header .pdpy-back { width: 100%; justify-content: center; } .pdpy-form-panel, .pdpy-client-panel { padding: 18px; } .pdpy-client-control { grid-template-columns: 1fr; } .pdpy-client-control > .pdpy-message { grid-column: auto; } .pdpy-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pdpy-balance-card { grid-column: 1 / -1; } .pdpy-summary-card { padding: 15px; min-height: 95px; } .pdpy-balance-card strong { font-size: 1.8rem; } .pdpy-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pdpy-field.pdpy-full { grid-column: 1 / -1; } .pdpy-form-actions > .btn:first-child { flex: 1; } .pdpy-filters { padding: 13px; } .pdpy-filter-actions > button { flex: 1; } .pdpy-pagination { justify-content: space-between; gap: 7px; } .pdpy-heading { align-items: flex-start; flex-wrap: wrap; } .pdpy-heading h2 { font-size: 1.35rem; } .pdpy-client-button-action, .pdpy-client-option em { display: none; } .pdpy-client-button, .pdpy-client-option { grid-template-columns: auto minmax(0, 1fr); } .pdpy-dialog { width: calc(100% - 10px); max-height: calc(100dvh - 10px); } .pdpy-dialog-header, .pdpy-client-list { padding-left: 14px; padding-right: 14px; } .pdpy-client-search { margin-left: 14px; margin-right: 14px; } .pdpy-client-count { margin-left: 14px; margin-right: 14px; } }

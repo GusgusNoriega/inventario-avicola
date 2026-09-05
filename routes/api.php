@@ -382,6 +382,12 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/catalogo', [ProductDispatchOperationController::class, 'catalog']);
             Route::prefix('pagos')->middleware('permission:PRODUCTOS_DESPACHO_DESPACHAR')->group(function (): void {
                 Route::get('/catalogo', [ProductDispatchCustomerPaymentController::class, 'catalog']);
+                Route::get('/cuenta', [ProductDispatchCustomerPaymentController::class, 'account']);
+                Route::post('/ajustes', [ProductDispatchCustomerPaymentController::class, 'storeAdjustment']);
+                Route::put('/ajustes/{ajuste}', [ProductDispatchCustomerPaymentController::class, 'updateAdjustment'])->whereNumber('ajuste');
+                Route::delete('/ajustes/{ajuste}', [ProductDispatchCustomerPaymentController::class, 'destroyAdjustment'])->whereNumber('ajuste');
+                Route::put('/deudas/{deuda}', [ProductDispatchCustomerPaymentController::class, 'updateDebt'])->whereNumber('deuda');
+                Route::delete('/deudas/{deuda}', [ProductDispatchCustomerPaymentController::class, 'destroyDebt'])->whereNumber('deuda');
                 Route::get('/', [ProductDispatchCustomerPaymentController::class, 'index']);
                 Route::post('/', [ProductDispatchCustomerPaymentController::class, 'store']);
                 Route::put('/{pago}', [ProductDispatchCustomerPaymentController::class, 'update'])->whereNumber('pago');

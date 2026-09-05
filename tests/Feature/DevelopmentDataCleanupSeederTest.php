@@ -491,6 +491,22 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+        foreach (['PRIOR_DEBT', 'CREDIT'] as $adjustmentType) {
+            DB::table('ajustes_despacho_productos')->insert([
+                'empresa_id' => $companyId,
+                'sucursal_id' => $branchId,
+                'tipo' => $adjustmentType,
+                'comprobante_id' => $adjustmentType === 'PRIOR_DEBT' ? $documentId : null,
+                'pago_id' => $adjustmentType === 'CREDIT' ? $paymentId : null,
+                'idempotency_key' => (string) Str::uuid(),
+                'request_hash' => hash('sha256', 'cleanup-adjustment-'.$adjustmentType),
+                'fecha_hora' => $now,
+                'estado' => 'REGISTRADO',
+                'created_by' => $user->id,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
         DB::table('movimientos_caja_efectivo')->insert([
             'empresa_id' => $companyId,
             'pago_id' => $paymentId,

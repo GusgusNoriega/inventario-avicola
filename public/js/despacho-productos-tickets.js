@@ -23,6 +23,27 @@ function positiveInteger(value, fallback = 0) {
   return Number.isInteger(number) && number > 0 ? number : fallback;
 }
 
+export function productDispatchTicketNavigation(search = "") {
+  const params = new URLSearchParams(search);
+  const identifier = (value) => {
+    const raw = String(value || "");
+    const number = Number(raw);
+    return /^\d+$/.test(raw) && Number.isSafeInteger(number) && number > 0 ? number : null;
+  };
+  const ticketId = identifier(params.get("edit_ticket"));
+  const returnClientId = identifier(params.get("return_client"));
+  const requestedCurrency = String(params.get("moneda") || "PEN").toUpperCase();
+  const currency = /^[A-Z]{3}$/.test(requestedCurrency) ? requestedCurrency : "PEN";
+  const returnParams = new URLSearchParams({ cliente_id: String(returnClientId), moneda: currency });
+
+  return {
+    ticketId,
+    returnClientId,
+    currency,
+    returnUrl: returnClientId ? `/despacho-productos/pagos?${returnParams}` : null,
+  };
+}
+
 function ticketFromResponse(response = {}) {
   return response?.data?.ticket
     || response?.data
@@ -328,6 +349,7 @@ function mountProductDispatchTickets() {
 
   return import("./api-client.js").then(({ apiRequest }) => {
     const apiBase = root.dataset.apiBase || "/despacho-productos";
+    const navigation = productDispatchTicketNavigation(window.location.search);
     const elements = {
       filters: document.querySelector("#pdtFilters"),
       search: document.querySelector("#pdtSearch"),
@@ -760,6 +782,10 @@ function mountProductDispatchTickets() {
       if (request.date_to) params.set("date_to", request.date_to);
       if (Number(request.per_page) !== 10) params.set("per_page", String(request.per_page));
       if (Number(request.page) > 1) params.set("page", String(request.page));
+      if (navigation.returnClientId) {
+        params.set("return_client", String(navigation.returnClientId));
+        params.set("moneda", navigation.currency);
+      }
       const query = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     }
@@ -1555,10 +1581,22 @@ function mountProductDispatchTickets() {
     });
 
     const initial = initialFilters();
+    let returnToPayments = null;
+    if (navigation.returnUrl) {
+      returnToPayments = document.createElement("a");
+      returnToPayments.className = "btn btn-ghost";
+      returnToPayments.href = navigation.returnUrl;
+      returnToPayments.textContent = "← Volver a pagos del cliente";
+      root.querySelector(".pdt-header-actions")?.prepend(returnToPayments);
+    }
     setFilterValues(initial);
     validateDateRange();
     void ensureCatalog().catch((error) => console.warn("No se pudo precargar el catálogo de edición.", error));
-    void loadTickets({ page: initial.page, filters: initial });
+    void loadTickets({ page: initial.page, filters: initial }).then(() => {
+      if (navigation.ticketId && !elements.editorDialog.open) {
+        return loadEditor(navigation.ticketId, returnToPayments);
+      }
+    });
   });
 }
 

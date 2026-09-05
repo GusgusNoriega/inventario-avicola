@@ -10,12 +10,38 @@ import {
   normalizeProductDispatchTicketForEditor,
   normalizeProductDispatchTicketsPayload,
   productDispatchEditorFingerprint,
+  productDispatchTicketNavigation,
 } from "../../public/js/despacho-productos-tickets.js";
 
 const ticketManagerSource = readFileSync(
   new URL("../../public/js/despacho-productos-tickets.js", import.meta.url),
   "utf8"
 );
+
+test("abre el ticket solicitado y permite volver a la cuenta del cliente en su moneda", () => {
+  assert.deepEqual(productDispatchTicketNavigation("?search=PD-28&edit_ticket=28&return_client=17&moneda=usd"), {
+    ticketId: 28,
+    returnClientId: 17,
+    currency: "USD",
+    returnUrl: "/despacho-productos/pagos?cliente_id=17&moneda=USD",
+  });
+  assert.equal(productDispatchTicketNavigation("?edit_ticket=28").returnUrl, null);
+});
+
+test("los enlaces a tickets rechazan identificadores inválidos y destinos de retorno externos", () => {
+  for (const invalid of ["0", "-1", "1.5", "1e3", "Infinity", "9007199254740992", "https://example.com"]) {
+    const params = new URLSearchParams({ edit_ticket: invalid, return_client: invalid });
+    const navigation = productDispatchTicketNavigation(params.toString());
+    assert.equal(navigation.ticketId, null, invalid);
+    assert.equal(navigation.returnUrl, null, invalid);
+  }
+  assert.deepEqual(productDispatchTicketNavigation("?return_client=17&moneda=//evil.example&return_url=https://evil.example"), {
+    ticketId: null,
+    returnClientId: 17,
+    currency: "PEN",
+    returnUrl: "/despacho-productos/pagos?cliente_id=17&moneda=PEN",
+  });
+});
 
 test("la consulta de tickets combina búsqueda, fechas y paginación permitida", () => {
   const query = new URLSearchParams(buildProductDispatchTicketQuery({

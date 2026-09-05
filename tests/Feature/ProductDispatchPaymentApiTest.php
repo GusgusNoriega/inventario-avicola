@@ -472,6 +472,205 @@ class ProductDispatchPaymentApiTest extends TestCase
         $this->assertDatabaseCount('pagos', 0);
     }
 
+    public function test_credit_reduces_prior_debt_and_excess_is_available_without_cash_or_double_counting(): void
+    {
+        $debtId = (int) $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '100.00'))
+            ->assertCreated()->json('data.id');
+        $documentId = (int) DB::table('ajustes_despacho_productos')->where('id', $debtId)->value('comprobante_id');
+        $creditPayload = $this->adjustmentPayload('CREDIT', '40.00');
+        $creditId = (int) $this->postJson(self::URL.'/ajustes', $creditPayload)
+            ->assertCreated()->assertJsonPath('data.kind', 'CREDIT')->json('data.id');
+        $this->getJson($this->accountUrl())->assertOk()
+            ->assertJsonPath('summary.balance', '60.00')->assertJsonPath('summary.debt', '60.00')
+            ->assertJsonPath('summary.credit', '0.00')->assertJsonPath('summary.transaction_count', 2)
+            ->assertJsonPath('summary.payments_total', '40.00');
+        $this->assertSummary($this->client, '40.00', '60.00');
+        $this->assertDatabaseHas('comprobantes', ['id' => $documentId, 'saldo_pendiente' => 60, 'estado' => 'PARCIAL']);
+        $paymentId = (int) DB::table('ajustes_despacho_productos')->where('id', $creditId)->value('pago_id');
+        $this->assertDatabaseHas('pagos', ['id' => $paymentId, 'tipo' => Pago::TYPE_CUSTOMER_DISCOUNT,
+            'direccion' => Pago::DIRECTION_NO_FLOW, 'cuenta_destino_id' => null, 'cuenta_origen_id' => null]);
+        $this->assertDatabaseHas('pago_aplicaciones', ['pago_id' => $paymentId, 'comprobante_id' => $documentId, 'importe_aplicado' => 40]);
+
+        $this->putJson(self::URL.'/ajustes/'.$creditId, $this->adjustmentPayload('CREDIT', '150.00'))
+            ->assertOk()->assertJsonPath('data.id', $creditId);
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '-50.00')
+            ->assertJsonPath('summary.credit', '50.00')->assertJsonPath('summary.debt', '0.00')
+            ->assertJsonPath('summary.payments_total', '150.00')->assertJsonPath('summary.transaction_count', 2);
+        $this->assertSummary($this->client, '150.00', '-50.00');
+        $this->assertDatabaseHas('comprobantes', ['id' => $documentId, 'saldo_pendiente' => 0, 'estado' => 'PAGADO']);
+        $this->deleteJson(self::URL.'/ajustes/'.$debtId)->assertUnprocessable();
+        $this->deleteJson(self::URL.'/ajustes/'.$creditId)->assertOk();
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '100.00');
+        $this->assertDatabaseHas('comprobantes', ['id' => $documentId, 'saldo_pendiente' => 100, 'estado' => 'PENDIENTE']);
+        $this->deleteJson(self::URL.'/ajustes/'.$debtId)->assertOk();
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '0.00')->assertJsonCount(0, 'data');
+        $this->assertSummary($this->client, '0.00', '0.00');
+    }
+
+    public function test_account_balance_is_unfiltered_and_credit_without_sales_is_retained_for_future_debts(): void
+    {
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '100.00', ['fecha_hora' => '2026-01-02T09:00']))
+            ->assertCreated();
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.credit', '100.00');
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '70.00', ['fecha_hora' => '2026-09-01T11:00']))
+            ->assertCreated();
+        $this->postJson(self::URL, $this->payload(['importe' => '10.00']))->assertCreated();
+        $this->getJson($this->accountUrl().'&date_from=2026-09-01&date_to=2026-09-30&per_page=1&page=2')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('summary.balance', '-40.00')->assertJsonPath('summary.transaction_count', 3);
+        $this->getJson($this->accountUrl().'&buscar=NO-EXISTE')->assertOk()->assertJsonCount(0, 'data')
+            ->assertJsonPath('summary.balance', '-40.00');
+        $this->assertSummary($this->client, '110.00', '-40.00');
+        config(['access_modules.modules.MODULO_DESPACHO_PRODUCTOS.technical_permissions' => array_values(array_diff(
+            config('access_modules.modules.MODULO_DESPACHO_PRODUCTOS.technical_permissions'),
+            ['PRODUCTOS_DESPACHO_TICKETS_GESTIONAR'],
+        ))]);
+        $this->getJson(self::URL.'/catalogo')->assertOk()->assertJsonPath('data.clients.0.id', $this->client->id)
+            ->assertJsonPath('data.default_currency', 'PEN')->assertJsonPath('data.currencies.0', 'PEN');
+        $this->getJson('/api/v1/despacho-productos/estado-cuenta/catalogo')->assertForbidden();
+    }
+
+    public function test_adjustment_retries_preserve_the_original_id_after_edit_or_delete_and_metadata_keeps_allocations(): void
+    {
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '90.00'))->assertCreated();
+        $payload = $this->adjustmentPayload('CREDIT', '30.00');
+        $id = (int) $this->postJson(self::URL.'/ajustes', $payload)->assertCreated()->json('data.id');
+        $paymentId = (int) DB::table('ajustes_despacho_productos')->where('id', $id)->value('pago_id');
+        $this->postJson(self::URL.'/ajustes', $payload)->assertOk()->assertJsonPath('data.id', $id);
+        $this->putJson(self::URL.'/ajustes/'.$id, [...$payload, 'fecha_hora' => '2026-09-02T14:45', 'observaciones' => 'Corrección de fecha'])
+            ->assertOk()->assertJsonPath('data.date_time', '2026-09-02T14:45');
+        $this->assertSame($paymentId, (int) DB::table('ajustes_despacho_productos')->where('id', $id)->value('pago_id'));
+        $this->assertDatabaseCount('pagos', 1);
+        $this->assertDatabaseCount('pago_aplicaciones', 1);
+        $this->postJson(self::URL.'/ajustes', $payload)->assertOk()->assertJsonPath('data.date_time', '2026-09-02T14:45');
+        $this->postJson(self::URL.'/ajustes', [...$payload, 'importe' => '31.00'])->assertUnprocessable()
+            ->assertJsonValidationErrors('idempotency_key');
+        $this->deleteJson(self::URL.'/ajustes/'.$id)->assertOk();
+        $count = DB::table('pagos')->count();
+        $this->postJson(self::URL.'/ajustes', $payload)->assertOk()->assertJsonPath('data.state', 'ANULADO');
+        $this->assertDatabaseCount('pagos', $count);
+        $this->assertDatabaseCount('ajustes_despacho_productos', 2);
+        $this->putJson(self::URL.'/ajustes/'.$id, $payload)->assertUnprocessable();
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '90.00');
+    }
+
+    public function test_adjustments_and_account_history_are_scoped_to_company_branch_and_currency(): void
+    {
+        $id = (int) $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '20.00'))->assertCreated()->json('data.id');
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '40.00', ['moneda' => 'USD']))->assertCreated();
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '-20.00');
+        $this->getJson($this->accountUrl('USD'))->assertOk()->assertJsonPath('summary.balance', '40.00');
+        $this->user->update(['sucursal_id' => $this->createBranch($this->user, 'AJUSTE-OTRA')]);
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('summary.balance', '0.00');
+        $this->getJson($this->accountUrl('USD'))->assertOk()->assertJsonCount(0, 'data');
+        $this->putJson(self::URL.'/ajustes/'.$id, $this->adjustmentPayload('CREDIT', '25.00'))->assertNotFound();
+        $this->deleteJson(self::URL.'/ajustes/'.$id)->assertNotFound();
+        $foreignClient = $this->createClient(User::factory()->create(), 'AJENO AJUSTES', '20999999999');
+        $this->getJson(self::URL.'/cuenta?cliente_id='.$foreignClient->id.'&moneda=PEN')->assertUnprocessable();
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '20.00', ['cliente_id' => $foreignClient->id]))
+            ->assertUnprocessable()->assertJsonValidationErrors('cliente_id');
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '0.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('importe');
+    }
+
+    public function test_historical_manual_debt_is_editable_from_payments_and_inactive_history_remains_visible(): void
+    {
+        $document = $this->createDocument($this->client, '100.00');
+        $document->update(['tipo_documento' => 'SALDO_ANTERIOR', 'origen_codigo' => 'MANUAL',
+            'origen_clave' => 'DEUDA_ANTERIOR_CLIENTE:'.Str::uuid()]);
+        DB::table('comprobante_detalles')->insert(['comprobante_id' => $document->id, 'descripcion' => 'Deuda histórica',
+            'subtotal' => '100.00', 'created_at' => now()]);
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('data.0.kind', 'PRIOR_DEBT')
+            ->assertJsonPath('data.0.edit_url', '/despacho-productos/pagos/deudas/'.$document->id);
+        $this->putJson(self::URL.'/deudas/'.$document->id, $this->adjustmentPayload('PRIOR_DEBT', '80.00'))
+            ->assertOk()->assertJsonPath('data.amount', '80.00');
+        $this->client->update(['estado' => Tercero::STATUS_INACTIVE]);
+        $this->getJson(self::URL.'/catalogo')->assertOk()->assertJsonPath('data.clients.0.id', $this->client->id);
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '80.00');
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '20.00'))->assertUnprocessable();
+        $this->deleteJson(self::URL.'/deudas/'.$document->id)->assertOk();
+    }
+
+    public function test_adjustment_correction_moves_client_and_invalid_edits_roll_back_allocations(): void
+    {
+        $debtId = $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '100.00'))->assertCreated()->json('data.id');
+        $id = $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '40.00'))->assertCreated()->json('data.id');
+        $documentId = DB::table('ajustes_despacho_productos')->where('id', $debtId)->value('comprobante_id');
+        $this->putJson(self::URL.'/ajustes/'.$debtId, $this->adjustmentPayload('PRIOR_DEBT', '20.00'))
+            ->assertUnprocessable()->assertJsonValidationErrors('importe');
+        $other = $this->createClient($this->user, 'OTRO AJUSTE', '20888888888');
+        $this->putJson(self::URL.'/ajustes/'.$id, $this->adjustmentPayload('CREDIT', '25.00', ['cliente_id' => $other->id]))
+            ->assertOk()->assertJsonPath('data.client.id', $other->id);
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '100.00');
+        $this->assertDatabaseHas('comprobantes', ['id' => $documentId, 'saldo_pendiente' => 100]);
+        $this->getJson(self::URL.'/cuenta?cliente_id='.$other->id.'&moneda=PEN')->assertOk()->assertJsonPath('summary.credit', '25.00');
+    }
+
+    public function test_credit_applied_to_shared_legacy_debt_is_visible_in_other_branch_without_exposing_unapplied_excess(): void
+    {
+        $document = $this->createDocument($this->client, '100.00');
+        $document->update(['tipo_documento' => 'SALDO_ANTERIOR', 'origen_codigo' => 'MANUAL',
+            'origen_clave' => 'DEUDA_ANTERIOR_CLIENTE:'.Str::uuid()]);
+        DB::table('comprobante_detalles')->insert(['comprobante_id' => $document->id, 'descripcion' => 'Deuda compartida',
+            'subtotal' => '100.00', 'created_at' => now()]);
+        $creditId = $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '140.00'))->assertCreated()->json('data.id');
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.credit', '40.00');
+        $this->user->update(['sucursal_id' => $this->createBranch($this->user, 'COMPARTIDA')]);
+        $response = $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.balance', '0.00')
+            ->assertJsonPath('summary.payments_total', '100.00')->assertJsonPath('summary.transaction_count', 2);
+        $external = collect($response->json('data'))->firstWhere('kind', 'APPLIED_PAYMENT');
+        $this->assertSame('100.00', $external['amount']);
+        $this->assertFalse($external['can_edit']);
+        $this->assertNull($external['origin_url']);
+        $this->assertStringContainsString('otra sucursal', $external['action_reason']);
+        $this->deleteJson(self::URL.'/ajustes/'.$creditId)->assertNotFound();
+    }
+
+    public function test_finance_cannot_bypass_adjustment_ownership_and_debt_notes_respect_storage_limits(): void
+    {
+        $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('PRIOR_DEBT', '10.00', ['observaciones' => str_repeat('a', 251)]))
+            ->assertUnprocessable()->assertJsonValidationErrors('observaciones');
+        $id = $this->postJson(self::URL.'/ajustes', $this->adjustmentPayload('CREDIT', '10.00'))->assertCreated()->json('data.id');
+        $paymentId = DB::table('ajustes_despacho_productos')->where('id', $id)->value('pago_id');
+        $this->grantFinanceAccess();
+        $this->postJson('/api/v1/finanzas/movimientos/'.$paymentId.'/anular', ['motivo' => 'Intento ajeno al módulo'])
+            ->assertUnprocessable()->assertJsonValidationErrors('movimiento');
+        $this->putJson('/api/v1/finanzas/movimientos/'.$paymentId, ['observaciones' => 'No cambiar', 'fecha_hora' => '2026-09-04 10:00:00'])
+            ->assertUnprocessable()->assertJsonValidationErrors('movimiento');
+        $this->getJson($this->accountUrl())->assertOk()->assertJsonPath('summary.credit', '10.00');
+    }
+
+    public function test_paginated_account_does_not_query_editable_details_for_the_entire_history(): void
+    {
+        $this->postJson(self::URL, $this->payload())->assertCreated();
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $this->getJson($this->accountUrl().'&per_page=1')->assertOk();
+        $smallCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+        foreach (range(1, 30) as $index) {
+            $this->postJson(self::URL, $this->payload(['observaciones' => 'Operación '.$index]))->assertCreated();
+        }
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $this->getJson($this->accountUrl().'&per_page=1')->assertOk()->assertJsonPath('meta.total', 31);
+        $largeCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+        $this->assertLessThanOrEqual($smallCount + 3, $largeCount);
+    }
+
+    private function adjustmentPayload(string $kind, string $amount, array $overrides = []): array
+    {
+        return array_replace(['idempotency_key' => (string) Str::uuid(), 'cliente_id' => $this->client->id,
+            'tipo' => $kind, 'importe' => $amount, 'moneda' => 'PEN', 'fecha_hora' => '2026-09-04T09:15',
+            'observaciones' => 'Saldo inicial de prueba'], $overrides);
+    }
+
+    private function accountUrl(string $currency = 'PEN'): string
+    {
+        return self::URL.'/cuenta?cliente_id='.$this->client->id.'&moneda='.$currency;
+    }
+
     private function createBranch(User $user, string $code): int
     {
         return (int) DB::table('sucursales')->insertGetId([

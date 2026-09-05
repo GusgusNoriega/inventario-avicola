@@ -2584,7 +2584,7 @@ class ProductDispatchOperationApiTest extends TestCase
         ]);
     }
 
-    public function test_ticket_deletion_rejects_stale_versions_and_any_historical_payment_application(): void
+    public function test_ticket_deletion_rejects_stale_versions_and_active_payment_applications(): void
     {
         $ticket = $this->postJson(
             '/api/v1/despacho-productos/tickets',
@@ -2632,7 +2632,7 @@ class ProductDispatchOperationApiTest extends TestCase
         $paymentId = (int) DB::table('pagos')->insertGetId([
             'empresa_id' => $this->user->empresa_id,
             'tercero_id' => $this->clientId,
-            'codigo' => 'COBRO-ANULADO-PRODUCTOS',
+            'codigo' => 'COBRO-ACTIVO-PRODUCTOS',
             'tipo' => 'COBRO_CLIENTE',
             'cliente_id' => $this->clientId,
             'direccion' => 'ENTRADA',
@@ -2640,9 +2640,7 @@ class ProductDispatchOperationApiTest extends TestCase
             'metodo' => 'EFECTIVO',
             'moneda' => 'PEN',
             'importe' => '1.00',
-            'estado' => 'ANULADO',
-            'anulada_por' => $this->user->id,
-            'anulada_at' => now(),
+            'estado' => 'REGISTRADO',
             'created_by' => $this->user->id,
             'created_at' => now(),
             'updated_at' => now(),
@@ -2687,6 +2685,51 @@ class ProductDispatchOperationApiTest extends TestCase
             'entidad' => 'comprobantes',
             'entidad_id' => (string) $documentId,
             'accion' => 'ANULAR',
+        ]);
+    }
+
+    public function test_ticket_can_be_deleted_after_reversing_its_customer_credit_and_preserves_payment_history(): void
+    {
+        $ticket = $this->postJson(
+            '/api/v1/despacho-productos/tickets',
+            $this->payload($this->clientId, [$this->weighing(product: $this->eggs, quantity: 10)]),
+        )->assertCreated()->json('data');
+        $documentId = (int) DB::table('comprobantes')
+            ->where('origen_clave', "VENTA:TICKET_PRODUCTOS:{$ticket['id']}")->value('id');
+        $credit = $this->postJson('/api/v1/despacho-productos/pagos/ajustes', [
+            'idempotency_key' => (string) Str::uuid(),
+            'tipo' => 'CREDIT', 'cliente_id' => $this->clientId,
+            'importe' => '3.00', 'moneda' => 'PEN',
+            'fecha_hora' => now('America/Lima')->format('Y-m-d\TH:i'),
+            'observaciones' => 'Saldo a favor para corregir',
+        ])->assertCreated()->json('data');
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId, 'estado' => 'PARCIAL', 'saldo_pendiente' => 4.50,
+        ]);
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $ticket['version'],
+        ])->assertConflict();
+
+        $this->deleteJson('/api/v1/despacho-productos/pagos/ajustes/'.$credit['id'])->assertOk();
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId, 'estado' => 'PENDIENTE', 'saldo_pendiente' => 7.50,
+        ]);
+        $this->deleteJson("/api/v1/despacho-productos/tickets/{$ticket['id']}", [
+            'version' => $ticket['version'],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('tickets_despacho_productos', [
+            'id' => $ticket['id'], 'estado' => TicketDespachoProducto::STATUS_DELETED,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $documentId, 'estado' => 'ANULADO', 'saldo_pendiente' => 0,
+        ]);
+        $this->assertDatabaseHas('pagos', ['id' => $credit['payment_id'], 'estado' => 'ANULADO']);
+        $this->assertDatabaseHas('pago_aplicaciones', [
+            'pago_id' => $credit['payment_id'], 'comprobante_id' => $documentId, 'importe_aplicado' => 3.00,
+        ]);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'tickets_despacho_productos', 'entidad_id' => (string) $ticket['id'], 'accion' => 'ELIMINAR',
         ]);
     }
 

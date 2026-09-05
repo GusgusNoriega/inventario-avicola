@@ -28,7 +28,7 @@ class ProductDispatchAccountStatementService
     public function catalog(int $companyId, object $branch): array
     {
         $eligible = $this->eligibleDocumentsQuery($companyId, (int) $branch->id);
-        $manualDebts = $this->manualCustomerDebtsQuery($companyId);
+        $manualDebts = $this->manualCustomerDebtsQuery($companyId, (int) $branch->id);
         $historicalClientIds = (clone $eligible)
             ->select('ticket.cliente_id');
         $manualDebtClientIds = (clone $manualDebts)
@@ -140,7 +140,7 @@ class ProductDispatchAccountStatementService
         $this->assertConsistentFinancialLinks($productDocuments);
 
         $productDocuments = $productDocuments->values();
-        $manualDebts = $this->manualCustomerDebtsQuery($companyId)
+        $manualDebts = $this->manualCustomerDebtsQuery($companyId, (int) $branch->id)
             ->where('document.tercero_id', $clientId)
             ->where('document.moneda', $currency)
             ->whereDate('document.fecha_emision', '<=', $dateTo)
@@ -248,6 +248,7 @@ class ProductDispatchAccountStatementService
             $documentIds,
             $dateTo,
             $timezone,
+            (int) $branch->id,
         )->concat($this->modulePaymentsQuery($companyId, (int) $branch->id)
             ->leftJoin('metodos_pago as method', 'method.id', '=', 'payment.metodo_pago_id')
             ->where('payment.cliente_id', $clientId)
@@ -305,6 +306,10 @@ class ProductDispatchAccountStatementService
 
             $paymentRows->push([
                 'kind' => 'PAYMENT',
+                'payment_id' => (int) $payment->id,
+                'date_time' => $localDateTime->format('Y-m-d\TH:i'),
+                'notes' => $payment->observaciones,
+                'reference' => $payment->referencia,
                 'payment_type' => $paymentType,
                 'movement_label' => $this->receivableApplicationLabel($paymentType),
                 'date' => $date,
@@ -392,7 +397,7 @@ class ProductDispatchAccountStatementService
             ->whereColumn('document.moneda', 'ticket.moneda');
     }
 
-    private function manualCustomerDebtsQuery(int $companyId): Builder
+    private function manualCustomerDebtsQuery(int $companyId, int $branchId): Builder
     {
         return DB::table('comprobantes as document')
             ->where('document.empresa_id', $companyId)
@@ -402,6 +407,11 @@ class ProductDispatchAccountStatementService
             ->where('document.tipo_documento', 'SALDO_ANTERIOR')
             ->where('document.origen_codigo', 'MANUAL')
             ->where('document.origen_clave', 'like', self::MANUAL_CUSTOMER_DEBT_ORIGIN_PREFIX.'%')
+            ->whereNotExists(function (Builder $adjustments) use ($companyId, $branchId): void {
+                $adjustments->selectRaw('1')->from('ajustes_despacho_productos')
+                    ->whereColumn('comprobante_id', 'document.id')->where('empresa_id', $companyId)
+                    ->where('sucursal_id', '<>', $branchId);
+            })
             ->whereIn('document.estado', [
                 Comprobante::STATUS_PENDING,
                 Comprobante::STATUS_PARTIAL,
@@ -411,13 +421,24 @@ class ProductDispatchAccountStatementService
 
     private function modulePaymentsQuery(int $companyId, int $branchId): Builder
     {
-        return DB::table('pagos_despacho_productos as module_payment')
-            ->join('pagos as payment', 'payment.id', '=', 'module_payment.pago_id')
-            ->where('module_payment.empresa_id', $companyId)
-            ->where('module_payment.sucursal_id', $branchId)
-            ->where('module_payment.estado', Pago::STATUS_REGISTERED)
+        return DB::table('pagos as payment')
+            ->leftJoin('pagos_despacho_productos as module_payment', 'payment.id', '=', 'module_payment.pago_id')
+            ->leftJoin('ajustes_despacho_productos as module_adjustment', 'payment.id', '=', 'module_adjustment.pago_id')
+            ->where(function (Builder $scope) use ($companyId, $branchId): void {
+                $scope->where(function (Builder $payments) use ($companyId, $branchId): void {
+                    $payments->where('module_payment.empresa_id', $companyId)
+                        ->where('module_payment.sucursal_id', $branchId)
+                        ->where('module_payment.estado', Pago::STATUS_REGISTERED)
+                        ->where('payment.tipo', Pago::TYPE_CUSTOMER_COLLECTION);
+                })->orWhere(function (Builder $adjustments) use ($companyId, $branchId): void {
+                    $adjustments->where('module_adjustment.empresa_id', $companyId)
+                        ->where('module_adjustment.sucursal_id', $branchId)
+                        ->where('module_adjustment.tipo', 'CREDIT')
+                        ->where('module_adjustment.estado', Pago::STATUS_REGISTERED)
+                        ->where('payment.tipo', Pago::TYPE_CUSTOMER_DISCOUNT);
+                });
+            })
             ->where('payment.empresa_id', $companyId)
-            ->where('payment.tipo', Pago::TYPE_CUSTOMER_COLLECTION)
             ->where('payment.estado', Pago::STATUS_REGISTERED)
             ->whereNull('payment.reversa_de_pago_id');
     }
@@ -487,7 +508,7 @@ class ProductDispatchAccountStatementService
         $hasHistory = $client && $this->eligibleDocumentsQuery($companyId, $branchId)
             ->where('ticket.cliente_id', $clientId)
             ->exists();
-        $hasManualDebtHistory = $client && $this->manualCustomerDebtsQuery($companyId)
+        $hasManualDebtHistory = $client && $this->manualCustomerDebtsQuery($companyId, $branchId)
             ->where('document.tercero_id', $clientId)
             ->exists();
         $hasPaymentHistory = $client && $this->modulePaymentsQuery($companyId, $branchId)
@@ -514,6 +535,7 @@ class ProductDispatchAccountStatementService
 
         return [
             'kind' => 'PRIOR_DEBT',
+            'document_id' => (int) $document->document_id,
             'payment_type' => null,
             'movement_label' => 'Deuda anterior',
             'date' => $date,
@@ -549,6 +571,8 @@ class ProductDispatchAccountStatementService
         if ($lines->isEmpty()) {
             return [[
                 'kind' => 'SALE',
+                'ticket_id' => (int) $document->ticket_id,
+                'date_time' => $registeredAt->format('Y-m-d\TH:i'),
                 'date' => $date,
                 'document' => (string) $document->ticket_code,
                 'product' => 'Venta de productos',
@@ -589,6 +613,8 @@ class ProductDispatchAccountStatementService
 
             return [
                 'kind' => 'SALE',
+                'ticket_id' => (int) $document->ticket_id,
+                'date_time' => $registeredAt->format('Y-m-d\TH:i'),
                 'date' => $date,
                 'document' => (string) $document->ticket_code,
                 'product' => (string) $line->producto_nombre_snapshot,
@@ -625,6 +651,7 @@ class ProductDispatchAccountStatementService
         Collection $documentIds,
         string $dateTo,
         string $timezone,
+        int $branchId,
     ): Collection {
         if ($documentIds->isEmpty()) {
             return collect();
@@ -655,10 +682,16 @@ class ProductDispatchAccountStatementService
             ->where('payment.estado', Pago::STATUS_REGISTERED)
             ->whereNull('payment.reversa_de_pago_id')
             // Module payments are already included at their full amount, even without allocations.
-            ->whereNotExists(function (Builder $modulePayments): void {
+            ->whereNotExists(function (Builder $modulePayments) use ($branchId): void {
                 $modulePayments->selectRaw('1')
                     ->from('pagos_despacho_productos')
-                    ->whereColumn('pagos_despacho_productos.pago_id', 'payment.id');
+                    ->whereColumn('pagos_despacho_productos.pago_id', 'payment.id')
+                    ->where('pagos_despacho_productos.sucursal_id', $branchId);
+            })
+            ->whereNotExists(function (Builder $adjustments) use ($branchId): void {
+                $adjustments->selectRaw('1')->from('ajustes_despacho_productos')
+                    ->whereColumn('ajustes_despacho_productos.pago_id', 'payment.id')
+                    ->where('ajustes_despacho_productos.sucursal_id', $branchId);
             })
             ->where(function (Builder $dates) use ($dateTo, $toExclusive): void {
                 $dates->where(function (Builder $received) use ($dateTo): void {

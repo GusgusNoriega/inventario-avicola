@@ -15,6 +15,8 @@ class ListProductDispatchCustomerPaymentsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'cliente_id' => ['nullable', 'integer', 'min:1'],
+            'moneda' => ['nullable', 'string', 'regex:/\A[A-Z]{3}\z/'],
             'buscar' => ['nullable', 'string', 'max:150'],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d', ...($this->filled('date_from') ? ['after_or_equal:date_from'] : [])],

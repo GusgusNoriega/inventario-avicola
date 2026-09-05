@@ -16,14 +16,19 @@ class ProductDispatchCustomerPaymentService
     public function __construct(
         private readonly FinancialMovementService $movements,
         private readonly FinancialAuditService $audit,
+        private readonly ProductDispatchAccountStatementService $statements,
     ) {}
 
     /** @return array<string, mixed> */
     public function catalog(int $companyId, object $branch): array
     {
         $currency = strtoupper(trim((string) DB::table('empresas')->where('id', $companyId)->value('moneda')));
+        $statementCatalog = $this->statements->catalog($companyId, $branch);
 
         return [
+            'clients' => $statementCatalog['clients'],
+            'currencies' => $statementCatalog['currencies'],
+            'default_currency' => $statementCatalog['default_currency'],
             'methods' => DB::table('metodos_pago')->where('estado', 'ACTIVO')->orderBy('nombre')
                 ->get(['id', 'codigo', 'nombre'])
                 ->map(fn (object $method): array => [
@@ -54,6 +59,12 @@ class ProductDispatchCustomerPaymentService
         $query = $this->query($companyId, (int) $branch->id)
             ->where('product_payment.estado', Pago::STATUS_REGISTERED)
             ->where('payment.estado', Pago::STATUS_REGISTERED);
+        if (! empty($filters['cliente_id'])) {
+            $query->where('payment.cliente_id', (int) $filters['cliente_id']);
+        }
+        if (! empty($filters['moneda'])) {
+            $query->where('payment.moneda', $filters['moneda']);
+        }
         if (! empty($filters['date_from'])) {
             $query->where('payment.fecha_hora', '>=', $this->databaseDate($filters['date_from'].'T00:00', $branch));
         }

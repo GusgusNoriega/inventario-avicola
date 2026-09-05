@@ -28,8 +28,9 @@ class ManualCustomerDebtService
         User $actor,
         array $data,
         ?string $ip = null,
+        ?object $productDispatchBranch = null,
     ): array {
-        $this->assertActor($companyId, $actor);
+        $this->assertActor($companyId, $actor, $productDispatchBranch);
         $originKey = self::ORIGIN_PREFIX.$data['idempotency_key'];
 
         try {
@@ -189,8 +190,10 @@ class ManualCustomerDebtService
         int $documentId,
         array $data,
         ?string $ip = null,
+        ?object $productDispatchBranch = null,
     ): void {
-        $this->assertActor($companyId, $actor);
+        $this->assertActor($companyId, $actor, $productDispatchBranch);
+        $this->assertProductAdjustmentContext($companyId, $documentId, $productDispatchBranch);
 
         DB::transaction(function () use ($companyId, $actor, $documentId, $data, $ip): void {
             $document = $this->editableDocument($companyId, $documentId);
@@ -265,8 +268,10 @@ class ManualCustomerDebtService
         int $documentId,
         string $reason,
         ?string $ip = null,
+        ?object $productDispatchBranch = null,
     ): void {
-        $this->assertActor($companyId, $actor);
+        $this->assertActor($companyId, $actor, $productDispatchBranch);
+        $this->assertProductAdjustmentContext($companyId, $documentId, $productDispatchBranch);
 
         DB::transaction(function () use ($companyId, $actor, $documentId, $reason, $ip): void {
             $document = DB::table('comprobantes')
@@ -477,13 +482,31 @@ class ManualCustomerDebtService
         return $client;
     }
 
-    private function assertActor(int $companyId, User $actor): void
+    private function assertProductAdjustmentContext(int $companyId, int $documentId, ?object $branch): void
+    {
+        $adjustment = DB::table('ajustes_despacho_productos')->where('empresa_id', $companyId)
+            ->where('comprobante_id', $documentId)->first(['sucursal_id']);
+        if ($adjustment && ($branch === null || (int) $adjustment->sucursal_id !== (int) $branch->id)) {
+            throw ValidationException::withMessages([
+                'deuda' => 'Esta deuda pertenece a Despacho de productos. Edítala o elimínala desde Pagos de clientes de su sucursal.',
+            ]);
+        }
+    }
+
+    private function assertActor(int $companyId, User $actor, ?object $productDispatchBranch = null): void
     {
         abort_unless(
             (int) $actor->empresa_id === $companyId && $actor->isActive(),
             403,
             'Usuario no autorizado para esta empresa.',
         );
+        if ($productDispatchBranch !== null) {
+            abort_unless((int) $productDispatchBranch->empresa_id === $companyId
+                && (! $actor->sucursal_id || (int) $actor->sucursal_id === (int) $productDispatchBranch->id)
+                && $actor->hasPermission('PRODUCTOS_DESPACHO_DESPACHAR'), 403);
+
+            return;
+        }
         abort_unless(
             $actor->hasPermission('SALDOS_AJUSTAR'),
             403,

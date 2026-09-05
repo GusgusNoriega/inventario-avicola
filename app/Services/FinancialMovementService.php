@@ -34,9 +34,10 @@ class FinancialMovementService
         ?string $ip = null,
         bool $allowMissingMethodReference = false,
         bool $allowUnassignedCustomerAccount = false,
+        ?object $productDispatchBranch = null,
     ): array {
         $data = $this->normalizePayload($data);
-        $this->assertActor($companyId, $actor, $data['tipo']);
+        $this->assertActor($companyId, $actor, $data['tipo'], $productDispatchBranch);
 
         try {
             return DB::transaction(
@@ -83,12 +84,14 @@ class FinancialMovementService
         ?int $cashMovementContextId = null,
         ?int $expenseContextId = null,
         ?int $productPaymentContextId = null,
+        ?int $productAdjustmentContextId = null,
     ): void {
         abort_unless(
             (int) $actor->empresa_id === $companyId
                 && $actor->isActive()
                 && ($actor->hasPermission('PAGOS_REGISTRAR')
-                    || ($productPaymentContextId !== null && $actor->hasPermission('PRODUCTOS_DESPACHO_DESPACHAR'))),
+                    || (($productPaymentContextId !== null || $productAdjustmentContextId !== null)
+                        && $actor->hasPermission('PRODUCTOS_DESPACHO_DESPACHAR'))),
             403,
             'Se requiere el permiso PAGOS_REGISTRAR.',
         );
@@ -102,6 +105,7 @@ class FinancialMovementService
             $cashMovementContextId,
             $expenseContextId,
             $productPaymentContextId,
+            $productAdjustmentContextId,
         ): void {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -111,6 +115,7 @@ class FinancialMovementService
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
 
             $this->assertProductPaymentContext($companyId, $paymentId, $productPaymentContextId);
+            $this->assertProductAdjustmentContext($companyId, $actor, $paymentId, $productAdjustmentContextId);
 
             if ($payment->estado !== Pago::STATUS_REGISTERED || $payment->reversa_de_pago_id !== null) {
                 throw ValidationException::withMessages([
@@ -485,6 +490,7 @@ class FinancialMovementService
         ?int $cashMovementContextId = null,
         ?int $expenseContextId = null,
         ?int $productPaymentContextId = null,
+        ?int $productAdjustmentContextId = null,
     ): array {
         abort_unless(
             (int) $actor->empresa_id === $companyId && $actor->isActive(),
@@ -503,6 +509,7 @@ class FinancialMovementService
             $cashMovementContextId,
             $expenseContextId,
             $productPaymentContextId,
+            $productAdjustmentContextId,
         ): array {
             $payment = DB::table('pagos')
                 ->where('empresa_id', $companyId)
@@ -512,6 +519,7 @@ class FinancialMovementService
             abort_unless($payment, 404, 'Movimiento financiero no encontrado.');
 
             $this->assertProductPaymentContext($companyId, $paymentId, $productPaymentContextId);
+            $this->assertProductAdjustmentContext($companyId, $actor, $paymentId, $productAdjustmentContextId);
 
             $collectionLink = $this->collectionForPayment($companyId, $paymentId);
             if ($collectionLink
@@ -1152,9 +1160,33 @@ class FinancialMovementService
     }
 
     /** @param array<string, mixed> $data */
-    private function assertActor(int $companyId, User $actor, string $type): void
+    private function assertProductAdjustmentContext(int $companyId, User $actor, int $paymentId, ?int $contextId): void
+    {
+        $adjustment = DB::table('ajustes_despacho_productos')->where('empresa_id', $companyId)
+            ->where('pago_id', $paymentId)->first(['id', 'sucursal_id']);
+        if (($adjustment && (int) $adjustment->id !== (int) $contextId)
+            || ($contextId !== null && ! $adjustment)) {
+            throw ValidationException::withMessages([
+                'movimiento' => 'Este saldo pertenece a Despacho de productos. Edítalo o elimínalo desde Pagos de clientes.',
+            ]);
+        }
+        if ($contextId !== null) {
+            abort_unless($actor->hasPermission('PRODUCTOS_DESPACHO_DESPACHAR')
+                && (! $actor->sucursal_id || (int) $actor->sucursal_id === (int) $adjustment->sucursal_id), 403);
+        }
+    }
+
+    private function assertActor(int $companyId, User $actor, string $type, ?object $productDispatchBranch = null): void
     {
         abort_unless((int) $actor->empresa_id === $companyId && $actor->isActive(), 403, 'Usuario no autorizado para esta empresa.');
+        if ($productDispatchBranch !== null) {
+            abort_unless($type === Pago::TYPE_CUSTOMER_DISCOUNT
+                && (int) $productDispatchBranch->empresa_id === $companyId
+                && (! $actor->sucursal_id || (int) $actor->sucursal_id === (int) $productDispatchBranch->id)
+                && $actor->hasPermission('PRODUCTOS_DESPACHO_DESPACHAR'), 403);
+
+            return;
+        }
         if (in_array($type, [
             'SALDO_INICIAL',
             'AJUSTE',

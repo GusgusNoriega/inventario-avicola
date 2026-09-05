@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(122, $migrationFiles);
+        $this->assertCount(123, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -129,6 +129,7 @@ class DatabaseSchemaTest extends TestCase
             'compras',
             'compra_detalles',
             'gastos_empresa',
+            'ajustes_despacho_productos',
             'movimientos_caja_efectivo',
             'cobradores',
             'cobranzas',
@@ -195,6 +196,7 @@ class DatabaseSchemaTest extends TestCase
             'compras' => ['empresa_id', 'proveedor_id', 'comprobante_id', 'pago_inicial_id', 'codigo', 'idempotency_key', 'tipo_documento', 'numero_documento', 'numero_documento_activo', 'fecha_compra', 'fecha_vencimiento', 'condicion', 'moneda', 'subtotal', 'impuesto', 'total', 'estado', 'observaciones', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
             'compra_detalles' => ['compra_id', 'tipo_pollo_id', 'descripcion', 'cantidad_aves', 'peso_kg', 'precio_kg', 'subtotal', 'created_at'],
             'gastos_empresa' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'categoria', 'concepto', 'destino', 'numero_documento', 'estado', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion'],
+            'ajustes_despacho_productos' => ['empresa_id', 'sucursal_id', 'tipo', 'comprobante_id', 'pago_id', 'idempotency_key', 'request_hash', 'fecha_hora', 'estado', 'created_by', 'anulada_por', 'anulada_at'],
             'movimientos_caja_efectivo' => ['empresa_id', 'pago_id', 'codigo', 'idempotency_key', 'caja_id', 'direccion', 'contraparte_tipo', 'cliente_id', 'otra_caja_id', 'detalle', 'estado', 'created_by'],
             'cobradores' => ['empresa_id', 'nombre', 'estado', 'created_by', 'created_at', 'updated_at'],
             'cobranzas' => ['empresa_id', 'cobrador_id', 'cobrador_nombre_snapshot', 'codigo', 'idempotency_key', 'payload_hash', 'cuenta_destino_id', 'proveedor_id', 'metodo_pago_id', 'fecha_hora', 'referencia', 'moneda', 'importe_total', 'observaciones', 'estado', 'recibido_en_caja', 'recepcion_caja_actualizada_at', 'recepcion_caja_actualizada_por', 'recepcion_caja_actualizada_por_nombre', 'created_by', 'anulada_por', 'anulada_at', 'motivo_anulacion', 'created_at', 'updated_at'],

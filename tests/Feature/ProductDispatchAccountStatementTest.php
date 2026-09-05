@@ -1222,6 +1222,28 @@ class ProductDispatchAccountStatementTest extends TestCase
             ->assertJsonPath('data.ending_balance', '-12.50');
     }
 
+    public function test_payment_account_groups_sale_lines_and_exposes_ticket_actions_with_current_version(): void
+    {
+        $document = $this->createProductDocument((int) $this->user->empresa_id, $this->branchId,
+            (int) $this->user->id, $this->clientId, 'PD-CUENTA-AGRUPADA', '2026-07-01', 'PEN',
+            [$this->simpleLine('40.00'), $this->simpleLine('60.00')]);
+        $url = '/api/v1/despacho-productos/pagos/cuenta?cliente_id='.$this->clientId.'&moneda=PEN';
+        $response = $this->getJson($url)->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('summary.balance', '100.00')->assertJsonPath('data.0.amount', '100.00')
+            ->assertJsonPath('data.0.kind', 'SALE')->assertJsonPath('data.0.ticket_id', $document['ticket_id'])
+            ->assertJsonPath('data.0.can_delete', true)->assertJsonPath('data.0.can_edit', true);
+        $this->assertNotEmpty($response->json('data.0.version'));
+        $this->assertStringContainsString('edit_ticket='.$document['ticket_id'], $response->json('data.0.manage_url'));
+        $creditId = $this->postJson('/api/v1/despacho-productos/pagos/ajustes', [
+            'idempotency_key' => (string) Str::uuid(), 'tipo' => 'CREDIT', 'cliente_id' => $this->clientId,
+            'importe' => '25.00', 'moneda' => 'PEN', 'fecha_hora' => '2026-07-02T10:00',
+        ])->assertCreated()->json('data.id');
+        $rows = collect($this->getJson($url)->assertOk()->assertJsonPath('summary.balance', '75.00')->json('data'));
+        $this->assertFalse($rows->firstWhere('kind', 'SALE')['can_delete']);
+        $this->deleteJson('/api/v1/despacho-productos/pagos/ajustes/'.$creditId)->assertOk();
+        $this->getJson($url)->assertOk()->assertJsonPath('data.0.can_delete', true)->assertJsonPath('summary.balance', '100.00');
+    }
+
     private function linkModulePayment(int $paymentId, int $branchId): void
     {
         DB::table('pagos_despacho_productos')->insert([
