@@ -34,6 +34,7 @@
   --pdd-fs-scale-meta: 11px;
   --pdd-fs-scale-weight: 70px;
   --pdd-fs-scale-unit: 16px;
+  --pdd-fs-scale-amount: 36px;
   --pdd-fs-scale-actions: 12px;
   --pdd-fs-field-label: 11px;
   --pdd-fs-field-value: 16px;
@@ -41,7 +42,6 @@
   --pdd-fs-field-unit: 12px;
   --pdd-fs-net-label: 11px;
   --pdd-fs-net-value: 16px;
-  --pdd-fs-net-help: 11px;
   --pdd-fs-variation-hint: 11px;
   --pdd-fs-variation-name: 12px;
   --pdd-fs-list-number: 18px;
@@ -53,6 +53,7 @@
   --pdd-fs-weighing-name: 11px;
   --pdd-fs-weighing-detail: 10px;
   --pdd-fs-weighing-amount: 11px;
+  --pdd-fs-weighing-total: 13px;
   --pdd-fs-action-title: 12px;
   --pdd-fs-action-detail: 10px;
   --pdd-fs-ticket-label: 11px;
@@ -247,7 +248,7 @@ button { color: inherit; }
 .pdd-scale-reading-wrap {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
   padding: 7px 9px;
   border-radius: 16px;
   border: 1px solid #25473d;
@@ -263,6 +264,9 @@ button { color: inherit; }
 #pddClearManualWeight[hidden] { display: none; }
 .pdd-live-weight { display: flex; align-items: baseline; justify-content: center; gap: 7px; color: #f4ffd0; font-size: clamp(2.4rem, 4.2vw, 4rem); font-weight: 900; letter-spacing: -.06em; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 25px rgba(215, 237, 120, .2); }
 .pdd-live-weight small { font-size: 1rem; letter-spacing: 0; color: #a9c7bb; }
+.pdd-amount-preview { min-width: 0; display: grid; gap: 2px; margin: 6px 0 8px; padding: 6px 8px; border: 1px solid rgba(86, 229, 181, .3); border-radius: 10px; background: rgba(32, 201, 142, .1); text-align: center; }
+.pdd-amount-preview > span { color: #a9c7bb; font-size: var(--pdd-fs-scale-meta); font-weight: 800; }
+.pdd-amount-preview output { color: var(--pdd-green-dark); font-size: var(--pdd-fs-scale-amount); font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .pdd-scale-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 7px; }
 .pdd-secondary-touch,
 .pdd-capture-touch { min-height: 44px; border: 0; border-radius: 10px; cursor: pointer; font-size: .76rem; font-weight: 850; }
@@ -283,8 +287,7 @@ button { color: inherit; }
 .pdd-price-field > .pdd-field-caption { left: 54px; right: auto; }
 .pdd-fields-grid label > strong,
 .pdd-gross-preview strong { font-size: 1rem; }
-.pdd-fields-grid small,
-.pdd-gross-preview small { overflow: hidden; color: var(--pdd-muted); font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
+.pdd-fields-grid small { overflow: hidden; color: var(--pdd-muted); font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
 .pdd-price-field > small { position: absolute; z-index: 1; top: 8px; left: calc(54px + var(--pdd-fs-field-label) * 4.5); right: 12px; line-height: 1.2; text-align: right; pointer-events: none; }
 .pdd-fields-grid > .pdd-field-error { grid-column: 1 / -1; margin: 0; color: #ffadb3; font-weight: 850; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
 .pdd-price-input { min-height: 64px; display: grid; grid-template-columns: 42px minmax(0, 1fr); overflow: hidden; border: 2px solid rgba(32, 201, 142, .72); border-radius: 12px; background: linear-gradient(180deg, #14251f, #09120f); cursor: pointer; transition: border-color .16s, box-shadow .16s, filter .16s; }
@@ -303,8 +306,7 @@ button { color: inherit; }
 .pdd-touch-number-input input::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .pdd-touch-number-input b { display: grid; place-items: center; border-left: 1px solid #345247; color: #d9ebe3; background: #14221d; font-size: var(--pdd-fs-field-unit); text-transform: lowercase; }
 .pdd-gross-preview { color: #fff; border-color: rgba(32, 201, 142, .6); background: linear-gradient(145deg, #0d9367, #07503a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); }
-.pdd-gross-preview > span,
-.pdd-gross-preview small { color: #d4eae1; }
+.pdd-gross-preview > span { color: #d4eae1; }
 
 .pdd-waste-strip { --pdd-control-height: max(48px, calc(var(--pdd-fs-field-label) * 1.2 + max(1.3rem, var(--pdd-fs-field-value)) * 1.2 + 10px)); min-width: 0; display: grid; grid-template-columns: minmax(145px, .75fr) minmax(245px, 1.55fr); align-items: stretch; gap: 8px; margin-top: 8px; }
 .pdd-waste-unit-control { position: relative; min-width: 0; display: block; }
@@ -360,7 +362,7 @@ button { color: inherit; }
   border-radius: var(--pdd-radius);
 }
 .pdd-lists-area { min-width: 0; padding: 12px; overflow: hidden; }
-.pdd-lists-grid { height: 100%; min-height: 270px; display: grid; grid-auto-flow: column; grid-auto-columns: calc(20% - 7.2px); gap: 9px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: thin; padding: 1px 2px 7px; touch-action: pan-x pan-y; }
+.pdd-lists-grid { height: 100%; min-height: 270px; display: grid; grid-auto-flow: column; grid-auto-columns: calc(25% - 6.75px); gap: 9px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-width: thin; padding: 1px 2px 7px; touch-action: pan-x pan-y; }
 .pdd-list-card {
   --pdd-list-accent: #35d39d;
   --pdd-list-accent-soft: rgba(53, 211, 157, .14);
@@ -404,12 +406,13 @@ button { color: inherit; }
 .pdd-list-card.is-active .pdd-list-count { color: #fff; background: #07100d; }
 .pdd-list-items { overflow-y: auto; padding: 0 6px 6px; }
 .pdd-weighing-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-.pdd-weighing-quantity-column { width: 52px; }
-.pdd-weighing-net-column { width: 88px; }
+.pdd-weighing-quantity-column { width: 15%; }
+.pdd-weighing-net-column { width: 24%; }
+.pdd-weighing-amount-column { width: 29%; }
 .pdd-weighing-table th { position: sticky; top: 0; z-index: 2; padding: 6px 4px; border-bottom: 1px solid var(--pdd-line); color: var(--pdd-muted); background: #0b1310; font-size: .67rem; font-weight: 900; text-align: left; text-transform: uppercase; letter-spacing: .03em; }
 .pdd-list-card.is-active .pdd-weighing-table th { color: #effff9; background: #17382e; }
 .pdd-weighing-table th:nth-child(2) { text-align: center; }
-.pdd-weighing-table th:nth-child(3) { text-align: right; }
+.pdd-weighing-table th:nth-child(n + 3) { text-align: right; }
 .pdd-weighing-table abbr { text-decoration: none; }
 .pdd-weighing-row { position: relative; }
 .pdd-weighing-row td { padding: 5px 4px; border-bottom: 1px solid #1e302a; vertical-align: middle; transition: background .14s; }
@@ -422,6 +425,7 @@ button { color: inherit; }
 .pdd-weighing-edit > span { display: block; overflow: hidden; font-size: .68rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .pdd-weighing-quantity { text-align: center; }
 .pdd-weighing-net { font-variant-numeric: tabular-nums; font-weight: 850; text-align: right; white-space: nowrap; }
+.pdd-weighing-amount { color: var(--pdd-list-accent); font-size: var(--pdd-fs-weighing-total); font-variant-numeric: tabular-nums; font-weight: 900; text-align: right; overflow-wrap: anywhere; }
 .pdd-weighing-empty td { height: 105px; padding: 12px; color: #96a9a1; font-size: .8rem; font-weight: 800; text-align: center; }
 .pdd-list-totals { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 8px; border-top: 1px solid var(--pdd-line); background: #101b17; font-size: .67rem; }
 .pdd-list-card.is-active .pdd-list-totals { border-top-color: var(--pdd-list-accent); background: #17382e; }
@@ -777,7 +781,6 @@ button { color: inherit; }
 .pdd-touch-number-input b { font-size: var(--pdd-fs-field-unit); }
 .pdd-gross-preview > span { font-size: var(--pdd-fs-net-label); }
 .pdd-gross-preview strong { font-size: var(--pdd-fs-net-value); }
-.pdd-gross-preview small { font-size: var(--pdd-fs-net-help); }
 
 .pdd-variation-empty { font-size: var(--pdd-fs-variation-hint); }
 .pdd-variation-option b { font-size: var(--pdd-fs-variation-name); }
@@ -1038,6 +1041,7 @@ button { color: inherit; }
   .pdd-product-scale-row { grid-template-columns: 86px 1fr; }
   .pdd-product-media { width: 86px; height: 128px; }
   .pdd-live-weight { font-size: clamp(32px, calc(var(--pdd-fs-scale-weight) * .62), 62px); }
+  .pdd-amount-preview output { font-size: clamp(24px, calc(var(--pdd-fs-scale-amount) * .8), 48px); }
   .pdd-scale-actions { grid-template-columns: 1fr; }
   .pdd-product-media .pdd-media-placeholder small { font-size: clamp(9px, calc(var(--pdd-fs-product-name) * .82), 16px); }
   .pdd-fields-grid { grid-template-columns: 1fr; }

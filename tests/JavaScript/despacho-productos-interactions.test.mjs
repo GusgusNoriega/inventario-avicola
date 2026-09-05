@@ -231,7 +231,7 @@ test("las imágenes rápidas no aumentan la fila y dejan el espacio restante a l
   assert.match(dispatchStyles, /\.pdd-lists-grid\s*\{[^}]*height:\s*100%/);
 });
 
-test("cada lista muestra producto, cantidad y neto en una tabla compacta editable", () => {
+test("cada lista muestra producto, cantidad, neto e importe en una tabla compacta editable", () => {
   const displayNameFlow = sourceBetween(dispatchSource, "function itemDisplayName", "function renderLists");
   const listRender = sourceBetween(dispatchSource, "function renderLists", "function renderActiveSummary");
   const listInteraction = sourceBetween(dispatchSource, 'elements.lists.addEventListener("click"', "elements.assignClient.addEventListener");
@@ -243,14 +243,18 @@ test("cada lista muestra producto, cantidad y neto en una tabla compacta editabl
   assert.match(listRender, /<abbr title="Producto">Prod\.<\/abbr>/);
   assert.match(listRender, /<abbr title="Cantidad">Cant\.<\/abbr>/);
   assert.match(listRender, /<abbr title="Peso neto">Neto<\/abbr>/);
+  assert.match(listRender, /<th scope="col">Importe<\/th>/);
   assert.match(listRender, /itemDisplayName\(item\)/);
   assert.match(listRender, /String\(item\.quantity\)/);
   assert.match(listRender, /formatWeight\(item\.net_weight_kg\)/);
+  assert.match(listRender, /formatMoney\(item\.amount,\s*state\.catalog\.currency\)/);
+  assert.match(listRender, /class="pdd-weighing-amount">\$\{escapeHtml\(amount\)\}/);
+  assert.match(listRender, /colspan="4"/);
   assert.match(listRender, /class="pdd-weighing-edit"[^>]*data-pdd-edit-item=/);
   assert.match(listRender, /aria-label="\$\{escapeHtml\(editLabel\)\}"/);
   assert.match(listInteraction, /closest\("\[data-pdd-edit-item\]"\)/);
   assert.match(listInteraction, /openEditDialog\(edit\.dataset\.pddEditItem,\s*edit\.dataset\.pddListIndex\)/);
-  assert.doesNotMatch(listRender, /item\.amount|item\.waste_total_grams|item\.tare_grams/);
+  assert.doesNotMatch(listRender, /item\.waste_total_grams|item\.tare_grams/);
 
   assert.match(dispatchStyles, /\.pdd-weighing-table\s*\{[^}]*table-layout:\s*fixed/);
   assert.match(dispatchStyles, /\.pdd-weighing-table th\s*\{[^}]*position:\s*sticky/);
@@ -258,7 +262,7 @@ test("cada lista muestra producto, cantidad y neto en una tabla compacta editabl
   assert.match(dispatchStyles, /\.pdd-weighing-row td\s*\{[^}]*padding:\s*5px 4px/);
   assert.match(dispatchStyles, /\.pdd-weighing-edit::after\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0/);
   assert.match(dispatchStyles, /\.pdd-weighing-row:focus-within td/);
-  assert.doesNotMatch(dispatchSource, /Índice de la pesada|Importe de la pesada|\.pdd-weighing-row small/);
+  assert.doesNotMatch(dispatchSource, /Índice de la pesada|\.pdd-weighing-row small/);
 });
 
 test("la columna seleccionada usa un fondo y contorno de alto contraste", () => {
@@ -277,14 +281,14 @@ test("la columna seleccionada usa un fondo y contorno de alto contraste", () => 
   assert.match(dispatchStyles, /\.pdd-list-card\.is-active \.pdd-list-totals\s*\{[^}]*background:\s*#17382e/);
 });
 
-test("en escritorio se ven cinco listas anchas y las restantes conservan el desplazamiento", () => {
+test("en escritorio se ven cuatro listas anchas y las restantes conservan el desplazamiento", () => {
   const baseGrid = dispatchStyles.match(/\.pdd-lists-grid\s*\{([^}]*)\}/)?.[1] || "";
   const tabletResponsive = sourceBetween(dispatchStyles, "@media (max-width: 1120px)", "@media (max-width: 960px)");
   const compactResponsive = sourceBetween(dispatchStyles, "@media (max-width: 860px)", "@media (max-width: 560px)");
   const mobileResponsive = sourceBetween(dispatchStyles, "@media (max-width: 560px)", "@media (max-width: 390px)");
 
   assert.match(baseGrid, /grid-auto-flow:\s*column/);
-  assert.match(baseGrid, /grid-auto-columns:\s*calc\(20%\s*-\s*7\.2px\)/);
+  assert.match(baseGrid, /grid-auto-columns:\s*calc\(25%\s*-\s*6\.75px\)/);
   assert.match(baseGrid, /gap:\s*9px/);
   assert.match(baseGrid, /overflow-x:\s*auto/);
   assert.match(tabletResponsive, /\.pdd-lists-grid\s*\{[^}]*grid-auto-columns:\s*minmax\(250px,\s*33%\)/);

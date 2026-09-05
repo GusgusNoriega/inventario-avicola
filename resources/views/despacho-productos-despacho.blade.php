@@ -80,6 +80,10 @@
               <span id="pddReadingState">Esperando peso</span>
             </div>
             <output id="pddLiveWeight" class="pdd-live-weight" aria-label="Peso neto actual">---<small>kg</small></output>
+            <div class="pdd-amount-preview">
+              <span>Importe de la pesada</span>
+              <output id="pddAmountPreview" aria-label="Importe de la pesada actual">S/ --</output>
+            </div>
             <div class="pdd-scale-actions">
               <button id="pddManualWeight" class="pdd-secondary-touch" type="button" aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false">
                 <span aria-hidden="true">✎</span> Manual
@@ -123,7 +127,6 @@
           <div class="pdd-gross-preview">
             <span>Peso bruto</span>
             <strong id="pddGrossPreview">--- kg</strong>
-            <small id="pddAmountPreview">Importe pesada S/ --</small>
           </div>
           <small id="pddPriceError" class="pdd-field-error" role="status" hidden></small>
         </div>

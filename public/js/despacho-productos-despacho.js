@@ -84,7 +84,7 @@ const TYPOGRAPHY_GROUPS = [
   {
     id: "scale",
     label: "Producto y balanza",
-    description: "Imagen, lectura principal y captura del peso.",
+    description: "Imagen, peso neto, importe y captura del peso.",
     open: true,
     controls: [
       { label: "Inicial del producto", description: "Letras grandes cuando el producto no tiene imagen.", variable: "--pdd-fs-product-initial", defaultValue: 37, min: 22, max: 54, step: 1, target: ".pdd-media-placeholder b" },
@@ -92,21 +92,21 @@ const TYPOGRAPHY_GROUPS = [
       { label: "Estado de la lectura", description: "Origen de la lectura y estado de la balanza.", variable: "--pdd-fs-scale-meta", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-scale-reading-head" },
       { label: "Peso neto principal", description: "Peso neto calculado o ingresado manualmente.", variable: "--pdd-fs-scale-weight", defaultValue: 70, min: 32, max: 96, step: 2, target: ".pdd-live-weight" },
       { label: "Unidad kg", description: "Unidad que acompaña el peso principal.", variable: "--pdd-fs-scale-unit", defaultValue: 16, min: 10, max: 28, step: 1, target: ".pdd-live-weight small" },
+      { label: "Importe principal", description: "Total de la pesada actual debajo del peso neto.", variable: "--pdd-fs-scale-amount", defaultValue: 36, min: 24, max: 64, step: 2, target: ".pdd-amount-preview output" },
       { label: "Botones de captura", description: "Peso manual y Capturar peso.", variable: "--pdd-fs-scale-actions", defaultValue: 12, min: 10, max: 22, step: 1, target: ".pdd-secondary-touch, .pdd-capture-touch" }
     ]
   },
   {
     id: "fields",
     label: "Campos y peso bruto",
-    description: "Cantidad, precio, tara, merma, peso bruto e importe estimado.",
+    description: "Cantidad, precio, tara, merma y peso bruto.",
     controls: [
       { label: "Etiquetas de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-field-caption" },
       { label: "Valores de campos", description: "Cantidad, precio, tara y merma.", variable: "--pdd-fs-field-value", defaultValue: 16, min: 12, max: 28, step: 1, target: ".pdd-price-input input, .pdd-touch-number-input input" },
       { label: "Ayudas de campos", description: "Forma de cobro y validaciones.", variable: "--pdd-fs-field-help", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-fields-grid small, .pdd-waste-hint" },
       { label: "Unidades", description: "Unidades junto a los valores táctiles.", variable: "--pdd-fs-field-unit", defaultValue: 12, min: 9, max: 20, step: 1, target: ".pdd-touch-number-input b" },
       { label: "Etiqueta de peso bruto", description: "Texto “Peso bruto”.", variable: "--pdd-fs-net-label", defaultValue: 11, min: 9, max: 18, step: 0.5, target: ".pdd-gross-preview > span" },
-      { label: "Valor de peso bruto", description: "Lectura original de la balanza.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-gross-preview strong" },
-      { label: "Importe pesada", description: "Importe estimado de la pesada actual.", variable: "--pdd-fs-net-help", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-gross-preview small" }
+      { label: "Valor de peso bruto", description: "Lectura original de la balanza.", variable: "--pdd-fs-net-value", defaultValue: 16, min: 12, max: 30, step: 1, target: ".pdd-gross-preview strong" }
     ]
   },
   {
@@ -135,10 +135,11 @@ const TYPOGRAPHY_GROUPS = [
     label: "Pesadas registradas",
     description: "Cada renglón agregado dentro de una lista.",
     controls: [
-      { label: "Encabezados de la tabla", description: "Títulos abreviados de producto, cantidad y neto.", variable: "--pdd-fs-weighing-index", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-weighing-table th" },
+      { label: "Encabezados de la tabla", description: "Títulos de producto, cantidad, neto e importe.", variable: "--pdd-fs-weighing-index", defaultValue: 11, min: 9, max: 20, step: 0.5, target: ".pdd-weighing-table th" },
       { label: "Nombre del producto pesado", description: "Producto y variación dentro de la lista.", variable: "--pdd-fs-weighing-name", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-edit > span" },
       { label: "Cantidad de la pesada", description: "Unidades registradas en cada renglón.", variable: "--pdd-fs-weighing-detail", defaultValue: 10, min: 9, max: 18, step: 0.5, target: ".pdd-weighing-quantity" },
-      { label: "Peso neto de la pesada", description: "Peso neto mostrado al lado derecho.", variable: "--pdd-fs-weighing-amount", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-net" }
+      { label: "Peso neto de la pesada", description: "Kilogramos netos de cada renglón.", variable: "--pdd-fs-weighing-amount", defaultValue: 11, min: 9, max: 21, step: 0.5, target: ".pdd-weighing-net" },
+      { label: "Importe de la pesada", description: "Total cobrado por cada renglón de la lista.", variable: "--pdd-fs-weighing-total", defaultValue: 13, min: 10, max: 24, step: 1, target: ".pdd-weighing-amount" }
     ]
   },
   {
@@ -1303,8 +1304,8 @@ function renderCapturePreview() {
     ? "No aplica"
     : (hasDisplayedWeight ? formatWeight(scaleWeight) : "--- kg");
   elements.amountPreview.textContent = hasWeight && selection
-    ? `Importe ${formatMoney(line.amount, state.catalog.currency)}`
-    : `Importe ${currencyLabel(state.catalog.currency)} --`;
+    ? formatMoney(line.amount, state.catalog.currency)
+    : `${currencyLabel(state.catalog.currency)} --`;
   const captureReady = Boolean(
     selection
     && state.liveScale.isCaptureReady
@@ -1394,19 +1395,21 @@ function renderLists() {
         const productName = itemDisplayName(item);
         const quantity = String(item.quantity);
         const netWeight = formatWeight(item.net_weight_kg);
-        const editLabel = `Editar ${productName}, cantidad ${quantity}, peso neto ${netWeight}`;
+        const amount = formatMoney(item.amount, state.catalog.currency);
+        const editLabel = `Editar ${productName}, cantidad ${quantity}, peso neto ${netWeight}, importe ${amount}`;
 
         return `<tr class="pdd-weighing-row">
           <td class="pdd-weighing-product"><button class="pdd-weighing-edit" type="button"${state.saving ? " disabled" : ""} data-pdd-edit-item="${escapeHtml(item.local_id)}" data-pdd-list-index="${index}" aria-label="${escapeHtml(editLabel)}"><span>${escapeHtml(productName)}</span></button></td>
           <td class="pdd-weighing-quantity">${escapeHtml(quantity)}</td>
           <td class="pdd-weighing-net">${escapeHtml(netWeight)}</td>
+          <td class="pdd-weighing-amount">${escapeHtml(amount)}</td>
         </tr>`;
       }).join("")
-      : '<tr class="pdd-weighing-empty"><td colspan="3">Vacía</td></tr>';
+      : '<tr class="pdd-weighing-empty"><td colspan="4">Vacía</td></tr>';
     const rows = `<table class="pdd-weighing-table">
       <caption class="sr-only">Pesadas de la lista ${index + 1}</caption>
-      <colgroup><col><col class="pdd-weighing-quantity-column"><col class="pdd-weighing-net-column"></colgroup>
-      <thead><tr><th scope="col"><abbr title="Producto">Prod.</abbr></th><th scope="col"><abbr title="Cantidad">Cant.</abbr></th><th scope="col"><abbr title="Peso neto">Neto</abbr></th></tr></thead>
+      <colgroup><col><col class="pdd-weighing-quantity-column"><col class="pdd-weighing-net-column"><col class="pdd-weighing-amount-column"></colgroup>
+      <thead><tr><th scope="col"><abbr title="Producto">Prod.</abbr></th><th scope="col"><abbr title="Cantidad">Cant.</abbr></th><th scope="col"><abbr title="Peso neto">Neto</abbr></th><th scope="col">Importe</th></tr></thead>
       <tbody>${tableRows}</tbody>
     </table>`;
 
