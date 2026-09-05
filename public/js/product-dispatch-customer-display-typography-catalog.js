@@ -21,7 +21,7 @@ export const PRODUCT_CUSTOMER_DISPLAY_TYPOGRAPHY_GROUPS = [
       { label: "Peso", variable: "--pdcd-fs-live-weight", selector: ".pdcd-live-weight strong", defaultValue: 140, min: 48, max: 240, step: 2, preview: "12.450" },
       { label: "Unidad kg", variable: "--pdcd-fs-live-unit", selector: ".pdcd-live-weight span", defaultValue: 30, min: 12, max: 72, step: 1, preview: "kg" },
       { label: "Etiqueta importe", variable: "--pdcd-fs-live-amount-label", selector: ".pdcd-live-amount span", defaultValue: 38, min: 12, max: 72, step: 1, preview: "IMPORTE" },
-      { label: "Valor importe", variable: "--pdcd-fs-live-amount-value", selector: ".pdcd-live-amount strong", defaultValue: 48, min: 18, max: 100, step: 1, preview: "S/ 68.48" }
+      { label: "Valor importe", variable: "--pdcd-fs-live-amount-value", selector: ".pdcd-live-amount strong", defaultValue: 80, min: 18, max: 160, step: 1, preview: "S/ 68.48" }
     ]
   },
   {
@@ -51,10 +51,9 @@ export const PRODUCT_CUSTOMER_DISPLAY_TYPOGRAPHY_GROUPS = [
   {
     id: "totals",
     title: "Totales",
-    description: "Peso e importe acumulados de la lista.",
+    description: "Importe acumulado de la lista.",
     controls: [
       { label: "Etiquetas", variable: "--pdcd-fs-total-label", selector: ".pdcd-list-total span", defaultValue: 17, min: 10, max: 40, step: 0.5, preview: "TOTAL" },
-      { label: "Neto lista", variable: "--pdcd-fs-total-net", selector: ".pdcd-list-total > div:first-child strong", defaultValue: 40, min: 16, max: 80, step: 1, preview: "9.575 kg" },
       { label: "Total lista", variable: "--pdcd-fs-total-amount", selector: ".pdcd-list-total > div:last-child strong", defaultValue: 42, min: 16, max: 90, step: 1, preview: "S/ 107.67" }
     ]
   },

@@ -89,7 +89,7 @@ function harness(initial = {}) {
 }
 
 test("el catálogo cubre todos los textos visibles con variables exclusivas", () => {
-  assert.equal(controls.length, 28);
+  assert.equal(controls.length, 27);
   assert.equal(new Set(controls.map(({ variable }) => variable)).size, controls.length);
   assert.equal(new Set(controls.map(({ selector }) => selector)).size, controls.length);
   controls.forEach((control) => {

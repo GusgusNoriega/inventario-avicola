@@ -123,7 +123,6 @@ test("renderiza título, neto, importe, lista y total sin inyectar HTML", () => 
     "liveAmount",
     "listHeading",
     "customer",
-    "listNet",
     "listAmount",
     "announcement"
   ]) {
@@ -179,7 +178,7 @@ test("ofrece una barra lateral táctil para configurar toda la tipografía", () 
 
 test("cada texto visible usa una variable independiente sin fijar los tamaños responsive", () => {
   const controls = PRODUCT_CUSTOMER_DISPLAY_TYPOGRAPHY_GROUPS.flatMap((group) => group.controls);
-  assert.equal(controls.length, 28);
+  assert.equal(controls.length, 27);
   controls.forEach(({ variable }) => {
     assert.match(displayStyles, new RegExp(`var\\(${variable},`));
   });

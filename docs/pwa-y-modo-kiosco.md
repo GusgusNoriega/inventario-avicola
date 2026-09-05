@@ -98,10 +98,6 @@ Si abre el sistema desde una pestaña común o desde la PWA instalada, el diálo
 
 Antes de usarlo en producción, ajuste en las preferencias de la impresora térmica el papel de 80 mm, escala de 100 %, una copia y márgenes mínimos. La impresión directa usa la impresora predeterminada y sus preferencias actuales.
 
-En la pantalla **Despacho de productos**, **Guardar e imprimir** envía por defecto dos trabajos de impresión separados del mismo ticket, uno después del otro, para que la térmica pueda cortar al finalizar cada trabajo. Mantenga una copia en las preferencias de la impresora y active el corte al final de cada trabajo en su controlador. El ticket se registra una sola vez. Si falla el segundo envío, **Reintentar impresión** envía únicamente la copia pendiente. La consulta de tickets y los demás módulos conservan una sola impresión.
-
-Sin impresión silenciosa, esta pantalla abre un diálogo por cada trabajo: confirme el primero y luego el segundo. El navegador no informa a la aplicación si el operador imprimió o canceló el diálogo, ni confirma el corte físico del papel.
-
 Si Windows tiene activada la opción **Permitir que Windows administre mi impresora predeterminada**, es recomendable desactivarla para impedir cambios automáticos.
 
 Windows mantiene una sola impresora predeterminada por usuario. Si dos módulos deben imprimir en dos impresoras diferentes dentro de la misma sesión de Windows, este acceso no puede dirigir cada ticket a una impresora distinta; use cuentas de Windows separadas o una solución de impresión local que permita seleccionar la impresora por módulo.

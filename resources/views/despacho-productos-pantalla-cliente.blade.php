@@ -70,7 +70,6 @@
         </div>
 
         <footer class="pdcd-list-total">
-          <div><span>Neto lista</span><strong id="productCustomerDisplayListNet">0.00 kg</strong></div>
           <div><span>Total</span><strong id="productCustomerDisplayListAmount">S/ 0.00</strong></div>
         </footer>
       </section>

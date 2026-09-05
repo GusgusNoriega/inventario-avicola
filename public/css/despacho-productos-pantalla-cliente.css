@@ -141,16 +141,17 @@ button { font: inherit; }
 
 .pdcd-live-amount {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
   min-height: clamp(82px, 11vh, 138px);
   border-radius: 16px;
   padding: 14px clamp(18px, 2vw, 32px);
   background: #050505;
 }
 .pdcd-live-amount span { color: #ff705c; font-size: var(--pdcd-fs-live-amount-label, clamp(22px, 2.6vw, 46px)); font-weight: 1000; text-transform: uppercase; }
-.pdcd-live-amount strong { min-width: 0; overflow: hidden; color: #fff; font-size: var(--pdcd-fs-live-amount-value, clamp(30px, 3vw, 58px)); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.pdcd-live-amount strong { min-width: 0; overflow: hidden; color: #fff; font-size: var(--pdcd-fs-live-amount-value, clamp(44px, 5vw, 96px)); font-variant-numeric: tabular-nums; line-height: 1.1; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 
 .pdcd-list { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--pdcd-paper); color: var(--pdcd-ink); }
 .pdcd-list-heading {
@@ -186,14 +187,13 @@ button { font: inherit; }
 
 .pdcd-list-total {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   background: #6c5c00;
 }
 .pdcd-list-total > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: clamp(14px, 1.5vw, 24px); background: #171412; color: #fff; }
 .pdcd-list-total span { color: #ddd1bd; font-size: var(--pdcd-fs-total-label, clamp(13px, 1.1vw, 20px)); font-weight: 800; text-transform: uppercase; }
 .pdcd-list-total strong { min-width: 0; overflow: hidden; color: var(--pdcd-yellow); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-.pdcd-list-total > div:first-child strong { font-size: var(--pdcd-fs-total-net, clamp(24px, 2.7vw, 48px)); }
 .pdcd-list-total > div:last-child strong { font-size: var(--pdcd-fs-total-amount, clamp(24px, 2.7vw, 48px)); }
 
 .pdcd-typography-panel {

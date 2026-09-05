@@ -89,7 +89,7 @@ class ProductDispatchCustomerDisplayTest extends TestCase
             ->assertSee('id="productCustomerDisplayListHeading"', false)
             ->assertSee('id="productCustomerDisplayCustomer"', false)
             ->assertSee('id="productCustomerDisplayRows"', false)
-            ->assertSee('id="productCustomerDisplayListNet"', false)
+            ->assertDontSee('id="productCustomerDisplayListNet"', false)
             ->assertSee('id="productCustomerDisplayListAmount"', false)
             ->assertSee('id="productCustomerDisplayAnnouncement"', false)
             ->assertSee('Peso neto')

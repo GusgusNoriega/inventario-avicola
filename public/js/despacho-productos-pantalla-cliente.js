@@ -34,7 +34,6 @@ const elements = {
   listHeading: document.getElementById("productCustomerDisplayListHeading"),
   customer: document.getElementById("productCustomerDisplayCustomer"),
   rows: document.getElementById("productCustomerDisplayRows"),
-  listNet: document.getElementById("productCustomerDisplayListNet"),
   listAmount: document.getElementById("productCustomerDisplayListAmount"),
   announcement: document.getElementById("productCustomerDisplayAnnouncement"),
   fullscreen: document.getElementById("productCustomerDisplayFullscreen"),
@@ -111,7 +110,6 @@ function clearDisplay(statusMessage = "Esperando despacho", removeStorage = fals
   elements.liveStatus.textContent = "Sin cálculo";
   elements.listHeading.textContent = "Lista 1";
   elements.customer.textContent = "Venta al público";
-  elements.listNet.textContent = "0.00 kg";
   elements.listAmount.textContent = "S/ 0.00";
   elements.announcement.textContent = "";
   renderEmptyRow();
@@ -244,11 +242,10 @@ function renderPayload(payload) {
   elements.liveStatus.textContent = previewStatusLabel(preview);
   elements.listHeading.textContent = `Lista ${listNumber}`;
   elements.customer.textContent = customer;
-  elements.listNet.textContent = formatWeight(totals.netWeightKg);
   elements.listAmount.textContent = listAmount;
   renderRows(activeList.rows, currency);
 
-  const announcement = `${customer}. Lista ${listNumber}. Neto de la lista ${formatWeight(totals.netWeightKg)}. Total ${listAmount}.`;
+  const announcement = `${customer}. Lista ${listNumber}. Total ${listAmount}.`;
   if (elements.announcement.textContent !== announcement) {
     elements.announcement.textContent = announcement;
   }
