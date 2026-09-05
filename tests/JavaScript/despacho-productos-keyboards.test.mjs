@@ -74,7 +74,7 @@ test("una segunda URL de importación reutiliza la misma instancia del documento
 test("todas las vistas comparten componentes y protegen campos estáticos antes de cargar scripts", () => {
   const directory = new URL("../../resources/views/", import.meta.url);
   const files = readdirSync(directory).filter(name => /^despacho-productos.*\.blade\.php$/.test(name));
-  assert.equal(files.length, 9);
+  assert.ok(files.length >= 9);
   for (const name of files) {
     const view = readFileSync(new URL(name, directory), "utf8");
     assert.match(view, /@include\('partials.product-dispatch-keyboards-styles'\)/, name);

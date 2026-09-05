@@ -115,11 +115,12 @@ class WebViewsTest extends TestCase
             ->assertSee('href="'.route('despacho-productos.configuracion-ticket').'"', false)
             ->assertSee('href="'.route('despacho-productos.tickets').'"', false)
             ->assertSee('href="'.route('despacho-productos.estado-cuenta').'"', false)
+            ->assertSee('href="'.route('despacho-productos.reporte-general').'"', false)
             ->assertSee('href="'.route('despacho-productos.pagos').'"', false)
             ->assertSee(route('menu'), false);
 
         $this->assertSame(
-            7,
+            8,
             substr_count($menu->getContent(), 'class="product-dispatch-menu-card card'),
         );
 

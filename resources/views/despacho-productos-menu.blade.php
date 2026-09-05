@@ -148,6 +148,19 @@
           </span>
           <span class="product-dispatch-menu-action">Consultar cuenta <span aria-hidden="true">→</span></span>
         </a>
+        <a class="product-dispatch-menu-card card is-statement" href="{{ route('despacho-productos.reporte-general') }}">
+          <span class="product-dispatch-menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 3h16v18H4zM8 7h8M8 17v-4M12 17V9M16 17v-6"></path>
+            </svg>
+          </span>
+          <span class="product-dispatch-menu-copy">
+            <small>Resumen diario y descarga PDF</small>
+            <strong>Reporte general</strong>
+            <span>Consulta por día las cantidades, pesos e importes de cada producto, con totales diarios y filtro por fechas.</span>
+          </span>
+          <span class="product-dispatch-menu-action">Ver reporte <span aria-hidden="true">→</span></span>
+        </a>
       </nav>
     </section>
 
