@@ -155,7 +155,7 @@ test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma
   const keypadBinding = sourceBetween(
     dispatchSource,
     "bindIntegerKeypad({",
-    "elements.chooseProduct.addEventListener"
+    "elements.productMedia.addEventListener"
   );
 
   assert.ok(quantityInput, "No se encontró el campo de cantidad.");
@@ -194,7 +194,7 @@ test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma
 });
 
 test("la captura y el editor muestran tara en kg y abren el teclado de tres decimales", () => {
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
   for (const id of ["pddTare", "pddEditTare"]) {
     const input = dispatchView.match(new RegExp(`<input\\b[^>]*\\bid="${id}"[^>]*>`))?.[0] || "";
     assert.match(input, /\btype="number"/);
@@ -263,7 +263,7 @@ test("el editor convierte la tara de kg a gramos y recupera los tres decimales o
 test("los precios de captura y edición comparten el teclado decimal de la pesada", () => {
   const capturePrice = dispatchView.match(/<input\b[^>]*\bid="pddUnitPrice"[^>]*>/)?.[0] || "";
   const editPrice = dispatchView.match(/<input\b[^>]*\bid="pddEditPrice"[^>]*>/)?.[0] || "";
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
 
   for (const input of [capturePrice, editPrice]) {
     assert.ok(input, "Debe existir el precio editable de la pesada.");
@@ -294,7 +294,7 @@ test("los precios de captura y edición comparten el teclado decimal de la pesad
 
 test("el acceso rápido muestra los cuatro productos configurados y selecciona con un toque", () => {
   const quickRender = sourceBetween(dispatchSource, "function configuredQuickProducts", "function renderSelectedProduct");
-  const quickListeners = sourceBetween(dispatchSource, "elements.chooseProduct.addEventListener", "elements.productSearch.addEventListener");
+  const quickListeners = sourceBetween(dispatchSource, "elements.productMedia.addEventListener", "elements.productSearch.addEventListener");
   const desktopResponsive = sourceBetween(dispatchStyles, "@media (max-width: 1280px)", "@media (max-width: 1120px)");
   const compactResponsive = sourceBetween(dispatchStyles, "@media (max-width: 960px)", "@media (max-width: 860px)");
   const mobileResponsive = sourceBetween(dispatchStyles, "@media (max-width: 560px)", "@media (max-width: 390px)");
@@ -593,7 +593,7 @@ test("confirmar el peso manual solo fija la lectura pendiente y no agrega una pe
     "function setPendingManualWeight",
     "function effectiveCaptureReading"
   );
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
 
   assert.match(manualCommitFlow, /pendingManualReading\s*=\s*createPendingManualReading\(/);
   assert.match(manualCommitFlow, /resolveWeightInput\(/);
@@ -790,7 +790,7 @@ test("Manual abre directamente el teclado compartido para preparar el peso neto"
   const manualInput = dispatchView.match(/<input\b[^>]*\bid="pddManualInput"[^>]*>/)?.[0] || "";
   const manualButton = dispatchView.match(/<button\b[^>]*\bid="pddManualWeight"[^>]*>/)?.[0] || "";
   const manualOpenFlow = sourceBetween(dispatchSource, 'elements.manualWeight.addEventListener("click"', 'elements.clearManualWeight.addEventListener("click"');
-  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.productMedia.addEventListener");
 
   assert.match(manualButton, /aria-controls="pddNumericKeypad"/);
   assert.match(manualInput, /type="number"/);

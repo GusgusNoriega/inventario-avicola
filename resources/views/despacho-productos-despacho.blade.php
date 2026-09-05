@@ -59,15 +59,8 @@
 
     <section class="pdd-capture-deck" aria-label="Captura de producto y peso">
       <article class="pdd-product-panel pdd-panel">
-        <div class="pdd-panel-heading">
-          <div><span>Producto</span><strong id="pddSelectedName">Sin producto</strong></div>
-          <button id="pddChooseProduct" class="pdd-choose-product" type="button" aria-haspopup="dialog" aria-controls="pddProductDialog">
-            <span aria-hidden="true">＋</span> Elegir
-          </button>
-        </div>
-
         <div class="pdd-product-scale-row">
-          <button id="pddProductMedia" class="pdd-product-media" type="button" aria-label="Elegir producto">
+          <button id="pddProductMedia" class="pdd-product-media" type="button" aria-label="Elegir producto" aria-haspopup="dialog" aria-controls="pddProductDialog">
             <span class="pdd-media-placeholder"><b>?</b><small>Elige un producto</small></span>
           </button>
 

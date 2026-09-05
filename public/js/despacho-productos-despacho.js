@@ -76,11 +76,10 @@ const TYPOGRAPHY_GROUPS = [
   {
     id: "sections",
     label: "Títulos de secciones",
-    description: "Encabezados del producto y configuración de la pesada.",
+    description: "Encabezado de configuración de la pesada.",
     controls: [
-      { label: "Etiquetas superiores", description: "Textos pequeños en mayúsculas sobre cada sección.", variable: "--pdd-fs-section-label", defaultValue: 11.5, min: 9, max: 18, step: 0.5, target: ".pdd-panel-heading span, .pdd-config-head span" },
-      { label: "Títulos y producto seleccionado", description: "Nombre del producto y título de configuración.", variable: "--pdd-fs-section-title", defaultValue: 16, min: 12, max: 26, step: 1, target: ".pdd-panel-heading strong, .pdd-config-head strong" },
-      { label: "Acciones de sección", description: "Botón para elegir el producto.", variable: "--pdd-fs-section-action", defaultValue: 13, min: 10, max: 22, step: 1, target: ".pdd-choose-product" }
+      { label: "Etiqueta de pesada", description: "Texto pequeño en mayúsculas sobre la pesada.", variable: "--pdd-fs-section-label", defaultValue: 11.5, min: 9, max: 18, step: 0.5, target: ".pdd-config-head span" },
+      { label: "Variación seleccionada", description: "Producto base o variación de la pesada.", variable: "--pdd-fs-section-title", defaultValue: 16, min: 12, max: 26, step: 1, target: ".pdd-config-head strong" }
     ]
   },
   {
@@ -232,8 +231,6 @@ const elements = {
   openScaleSettings: document.querySelector("#pddOpenScaleSettings"),
   openCustomerDisplay: document.querySelector("#pddOpenCustomerDisplay"),
   openViewSettings: document.querySelector("#pddOpenViewSettings"),
-  selectedName: document.querySelector("#pddSelectedName"),
-  chooseProduct: document.querySelector("#pddChooseProduct"),
   productMedia: document.querySelector("#pddProductMedia"),
   weightSource: document.querySelector("#pddWeightSource"),
   readingState: document.querySelector("#pddReadingState"),
@@ -1147,14 +1144,12 @@ function renderSelectedProduct() {
   const selection = effectiveProduct(product, variation);
 
   if (!selection) {
-    elements.selectedName.textContent = "Sin producto";
     elements.selectedVariantLabel.textContent = "Producto base";
     elements.productMedia.innerHTML = '<span class="pdd-media-placeholder"><b>?</b><small>Elige un producto</small></span>';
     elements.unitPrice.disabled = true;
     elements.priceCurrency.textContent = currencyLabel(state.catalog.currency);
     elements.priceMode.textContent = "Sin producto";
   } else {
-    elements.selectedName.textContent = selection.product_name;
     elements.selectedVariantLabel.textContent = selection.variation_name || "Producto base";
     elements.productMedia.innerHTML = mediaMarkup(selection.display_name, selection.image_url);
     elements.unitPrice.disabled = state.saving;
@@ -2220,7 +2215,6 @@ state.numericKeypad = bindIntegerKeypad({
   }
 });
 
-elements.chooseProduct.addEventListener("click", openProductDialog);
 elements.productMedia.addEventListener("click", openProductDialog);
 elements.quickAllProducts.addEventListener("click", openProductDialog);
 elements.quickProducts.addEventListener("click", (event) => {

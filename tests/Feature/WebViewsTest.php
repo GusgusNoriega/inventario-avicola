@@ -167,7 +167,9 @@ class WebViewsTest extends TestCase
         $dispatch
             ->assertOk()
             ->assertSee('Despacho de productos')
-            ->assertSee('id="pddChooseProduct"', false)
+            ->assertSee('id="pddProductMedia"', false)
+            ->assertDontSee('id="pddChooseProduct"', false)
+            ->assertDontSee('id="pddSelectedName"', false)
             ->assertSee('id="pddLiveWeight"', false)
             ->assertSee('id="pddManualInput"', false)
             ->assertSee('id="pddNumericKeypad"', false)
