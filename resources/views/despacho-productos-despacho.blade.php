@@ -184,13 +184,15 @@
 
     </div>
 
-    <p id="pddMessage" class="pdd-message-live" role="status" aria-live="polite">Preparando la estación de despacho…</p>
+    <div class="pdd-notifications">
+      <p id="pddMessage" class="pdd-message-live" role="status" aria-live="polite">Preparando la estación de despacho…</p>
 
-    <section id="pddLastTicket" class="pdd-ticket-toast" hidden aria-live="polite">
-      <div><strong id="pddLastTicketTitle">Ticket guardado</strong><span id="pddLastTicketDetail"></span></div>
-      <button id="pddRetryPrint" type="button" hidden>Reintentar impresión</button>
-      <button id="pddDismissTicket" type="button" aria-label="Cerrar aviso">×</button>
-    </section>
+      <section id="pddLastTicket" class="pdd-ticket-toast" hidden aria-live="polite">
+        <div><strong id="pddLastTicketTitle">Ticket guardado</strong><span id="pddLastTicketDetail"></span></div>
+        <button id="pddRetryPrint" type="button" hidden>Reintentar impresión</button>
+        <button id="pddDismissTicket" type="button" aria-label="Cerrar aviso">×</button>
+      </section>
+    </div>
   </main>
 
   <dialog id="pddProductDialog" class="pdd-dialog pdd-product-dialog" aria-labelledby="pddProductDialogTitle">

@@ -1792,7 +1792,7 @@ function saveEditingItem(event) {
 function deleteEditingItem() {
   if (state.saving) return;
   const item = editingItem();
-  if (!item || !window.confirm(`¿Quitar la pesada de ${itemDisplayName(item)} de esta lista?`)) return;
+  if (!item) return;
   activeDraft().items = activeDraft().items.filter((entry) => entry.local_id !== item.local_id);
   state.editingLocalId = null;
   persistDrafts();

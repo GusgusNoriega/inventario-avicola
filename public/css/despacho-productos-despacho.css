@@ -448,6 +448,18 @@ button { color: inherit; }
 .pdd-save-button small { color: rgba(255, 255, 255, .76); }
 .pdd-save-button:disabled { cursor: not-allowed; opacity: .43; box-shadow: none; }
 
+.pdd-notifications {
+  position: fixed;
+  z-index: 40;
+  top: max(18px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+  width: min(520px, calc(100vw - 36px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
 .pdd-message-live {
   position: absolute;
   width: 1px;
@@ -460,11 +472,8 @@ button { color: inherit; }
   border: 0;
 }
 .pdd-message-live.is-error {
-  position: fixed;
-  z-index: 40;
-  left: 50%;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  width: min(620px, calc(100vw - 28px));
+  position: relative;
+  width: 100%;
   height: auto;
   padding: 11px 14px;
   margin: 0;
@@ -477,12 +486,13 @@ button { color: inherit; }
   box-shadow: 0 16px 40px rgba(0, 0, 0, .42);
   text-align: center;
   white-space: normal;
-  transform: translateX(-50%);
+  overflow-wrap: anywhere;
+  pointer-events: auto;
 }
 
-.pdd-ticket-toast { position: fixed; z-index: 30; right: 18px; bottom: 18px; max-width: min(520px, calc(100vw - 36px)); display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid rgba(32, 201, 142, .48); border-radius: 14px; background: #111e1a; box-shadow: 0 18px 45px rgba(0, 0, 0, .45); }
+.pdd-ticket-toast { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid rgba(32, 201, 142, .48); border-radius: 14px; background: #111e1a; box-shadow: 0 18px 45px rgba(0, 0, 0, .45); pointer-events: auto; }
 .pdd-ticket-toast[hidden] { display: none; }
-.pdd-ticket-toast > div { min-width: 0; display: grid; gap: 2px; }
+.pdd-ticket-toast > div { flex: 1 1 180px; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
 .pdd-ticket-toast span { color: var(--pdd-muted); font-size: .7rem; }
 .pdd-ticket-toast button { flex: none; border: 0; background: transparent; cursor: pointer; }
 #pddRetryPrint { min-height: 34px; padding: 0 10px; border-radius: 9px; color: #fff; background: var(--pdd-green); font-size: .7rem; font-weight: 850; }

@@ -525,7 +525,8 @@ test("la barra inferior se elimina sin reservar espacio y los errores conservan 
   assert.doesNotMatch(dispatchSource, /Mensaje de estado|Resumen inferior|--pdd-fs-footer-(?:message|summary)/);
   assert.doesNotMatch(dispatchStyles, /\.pdd-statusbar|\.pdd-footer-summary|--pdd-fs-footer-(?:message|summary)/);
   assert.match(dispatchStyles, /\.pdd-message-live\s*\{[^}]*position:\s*absolute;[^}]*width:\s*1px;[^}]*height:\s*1px/);
-  assert.match(dispatchStyles, /\.pdd-message-live\.is-error\s*\{[^}]*position:\s*fixed/);
+  assert.match(dispatchStyles, /\.pdd-notifications\s*\{[^}]*position:\s*fixed;[^}]*top:\s*max\(18px,[^}]*right:\s*max\(18px,[^}]*flex-direction:\s*column/);
+  assert.match(dispatchStyles, /\.pdd-message-live\.is-error\s*\{[^}]*position:\s*relative/);
 });
 
 test("el teclado de precio anidado conserva el foco de cada diálogo", () => {
