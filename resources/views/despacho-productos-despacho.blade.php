@@ -178,7 +178,7 @@
           <span aria-hidden="true">✓</span><span><b>Guardar</b><small>Sin imprimir</small></span>
         </button>
         <button id="pddSavePrint" class="pdd-save-button is-primary" type="button" disabled>
-          <span aria-hidden="true">▣</span><span><b>Guardar e imprimir</b><small>Ticket de despacho</small></span>
+          <span aria-hidden="true">▣</span><span><b>Guardar e imprimir</b><small>2 copias del ticket</small></span>
         </button>
       </aside>
     </section>

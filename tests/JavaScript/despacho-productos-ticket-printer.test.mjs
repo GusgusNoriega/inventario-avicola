@@ -283,7 +283,7 @@ test("la impresión usa un marco oculto y abre directamente el diálogo del nave
   let focused = 0;
   let printed = 0;
   let succeeded = 0;
-  let clearedTimer = null;
+  const clearedTimers = [];
 
   const printWindow = {
     addEventListener(type, listener) {
@@ -328,7 +328,7 @@ test("la impresión usa un marco oculto y abre directamente el diálogo del nave
       return delay;
     },
     clearTimeout(timer) {
-      clearedTimer = timer;
+      clearedTimers.push(timer);
     }
   };
 
@@ -352,11 +352,12 @@ test("la impresión usa un marco oculto y abre directamente el diálogo del nave
     assert.doesNotMatch(frame.srcdoc, /window\.print\(\)|<script/i);
     assert.equal(focused, 1);
     assert.equal(printed, 1);
-    assert.equal(succeeded, 1);
+    assert.equal(succeeded, 0);
     assert.equal(removed, 0);
 
     printListeners.afterprint();
-    assert.equal(clearedTimer, 60000);
+    assert.equal(succeeded, 1);
+    assert.ok(clearedTimers.includes(60000));
     assert.equal(removed, 1);
   } finally {
     if (previousDocument === undefined) delete globalThis.document;

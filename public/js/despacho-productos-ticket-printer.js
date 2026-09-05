@@ -254,43 +254,82 @@ function printableHtml(response, options = {}) {
 
 export function printProductDispatchTicket(response, options = {}) {
   const ticket = ticketData(response);
-  const printFrame = document.createElement("iframe");
-  let cleanupTimer = null;
+  const ticketHtml = printableHtml(response, options);
+  let remainingCopies = options.copies === 2 ? 2 : 1;
+  let finished = false;
 
-  printFrame.className = "ticket-print-frame";
-  printFrame.title = `Impresión de ${ticket.code || ticket.codigo || "ticket"}`;
-  printFrame.setAttribute("aria-hidden", "true");
-  printFrame.addEventListener("load", () => {
-    const printWindow = printFrame.contentWindow;
-
-    if (!printWindow) {
-      printFrame.remove();
-      options.onError?.(new Error("No se pudo preparar el ticket para imprimir."));
-      return;
-    }
+  function printNextCopy() {
+    if (finished) return;
+    let printFrame = null;
+    let cleanupTimer = null;
+    let printTimer = null;
+    let settled = false;
 
     const cleanup = () => {
-      if (cleanupTimer) window.clearTimeout(cleanupTimer);
-      printFrame.remove();
+      if (cleanupTimer !== null) window.clearTimeout(cleanupTimer);
+      if (printTimer !== null) window.clearTimeout(printTimer);
+      printFrame?.remove();
+    };
+    const fail = (error) => {
+      if (settled || finished) return;
+      settled = true;
+      finished = true;
+      cleanup();
+      options.onError?.(error, { remainingCopies });
     };
 
-    printWindow.addEventListener("afterprint", cleanup, { once: true });
-    cleanupTimer = window.setTimeout(cleanup, 60000);
-    window.setTimeout(() => {
-      try {
-        printWindow.focus();
-        printWindow.print();
-        options.onSuccess?.();
-      } catch (error) {
-        cleanup();
-        options.onError?.(error);
-      }
-    }, 150);
-  }, { once: true });
+    try {
+      printFrame = document.createElement("iframe");
+      printFrame.className = "ticket-print-frame";
+      printFrame.title = `Impresión de ${ticket.code || ticket.codigo || "ticket"}`;
+      printFrame.setAttribute("aria-hidden", "true");
+      printFrame.addEventListener("load", () => {
+        if (settled || finished) return;
+        const printWindow = printFrame.contentWindow;
 
-  printFrame.srcdoc = printableHtml(response, options);
-  document.body.appendChild(printFrame);
-  return true;
+        if (!printWindow) {
+          fail(new Error("No se pudo preparar el ticket para imprimir."));
+          return;
+        }
+
+        printWindow.addEventListener("afterprint", () => {
+          if (settled || finished) return;
+          settled = true;
+          cleanup();
+          remainingCopies -= 1;
+
+          if (remainingCopies > 0) {
+            // Cada copia necesita su propio trabajo para permitir el corte de la térmica.
+            window.setTimeout(printNextCopy, 150);
+          } else {
+            finished = true;
+            options.onSuccess?.();
+          }
+        }, { once: true });
+
+        printTimer = window.setTimeout(() => {
+          if (settled || finished) return;
+          try {
+            printWindow.focus();
+            printWindow.print();
+          } catch (error) {
+            fail(error);
+          }
+        }, 150);
+      }, { once: true });
+
+      cleanupTimer = window.setTimeout(() => {
+        fail(new Error("No se pudo confirmar el cierre de la impresión. Revisa si salió el ticket antes de reintentar."));
+      }, 60000);
+      printFrame.srcdoc = ticketHtml;
+      document.body.appendChild(printFrame);
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  printNextCopy();
+  return !finished;
 }
 
 export { groupTicketItems, printableHtml as buildProductDispatchTicketHtml };

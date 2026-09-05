@@ -54,6 +54,7 @@ import {
 const station = document.querySelector("#productDispatchStation");
 const apiBase = station?.dataset.apiBase || "/despacho-productos";
 const currentUserId = station?.dataset.userId || "anonymous";
+const PRODUCT_DISPATCH_PRINT_COPIES = 2;
 const PRODUCT_CUSTOMER_DISPLAY_PRODUCER_SESSION_KEY =
   `sistema-pollos-pantalla-cliente-productos-productor-v1-user-${currentUserId}`;
 const PRODUCT_CUSTOMER_DISPLAY_INSTANCE_SESSION_KEY =
@@ -1794,13 +1795,13 @@ function deleteEditingItem() {
   setMessage("La pesada se quitó del borrador.", "success");
 }
 
-function showTicketToast(ticket, printed, printError = null) {
-  state.pendingPrintTicket = printError ? ticket : null;
+function showTicketToast(ticket, printed, printError = null, remainingCopies = PRODUCT_DISPATCH_PRINT_COPIES) {
+  state.pendingPrintTicket = printError ? { ticket, copies: remainingCopies } : null;
   elements.lastTicket.hidden = false;
   elements.lastTicketTitle.textContent = printError
     ? "Ticket guardado; impresión pendiente"
     : printed
-      ? "Ticket guardado y enviado a impresión"
+      ? "Ticket guardado y enviado a impresión (2 copias)"
       : "Ticket guardado sin imprimir";
   elements.lastTicketDetail.textContent = `${ticket?.code || ticket?.codigo || "Ticket confirmado"}${printError ? ` · ${printError}` : ""}`;
   elements.retryPrint.hidden = !printError;
@@ -1833,13 +1834,14 @@ async function saveActiveDraft(shouldPrint = false) {
     if (shouldPrint) {
       try {
         printProductDispatchTicket(ticket, {
+          copies: PRODUCT_DISPATCH_PRINT_COPIES,
           currency: state.catalog.currency,
           productTicketTitle: state.catalog.product_ticket_title,
           ticketMessage: state.catalog.ticket_message,
           timezone: state.catalog.branch?.timezone,
           onSuccess: () => showTicketToast(ticket, true),
-          onError: (error) => {
-            showTicketToast(ticket, false, errorMessage(error));
+          onError: (error, { remainingCopies } = {}) => {
+            showTicketToast(ticket, false, errorMessage(error), remainingCopies);
             setMessage("El ticket se guardó. La impresión puede reintentarse sin volver a guardar.", "error");
           }
         });
@@ -1861,9 +1863,12 @@ async function saveActiveDraft(shouldPrint = false) {
 
 function retryPrint() {
   if (!state.pendingPrintTicket) return;
-  const ticket = state.pendingPrintTicket;
+  const { ticket, copies } = state.pendingPrintTicket;
+  state.pendingPrintTicket = null;
+  elements.retryPrint.hidden = true;
   try {
     printProductDispatchTicket(ticket, {
+      copies,
       currency: state.catalog.currency,
       productTicketTitle: state.catalog.product_ticket_title,
       ticketMessage: state.catalog.ticket_message,
@@ -1873,10 +1878,10 @@ function retryPrint() {
         showTicketToast(ticket, true);
         setMessage("La impresión se abrió correctamente.", "success");
       },
-      onError: (error) => showTicketToast(ticket, false, errorMessage(error))
+      onError: (error, { remainingCopies = copies } = {}) => showTicketToast(ticket, false, errorMessage(error), remainingCopies)
     });
   } catch (error) {
-    showTicketToast(ticket, false, errorMessage(error));
+    showTicketToast(ticket, false, errorMessage(error), copies);
   }
 }
 
