@@ -16,6 +16,7 @@ import {
   effectiveProduct,
   escapeHtml,
   formatMoney,
+  formatTareKilograms,
   formatWeight,
   formatWeightValue,
   resolveWeightInput,
@@ -26,6 +27,7 @@ import {
   productInitial,
   roundTo,
   searchClients,
+  tareKilogramsToGrams,
   validateUnitPrice
 } from "./despacho-productos-despacho-utils.js";
 import { printProductDispatchTicket } from "./despacho-productos-ticket-printer.js";
@@ -332,7 +334,8 @@ const elements = {
   wastePresetInputs: [
     document.querySelector("#pddWastePreset1"),
     document.querySelector("#pddWastePreset2"),
-    document.querySelector("#pddWastePreset3")
+    document.querySelector("#pddWastePreset3"),
+    document.querySelector("#pddWastePreset4")
   ],
   saveWastePresets: document.querySelector("#pddSaveWastePresets"),
   wastePresetStatus: document.querySelector("#pddWastePresetStatus"),
@@ -1195,7 +1198,7 @@ function captureValues() {
   const rawQuantity = Number(elements.quantity.value);
   const quantity = Math.max(0, Math.round(Number.isFinite(rawQuantity) ? rawQuantity : 0));
   const wasteGramsPerUnit = Number(elements.wastePerUnit.value);
-  const tareGrams = Number(elements.tare.value);
+  const tareGrams = tareKilogramsToGrams(elements.tare.value);
   return {
     quantity,
     waste_grams_per_unit: wasteGramsPerUnit,
@@ -1238,8 +1241,8 @@ function captureNetValidation(
   }
   if (!Number.isSafeInteger(values.tare_grams)
     || values.tare_grams < 0
-    || values.tare_grams > Number(elements.tare.max)) {
-    return { message: "Tara inválida.", target: elements.tare };
+    || values.tare_grams > Number(elements.tare.max) * 1000) {
+    return { message: "Ingresa una tara válida en kg, con hasta 3 decimales.", target: elements.tare };
   }
   if (Number.isFinite(weightKg) && weightKg > 0
     && values.tare_grams >= Math.round(weightKg * 1000) + values.waste_total_grams) {
@@ -1564,7 +1567,7 @@ function addCurrentReading(scaleState = effectiveCaptureReading()) {
   };
 
   activeDraft().items.push(item);
-  elements.tare.value = "0";
+  elements.tare.value = "0.000";
   state.numericKeypad?.refreshLabel(elements.tare);
   useCatalogPrice();
   renderWastePresets();
@@ -1662,7 +1665,7 @@ function renderEditCalculation() {
     quantity: elements.editQuantity.value,
     read_weight_kg: editingWeightValue(item),
     waste_grams_per_unit: elements.editWastePerUnit.value,
-    tare_grams: elements.editTare.value,
+    tare_grams: tareKilogramsToGrams(elements.editTare.value),
     unit_price: elements.editPrice.value,
     price_mode: selection?.price_mode,
     weight_source: weightSource
@@ -1684,7 +1687,8 @@ function openEditDialog(localId, listIndex) {
   elements.editQuantity.value = String(item.quantity);
   elements.editWeight.value = formatWeightValue(item.read_weight_kg);
   elements.editWastePerUnit.value = String(item.waste_grams_per_unit ?? Math.round(item.waste_total_grams / Math.max(1, item.quantity)));
-  elements.editTare.value = String(item.tare_grams || 0);
+  elements.editTare.value = formatTareKilograms(item.tare_grams);
+  state.numericKeypad?.refreshLabel(elements.editTare);
   elements.editPrice.value = Number(item.unit_price).toFixed(2);
   state.numericKeypad?.refreshLabel(elements.editPrice);
   elements.editSource.textContent = item.weight_source === PRODUCT_DISPATCH_SCALE_CODE
@@ -1734,11 +1738,18 @@ function saveEditingItem(event) {
   const selection = effectiveProduct(product, variation);
   if (!selection) return;
   const nextWeightSource = editingWeightSource(item);
+  const tareGrams = tareKilogramsToGrams(elements.editTare.value);
+  if (nextWeightSource !== "MANUAL"
+    && (!Number.isSafeInteger(tareGrams) || tareGrams < 0 || tareGrams > Number(elements.editTare.max) * 1000)) {
+    elements.editTare.focus();
+    setMessage("Ingresa una tara válida en kg, con hasta 3 decimales.", "error");
+    return;
+  }
   const calculated = calculateLine(calculationInputForWeightSource({
     quantity: elements.editQuantity.value,
     read_weight_kg: readWeight,
     waste_grams_per_unit: elements.editWastePerUnit.value,
-    tare_grams: elements.editTare.value,
+    tare_grams: tareGrams,
     unit_price: elements.editPrice.value,
     price_mode: selection.price_mode,
     weight_source: nextWeightSource
@@ -2187,7 +2198,8 @@ state.numericKeypad = bindIntegerKeypad({
   inputs: [
     { input: elements.quantity, maxLength: 6 },
     { input: elements.wastePerUnit, maxLength: 7 },
-    { input: elements.tare, maxLength: 10 },
+    { input: elements.tare, mode: "decimal", decimalPlaces: 3, maxLength: 7 },
+    { input: elements.editTare, mode: "decimal", decimalPlaces: 3, maxLength: 7 },
     { input: elements.manualInput, mode: "decimal", decimalPlaces: 2, maxLength: 9, valueName: "peso", valueArticle: "un", onCommit: setPendingManualWeight },
     { input: elements.unitPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" },
     { input: elements.editPrice, mode: "decimal", decimalPlaces: 2, maxLength: 10, valueName: "precio", valueArticle: "un" }
@@ -2302,8 +2314,8 @@ elements.wastePerUnit.addEventListener("change", () => {
 });
 elements.tare.addEventListener("input", renderCapturePreview);
 elements.tare.addEventListener("change", () => {
-  const normalized = Math.round(Number(elements.tare.value || 0));
-  elements.tare.value = String(Number.isFinite(normalized) ? Math.max(0, normalized) : 0);
+  const grams = tareKilogramsToGrams(elements.tare.value);
+  if (Number.isSafeInteger(grams)) elements.tare.value = formatTareKilograms(grams);
   state.numericKeypad?.refreshLabel(elements.tare);
   renderCapturePreview();
 });

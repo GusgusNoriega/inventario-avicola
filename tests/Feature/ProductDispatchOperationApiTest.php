@@ -112,7 +112,7 @@ class ProductDispatchOperationApiTest extends TestCase
 
         $response = $this->getJson('/api/v1/despacho-productos/catalogo')
             ->assertOk()
-            ->assertJsonPath('data.waste_presets', [0, 50, 100])
+            ->assertJsonPath('data.waste_presets', [0, 50, 100, 150])
             ->assertJsonPath('data.quick_product_ids', [$this->eggs->id, $this->turkey->id])
             ->assertJsonPath('data.quick_products_configured', false)
             ->assertJsonPath('data.scale.code', Balanza::CODE_PRODUCT_DISPATCH)
@@ -140,10 +140,10 @@ class ProductDispatchOperationApiTest extends TestCase
     public function test_waste_presets_are_configurable_and_scoped_by_company_and_branch(): void
     {
         $this->putJson('/api/v1/despacho-productos/configuracion', [
-            'waste_presets' => [15, 40, 90],
+            'waste_presets' => [15, 40, 90, 125],
         ])
             ->assertOk()
-            ->assertJsonPath('data.waste_presets', [15, 40, 90]);
+            ->assertJsonPath('data.waste_presets', [15, 40, 90, 125]);
 
         $this->assertDatabaseHas('configuraciones_despacho_productos', [
             'empresa_id' => $this->user->empresa_id,
@@ -151,10 +151,11 @@ class ProductDispatchOperationApiTest extends TestCase
             'merma_preset_1_gramos_unidad' => 15,
             'merma_preset_2_gramos_unidad' => 40,
             'merma_preset_3_gramos_unidad' => 90,
+            'merma_preset_4_gramos_unidad' => 125,
         ]);
         $this->getJson('/api/v1/despacho-productos/catalogo')
             ->assertOk()
-            ->assertJsonPath('data.waste_presets', [15, 40, 90]);
+            ->assertJsonPath('data.waste_presets', [15, 40, 90, 125]);
 
         $otherBranchId = DB::table('sucursales')->insertGetId([
             'empresa_id' => $this->user->empresa_id,
@@ -168,20 +169,21 @@ class ProductDispatchOperationApiTest extends TestCase
         $this->user->update(['sucursal_id' => $otherBranchId]);
         $this->getJson('/api/v1/despacho-productos/catalogo')
             ->assertOk()
-            ->assertJsonPath('data.waste_presets', [0, 50, 100]);
+            ->assertJsonPath('data.waste_presets', [0, 50, 100, 150]);
 
         $this->putJson('/api/v1/despacho-productos/configuracion', [
-            'waste_presets' => [1, 2],
+            'waste_presets' => [1, 2, 3],
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('waste_presets');
         $this->putJson('/api/v1/despacho-productos/configuracion', [
-            'waste_presets' => [0, -1, 1000001],
+            'waste_presets' => [0, -1, 1000001, 1.5],
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors([
                 'waste_presets.1',
                 'waste_presets.2',
+                'waste_presets.3',
             ]);
     }
 
@@ -203,7 +205,7 @@ class ProductDispatchOperationApiTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('data.customer_display_title', 'La Central de los Pollos')
-            ->assertJsonPath('data.waste_presets', [0, 50, 100]);
+            ->assertJsonPath('data.waste_presets', [0, 50, 100, 150]);
 
         $this->assertDatabaseHas('configuraciones_despacho_productos', [
             'empresa_id' => $this->user->empresa_id,
@@ -417,7 +419,7 @@ class ProductDispatchOperationApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.quick_product_ids', $selection)
             ->assertJsonPath('data.quick_products_configured', true)
-            ->assertJsonPath('data.waste_presets', [0, 50, 100]);
+            ->assertJsonPath('data.waste_presets', [0, 50, 100, 150]);
 
         $this->assertDatabaseHas('configuraciones_despacho_productos', [
             'empresa_id' => $this->user->empresa_id,
@@ -439,10 +441,10 @@ class ProductDispatchOperationApiTest extends TestCase
         );
 
         $this->putJson('/api/v1/despacho-productos/configuracion', [
-            'waste_presets' => [5, 10, 15],
+            'waste_presets' => [5, 10, 15, 20],
         ])
             ->assertOk()
-            ->assertJsonPath('data.waste_presets', [5, 10, 15])
+            ->assertJsonPath('data.waste_presets', [5, 10, 15, 20])
             ->assertJsonPath('data.quick_product_ids', $selection);
 
         $otherBranchId = DB::table('sucursales')->insertGetId([
@@ -2737,7 +2739,7 @@ class ProductDispatchOperationApiTest extends TestCase
 
         $this->getJson('/api/v1/despacho-productos/catalogo')->assertForbidden();
         $this->putJson('/api/v1/despacho-productos/configuracion', [
-            'waste_presets' => [0, 50, 100],
+            'waste_presets' => [0, 50, 100, 150],
         ])->assertForbidden();
         $this->postJson('/api/v1/despacho-productos/tickets', [])->assertForbidden();
         $this->getJson('/api/v1/despacho-productos/tickets')->assertForbidden();

@@ -12,6 +12,7 @@ import {
   calculateDraft,
   calculateLine,
   effectiveProduct,
+  formatTareKilograms,
   formatWeight,
   formatWeightValue,
   normalizeCatalog,
@@ -19,6 +20,7 @@ import {
   normalizeQuickProductIds,
   normalizeWastePresets,
   resolveWeightInput,
+  tareKilogramsToGrams,
   validateUnitPrice
 } from "../../public/js/despacho-productos-despacho-utils.js";
 
@@ -66,6 +68,66 @@ test("los límites redondeados del campo conservan el peso original al guardarlo
   assert.equal(resolveWeightInput("1000000000.00", 999999999.999), 999999999.999);
   assert.equal(resolveWeightInput("0.01", 0.001), 0.01);
   assert.equal(resolveWeightInput("999999999.99", 999999999.999), 999999999.99);
+});
+
+test("la tara en kilogramos conserva gramos exactos con punto o coma decimal", () => {
+  for (const [input, grams] of [
+    ["0.000", 0],
+    ["0.001", 1],
+    ["0.050", 50],
+    ["1", 1000],
+    ["1.250", 1250],
+    ["1,250", 1250],
+    ["1.25", 1250],
+    ["1.5", 1500],
+    [" 12.345 ", 12345],
+    ["999999.999", 999999999],
+    ["1000000", 1000000000]
+  ]) {
+    assert.equal(tareKilogramsToGrams(input), grams, `Tara ${input}`);
+    assert.equal(tareKilogramsToGrams(formatTareKilograms(grams)), grams);
+  }
+  assert.equal(formatTareKilograms(0), "0.000");
+  assert.equal(formatTareKilograms(1), "0.001");
+  assert.equal(formatTareKilograms(1250), "1.250");
+  assert.equal(formatTareKilograms(1500), "1.500");
+});
+
+test("la tara no redondea valores inválidos ni recorta el valor antes de validar su límite", () => {
+  for (const input of ["", "  ", null, undefined, "-1", "1.2501", "0.0001", "1e3", "1.2.3", "1,2,3", "abc", Infinity, NaN]) {
+    assert.ok(Number.isNaN(tareKilogramsToGrams(input)), `Debe rechazar ${String(input)}`);
+  }
+  assert.equal(tareKilogramsToGrams("1000000.001"), 1000000001);
+});
+
+test("capturar y recuperar tara decimal descuenta kilogramos y conserva gramos en el ticket", () => {
+  const draft = normalizeDraft({
+    id: "44444444-4444-4444-8444-444444444444",
+    items: [{
+      product_id: 7,
+      quantity: 2,
+      read_weight_kg: 10,
+      waste_grams_per_unit: 150,
+      tare_grams: tareKilogramsToGrams("1.250"),
+      unit_price: 10,
+      price_mode: PRODUCT_PRICE_MODE_KG,
+      weight_source: PRODUCT_DISPATCH_SCALE_CODE
+    }]
+  });
+  const line = draft.items[0];
+
+  assert.equal(line.tare_grams, 1250);
+  assert.equal(line.tare_weight_kg, 1.25);
+  assert.equal(line.waste_total_grams, 300);
+  assert.equal(line.net_weight_kg, 9.05);
+  assert.equal(line.amount, 90.5);
+  assert.equal(buildTicketPayload(draft).weighings[0].tare_grams, 1250);
+  assert.equal(buildTicketPayload(draft).weighings[0].waste_grams_per_unit, 150);
+
+  const edited = calculateLine({ ...line, tare_grams: tareKilogramsToGrams("1,501") });
+  assert.equal(edited.tare_grams, 1501);
+  assert.equal(edited.net_weight_kg, 8.799);
+  assert.equal(edited.amount, 87.99);
 });
 
 test("la estación siempre mantiene ocho listas independientes y recuperables", () => {
@@ -323,7 +385,7 @@ test("el catálogo acepta el contrato del API y normaliza clientes para búsqued
   assert.equal(catalog.product_ticket_title, "CONTROL DE DESPACHO AVÍCOLA");
   assert.equal(catalog.ticket_title, "CONTROL DE DESPACHO AVÍCOLA");
   assert.equal(catalog.customer_display_title, "LA CENTRAL DE LOS POLLOS");
-  assert.deepEqual(catalog.waste_presets, [0, 50, 100]);
+  assert.deepEqual(catalog.waste_presets, [0, 50, 100, 150]);
 });
 
 test("el título propio del ticket se limita y conserva un alias compatible", () => {
@@ -375,11 +437,19 @@ test("la merma por unidad se suma y la tara se descuenta sin modificar la merma 
   assert.equal(calculateDraft([line]).tare_grams, 80);
 });
 
-test("los tres presets del catálogo son enteros seguros y tienen valores de respaldo", () => {
-  assert.deepEqual(normalizeWastePresets([10, 20, 30]), [10, 20, 30]);
-  assert.deepEqual(normalizeWastePresets([10, -1, 30]), [0, 50, 100]);
-  assert.deepEqual(normalizeWastePresets([10, 20]), [0, 50, 100]);
-  assert.deepEqual(normalizeWastePresets([10, 20, 1_000_001]), [0, 50, 100]);
+test("los cuatro presets conservan las tres mermas existentes y agregan el cuarto valor", () => {
+  const existingPresets = [350, 400, 500];
+  assert.deepEqual(normalizeWastePresets(existingPresets), [350, 400, 500, 150]);
+  assert.deepEqual(existingPresets, [350, 400, 500], "La compatibilidad no debe mutar la configuración recibida.");
+  assert.deepEqual(normalizeWastePresets([10, 20, 30, 75]), [10, 20, 30, 75]);
+  assert.deepEqual(normalizeWastePresets([0, 50, 100, 1_000_000]), [0, 50, 100, 1_000_000]);
+  assert.deepEqual(normalizeCatalog({ waste_presets: [350, 400, 500, 600] }).waste_presets, [350, 400, 500, 600]);
+});
+
+test("las mermas predeterminadas siguen siendo gramos enteros con valores de respaldo seguros", () => {
+  for (const presets of [undefined, [10, -1, 30], [10, 20], [10, 20, 1_000_001], [10, 20, 30, 1.5], [10, 20, 30, -1], [10, 20, 30, 1_000_001], [0, 50, 100, 150, 200]]) {
+    assert.deepEqual(normalizeWastePresets(presets), [0, 50, 100, 150]);
+  }
 });
 
 test("el precio de una pesada usa entre 0.01 y el máximo con solo dos decimales", () => {

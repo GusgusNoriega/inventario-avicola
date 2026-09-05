@@ -120,8 +120,8 @@
           <label>
             <span class="pdd-field-caption">Tara</span>
             <span class="pdd-touch-number-input">
-              <input id="pddTare" type="number" min="0" max="1000000000" step="1" inputmode="none" value="0" readonly data-pdd-keypad-label="Tara en gramos" data-pdd-keypad-value-label="Tara seleccionada" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" aria-label="Tara en gramos: 0. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
-              <b aria-hidden="true">g</b>
+              <input id="pddTare" type="number" min="0" max="1000000" step="0.001" inputmode="none" value="0.000" readonly data-pdd-keypad-label="Tara en kilogramos" data-pdd-keypad-value-label="Tara (kg)" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" data-pdd-keypad-hint="Usa hasta 3 decimales: 1.250 kg equivale a 1 kilo y 250 gramos; 0.050 kg son 50 gramos." aria-label="Tara en kilogramos: 0.000. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico">
+              <b aria-hidden="true">kg</b>
             </span>
           </label>
           <div class="pdd-gross-preview">
@@ -143,6 +143,7 @@
             <button type="button" data-pdd-waste-preset="0" aria-pressed="true"><span>M1</span><strong>0 g</strong></button>
             <button type="button" data-pdd-waste-preset="1" aria-pressed="false"><span>M2</span><strong>50 g</strong></button>
             <button type="button" data-pdd-waste-preset="2" aria-pressed="false"><span>M3</span><strong>100 g</strong></button>
+            <button type="button" data-pdd-waste-preset="3" aria-pressed="false"><span>M4</span><strong>150 g</strong></button>
           </div>
           <small id="pddWasteHint" class="pdd-waste-hint" aria-live="polite"></small>
         </div>
@@ -282,7 +283,7 @@
         <label><span>Peso leído (kg)</span><input id="pddEditWeight" type="number" min="0" max="1000000000" step="0.01" required></label>
         <label><span>Merma/u (g)</span><input id="pddEditWastePerUnit" type="number" min="0" max="1000000" step="1" required></label>
         <label><span>Merma total (g)</span><output id="pddEditWasteTotal" class="pdd-edit-output">0 g</output></label>
-        <label><span>Tara (g)</span><input id="pddEditTare" type="number" min="0" max="1000000000" step="1" required></label>
+        <label><span>Tara (kg)</span><input id="pddEditTare" type="number" min="0" max="1000000" step="0.001" inputmode="none" readonly required data-pdd-keypad-label="Tara en kilogramos" data-pdd-keypad-value-label="Tara (kg)" data-pdd-keypad-confirm-label="Usar tara" data-pdd-keypad-value-name="tara" data-pdd-keypad-hint="Usa hasta 3 decimales: 1.250 kg equivale a 1 kilo y 250 gramos; 0.050 kg son 50 gramos." aria-label="Tara en kilogramos. Presiona para cambiarla con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico"></label>
         <label class="pdd-edit-price-field"><span>Precio</span><input id="pddEditPrice" type="number" min="0.01" max="9999999999.99" step="0.01" inputmode="none" readonly required data-pdd-keypad-label="Precio de la pesada" data-pdd-keypad-value-label="Precio seleccionado" data-pdd-keypad-confirm-label="Usar precio" data-pdd-keypad-value-name="precio" data-pdd-keypad-value-article="un" aria-label="Precio de la pesada. Presiona para cambiarlo con el teclado táctil." aria-haspopup="dialog" aria-controls="pddNumericKeypad" aria-expanded="false" title="Presiona para abrir el teclado numérico"></label>
       </div>
       <div class="pdd-edit-summary">
@@ -400,11 +401,12 @@
       </div>
 
       <form id="pddWastePresetForm" class="pdd-waste-preset-setting">
-        <div><strong>Mermas M1–M3</strong><small>Gramos por unidad</small></div>
+        <div><strong>Mermas M1–M4</strong><small>Gramos por unidad</small></div>
         <div class="pdd-waste-preset-inputs">
           <label><span>M1</span><input id="pddWastePreset1" type="number" min="0" max="1000000" step="1" value="0" required></label>
           <label><span>M2</span><input id="pddWastePreset2" type="number" min="0" max="1000000" step="1" value="50" required></label>
           <label><span>M3</span><input id="pddWastePreset3" type="number" min="0" max="1000000" step="1" value="100" required></label>
+          <label><span>M4</span><input id="pddWastePreset4" type="number" min="0" max="1000000" step="1" value="150" required></label>
         </div>
         <button id="pddSaveWastePresets" type="submit">Guardar</button>
         <small id="pddWastePresetStatus" class="pdd-waste-preset-status" role="status" aria-live="polite"></small>

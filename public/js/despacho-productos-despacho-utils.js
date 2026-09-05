@@ -2,7 +2,7 @@ export const PRODUCT_DISPATCH_DRAFT_COUNT = 8;
 export const PRODUCT_DISPATCH_SCALE_CODE = "BALANZA_DESPACHO_PRODUCTOS";
 export const PRODUCT_PRICE_MODE_KG = "POR_KG";
 export const PRODUCT_PRICE_MODE_UNIT = "POR_UNIDAD";
-export const PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS = [0, 50, 100];
+export const PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS = [0, 50, 100, 150];
 export const PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS = 1_000_000_000;
 export const PRODUCT_DISPATCH_MAX_UNIT_PRICE = 9_999_999_999.99;
 
@@ -19,6 +19,17 @@ export function createUuid() {
 export function roundTo(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+}
+
+export function tareKilogramsToGrams(value) {
+  const normalized = String(value ?? "").trim().replace(",", ".");
+  if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) return NaN;
+  const grams = Math.round(Number(normalized) * 1000);
+  return Number.isSafeInteger(grams) ? grams : NaN;
+}
+
+export function formatTareKilograms(grams) {
+  return (Number(grams || 0) / 1000).toFixed(3);
 }
 
 export function clampNumber(value, minimum, maximum, fallback = minimum) {
@@ -46,7 +57,7 @@ export function normalizePriceMode(value) {
 }
 
 export function normalizeWastePresets(value) {
-  if (!Array.isArray(value) || value.length !== 3) {
+  if (!Array.isArray(value) || ![3, 4].includes(value.length)) {
     return [...PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS];
   }
 
@@ -59,7 +70,9 @@ export function normalizeWastePresets(value) {
     return [...PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS];
   }
 
-  return presets;
+  return presets.length === 3
+    ? [...presets, PRODUCT_DISPATCH_DEFAULT_WASTE_PRESETS[3]]
+    : presets;
 }
 
 export function normalizeQuickProductIds(value, products = []) {

@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS,
+  tareKilogramsToGrams
+} from "../../public/js/despacho-productos-despacho-utils.js";
+
+import {
   applyDecimalKeypadKey,
   applyIntegerKeypadKey,
   sanitizeDecimalKeypadBuffer,
@@ -85,6 +90,35 @@ test("el modo decimal del mismo teclado conserva dos decimales y admite punto o 
   assert.match(validateDecimalKeypadBuffer("0", { min: 0.01, decimalPlaces: 2, valueName: "precio" }), /mínimo es 0.01/);
 });
 
+test("el teclado de tara permite escribir kilos y tres decimales de gramos", () => {
+  const tareOptions = {
+    required: true,
+    min: 0,
+    max: 1000000,
+    maxLength: 7,
+    decimalPlaces: 3,
+    valueName: "tara",
+    valueArticle: "una"
+  };
+  let buffer = "";
+  for (const key of ["1", ".", "2", "5", "0"]) {
+    buffer = applyDecimalKeypadKey(buffer, key, 7, 3);
+  }
+  assert.equal(buffer, "1.250");
+  assert.equal(tareKilogramsToGrams(buffer), 1250);
+  assert.equal(applyDecimalKeypadKey(buffer, "1", 7, 3), "1.250");
+  assert.equal(applyDecimalKeypadKey(buffer, "backspace", 7, 3), "1.25");
+  assert.equal(applyDecimalKeypadKey(buffer, "clear", 7, 3), "");
+  assert.equal(sanitizeDecimalKeypadBuffer("0001,250", 7, 3), "1.250");
+  for (const value of ["0", "0.001", "1.250", "1,250", "1000000.000"]) {
+    assert.equal(validateDecimalKeypadBuffer(value, tareOptions), "");
+  }
+  assert.match(validateDecimalKeypadBuffer("", tareOptions), /Ingresa una tara/);
+  assert.match(validateDecimalKeypadBuffer("1.2501", tareOptions), /hasta 3 decimales/);
+  assert.match(validateDecimalKeypadBuffer("1000000.001", tareOptions), /máximo es 1000000/);
+  assert.match(validateDecimalKeypadBuffer("-0.001", tareOptions), /válido/);
+});
+
 test("el peso nuevo del teclado usa dos decimales y respeta sus límites en kilogramos", () => {
   const weightOptions = {
     required: true,
@@ -157,6 +191,73 @@ test("cantidad, merma por unidad y tara comparten el teclado sin cuadro de merma
   const wasteControlStyles = dispatchStyles.match(/\.pdd-touch-number-input\s+input\s*\{([^}]*)\}/)?.[1] || "";
   const wasteControlHeight = Number(wasteControlStyles.match(/(?:min-)?height:\s*(\d+)px/)?.[1]);
   assert.ok(wasteControlHeight >= 44, "El control táctil de merma debe medir al menos 44 px de alto.");
+});
+
+test("la captura y el editor muestran tara en kg y abren el teclado de tres decimales", () => {
+  const keypadBinding = sourceBetween(dispatchSource, "bindIntegerKeypad({", "elements.chooseProduct.addEventListener");
+  for (const id of ["pddTare", "pddEditTare"]) {
+    const input = dispatchView.match(new RegExp(`<input\\b[^>]*\\bid="${id}"[^>]*>`))?.[0] || "";
+    assert.match(input, /\btype="number"/);
+    assert.match(input, /\bmin="0"/);
+    assert.match(input, /\bmax="1000000"/);
+    assert.match(input, /\bstep="0\.001"/);
+    assert.match(input, /\binputmode="none"/);
+    assert.match(input, /\breadonly\b/);
+    assert.match(input, /\baria-controls="pddNumericKeypad"/);
+    assert.match(input, /data-pdd-keypad-label="Tara en kilogramos"/);
+  }
+  for (const field of ["tare", "editTare"]) {
+    assert.match(keypadBinding, new RegExp(`input:\\s*elements\\.${field},\\s*mode:\\s*"decimal",\\s*decimalPlaces:\\s*3,\\s*maxLength:\\s*7`));
+  }
+  const wasteInput = dispatchView.match(/<input\b[^>]*\bid="pddWastePerUnit"[^>]*>/)?.[0] || "";
+  assert.match(wasteInput, /\bstep="1"/);
+});
+
+test("la captura convierte la tara a gramos antes de comprobar límites y peso neto", () => {
+  const captureValuesFlow = sourceBetween(dispatchSource, "function captureValues", "function renderWastePresets");
+  const netValidationFlow = sourceBetween(dispatchSource, "function captureNetValidation", "function captureValidation");
+  const elements = {
+    quantity: { value: "2" },
+    wastePerUnit: { value: "150", max: "1000000" },
+    tare: { value: "1.250", max: "1000000" }
+  };
+  const captureValues = new Function("elements", "tareKilogramsToGrams", "captureUnitPrice", `${captureValuesFlow}\nreturn captureValues;`)(
+    elements, tareKilogramsToGrams, () => 10
+  );
+  const validateNet = new Function("elements", "PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS", `${netValidationFlow}\nreturn captureNetValidation;`)(
+    elements, PRODUCT_DISPATCH_MAX_WASTE_TOTAL_GRAMS
+  );
+
+  assert.deepEqual(captureValues(), {
+    quantity: 2,
+    waste_grams_per_unit: 150,
+    waste_total_grams: 300,
+    tare_grams: 1250,
+    unit_price: 10
+  });
+  assert.equal(validateNet(10, captureValues()).message, "");
+  for (const value of ["", "1.2501", "-0.001", "1000000.001"]) {
+    elements.tare.value = value;
+    assert.equal(validateNet(2000000, captureValues()).target, elements.tare, `Debe rechazar tara ${value}`);
+  }
+  elements.tare.value = "1000000.000";
+  assert.equal(validateNet(2000000, captureValues()).message, "");
+  elements.tare.value = "10.300";
+  assert.equal(validateNet(10, captureValues()).target, elements.tare);
+  elements.tare.value = "10.299";
+  assert.equal(validateNet(10, captureValues()).message, "");
+});
+
+test("el editor convierte la tara de kg a gramos y recupera los tres decimales originales", () => {
+  const calculationFlow = sourceBetween(dispatchSource, "function renderEditCalculation", "function openEditDialog");
+  const openFlow = sourceBetween(dispatchSource, "function openEditDialog", "function changeEditingProduct");
+  const saveFlow = sourceBetween(dispatchSource, "function saveEditingItem", "function deleteEditingItem");
+
+  assert.match(openFlow, /elements\.editTare\.value\s*=\s*formatTareKilograms\(item\.tare_grams\)/);
+  assert.match(calculationFlow, /tareKilogramsToGrams\(elements\.editTare\.value\)/);
+  assert.match(saveFlow, /tareKilogramsToGrams\(elements\.editTare\.value\)/);
+  assert.doesNotMatch(calculationFlow, /tare_grams:\s*elements\.editTare\.value/);
+  assert.doesNotMatch(saveFlow, /tare_grams:\s*elements\.editTare\.value/);
 });
 
 test("los precios de captura y edición comparten el teclado decimal de la pesada", () => {
@@ -658,8 +759,8 @@ test("merma total y tara fuera de rango bloquean Capturar sin recortarse", () =>
   );
 });
 
-test("los tres presets son táctiles, indican selección y se guardan en la configuración", () => {
-  assert.equal((dispatchView.match(/data-pdd-waste-preset="[012]"/g) || []).length, 3);
+test("los cuatro presets son táctiles, indican selección y se guardan en la configuración", () => {
+  assert.equal((dispatchView.match(/data-pdd-waste-preset="[0123]"/g) || []).length, 4);
   assert.match(dispatchView, /id="pddWastePresetForm"/);
   assert.match(dispatchSource, /aria-pressed="\$\{active\}"/);
   assert.match(dispatchSource, /apiRequest\(`\$\{apiBase\}\/configuracion`,\s*\{[\s\S]*method:\s*"PUT"/);
@@ -667,9 +768,9 @@ test("los tres presets son táctiles, indican selección y se guardan en la conf
   assert.match(dispatchStyles, /\.pdd-waste-presets button\s*\{[^}]*min-height:\s*52px/);
 });
 
-test("la tara vuelve a cero después de capturar una pesada", () => {
+test("la tara vuelve a cero con tres decimales después de capturar una pesada", () => {
   const addReadingFlow = sourceBetween(dispatchSource, "function addCurrentReading", "function openProductDialog");
-  assert.match(addReadingFlow, /activeDraft\(\)\.items\.push\(item\);[\s\S]*elements\.tare\.value\s*=\s*"0"/);
+  assert.match(addReadingFlow, /activeDraft\(\)\.items\.push\(item\);[\s\S]*elements\.tare\.value\s*=\s*"0\.000"/);
 });
 
 test("en móvil Cantidad ocupa toda la fila para evitar desbordes", () => {

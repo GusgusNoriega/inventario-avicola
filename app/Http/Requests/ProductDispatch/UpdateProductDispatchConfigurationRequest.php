@@ -20,7 +20,7 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
         $companyId = (int) $this->user()?->empresa_id;
 
         return [
-            'waste_presets' => ['sometimes', 'required', 'array', 'size:3'],
+            'waste_presets' => ['sometimes', 'required', 'array', 'size:4'],
             'waste_presets.*' => ['required', 'integer', 'min:0', 'max:1000000'],
             'quick_product_ids' => ['sometimes', 'array', 'size:4'],
             'quick_product_ids.*' => [
@@ -80,9 +80,9 @@ class UpdateProductDispatchConfigurationRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'waste_presets.required' => 'Configura las tres mermas rápidas del despacho.',
+            'waste_presets.required' => 'Configura las cuatro mermas rápidas del despacho.',
             'waste_presets.array' => 'Las mermas rápidas deben enviarse como una lista.',
-            'waste_presets.size' => 'Debes configurar exactamente tres mermas rápidas.',
+            'waste_presets.size' => 'Debes configurar exactamente cuatro mermas rápidas.',
             'waste_presets.*.required' => 'Indica el valor de cada merma rápida.',
             'waste_presets.*.integer' => 'Cada merma rápida debe expresarse en gramos enteros por unidad.',
             'waste_presets.*.min' => 'Las mermas rápidas no pueden ser negativas.',

@@ -310,7 +310,7 @@ button { color: inherit; }
 
 .pdd-waste-strip { --pdd-control-height: max(48px, calc(var(--pdd-fs-field-label) * 1.2 + max(1.3rem, var(--pdd-fs-field-value)) * 1.2 + 10px)); min-width: 0; display: grid; grid-template-columns: minmax(145px, .75fr) minmax(245px, 1.55fr); align-items: stretch; gap: 8px; margin-top: 8px; }
 .pdd-waste-unit-control { position: relative; min-width: 0; display: block; }
-.pdd-waste-presets { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.pdd-waste-presets { min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
 .pdd-waste-presets button { min-width: 0; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 4px 6px; border: 1px solid #3b6757; border-radius: 11px; color: #d8e9e1; background: linear-gradient(180deg, #172b24, #0e1c17); cursor: pointer; touch-action: manipulation; }
 .pdd-waste-presets button span { color: var(--pdd-muted); font-size: .62rem; font-weight: 900; }
 .pdd-waste-presets button strong { overflow: hidden; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -739,7 +739,7 @@ button { color: inherit; }
 .pdd-waste-preset-setting > div:first-child { display: grid; gap: 2px; }
 .pdd-waste-preset-setting > div:first-child strong { font-size: .8rem; }
 .pdd-waste-preset-setting > div:first-child small { color: var(--pdd-muted); font-size: .66rem; }
-.pdd-waste-preset-inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pdd-waste-preset-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .pdd-waste-preset-inputs label { min-width: 0; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; }
 .pdd-waste-preset-inputs span { height: 42px; display: grid; place-items: center; border: 1px solid #3b6757; border-right: 0; border-radius: 9px 0 0 9px; color: var(--pdd-muted); font-size: .65rem; font-weight: 900; }
 .pdd-waste-preset-inputs input { min-width: 0; height: 42px; padding: 0 6px; border: 1px solid #3b6757; border-radius: 0 9px 9px 0; background: var(--pdd-input); font-weight: 850; text-align: center; }
@@ -997,6 +997,7 @@ button { color: inherit; }
   .pdd-capture-deck { grid-template-columns: minmax(280px, .85fr) minmax(430px, 1.35fr) minmax(170px, .55fr); }
   .pdd-fields-grid { grid-template-columns: 1fr 1fr; }
   .pdd-waste-strip { grid-template-columns: minmax(100px, .75fr) minmax(150px, 1.4fr); }
+  .pdd-waste-presets button { flex-direction: column; gap: 2px; }
 }
 
 @media (max-width: 1120px) {

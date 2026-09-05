@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 class ProductDispatchConfigurationService
 {
     /** @var list<int> */
-    public const DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT = [0, 50, 100];
+    public const DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT = [0, 50, 100, 150];
 
     /**
      * @return array{
@@ -62,9 +62,9 @@ class ProductDispatchConfigurationService
                 $changes['waste_presets'],
             ));
 
-            if (count($presets) !== 3) {
+            if (count($presets) !== 4) {
                 throw ValidationException::withMessages([
-                    'waste_presets' => 'Debes configurar exactamente tres mermas rápidas.',
+                    'waste_presets' => 'Debes configurar exactamente cuatro mermas rápidas.',
                 ]);
             }
 
@@ -73,6 +73,7 @@ class ProductDispatchConfigurationService
                 'merma_preset_1_gramos_unidad' => $presets[0],
                 'merma_preset_2_gramos_unidad' => $presets[1],
                 'merma_preset_3_gramos_unidad' => $presets[2],
+                'merma_preset_4_gramos_unidad' => $presets[3],
             ];
         }
 
@@ -167,6 +168,7 @@ class ProductDispatchConfigurationService
             'merma_preset_1_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[0],
             'merma_preset_2_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[1],
             'merma_preset_3_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[2],
+            'merma_preset_4_gramos_unidad' => self::DEFAULT_WASTE_PRESETS_GRAMS_PER_UNIT[3],
             'productos_rapidos_configurados' => false,
             'created_at' => $now,
             'updated_at' => $now,
@@ -191,6 +193,7 @@ class ProductDispatchConfigurationService
                 (int) $configuration->merma_preset_1_gramos_unidad,
                 (int) $configuration->merma_preset_2_gramos_unidad,
                 (int) $configuration->merma_preset_3_gramos_unidad,
+                (int) $configuration->merma_preset_4_gramos_unidad,
             ],
             'quick_product_ids' => $this->effectiveQuickProductIds($configuration, $companyId),
             'quick_products_configured' => (bool) $configuration->productos_rapidos_configurados,

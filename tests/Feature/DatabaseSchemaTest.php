@@ -17,7 +17,7 @@ class DatabaseSchemaTest extends TestCase
     {
         $migrationFiles = glob(database_path('migrations/*.php'));
 
-        $this->assertCount(120, $migrationFiles);
+        $this->assertCount(122, $migrationFiles);
 
         foreach ($migrationFiles as $migrationFile) {
             $contents = file_get_contents($migrationFile);
@@ -170,7 +170,7 @@ class DatabaseSchemaTest extends TestCase
             'ajustes_peso_minorista' => ['empresa_id', 'estacion', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'predeterminado', 'estado'],
             'ajustes_peso_mayorista_2' => ['empresa_id', 'codigo', 'nombre', 'sexo', 'presentacion', 'gramos_adicionales', 'estado'],
             'configuraciones_despacho_minorista' => ['empresa_id', 'sucursal_id', 'estacion', 'metodo_pago_id', 'cuenta_destino_id'],
-            'configuraciones_despacho_productos' => ['empresa_id', 'sucursal_id', 'merma_preset_1_gramos_unidad', 'merma_preset_2_gramos_unidad', 'merma_preset_3_gramos_unidad', 'productos_rapidos_configurados', 'producto_rapido_1_id', 'producto_rapido_2_id', 'producto_rapido_3_id', 'producto_rapido_4_id', 'titulo_pantalla_cliente', 'titulo_ticket_despacho'],
+            'configuraciones_despacho_productos' => ['empresa_id', 'sucursal_id', 'merma_preset_1_gramos_unidad', 'merma_preset_2_gramos_unidad', 'merma_preset_3_gramos_unidad', 'merma_preset_4_gramos_unidad', 'productos_rapidos_configurados', 'producto_rapido_1_id', 'producto_rapido_2_id', 'producto_rapido_3_id', 'producto_rapido_4_id', 'titulo_pantalla_cliente', 'titulo_ticket_despacho'],
             'balanzas' => ['sucursal_id', 'codigo', 'modo_conexion', 'dispositivo', 'configuracion', 'estado'],
             'pesadas' => ['ticket_id', 'tipo_pollo_id', 'condicion_pollo', 'sexo', 'presentacion_pollo', 'tipo_java_id', 'tipo_bandeja_id', 'ajuste_peso_minorista_id', 'ajuste_peso_mayorista_2_id', 'aves_por_bandeja', 'cantidad_bandejas', 'peso_bandeja_kg_snapshot', 'peso_leido_kg', 'ajuste_peso_gramos', 'ajuste_peso_mayorista_2_gramos', 'peso_bruto_kg', 'tara_total_kg', 'peso_neto_kg'],
             'configuraciones_recepcion_pollo_vivo' => ['sucursal_id', 'propietario_externo_predeterminado_id', 'almacen_columna_1_id', 'almacen_columna_2_id', 'almacen_columna_3_id', 'almacen_columna_4_id', 'cliente_columna_3_id', 'cliente_columna_4_id', 'aves_por_java_macho', 'aves_por_java_hembra', 'cantidad_javas_predeterminada', 'tipo_java_predeterminado_id', 'updated_by'],
