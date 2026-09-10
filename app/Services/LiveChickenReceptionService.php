@@ -38,6 +38,20 @@ class LiveChickenReceptionService
         private readonly LiveChickenReceptionTicketInventoryService $receptionTicketInventory,
     ) {}
 
+    /** Read the same effective capture defaults used by the web module, without recording anything. */
+    public function configurationForSync(int $companyId, int $branchId): array
+    {
+        $catalog = $this->catalog($companyId, $branchId);
+
+        return $this->effectiveConfiguration(
+            $branchId,
+            $catalog['warehouses'],
+            $catalog['clients'],
+            $catalog['external_owners'],
+            $catalog['cage_types'],
+        );
+    }
+
     /** @return array<string, mixed> */
     public function overview(int $companyId, object $branch): array
     {

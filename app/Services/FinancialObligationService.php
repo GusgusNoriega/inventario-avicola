@@ -3,7 +3,10 @@
 namespace App\Services;
 
 use App\Models\Pesada;
+use App\Models\ReceptionSyncRecord;
+use App\Models\Tercero;
 use App\Models\TicketDespacho;
+use App\Models\TipoPollo;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +14,101 @@ use Illuminate\Validation\ValidationException;
 
 class FinancialObligationService
 {
+    /**
+     * Values an offline dispatch without creating operational tickets or stock movements.
+     * The caller supplies the price selected and retained exclusively on the server.
+     */
+    public function syncReceptionDispatch(
+        ReceptionSyncRecord $record,
+        User $actor,
+        int $typeId,
+        string $priceKg,
+        bool $refreshCounterpartySnapshot = false,
+    ): ?int {
+        $companyId = (int) $record->company_id;
+        $originKey = "VENTA:RECEPCION_SYNC:{$record->id}";
+        $payload = $record->payload;
+
+        if ($record->status === 'voided') {
+            $this->voidDocument(
+                $companyId,
+                $originKey,
+                $actor,
+                'Despacho de recepción sincronizado anulado: '.($payload['void_reason'] ?? 'Sin motivo'),
+                currentReadPayments: true,
+            );
+
+            return null;
+        }
+
+        $client = Tercero::query()->where('empresa_id', $companyId)
+            ->findOrFail((int) $payload['destination_id']);
+        $type = TipoPollo::query()->findOrFail($typeId);
+        $rows = collect($payload['weighings'])->where('status', 'active')->values();
+        $total = $rows->reduce(
+            fn (string $sum, array $row): string => bcadd(
+                $sum,
+                $this->moneyProduct(number_format((float) $row['net_weight_kg'], 3, '.', ''), $priceKg),
+                2,
+            ),
+            '0.00',
+        );
+        if (bccomp($total, '0.00', 2) <= 0) {
+            throw ValidationException::withMessages([
+                'destination_id' => 'El despacho no tiene una valorización válida. Revisa la configuración de venta en el servidor antes de volver a sincronizar.',
+            ]);
+        }
+
+        $localNumber = trim((string) ($payload['local_number'] ?? ''));
+        $lines = collect([[
+            'tipo_pollo_id' => $typeId,
+            'descripcion' => mb_substr('Recepción sincronizada RPV-SYNC-'.$record->id.' · '.$record->uuid
+                .($localNumber !== '' ? ' · Ticket local '.$localNumber : '').' · '.$type->nombre, 0, 250),
+            'cantidad_aves' => (int) $rows->sum('birds'),
+            'peso_neto_kg' => $rows->reduce(
+                fn (string $sum, array $row): string => bcadd($sum, number_format((float) $row['net_weight_kg'], 3, '.', ''), 3),
+                '0.000',
+            ),
+            'precio_kg' => $priceKg,
+            'subtotal' => $total,
+        ]]);
+        if (bccomp($total, '999999999999.99', 2) > 0
+            || bccomp($lines->first()['peso_neto_kg'], '999999999.999', 3) > 0) {
+            throw ValidationException::withMessages([
+                'weighings' => 'El despacho supera la capacidad de un comprobante. Divídelo en varios tickets antes de sincronizar.',
+            ]);
+        }
+        $documentId = $this->upsertDocument(
+            companyId: $companyId,
+            actor: $actor,
+            originKey: $originKey,
+            attributes: [
+                'tercero_id' => (int) $client->id,
+                'operacion' => 'VENTA',
+                'naturaleza' => 'CARGO',
+                'tipo_documento' => 'INTERNO',
+                'codigo' => 'RPV-SYNC-'.$record->id,
+                'origen_codigo' => 'AUTOMATICO',
+                'fecha_emision' => $record->operating_date->format('Y-m-d'),
+                'fecha_vencimiento' => $record->operating_date->format('Y-m-d'),
+                'moneda' => $this->companyCurrency($companyId),
+                'subtotal' => $total,
+                'impuesto' => '0.00',
+                'total' => $total,
+                'contraparte_tipo_documento_snapshot' => $client->tipo_documento,
+                'contraparte_numero_documento_snapshot' => $client->numero_documento,
+                'contraparte_nombre_snapshot' => $client->nombre_razon_social,
+                'contraparte_direccion_snapshot' => $client->direccion,
+            ],
+            applicationSide: 'CXC',
+            refreshCounterpartySnapshot: $refreshCounterpartySnapshot,
+            currentReadPayments: true,
+        );
+        $this->syncDocumentDetails($documentId, $lines);
+
+        return $documentId;
+    }
+
     /**
      * Genera o sincroniza el documento interno de venta de un ticket.
      *
@@ -206,20 +304,27 @@ class FinancialObligationService
         array $attributes,
         string $applicationSide,
         bool $refreshCounterpartySnapshot = false,
+        bool $currentReadPayments = false,
     ): int {
         $existing = DB::table('comprobantes')
             ->where('empresa_id', $companyId)
             ->where('origen_clave', $originKey)
             ->lockForUpdate()
             ->first();
-        $applied = $existing
-            ? (string) DB::table('pago_aplicaciones as aplicaciones')
+        $applied = '0.00';
+        if ($existing) {
+            $applicationQuery = DB::table('pago_aplicaciones as aplicaciones')
                 ->join('pagos', 'pagos.id', '=', 'aplicaciones.pago_id')
                 ->where('aplicaciones.comprobante_id', $existing->id)
                 ->where('aplicaciones.lado', $applicationSide)
-                ->where('pagos.estado', 'REGISTRADO')
-                ->sum('aplicaciones.importe_aplicado')
-            : '0.00';
+                ->where('pagos.estado', 'REGISTRADO');
+            $applied = $currentReadPayments
+                ? $applicationQuery->lockForUpdate()->get(['aplicaciones.importe_aplicado'])->reduce(
+                    fn (string $sum, object $application): string => bcadd($sum, (string) $application->importe_aplicado, 2),
+                    '0.00',
+                )
+                : (string) $applicationQuery->sum('aplicaciones.importe_aplicado');
+        }
         $balance = bcsub((string) $attributes['total'], $applied, 2);
 
         if (bccomp($balance, '0.00', 2) < 0) {
@@ -291,6 +396,7 @@ class FinancialObligationService
         string $originKey,
         User $actor,
         string $reason,
+        bool $currentReadPayments = false,
     ): void {
         $document = DB::table('comprobantes')
             ->where('empresa_id', $companyId)
@@ -302,11 +408,13 @@ class FinancialObligationService
             return;
         }
 
-        $hasApplications = DB::table('pago_aplicaciones as aplicacion')
+        $applicationQuery = DB::table('pago_aplicaciones as aplicacion')
             ->join('pagos as pago', 'pago.id', '=', 'aplicacion.pago_id')
             ->where('aplicacion.comprobante_id', $document->id)
-            ->where('pago.estado', 'REGISTRADO')
-            ->exists();
+            ->where('pago.estado', 'REGISTRADO');
+        $hasApplications = $currentReadPayments
+            ? $applicationQuery->lockForUpdate()->get(['aplicacion.pago_id'])->isNotEmpty()
+            : $applicationQuery->exists();
 
         if ($hasApplications) {
             throw ValidationException::withMessages([

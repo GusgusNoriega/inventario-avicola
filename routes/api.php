@@ -48,6 +48,8 @@ use App\Http\Controllers\Api\V1\WholesaleTwoWeightAdjustmentController;
 use App\Models\TerceroRole;
 use Illuminate\Support\Facades\Route;
 
+require __DIR__.'/reception-sync-api.php';
+
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', fn () => response()->json([
         'status' => 'ok',

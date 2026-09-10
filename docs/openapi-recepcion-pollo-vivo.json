@@ -1,0 +1,3543 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Recepción de pollo vivo — sincronización offline",
+    "version": "1.0.0",
+    "description": "API para una futura aplicación de recepción y despacho con base local. Los tickets de despacho directo a clientes generan una cuenta por cobrar en el servidor al sincronizar; las recepciones a almacén no generan deuda. La aplicación no envía ni recibe datos económicos. Sin movimientos de inventario, caja, javas o bandejas ni cobros automáticos. Credencial rpv_ emitida por un administrador. Consultar recepcion-pollo-vivo-sync.md para estrategia de sincronización, precios de servidor, idempotencia y resolución de conflictos."
+  },
+  "servers": [
+    {
+      "url": "/api/v1/recepcion-pollo-vivo/sync",
+      "description": "Mismo servidor donde se aloja este sistema; usar HTTPS en producción"
+    }
+  ],
+  "security": [
+    {
+      "ReceptionDeviceToken": []
+    }
+  ],
+  "paths": {
+    "/status": {
+      "get": {
+        "operationId": "receptionSyncStatus",
+        "summary": "Verificar credencial, ámbito y versión del contrato",
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Status"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshots": {
+      "post": {
+        "operationId": "createReceptionSyncSnapshot",
+        "summary": "Crear descarga completa estable por 24 horas",
+        "description": "Máximo tres snapshots vigentes por dispositivo. Todos sus datos están materializados; nuevas escrituras no alteran sus páginas. Incluye catálogos e historial operativo, sin precios, importes, saldos ni deudas de clientes.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Descarga creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SnapshotCreated"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listReceptionSyncSnapshots",
+        "summary": "Recuperar descargas vigentes del dispositivo",
+        "description": "Usar después de perder la respuesta de creación, antes de generar otra descarga y consumir un cupo. Solo lista snapshots vigentes del ámbito y dispositivo autorizados.",
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "snapshots": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SnapshotMetadata"
+                          }
+                        }
+                      },
+                      "required": [
+                        "snapshots"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin autorización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshots/{snapshot}": {
+      "parameters": [
+        {
+          "name": "snapshot",
+          "in": "path",
+          "required": true,
+          "description": "Identificador de snapshot perteneciente al dispositivo",
+          "schema": {
+            "type": "string",
+            "description": "ID snapshot",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readReceptionSyncSnapshot",
+        "summary": "Descargar página reanudable",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Cursor exclusivo; usar next_after confirmado.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño máximo de página.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SnapshotPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe, pertenece a otro ámbito/dispositivo o fue purgado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Venció; crear descarga nueva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Cursor o límite inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "releaseReceptionSyncSnapshot",
+        "summary": "Liberar una descarga ya importada",
+        "description": "Borra únicamente esa copia materializada. Repetir después de liberarla devuelve 404; puede tratarse como liberación confirmada.",
+        "responses": {
+          "204": {
+            "description": "Descarga liberada, sin cuerpo"
+          },
+          "401": {
+            "description": "Token inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sin autorización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe dentro del dispositivo autorizado o ya fue liberada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/push": {
+      "post": {
+        "operationId": "pushReceptionSyncOperations",
+        "summary": "Crear, corregir y anular capturas offline sin duplicarlas",
+        "description": "Procesamiento independiente y atómico por operación; HTTP 200 puede contener rechazos o conflictos. Cada ticket (carriles 5/6) crea una venta y cuenta por cobrar vinculadas al registro, sin duplicar pesadas o conteo. El servidor usa el peso neto activo y el precio vigente de pollo vivo al aceptar el ticket: prioridad lista del cliente, luego general. Conserva ese precio en reintentos y correcciones del mismo cliente; cambiar cliente toma el precio vigente del nuevo cliente. Las recepciones (carriles 1–4) no generan deuda. Sin precio positivo, rechaza la operación con http_status 422 y revierte sus cambios; conservar captura pendiente, configurar precio en web y enviar otro operation_id. Correcciones y anulaciones de tickets con pagos aplicados REGISTRADO se rechazan con http_status 422. Anular un ticket sin pagos invalida su deuda y conserva historial. Reintentos de transporte usan mismo UUID y contenido; no duplican la cuenta por cobrar. No acepta ni devuelve precios, importes, saldos o deudas. No modifica javas, bandejas, inventario ni caja, ni genera cobros. Registros compartidos entre dispositivos de la sucursal; revisiones previenen sobrescritura.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operations": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Operation"
+                    },
+                    "minItems": 1,
+                    "maxItems": 50
+                  }
+                },
+                "required": [
+                  "operations"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/OperationResult"
+                          }
+                        },
+                        "has_errors": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "results",
+                        "has_errors"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Cuerpo mayor de 2097152 bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Lote inválido, vacío o con más de 50 operaciones",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/records": {
+      "get": {
+        "operationId": "listReceptionSyncRecords",
+        "summary": "Consultar registros sincronizados",
+        "description": "Paginación por ID, NO cursor de cambios. Las correcciones de IDs anteriores requieren snapshot completo o consulta individual. Solo información operativa; no devuelve precios, importes, saldos ni deudas.",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "Cursor exclusivo; usar next_after confirmado.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Tamaño máximo de página.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Fecha operativa inicial",
+            "schema": {
+              "type": "string",
+              "description": "Inicio inclusivo",
+              "format": "date"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "Fecha operativa final; igual o posterior a date_from",
+            "schema": {
+              "type": "string",
+              "description": "Fin inclusivo",
+              "format": "date"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Tipo de registro",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reception",
+                "ticket"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Estado del documento",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "voided"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RecordPage"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Filtros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/records/{record}": {
+      "get": {
+        "operationId": "getReceptionSyncRecord",
+        "summary": "Obtener documento y revisión actual",
+        "parameters": [
+          {
+            "name": "record",
+            "in": "path",
+            "required": true,
+            "description": "Identificador de entidad",
+            "schema": {
+              "type": "string",
+              "description": "UUID registro",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Record"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Registro no encontrado en empresa y sucursal autorizadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports": {
+      "get": {
+        "operationId": "receptionSyncReport",
+        "summary": "Totales de capturas sincronizadas por jornada, cliente, propietario y sexo",
+        "description": "Excluye documentos/pesadas anulados de totales. No incluye historial source web. Rango: date_to - date_from ≤ 366 días. kind permite separar recepción y ticket. Totales operativos sin precios, importes, saldos o deudas. La venta vinculada al ticket no se cuenta como otra captura.",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "description": "Fecha operativa inicial",
+            "schema": {
+              "type": "string",
+              "description": "Inicio inclusivo",
+              "format": "date"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "description": "Fecha operativa final; igual o posterior a date_from",
+            "schema": {
+              "type": "string",
+              "description": "Fin inclusivo",
+              "format": "date"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Tipo de registro",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reception",
+                "ticket"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Estado del documento",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "voided"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Respuesta correcta",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Report"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido, revocado o vencido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Usuario, empresa, sucursal o permiso sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Fechas requeridas, rango inválido o mayor a 366 días",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Límite de solicitudes alcanzado; reintentar con espera progresiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error del servidor; reintentar con los mismos IDs y cuerpos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ReceptionDeviceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "rpv_<64 hex>",
+        "description": "Token copiado una sola vez desde /recepcion-pollo-vivo/dispositivos. Ámbito fijo empresa/sucursal/dispositivo."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Descripción legible del error"
+          },
+          "code": {
+            "type": "string",
+            "description": "Código de error cuando esté disponible"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Error de validación"
+              }
+            }
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "Totals": {
+        "type": "object",
+        "properties": {
+          "weighings": {
+            "type": "integer",
+            "description": "Pesadas activas"
+          },
+          "cages": {
+            "type": "integer",
+            "description": "Javas registradas"
+          },
+          "birds": {
+            "type": "integer",
+            "description": "Pollos"
+          },
+          "male_birds": {
+            "type": "integer",
+            "description": "Pollos machos"
+          },
+          "female_birds": {
+            "type": "integer",
+            "description": "Pollos hembras"
+          },
+          "gross_weight_kg": {
+            "type": "number",
+            "description": "Peso bruto",
+            "multipleOf": 0.001
+          },
+          "tare_weight_kg": {
+            "type": "number",
+            "description": "Tara total",
+            "multipleOf": 0.001
+          },
+          "net_weight_kg": {
+            "type": "number",
+            "description": "Peso neto",
+            "multipleOf": 0.001
+          }
+        },
+        "required": [
+          "weighings",
+          "cages",
+          "birds",
+          "male_birds",
+          "female_birds",
+          "gross_weight_kg",
+          "tare_weight_kg",
+          "net_weight_kg"
+        ]
+      },
+      "WeighingInput": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "UUID estable de la pesada; único dentro del documento",
+            "format": "uuid"
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "MACHO",
+              "HEMBRA"
+            ]
+          },
+          "cage_type_id": {
+            "type": "integer",
+            "description": "ID descargado de cage_type",
+            "minimum": 1
+          },
+          "cage_weight_kg": {
+            "type": "number",
+            "description": "Tara por java capturada; se conserva aunque cambie el catálogo",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.001
+          },
+          "birds_per_cage": {
+            "type": "integer",
+            "description": "Pollos por java",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "cage_count": {
+            "type": "integer",
+            "description": "Cantidad de javas; no genera movimiento de envases",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "read_weight_kg": {
+            "type": "number",
+            "description": "Peso bruto leído; debe superar tara por java multiplicada por cantidad",
+            "exclusiveMinimum": true,
+            "minimum": 0,
+            "maximum": 9999999,
+            "multipleOf": 0.001
+          },
+          "weight_source": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "BALANZA"
+            ]
+          },
+          "weighed_at": {
+            "type": "string",
+            "description": "Captura ISO8601 con offset o Z; tolerancia futura máxima 5 minutos",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "voided"
+            ],
+            "default": "active"
+          },
+          "void_reason": {
+            "type": "string",
+            "description": "Obligatorio y no vacío si status es voided; una pesada anulada no puede modificarse o reactivarse",
+            "maxLength": 500,
+            "nullable": true
+          }
+        },
+        "required": [
+          "uuid",
+          "sex",
+          "cage_type_id",
+          "cage_weight_kg",
+          "birds_per_cage",
+          "cage_count",
+          "read_weight_kg",
+          "weight_source",
+          "weighed_at"
+        ],
+        "additionalProperties": false
+      },
+      "PayloadInput": {
+        "type": "object",
+        "description": "Captura operativa completa. No admite precios, importes, saldos, deudas ni datos de cobros. El servidor calcula la cuenta por cobrar de los tickets al aceptar la operación.",
+        "properties": {
+          "operating_date": {
+            "type": "string",
+            "description": "Fecha operativa de la pesada; desde 2000-01-01; no cambia al corregir",
+            "format": "date",
+            "example": "2026-09-09"
+          },
+          "operating_cutoff": {
+            "type": "string",
+            "description": "Hora de corte local que se utilizó al capturar",
+            "pattern": "^\\d{2}:\\d{2}:\\d{2}$",
+            "example": "21:00:00"
+          },
+          "lane": {
+            "type": "integer",
+            "description": "Recepción: 1 propia macho, 2 propia hembra, 3 externa macho, 4 externa hembra. Ticket: 5 o 6, admite ambos sexos",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "origin": {
+            "type": "string",
+            "description": "Origen informativo",
+            "maxLength": 80,
+            "default": "Camión del día"
+          },
+          "destination_id": {
+            "type": "integer",
+            "description": "Almacén de sucursal para recepción, cliente de empresa para ticket",
+            "minimum": 1
+          },
+          "external_owner_id": {
+            "type": "integer",
+            "description": "Proveedor de la empresa, obligatorio carriles 3/4; no permitido en otros",
+            "minimum": 1,
+            "nullable": true
+          },
+          "delivery_vehicle_id": {
+            "type": "integer",
+            "description": "Solo ticket; obligatorio junto a delivery_driver_id",
+            "minimum": 1,
+            "nullable": true
+          },
+          "delivery_driver_id": {
+            "type": "integer",
+            "description": "Solo ticket; obligatorio junto a delivery_vehicle_id",
+            "minimum": 1,
+            "nullable": true
+          },
+          "local_number": {
+            "type": "string",
+            "description": "Correlativo informativo local, no único; no sirve para deduplicación",
+            "maxLength": 80,
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "description": "Observaciones",
+            "maxLength": 2000,
+            "nullable": true
+          },
+          "weighings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeighingInput"
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "Payload completo: mantener todas las UUID anteriores. Para retirar una pesada, enviar status voided y void_reason. Debe quedar al menos una activa."
+          }
+        },
+        "required": [
+          "operating_date",
+          "operating_cutoff",
+          "lane",
+          "destination_id",
+          "weighings"
+        ],
+        "additionalProperties": false
+      },
+      "UpsertOperation": {
+        "type": "object",
+        "description": "Crear o corregir una captura. Para tickets, confirma en la misma transacción la venta y la cuenta por cobrar. Al corregir peso conserva el precio aceptado; al cambiar cliente usa el precio vigente del nuevo cliente. Rechaza la operación completa si falta precio positivo o el ticket tiene pagos aplicados REGISTRADO.",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "description": "UUID único de esta operación por empresa/sucursal/dispositivo. Un reintento conserva cuerpo exacto e ID",
+            "format": "uuid"
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "UUID estable de recepción/ticket",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reception",
+              "ticket"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "upsert"
+            ]
+          },
+          "expected_revision": {
+            "type": "integer",
+            "description": "0 para crear; revisión confirmada para corregir o anular",
+            "minimum": 0,
+            "maximum": 2147483646
+          },
+          "reason": {
+            "type": "string",
+            "description": "Obligatorio no vacío para corregir y anular; nuevo UUID de operación al corregir contenido",
+            "maxLength": 500,
+            "nullable": true
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PayloadInput"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_id",
+          "kind",
+          "action",
+          "expected_revision",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "VoidOperation": {
+        "type": "object",
+        "description": "Anula el registro y conserva su historial. En tickets sin cobros aplicados invalida también la venta y deuda vinculadas. Si hay pagos aplicados REGISTRADO, rechaza sin modificar el registro ni sus finanzas.",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "description": "UUID único de esta operación por empresa/sucursal/dispositivo. Un reintento conserva cuerpo exacto e ID",
+            "format": "uuid"
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "UUID estable de recepción/ticket",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reception",
+              "ticket"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "void"
+            ]
+          },
+          "expected_revision": {
+            "type": "integer",
+            "description": "Revisión actual del documento",
+            "minimum": 1,
+            "maximum": 2147483646
+          },
+          "reason": {
+            "type": "string",
+            "description": "Motivo obligatorio de anulación",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_id",
+          "kind",
+          "action",
+          "expected_revision",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "Operation": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UpsertOperation"
+          },
+          {
+            "$ref": "#/components/schemas/VoidOperation"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "action",
+          "mapping": {
+            "upsert": "#/components/schemas/UpsertOperation",
+            "void": "#/components/schemas/VoidOperation"
+          }
+        }
+      },
+      "Weighing": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "UUID estable de la pesada; único dentro del documento",
+            "format": "uuid"
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "MACHO",
+              "HEMBRA"
+            ]
+          },
+          "cage_type_id": {
+            "type": "integer",
+            "description": "ID descargado de cage_type",
+            "minimum": 1
+          },
+          "cage_weight_kg": {
+            "type": "number",
+            "description": "Tara por java capturada; se conserva aunque cambie el catálogo",
+            "minimum": 0,
+            "maximum": 1000,
+            "multipleOf": 0.001
+          },
+          "birds_per_cage": {
+            "type": "integer",
+            "description": "Pollos por java",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "cage_count": {
+            "type": "integer",
+            "description": "Cantidad de javas; no genera movimiento de envases",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "read_weight_kg": {
+            "type": "number",
+            "description": "Peso bruto leído; debe superar tara por java multiplicada por cantidad",
+            "exclusiveMinimum": true,
+            "minimum": 0,
+            "maximum": 9999999,
+            "multipleOf": 0.001
+          },
+          "weight_source": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "BALANZA"
+            ]
+          },
+          "weighed_at": {
+            "type": "string",
+            "description": "Captura ISO8601 con offset o Z; tolerancia futura máxima 5 minutos",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "voided"
+            ],
+            "default": "active"
+          },
+          "void_reason": {
+            "type": "string",
+            "description": "Obligatorio y no vacío si status es voided; una pesada anulada no puede modificarse o reactivarse",
+            "maxLength": 500,
+            "nullable": true
+          },
+          "number": {
+            "type": "integer",
+            "description": "Posición de pesada"
+          },
+          "cage_type_name": {
+            "type": "string",
+            "description": "Nombre histórico"
+          },
+          "birds": {
+            "type": "integer",
+            "description": "birds_per_cage × cage_count"
+          },
+          "gross_weight_kg": {
+            "type": "number",
+            "description": "Peso bruto"
+          },
+          "tare_weight_kg": {
+            "type": "number",
+            "description": "Tara por java × cantidad"
+          },
+          "net_weight_kg": {
+            "type": "number",
+            "description": "Bruto menos tara"
+          }
+        },
+        "required": [
+          "uuid",
+          "number",
+          "sex",
+          "cage_type_id",
+          "cage_type_name",
+          "cage_weight_kg",
+          "birds_per_cage",
+          "cage_count",
+          "birds",
+          "read_weight_kg",
+          "gross_weight_kg",
+          "tare_weight_kg",
+          "net_weight_kg",
+          "weight_source",
+          "weighed_at",
+          "status"
+        ]
+      },
+      "Destination": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "ID de cliente o almacén"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "CLIENTE",
+              "ALMACEN"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre histórico",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name"
+        ]
+      },
+      "Owner": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PROPIA",
+              "EXTERNA"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "description": "Proveedor externo; null para propia",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre histórico",
+            "nullable": true
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "name"
+        ]
+      },
+      "Payload": {
+        "type": "object",
+        "properties": {
+          "operating_date": {
+            "type": "string",
+            "description": "Fecha operativa de la pesada; desde 2000-01-01; no cambia al corregir",
+            "format": "date",
+            "example": "2026-09-09"
+          },
+          "operating_cutoff": {
+            "type": "string",
+            "description": "Hora de corte local que se utilizó al capturar",
+            "pattern": "^\\d{2}:\\d{2}:\\d{2}$",
+            "example": "21:00:00"
+          },
+          "lane": {
+            "type": "integer",
+            "description": "Recepción: 1 propia macho, 2 propia hembra, 3 externa macho, 4 externa hembra. Ticket: 5 o 6, admite ambos sexos",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "origin": {
+            "type": "string",
+            "description": "Origen informativo",
+            "maxLength": 80,
+            "default": "Camión del día"
+          },
+          "destination_id": {
+            "type": "integer",
+            "description": "Almacén de sucursal para recepción, cliente de empresa para ticket",
+            "minimum": 1
+          },
+          "external_owner_id": {
+            "type": "integer",
+            "description": "Proveedor de la empresa, obligatorio carriles 3/4; no permitido en otros",
+            "minimum": 1,
+            "nullable": true
+          },
+          "delivery_vehicle_id": {
+            "type": "integer",
+            "description": "Solo ticket; obligatorio junto a delivery_driver_id",
+            "minimum": 1,
+            "nullable": true
+          },
+          "delivery_driver_id": {
+            "type": "integer",
+            "description": "Solo ticket; obligatorio junto a delivery_vehicle_id",
+            "minimum": 1,
+            "nullable": true
+          },
+          "local_number": {
+            "type": "string",
+            "description": "Correlativo informativo local, no único; no sirve para deduplicación",
+            "maxLength": 80,
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "description": "Observaciones",
+            "maxLength": 2000,
+            "nullable": true
+          },
+          "weighings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Weighing"
+            }
+          },
+          "destination": {
+            "$ref": "#/components/schemas/Destination"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Owner"
+          },
+          "delivery": {
+            "type": "object",
+            "properties": {
+              "vehicle": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "ID"
+                  },
+                  "plate": {
+                    "type": "string",
+                    "description": "Placa"
+                  }
+                },
+                "required": [
+                  "id",
+                  "plate"
+                ]
+              },
+              "driver": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "ID"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Nombre"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
+            },
+            "required": [
+              "vehicle",
+              "driver"
+            ],
+            "nullable": true
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "void_reason": {
+            "type": "string",
+            "description": "Motivo de anulación completa, si procede"
+          },
+          "voided_at": {
+            "type": "string",
+            "description": "Anulación completa, si procede",
+            "format": "date-time"
+          },
+          "voided_by": {
+            "type": "integer",
+            "description": "Usuario que anuló, si procede"
+          }
+        },
+        "required": [
+          "operating_date",
+          "operating_cutoff",
+          "lane",
+          "destination_id",
+          "destination",
+          "owner",
+          "weighings",
+          "totals"
+        ]
+      },
+      "Record": {
+        "type": "object",
+        "description": "Registro operativo de sincronización. No contiene precios, importes, saldos, deudas ni identificadores del documento financiero. La cuenta por cobrar vinculada a un ticket se consulta en finanzas web.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "ID del registro de sincronización"
+          },
+          "uuid": {
+            "type": "string",
+            "description": "Identidad estable local/remota",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reception",
+              "ticket"
+            ]
+          },
+          "operating_date": {
+            "type": "string",
+            "description": "Jornada",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "voided"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "Revisión para control de concurrencia",
+            "minimum": 1
+          },
+          "device_id": {
+            "type": "string",
+            "description": "Dispositivo creador",
+            "format": "uuid"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creación de servidor",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última modificación del servidor",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "kind",
+          "operating_date",
+          "status",
+          "revision",
+          "device_id",
+          "payload",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "OperationResult": {
+        "type": "object",
+        "description": "Resultado individual dentro del lote HTTP 200. Un rechazo financiero devuelve status rejected, http_status 422 y errors, sin confirmar cambios del registro o su deuda. Conservar captura pendiente, resolver la causa y usar otro operation_id para un nuevo intento. Un reintento de transporte conserva el ID y cuerpo originales.",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Valor enviado; puede ser inválido o null en resultados rechazados"
+          },
+          "entity_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Valor enviado; puede ser inválido o null en resultados rechazados"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "replayed",
+              "conflict",
+              "rejected"
+            ]
+          },
+          "http_status": {
+            "type": "integer",
+            "enum": [
+              200,
+              201,
+              409,
+              422
+            ]
+          },
+          "record": {
+            "type": "object",
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Record"
+              }
+            ],
+            "description": "Documento cuando está disponible; null en conflicto sobre entidad inexistente"
+          },
+          "message": {
+            "type": "string",
+            "description": "Descripción cuando corresponde"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Error por campo"
+              }
+            }
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "operation_id",
+          "entity_id",
+          "status",
+          "http_status"
+        ]
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "server_time": {
+            "type": "string",
+            "description": "Hora UTC de servidor",
+            "format": "date-time"
+          },
+          "company_id": {
+            "type": "integer",
+            "description": "Empresa autorizada"
+          },
+          "branch_id": {
+            "type": "integer",
+            "description": "Sucursal autorizada"
+          },
+          "device_id": {
+            "type": "string",
+            "description": "Identidad fija del dispositivo",
+            "format": "uuid"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Zona horaria IANA de la sucursal",
+            "example": "America/Bogota"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "batch_operations": {
+                "type": "integer",
+                "enum": [
+                  50
+                ]
+              },
+              "weighings_per_record": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              },
+              "request_bytes": {
+                "type": "integer",
+                "enum": [
+                  2097152
+                ]
+              },
+              "snapshot_page_size": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              }
+            },
+            "required": [
+              "batch_operations",
+              "weighings_per_record",
+              "request_bytes",
+              "snapshot_page_size"
+            ]
+          },
+          "capabilities": {
+            "type": "object",
+            "properties": {
+              "full_snapshot": {
+                "type": "boolean"
+              },
+              "incremental_download": {
+                "type": "boolean"
+              },
+              "cross_device_revision_control": {
+                "type": "boolean"
+              },
+              "offline_reports": {
+                "type": "boolean"
+              },
+              "inventory_movements": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "financial_movements": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ],
+                "description": "Solo despachos directos a clientes: venta y cuenta por cobrar calculadas en servidor. No genera cobros o movimientos de caja."
+              },
+              "server_client_debt": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ],
+                "description": "El servidor calcula y mantiene la deuda asociada a cada ticket de despacho directo."
+              },
+              "client_financial_data": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ],
+                "description": "La aplicación no envía ni recibe precios, importes, saldos, deudas o cobros."
+              }
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "server_time",
+          "company_id",
+          "branch_id",
+          "device_id",
+          "timezone",
+          "limits",
+          "capabilities"
+        ]
+      },
+      "SnapshotMetadata": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identificador de descarga",
+            "format": "uuid"
+          },
+          "schema_version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "full"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Hora de creación",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Vence 24 horas después de creación",
+            "format": "date-time"
+          },
+          "total_items": {
+            "type": "integer",
+            "description": "Total de elementos",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "schema_version",
+          "mode",
+          "created_at",
+          "expires_at",
+          "total_items"
+        ]
+      },
+      "SnapshotCreated": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SnapshotMetadata"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "page_size": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              },
+              "after": {
+                "type": "integer",
+                "enum": [
+                  0
+                ]
+              }
+            },
+            "required": [
+              "page_size",
+              "after"
+            ]
+          }
+        ]
+      },
+      "Company": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Empresa"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre comercial",
+            "nullable": true
+          },
+          "legal_name": {
+            "type": "string",
+            "description": "Razón social",
+            "nullable": true
+          },
+          "tax_id": {
+            "type": "string",
+            "description": "RUC",
+            "nullable": true
+          },
+          "country_code": {
+            "type": "string",
+            "description": "País"
+          },
+          "currency": {
+            "type": "string",
+            "description": "Moneda"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Zona IANA"
+          },
+          "operating_cutoff": {
+            "type": "string",
+            "description": "Hora local HH:mm:ss"
+          },
+          "ticket_title": {
+            "type": "string",
+            "description": "Título para impresión"
+          },
+          "ticket_message": {
+            "type": "string",
+            "description": "Mensaje para impresión"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "legal_name",
+          "tax_id",
+          "country_code",
+          "currency",
+          "timezone",
+          "operating_cutoff",
+          "ticket_title",
+          "ticket_message"
+        ]
+      },
+      "Branch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Sucursal"
+          },
+          "company_id": {
+            "type": "integer",
+            "description": "Empresa"
+          },
+          "code": {
+            "type": "string",
+            "description": "Código"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre"
+          },
+          "address": {
+            "type": "string",
+            "description": "Dirección",
+            "nullable": true
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Zona IANA"
+          }
+        },
+        "required": [
+          "id",
+          "company_id",
+          "code",
+          "name",
+          "address",
+          "timezone"
+        ]
+      },
+      "Configuration": {
+        "type": "object",
+        "properties": {
+          "layout_version": {
+            "type": "integer",
+            "enum": [
+              4
+            ]
+          },
+          "precision_decimals": {
+            "type": "integer",
+            "enum": [
+              3
+            ]
+          },
+          "inventory_tracking": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "tray_tracking": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "saved": {
+            "type": "boolean"
+          },
+          "default_external_owner_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "default_male_birds_per_cage": {
+            "type": "integer"
+          },
+          "default_female_birds_per_cage": {
+            "type": "integer"
+          },
+          "default_cage_count": {
+            "type": "integer"
+          },
+          "default_cage_type_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "lanes": {
+            "type": "object",
+            "description": "Claves 1, 2, 3, 4, 5, 6",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "ALMACEN",
+                    "CLIENTE"
+                  ]
+                },
+                "owner_type": {
+                  "type": "string",
+                  "enum": [
+                    "PROPIA",
+                    "EXTERNA"
+                  ]
+                },
+                "sex": {
+                  "type": "string",
+                  "enum": [
+                    "MACHO",
+                    "HEMBRA"
+                  ],
+                  "nullable": true
+                },
+                "requires_sex": {
+                  "type": "boolean"
+                },
+                "destination_id": {
+                  "type": "integer",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "type",
+                "owner_type",
+                "sex",
+                "requires_sex",
+                "destination_id"
+              ]
+            }
+          }
+        },
+        "required": [
+          "layout_version",
+          "precision_decimals",
+          "inventory_tracking",
+          "tray_tracking",
+          "saved",
+          "default_external_owner_id",
+          "default_male_birds_per_cage",
+          "default_female_birds_per_cage",
+          "default_cage_count",
+          "default_cage_type_id",
+          "lanes"
+        ],
+        "additionalProperties": true,
+        "description": "Configuración visual y operativa del módulo, con carriles y valores de captura por defecto. Conservar campos adicionales para compatibilidad."
+      },
+      "Party": {
+        "type": "object",
+        "description": "Identificación y contacto de clientes o proveedores. No incluye precios, saldos, deudas ni cobros.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "ID de tercero"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre"
+          },
+          "document_type": {
+            "type": "string",
+            "description": "Tipo documento",
+            "nullable": true
+          },
+          "document_number": {
+            "type": "string",
+            "description": "Número documento",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "description": "Dirección",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "description": "Teléfono",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "description": "Correo",
+            "nullable": true
+          },
+          "is_internal_client": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "CLIENTE",
+              "PROVEEDOR"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado del catálogo, normalmente ACTIVO o INACTIVO"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última actualización del catálogo",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "status",
+          "active"
+        ]
+      },
+      "Warehouse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Almacén"
+          },
+          "code": {
+            "type": "string",
+            "description": "Código"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre"
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado del catálogo, normalmente ACTIVO o INACTIVO"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última actualización del catálogo",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "status",
+          "active"
+        ]
+      },
+      "CageType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Tipo java"
+          },
+          "code": {
+            "type": "string",
+            "description": "Código"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre"
+          },
+          "weight_kg": {
+            "type": "string",
+            "description": "Tara de catálogo en kg, decimal con 3 posiciones",
+            "example": "2.500"
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado del catálogo, normalmente ACTIVO o INACTIVO"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última actualización del catálogo",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "weight_kg",
+          "status",
+          "active"
+        ]
+      },
+      "Vehicle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Vehículo"
+          },
+          "plate": {
+            "type": "string",
+            "description": "Placa"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Marca",
+            "nullable": true
+          },
+          "model": {
+            "type": "string",
+            "description": "Modelo",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "description": "Color",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "description": "Descripción",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado del catálogo, normalmente ACTIVO o INACTIVO"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última actualización del catálogo",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "plate",
+          "status",
+          "active"
+        ]
+      },
+      "Driver": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Conductor"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre completo"
+          },
+          "document_type": {
+            "type": "string",
+            "description": "Tipo documento",
+            "nullable": true
+          },
+          "document_number": {
+            "type": "string",
+            "description": "Número documento",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "description": "Teléfono",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado del catálogo, normalmente ACTIVO o INACTIVO"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última actualización del catálogo",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "active"
+        ]
+      },
+      "ChickenType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Tipo pollo"
+          },
+          "code": {
+            "type": "string",
+            "description": "Código"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre"
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado del catálogo, normalmente ACTIVO o INACTIVO"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última actualización del catálogo",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "status",
+          "active"
+        ]
+      },
+      "Scale": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Código de balanza lógica web"
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre"
+          },
+          "weight_sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "MANUAL",
+                "BALANZA"
+              ]
+            }
+          },
+          "connection_modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "SERIAL",
+                "BLE",
+                "BLUETOOTH"
+              ]
+            }
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "weight_sources",
+          "connection_modes"
+        ]
+      },
+      "Journey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "ID web"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "web"
+            ]
+          },
+          "editable": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "operating_date": {
+            "type": "string",
+            "description": "Fecha jornada",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "description": "Estado jornada web"
+          },
+          "starts_at": {
+            "type": "string",
+            "description": "Inicio",
+            "format": "date-time",
+            "nullable": true
+          },
+          "ends_at": {
+            "type": "string",
+            "description": "Cierre programado",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closed_at": {
+            "type": "string",
+            "description": "Cierre real",
+            "format": "date-time",
+            "nullable": true
+          },
+          "reception": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "Recepción web"
+              },
+              "status": {
+                "type": "string",
+                "description": "Estado"
+              },
+              "origin": {
+                "type": "string",
+                "description": "Origen",
+                "nullable": true
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "editable",
+          "operating_date",
+          "status"
+        ]
+      },
+      "SnapshotRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "ID del registro de sincronización"
+          },
+          "uuid": {
+            "type": "string",
+            "description": "UUID offline; identificador web puede ser null o referencia histórica",
+            "nullable": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reception",
+              "ticket"
+            ]
+          },
+          "operating_date": {
+            "type": "string",
+            "description": "Jornada",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "voided"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "Revisión; historial web puede usar 0",
+            "minimum": 0
+          },
+          "device_id": {
+            "type": "string",
+            "description": "Dispositivo creador; ausente en registros web",
+            "format": "uuid"
+          },
+          "payload": {
+            "description": "Payload para source offline, WebPayload para source web; source web es siempre de solo lectura.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Payload"
+              },
+              {
+                "$ref": "#/components/schemas/WebPayload"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creación de servidor",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Última modificación del servidor",
+            "format": "date-time",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "web",
+              "offline"
+            ]
+          },
+          "editable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "editable",
+          "kind",
+          "operating_date",
+          "status",
+          "revision",
+          "payload"
+        ],
+        "description": "Usar la clave completa del elemento snapshot para distinguir fuentes. Nunca subir un registro source web mediante push."
+      },
+      "SnapshotItem": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "company"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Company"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "branch"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Branch"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "configuration"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Configuration"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "client"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Party"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "external_owner"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Party"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "warehouse"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Warehouse"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "cage_type"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/CageType"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "vehicle"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Vehicle"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "driver"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Driver"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "chicken_type"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/ChickenType"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "scale"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Scale"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "journey"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/Journey"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "integer",
+                "description": "Cursor dentro de esta descarga",
+                "minimum": 1
+              },
+              "entity": {
+                "type": "string",
+                "enum": [
+                  "record"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "description": "Clave de importación; combinar siempre con entity"
+              },
+              "data": {
+                "$ref": "#/components/schemas/SnapshotRecord"
+              }
+            },
+            "required": [
+              "sequence",
+              "entity",
+              "key",
+              "data"
+            ]
+          }
+        ]
+      },
+      "SnapshotPage": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "$ref": "#/components/schemas/SnapshotMetadata"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotItem"
+            }
+          },
+          "next_after": {
+            "type": "integer",
+            "description": "Siguiente cursor; null al terminar",
+            "minimum": 0,
+            "nullable": true
+          },
+          "has_more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "snapshot",
+          "items",
+          "next_after",
+          "has_more"
+        ]
+      },
+      "RecordPage": {
+        "type": "object",
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "next_after": {
+            "type": "integer",
+            "description": "Cursor ID; null al terminar",
+            "minimum": 0,
+            "nullable": true
+          }
+        },
+        "required": [
+          "records",
+          "has_more",
+          "next_after"
+        ]
+      },
+      "Report": {
+        "type": "object",
+        "description": "Conteo de documentos y totales de pesos y pollos; sin datos económicos. El documento financiero vinculado no duplica las capturas del reporte.",
+        "properties": {
+          "date_from": {
+            "type": "string",
+            "description": "Fecha inicial",
+            "format": "date"
+          },
+          "date_to": {
+            "type": "string",
+            "description": "Fecha final",
+            "format": "date"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "offline_records"
+            ]
+          },
+          "record_counts": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "integer",
+                "description": "Activos"
+              },
+              "voided": {
+                "type": "integer",
+                "description": "Anulados"
+              }
+            },
+            "required": [
+              "active",
+              "voided"
+            ]
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "by_day": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "description": "Jornada",
+                  "format": "date"
+                },
+                "totals": {
+                  "$ref": "#/components/schemas/Totals"
+                }
+              },
+              "required": [
+                "date",
+                "totals"
+              ]
+            }
+          },
+          "by_client": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "description": "ID de cliente o almacén"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "CLIENTE",
+                    "ALMACEN"
+                  ]
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Nombre histórico",
+                  "nullable": true
+                },
+                "totals": {
+                  "$ref": "#/components/schemas/Totals"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "name",
+                "totals"
+              ]
+            }
+          },
+          "by_owner": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "PROPIA",
+                    "EXTERNA"
+                  ]
+                },
+                "id": {
+                  "type": "integer",
+                  "description": "Proveedor externo; null para propia",
+                  "nullable": true
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Nombre histórico",
+                  "nullable": true
+                },
+                "totals": {
+                  "$ref": "#/components/schemas/Totals"
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "name",
+                "totals"
+              ]
+            }
+          },
+          "by_sex": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sex": {
+                  "type": "string",
+                  "enum": [
+                    "MACHO",
+                    "HEMBRA"
+                  ]
+                },
+                "totals": {
+                  "$ref": "#/components/schemas/Totals"
+                }
+              },
+              "required": [
+                "sex",
+                "totals"
+              ]
+            }
+          },
+          "by_lane": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "lane": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 6,
+                  "description": "Carril real de captura; tickets 5 o 6"
+                },
+                "totals": {
+                  "$ref": "#/components/schemas/Totals"
+                }
+              },
+              "required": [
+                "lane",
+                "totals"
+              ]
+            }
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "scope",
+          "record_counts",
+          "totals",
+          "by_day",
+          "by_client",
+          "by_owner",
+          "by_sex",
+          "by_lane"
+        ]
+      },
+      "WebWeighing": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "key": {
+            "type": "string",
+            "description": "Clave estable cuando la pesada histórica carece de UUID"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "voided"
+            ]
+          },
+          "weighing_status": {
+            "type": "string"
+          },
+          "sex": {
+            "type": "string",
+            "enum": [
+              "MACHO",
+              "HEMBRA"
+            ]
+          },
+          "chicken_type_id": {
+            "type": "integer"
+          },
+          "cage_type_id": {
+            "type": "integer"
+          },
+          "cage_type_code": {
+            "type": "string",
+            "nullable": true
+          },
+          "cage_type_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "cage_weight_kg": {
+            "type": "string",
+            "description": "Kilogramos con tres decimales"
+          },
+          "birds_per_cage": {
+            "type": "integer"
+          },
+          "cage_count": {
+            "type": "integer"
+          },
+          "birds": {
+            "type": "integer"
+          },
+          "bird_count": {
+            "type": "integer"
+          },
+          "read_weight_kg": {
+            "type": "string"
+          },
+          "gross_weight_kg": {
+            "type": "string"
+          },
+          "tare_weight_kg": {
+            "type": "string"
+          },
+          "net_weight_kg": {
+            "type": "string"
+          },
+          "weight_source": {
+            "type": "string",
+            "description": "MANUAL o BALANZA"
+          },
+          "scale_reading": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "raw_frame": {
+                "type": "string",
+                "nullable": true
+              },
+              "connection_mode": {
+                "type": "string",
+                "nullable": true
+              },
+              "device_name": {
+                "type": "string",
+                "nullable": true
+              },
+              "captured_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            }
+          },
+          "weighed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "voided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "void_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_by": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scale_code": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "number",
+          "status",
+          "sex",
+          "cage_type_id",
+          "cage_weight_kg",
+          "birds_per_cage",
+          "cage_count",
+          "birds",
+          "read_weight_kg",
+          "gross_weight_kg",
+          "tare_weight_kg",
+          "net_weight_kg"
+        ]
+      },
+      "WebPayload": {
+        "type": "object",
+        "properties": {
+          "lane": {
+            "type": "integer"
+          },
+          "origin": {
+            "type": "string",
+            "nullable": true
+          },
+          "operating_cutoff": {
+            "type": "string"
+          },
+          "journey_id": {
+            "type": "integer"
+          },
+          "reception_id": {
+            "type": "integer"
+          },
+          "destination_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "destination": {
+            "$ref": "#/components/schemas/Destination"
+          },
+          "external_owner_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Owner"
+          },
+          "weighings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WebWeighing"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "code": {
+            "type": "string",
+            "description": "Código del ticket web cuando corresponde"
+          },
+          "owner_type": {
+            "type": "string"
+          },
+          "warehouse_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "warehouse_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "dispatch_client_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "client_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "client_document_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_internal_client": {
+            "type": "boolean"
+          },
+          "delivery_vehicle_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "delivery_plate": {
+            "type": "string",
+            "nullable": true
+          },
+          "delivery_driver_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "delivery_driver_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "ticket_status": {
+            "type": "string"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "voided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "void_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "operating_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "local_number": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "source_lane": {
+            "type": "integer"
+          },
+          "legacy_layout": {
+            "type": "boolean"
+          },
+          "delivery": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "vehicle": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "plate": {
+                    "type": "string"
+                  }
+                }
+              },
+              "driver": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "lane",
+          "journey_id",
+          "reception_id",
+          "destination",
+          "owner",
+          "weighings",
+          "totals"
+        ]
+      }
+    }
+  }
+}

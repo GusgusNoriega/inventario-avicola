@@ -180,6 +180,7 @@ class FinancialQueryService
                     'tercero' => $this->documentThirdParty($document),
                     'tickets' => $tickets[(int) $document->id] ?? [],
                     'detalle' => $document->tipo_documento === 'SALDO_ANTERIOR'
+                        || str_starts_with((string) $document->origen_clave, 'VENTA:RECEPCION_SYNC:')
                         ? ($details[(int) $document->id] ?? null)
                         : null,
                 ];

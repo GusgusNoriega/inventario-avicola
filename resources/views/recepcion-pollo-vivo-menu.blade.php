@@ -71,6 +71,25 @@
           </span>
           <span class="live-reception-menu-action">Consultar <span aria-hidden="true">→</span></span>
         </a>
+        <a class="live-reception-menu-card card is-history" href="{{ route('reception-sync-records.index') }}">
+          <span class="live-reception-menu-copy">
+            <small>Aplicación sin conexión</small>
+            <strong>Registros sincronizados</strong>
+            <span>Consulta las recepciones y los tickets enviados por los dispositivos.</span>
+          </span>
+          <span class="live-reception-menu-action">Consultar <span aria-hidden="true">→</span></span>
+        </a>
+
+        @if(auth()->user()?->isAdministrator())
+          <a class="live-reception-menu-card card is-register" href="{{ route('reception-sync-tokens.index') }}">
+            <span class="live-reception-menu-copy">
+              <small>Aplicación sin conexión</small>
+              <strong>Conectar dispositivos</strong>
+              <span>Genera o revoca los tokens para sincronizar la recepción de cada sucursal.</span>
+            </span>
+            <span class="live-reception-menu-action">Administrar <span aria-hidden="true">→</span></span>
+          </a>
+        @endif
       </nav>
     </section>
 

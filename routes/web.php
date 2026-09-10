@@ -1,5 +1,8 @@
 <?php
 
+require __DIR__.'/reception-sync-tokens.php';
+require __DIR__.'/reception-sync-records-web.php';
+
 use App\Http\Controllers\Web\AuthController as WebAuthController;
 use App\Http\Controllers\Web\LiveChickenReceptionJourneyReportController;
 use App\Http\Controllers\Web\ProductDispatchAccountStatementReportController;

@@ -5,6 +5,8 @@
 .live-reception-menu-root,
 .live-reception-menu-page {
   min-height: 100%;
+  height: auto;
+  overflow: auto;
 }
 
 .live-reception-menu-page {

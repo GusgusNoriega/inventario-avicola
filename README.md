@@ -62,6 +62,8 @@ composer audit
 Documentación adicional:
 
 - [Arquitectura de la API](docs/arquitectura-api.md)
+- [API offline de recepción de pollo vivo: tokens, sincronización y reportes](docs/recepcion-pollo-vivo-sync.md)
+- [Contrato OpenAPI de recepción offline](docs/openapi-recepcion-pollo-vivo.json)
 - [Esquema de base de datos](docs/esquema-base-datos.md)
 - [Migraciones y base local](docs/migraciones-base-datos.md)
 - [Despliegue en cPanel sin Node ni npm](docs/despliegue-cpanel.md)
