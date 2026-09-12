@@ -8,11 +8,13 @@ use App\Models\ProductoDespacho;
 use App\Models\Tercero;
 use App\Models\TicketDespachoProducto;
 use App\Models\User;
+use App\Services\GeneralConfigurationService;
 use App\Support\FinancialMoney;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\InteractsWithAccessControl;
 use Tests\TestCase;
 
@@ -894,7 +896,87 @@ class ProductDispatchAccountStatementTest extends TestCase
             ->assertJsonCount(0, 'data.rows');
     }
 
-    public function test_statement_uses_branch_timezone_for_inclusive_payment_date_boundaries(): void
+    #[DataProvider('reclassifiedPaymentCutoffs')]
+    public function test_reclassified_sales_and_payments_share_the_operating_date_without_changing_real_timestamps(
+        string $cutoff,
+        bool $modulePayment,
+    ): void {
+        $document = $this->simpleProductDocument('PD-CAMBIO-HORARIO', '2026-07-10', '100.00');
+        DB::table('tickets_despacho_productos')->where('id', $document['ticket_id'])
+            ->update(['registrado_at' => '2026-07-10 15:00:00']);
+        DB::table('pesadas_despacho_productos')->where('ticket_despacho_producto_id', $document['ticket_id'])
+            ->update(['pesada_at' => '2026-07-10 15:00:00']);
+        $payment = $this->createPayment(
+            (int) $this->user->empresa_id, (int) $this->user->id, $this->clientId,
+            'PG-CAMBIO-HORARIO', '2026-07-10 15:30:00', '100.00',
+        );
+        $this->applyPayment($payment, $document['document_id'], '100.00');
+        if ($modulePayment) {
+            $this->linkModulePayment($payment, $this->branchId);
+        }
+        $beforePayment = DB::table('pagos')->where('id', $payment)->first();
+        $beforeApplications = DB::table('pago_aplicaciones')->where('pago_id', $payment)->get();
+        $this->getJson($this->statementUrl(dateFrom: '2026-07-10', dateTo: '2026-07-10'))
+            ->assertOk()->assertJsonPath('data.ending_balance', '0.00')
+            ->assertJsonPath('data.sales_total', '100.00')->assertJsonPath('data.payments_total', '100.00');
+
+        app(GeneralConfigurationService::class)->update(
+            (int) $this->user->empresa_id, $cutoff, '21:00', (int) $this->user->id,
+        );
+
+        $this->getJson($this->statementUrl(dateFrom: '2026-07-10', dateTo: '2026-07-10'))
+            ->assertOk()->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.ending_balance', '0.00')->assertJsonCount(0, 'data.rows');
+        $this->getJson($this->statementUrl(dateFrom: '2026-07-11', dateTo: '2026-07-11'))
+            ->assertOk()->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.sales_total', '100.00')->assertJsonPath('data.payments_total', '100.00')
+            ->assertJsonPath('data.ending_balance', '0.00')->assertJsonPath('data.payment_count', 1)
+            ->assertJsonPath('data.rows.0.date', '2026-07-11')->assertJsonPath('data.rows.1.date', '2026-07-11')
+            ->assertJsonPath('data.rows.0.balance', '100.00')->assertJsonPath('data.rows.1.balance', '0.00')
+            ->assertJsonPath('data.rows.0.date_time', '2026-07-10T15:00')
+            ->assertJsonPath('data.rows.1.date_time', '2026-07-10T15:30');
+        $account = $this->getJson('/api/v1/despacho-productos/pagos/cuenta?'.http_build_query([
+            'cliente_id' => $this->clientId, 'moneda' => 'PEN',
+            'date_from' => '2026-07-10', 'date_to' => '2026-07-10',
+        ]))->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('summary.balance', '0.00');
+        $this->assertSame(['2026-07-10T15:30', '2026-07-10T15:00'], array_column($account->json('data'), 'date_time'));
+        $this->assertEquals($beforePayment, DB::table('pagos')->where('id', $payment)->first());
+        $this->assertEquals($beforeApplications, DB::table('pago_aplicaciones')->where('pago_id', $payment)->get());
+    }
+
+    public static function reclassifiedPaymentCutoffs(): array
+    {
+        return [
+            'allocated at noon' => ['12:00', false],
+            'allocated at midnight' => ['00:00', false],
+            'module at noon' => ['12:00', true],
+            'module at midnight' => ['00:00', true],
+        ];
+    }
+
+    public function test_statement_keeps_real_chronological_order_inside_a_journey_crossing_midnight(): void
+    {
+        $document = $this->simpleProductDocument('PD-ORDEN-JORNADA', '2026-07-10', '100.00');
+        DB::table('tickets_despacho_productos')->where('id', $document['ticket_id'])
+            ->update(['registrado_at' => '2026-07-09 22:00:00']);
+        foreach ([['PG-NOCHE', '2026-07-09 23:00:00', '40.00'], ['PG-MANANA', '2026-07-10 09:00:00', '60.00']] as [$code, $time, $amount]) {
+            $payment = $this->createPayment(
+                (int) $this->user->empresa_id, (int) $this->user->id, $this->clientId,
+                $code, $time, $amount,
+            );
+            $this->applyPayment($payment, $document['document_id'], $amount);
+        }
+
+        $response = $this->getJson($this->statementUrl(dateFrom: '2026-07-10', dateTo: '2026-07-10'))
+            ->assertOk()->assertJsonPath('data.opening_balance', '0.00')
+            ->assertJsonPath('data.ending_balance', '0.00');
+        $rows = collect($response->json('data.rows'));
+        $this->assertSame(['PD-ORDEN-JORNADA', 'PG-NOCHE', 'PG-MANANA'], $rows->pluck('document')->all());
+        $this->assertSame(['100.00', '60.00', '0.00'], $rows->pluck('balance')->all());
+        $this->assertSame(['2026-07-10'], $rows->pluck('date')->unique()->values()->all());
+    }
+
+    public function test_statement_uses_branch_timezone_for_inclusive_operating_payment_boundaries(): void
     {
         DB::table('sucursales')->where('id', $this->branchId)->update([
             'zona_horaria' => 'America/Los_Angeles',
@@ -902,11 +984,11 @@ class ProductDispatchAccountStatementTest extends TestCase
         $document = $this->simpleProductDocument('PD-ZONA-HORARIA', '2026-07-15', '100.00');
 
         // The database clock is America/Lima. These values are respectively
-        // 01/07 00:00, 31/07 23:59:59 and 01/08 00:00 in Los Angeles.
+        // 30/06 21:00, 31/07 20:59:59 and 31/07 21:00 in Los Angeles.
         foreach ([
-            ['PG-LIMITE-INICIAL', '2026-07-01 02:00:00', '10.00'],
-            ['PG-LIMITE-FINAL', '2026-08-01 01:59:59', '15.00'],
-            ['PG-FUERA-DEL-RANGO', '2026-08-01 02:00:00', '20.00'],
+            ['PG-LIMITE-INICIAL', '2026-06-30 23:00:00', '10.00'],
+            ['PG-LIMITE-FINAL', '2026-07-31 22:59:59', '15.00'],
+            ['PG-FUERA-DEL-RANGO', '2026-07-31 23:00:00', '20.00'],
         ] as [$code, $storedAt, $amount]) {
             $payment = $this->createPayment(
                 (int) $this->user->empresa_id,
@@ -933,6 +1015,7 @@ class ProductDispatchAccountStatementTest extends TestCase
 
     public function test_collection_receipt_date_takes_precedence_over_the_later_deposit_timestamp(): void
     {
+        DB::table('empresas')->where('id', $this->user->empresa_id)->update(['hora_corte_operativo' => '00:00:00']);
         $document = $this->simpleProductDocument('PD-FECHA-RECEPCION', '2026-07-15', '100.00');
         $payment = $this->createPayment(
             (int) $this->user->empresa_id,
@@ -1018,6 +1101,11 @@ class ProductDispatchAccountStatementTest extends TestCase
         $this->assertIsArray($paymentRow);
         $this->assertSame('2026-07-31', $paymentRow['date']);
         $this->assertSame('25.00', $paymentRow['payment']);
+        $this->getJson('/api/v1/despacho-productos/pagos/cuenta?'.http_build_query([
+            'cliente_id' => $this->clientId, 'moneda' => 'PEN',
+            'date_from' => '2026-07-31', 'date_to' => '2026-07-31',
+        ]))->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.date_time', '2026-07-31T09:00');
     }
 
     public function test_statement_validation_rejects_malformed_ranges_arrays_and_ineligible_clients(): void
@@ -1159,12 +1247,12 @@ class ProductDispatchAccountStatementTest extends TestCase
             ->assertJsonPath('data.payments_total', '75.00')
             ->assertJsonPath('data.ending_balance', '-75.00')
             ->assertJsonPath('data.payment_count', 1)
-            ->assertJsonPath('data.rows.0.date', '2026-07-10');
+            ->assertJsonPath('data.rows.0.date', '2026-07-11');
 
         $this->putJson('/api/v1/despacho-productos/pagos/'.$id, [
             ...$payload,
             'importe' => '60.00',
-            'fecha_hora' => '2026-06-30T23:30',
+            'fecha_hora' => '2026-06-29T23:30',
         ])->assertOk();
         $this->getJson($this->statementUrl())
             ->assertOk()

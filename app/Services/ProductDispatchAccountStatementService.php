@@ -10,6 +10,7 @@ use App\Models\Tercero;
 use App\Models\TerceroRole;
 use App\Models\TicketDespachoProducto;
 use App\Support\FinancialMoney;
+use App\Support\OperatingDate;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder;
@@ -116,6 +117,11 @@ class ProductDispatchAccountStatementService
         $client = $this->eligibleClient($companyId, (int) $branch->id, $clientId);
         $timezone = (string) ($branch->zona_horaria ?: config('app.timezone'));
         $databaseTimezone = $this->databaseTimezone();
+        $cutoff = (string) (DB::table('empresas')->where('id', $companyId)
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00');
+        [, $databaseToExclusive] = OperatingDate::databaseRange(
+            $dateFrom, $dateTo, $timezone, $databaseTimezone, $cutoff,
+        );
 
         $productDocuments = $this->eligibleDocumentsQuery($companyId, (int) $branch->id)
             ->where('ticket.cliente_id', $clientId)
@@ -247,14 +253,13 @@ class ProductDispatchAccountStatementService
             $currency,
             $documentIds,
             $dateTo,
-            $timezone,
+            $databaseToExclusive,
             (int) $branch->id,
         )->concat($this->modulePaymentsQuery($companyId, (int) $branch->id)
             ->leftJoin('metodos_pago as method', 'method.id', '=', 'payment.metodo_pago_id')
             ->where('payment.cliente_id', $clientId)
             ->where('payment.moneda', $currency)
-            ->where('payment.fecha_hora', '<', CarbonImmutable::createFromFormat('!Y-m-d', $dateTo, $timezone)
-                ->addDay()->setTimezone($databaseTimezone)->toDateTimeString())
+            ->where('payment.fecha_hora', '<', $databaseToExclusive)
             ->get([
                 'payment.id', 'payment.codigo', 'payment.fecha_hora', 'payment.tipo',
                 'payment.direccion', 'payment.metodo', 'payment.referencia', 'payment.observaciones',
@@ -276,7 +281,7 @@ class ProductDispatchAccountStatementService
             $routeReceivedDate = trim((string) $payment->route_received_date);
             $date = $routeReceivedDate !== ''
                 ? $routeReceivedDate
-                : $localDateTime->format('Y-m-d');
+                : OperatingDate::forTimestamp($localDateTime, $cutoff);
             $amount = FinancialMoney::normalize((string) $payment->applied_amount);
 
             if ($date < $dateFrom) {
@@ -308,6 +313,7 @@ class ProductDispatchAccountStatementService
                 'kind' => 'PAYMENT',
                 'payment_id' => (int) $payment->id,
                 'date_time' => $localDateTime->format('Y-m-d\TH:i'),
+                'receipt_date' => $routeReceivedDate !== '' ? $routeReceivedDate : null,
                 'notes' => $payment->observaciones,
                 'reference' => $payment->referencia,
                 'payment_type' => $paymentType,
@@ -326,7 +332,7 @@ class ProductDispatchAccountStatementService
                 'balance' => '0.00',
                 'show_balance' => true,
                 '_effect' => FinancialMoney::subtract('0.00', $amount),
-                '_sort' => $date.' '.$localDateTime->format('H:i:s').'-2-'
+                '_sort' => $date.' '.$localDateTime->format('Y-m-d H:i:s').'-2-'
                     .str_pad((string) $payment->id, 12, '0', STR_PAD_LEFT),
             ]);
         }
@@ -587,7 +593,7 @@ class ProductDispatchAccountStatementService
                 'balance' => '0.00',
                 'show_balance' => true,
                 '_effect' => $documentAmount,
-                '_sort' => $date.' '.$registeredAt->format('H:i:s').'-1-'
+                '_sort' => $date.' '.$registeredAt->format('Y-m-d H:i:s').'-1-'
                     .str_pad((string) $document->ticket_id, 12, '0', STR_PAD_LEFT).'-000000',
             ]];
         }
@@ -633,7 +639,7 @@ class ProductDispatchAccountStatementService
                 'balance' => '0.00',
                 'show_balance' => $index === $lastIndex,
                 '_effect' => $amount,
-                '_sort' => $date.' '.$registeredAt->format('H:i:s').'-1-'
+                '_sort' => $date.' '.$registeredAt->format('Y-m-d H:i:s').'-1-'
                     .str_pad((string) $document->ticket_id, 12, '0', STR_PAD_LEFT).'-'
                     .str_pad((string) $line->numero, 6, '0', STR_PAD_LEFT),
             ];
@@ -650,18 +656,12 @@ class ProductDispatchAccountStatementService
         string $currency,
         Collection $documentIds,
         string $dateTo,
-        string $timezone,
+        string $toExclusive,
         int $branchId,
     ): Collection {
         if ($documentIds->isEmpty()) {
             return collect();
         }
-
-        $toExclusive = CarbonImmutable::createFromFormat('!Y-m-d', $dateTo, $timezone)
-            ->addDay()
-            ->startOfDay()
-            ->setTimezone($this->databaseTimezone())
-            ->format('Y-m-d H:i:s');
 
         return DB::table('pago_aplicaciones as application')
             ->join('pagos as payment', 'payment.id', '=', 'application.pago_id')

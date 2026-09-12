@@ -113,7 +113,10 @@ class ProductDispatchCustomerAccountService
                     $row = [
                         'id' => $source['payment_id'], 'payment_id' => $source['payment_id'], 'kind' => 'APPLIED_PAYMENT',
                         'code' => $source['document'], 'client' => $statement['client'], 'currency' => $statement['currency'],
-                        'amount' => $source['payment'], 'date_time' => $source['date'].'T'.substr($source['date_time'], 11),
+                        'amount' => $source['payment'],
+                        'date_time' => $source['receipt_date'] !== null
+                            ? $source['receipt_date'].'T'.substr($source['date_time'], 11)
+                            : $source['date_time'],
                         'notes' => $source['detail'], 'reference' => null,
                         'can_edit' => false, 'can_delete' => false, 'edit_url' => null, 'delete_url' => null,
                         'origin_url' => ! $otherBranch && $mayViewFinance ? $origin : null,

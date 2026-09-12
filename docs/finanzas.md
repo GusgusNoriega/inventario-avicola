@@ -17,6 +17,21 @@ Los saldos no se editan directamente. Siempre se derivan del libro inmutable de
 `pagos`: entradas a una cuenta menos salidas de esa cuenta. Una anulación crea
 una reversa y restaura las aplicaciones CXC/CXP.
 
+Los estados de cuenta de clientes, el resumen de cuentas y la ruta de cobranza
+agrupan los cobros directos por la misma jornada operativa que las ventas. El
+periodo incluye desde la hora de corte del día anterior a la fecha inicial hasta
+la hora de corte de la fecha final, sin incluir ese último instante. Así, cambiar
+el horario no separa una venta de un cobro realizado en la misma jornada. En
+Despacho de productos se aplica la zona horaria de la sucursal; los reportes
+generales usan la zona horaria de la empresa.
+
+La fecha de recepción elegida explícitamente en una cobranza se respeta. Las
+fechas y horas reales de pagos, sus importes y aplicaciones no se modifican: la
+corrección se aplica al consultar o generar nuevamente el reporte, incluso para
+horarios ya cambiados. Los anticipos reales siguen mostrándose como saldo a
+favor. Los estados de proveedores y los movimientos de caja conservan su
+periodo calendario.
+
 La vista de caja de efectivo agrega una capa operativa en
 `movimientos_caja_efectivo`. Cada registro apunta al asiento vigente en
 `pagos`, por lo que no mantiene un saldo paralelo. Si se corrigen el importe,
