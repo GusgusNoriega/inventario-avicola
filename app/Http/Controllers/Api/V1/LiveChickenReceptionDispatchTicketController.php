@@ -283,7 +283,7 @@ class LiveChickenReceptionDispatchTicketController extends Controller
         $now = CarbonImmutable::now((string) $branch->zona_horaria);
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $cutoffAt = $now->startOfDay()->setTimeFromTimeString($cutoff);
         $currentOperatingDate = $now->greaterThanOrEqualTo($cutoffAt)
             ? $now->addDay()->startOfDay()

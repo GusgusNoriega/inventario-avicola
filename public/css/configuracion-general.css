@@ -1,0 +1,92 @@
+.general-settings-shell {
+  max-width: 1080px;
+}
+
+.general-settings-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.general-settings-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.general-settings-copy {
+  margin: 0;
+  color: #a9bdd8;
+  line-height: 1.6;
+}
+
+.general-settings-form {
+  display: grid;
+  gap: 16px;
+}
+
+.general-settings-editor {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.general-settings-editor input {
+  min-height: 54px;
+  color: #fff;
+  color-scheme: dark;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.general-settings-example {
+  padding: 16px;
+  border: 1px solid #304b6c;
+  border-radius: 10px;
+  background: #101d2e;
+}
+
+.general-settings-example span {
+  color: #8fa8c9;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.general-settings-example p {
+  margin: 6px 0 0;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.general-settings-actions {
+  flex-wrap: wrap;
+}
+
+.general-settings-actions .journey-message {
+  flex-basis: 300px;
+  line-height: 1.5;
+}
+
+.general-settings-page [hidden] {
+  display: none;
+}
+
+.general-settings-page :disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .general-settings-summary,
+  .general-settings-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .general-settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .general-settings-actions .journey-message {
+    flex-basis: auto;
+  }
+}

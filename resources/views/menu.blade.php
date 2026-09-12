@@ -345,6 +345,22 @@
         </a>
         @endif
 
+        @if ($user->hasModule('MODULO_CONFIGURACION_GENERAL'))
+        <a class="menu-tile menu-tile-primary" href="{{ route('configuracion-general') }}">
+          <span class="menu-tile-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 6v6l4 2"></path>
+            </svg>
+          </span>
+          <span class="menu-tile-text">
+            <strong>Configuración general</strong>
+            <small>Hora de cierre y apertura de la jornada</small>
+          </span>
+          <span class="menu-status">Administrar</span>
+        </a>
+        @endif
+
         @if ($user->hasModule('MODULO_USUARIOS_ROLES'))
         <a class="menu-tile menu-tile-primary menu-tile-access" href="{{ route('admin.access-control') }}">
           <span class="menu-tile-icon" aria-hidden="true">

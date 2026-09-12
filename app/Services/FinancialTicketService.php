@@ -260,12 +260,12 @@ class FinancialTicketService
                 ->lockForUpdate()
                 ->get();
             $recordChanges = $records->map(function (Pesada $record) use (
-                $databaseTimezone,
+                $branchTimezone,
                 $offsetSeconds,
             ): array {
                 $before = CarbonImmutable::parse(
                     (string) $record->getRawOriginal('pesada_at'),
-                    $databaseTimezone,
+                    $branchTimezone,
                 );
 
                 return [
@@ -277,28 +277,17 @@ class FinancialTicketService
             $cutoff = (string) (
                 DB::table('empresas')
                     ->where('id', $companyId)
-                    ->value('hora_corte_operativo')
+                    ->sharedLock()->value('hora_corte_operativo')
                 ?: '21:00:00'
             );
-            $operatingDates = $recordChanges
-                ->map(fn (array $change): string => $this->operatingDateFor(
-                    $change['after']->setTimezone($branchTimezone),
-                    $cutoff,
-                ))
-                ->unique()
-                ->values();
-
-            if ($operatingDates->count() > 1) {
-                throw ValidationException::withMessages([
-                    'fecha_hora' => 'La nueva hora haría que las pesadas queden en jornadas operativas diferentes. Elige una hora que conserve todas las pesadas dentro de la misma jornada.',
-                ]);
-            }
-
-            $targetOperatingDate = $operatingDates->first()
-                ?? $this->operatingDateFor(
-                    $targetRegisteredAt->setTimezone($branchTimezone),
-                    $cutoff,
-                );
+            // Keep the same whole-ticket rule as a schedule recalculation. A
+            // changed cutoff may legitimately fall between this ticket's weighings.
+            $firstWeighedAt = $recordChanges->pluck('after')
+                ->sortBy(fn (CarbonImmutable $at): int => $at->getTimestamp())->first();
+            $targetOperatingDate = $this->operatingDateFor(
+                $firstWeighedAt ?? $targetRegisteredAt->setTimezone($branchTimezone),
+                $cutoff,
+            );
             $targetJourney = DB::table('jornadas_operativas')
                 ->where('sucursal_id', $journeyContext->sucursal_id)
                 ->whereDate('fecha_operativa', $targetOperatingDate)

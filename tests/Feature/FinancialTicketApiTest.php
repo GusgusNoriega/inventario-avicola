@@ -9,6 +9,7 @@ use App\Models\TerceroRole;
 use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
+use App\Services\GeneralConfigurationService;
 use App\Support\WholesaleTwoChickenVariant;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1536,6 +1537,102 @@ class FinancialTicketApiTest extends TestCase
                 ->pluck('entidad_id')
                 ->all(),
         );
+    }
+
+    public function test_reclassified_ticket_can_keep_or_shift_its_datetime_with_weighings_on_both_sides_of_cutoff(): void
+    {
+        $ticket = $this->createTicket(
+            'FECHA-HORA-RECLASIFICADO',
+            CarbonImmutable::parse('2026-07-20 22:40:00'),
+            $this->sourceClientId,
+            $this->twoTypeValues(),
+        );
+        $destinationJourneyId = DB::table('jornadas_operativas')->insertGetId([
+            'sucursal_id' => $this->branchId, 'fecha_operativa' => '2026-07-21',
+            'estado' => 'CERRADA', 'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-07-20 21:00:00', 'cierre_programado_at' => '2026-07-21 21:00:00',
+        ]);
+        DB::table('tickets_despacho')->where('id', $ticket['id'])->update(['jornada_id' => $destinationJourneyId]);
+        $weighingIds = DB::table('pesadas')->where('ticket_id', $ticket['id'])->orderBy('id')->pluck('id');
+        // ID order is intentionally the opposite of capture order.
+        DB::table('pesadas')->where('id', $weighingIds[0])->update(['pesada_at' => '2026-07-20 22:30:00']);
+        DB::table('pesadas')->where('id', $weighingIds[1])->update(['pesada_at' => '2026-07-20 21:30:00']);
+        $this->createJavaMovement($ticket['id'], $this->sourceClientId);
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/precios", [
+            'precios' => [['id' => $ticket['price_ids'][$this->firstChickenTypeId], 'precio_kg' => '8.5000']],
+        ])->assertOk();
+        app(GeneralConfigurationService::class)->update((int) $this->user->empresa_id, '22:00', '21:00', (int) $this->user->id);
+        $this->assertDatabaseHas('tickets_despacho', ['id' => $ticket['id'], 'jornada_id' => $this->journeyId]);
+        $facts = DB::table('pesadas')->where('ticket_id', $ticket['id'])->orderBy('id')
+            ->get(['id', 'ticket_id', 'cantidad_aves', 'cantidad_javas', 'peso_neto_kg', 'estado', 'created_at']);
+        $prices = DB::table('ticket_precios')->where('ticket_id', $ticket['id'])->orderBy('id')->get();
+        $document = DB::table('comprobantes')->where('origen_clave', "VENTA:TICKET:{$ticket['id']}")->firstOrFail();
+
+        $endpoint = "/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora";
+        $this->putJson($endpoint, ['fecha_hora' => '2026-07-20T22:40'])->assertOk();
+        $this->assertDatabaseHas('tickets_despacho', ['id' => $ticket['id'], 'jornada_id' => $this->journeyId]);
+        $this->assertDatabaseHas('pesadas', ['id' => $weighingIds[0], 'pesada_at' => '2026-07-20 22:30:00']);
+        $this->assertDatabaseHas('pesadas', ['id' => $weighingIds[1], 'pesada_at' => '2026-07-20 21:30:00']);
+
+        $this->putJson($endpoint, ['fecha_hora' => '2026-07-21T22:40'])->assertOk();
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'], 'jornada_id' => $destinationJourneyId, 'cerrado_at' => '2026-07-21 22:40:00',
+        ]);
+        $this->assertDatabaseHas('pesadas', ['id' => $weighingIds[0], 'pesada_at' => '2026-07-21 22:30:00']);
+        $this->assertDatabaseHas('pesadas', ['id' => $weighingIds[1], 'pesada_at' => '2026-07-21 21:30:00']);
+        $this->assertEquals($facts, DB::table('pesadas')->where('ticket_id', $ticket['id'])->orderBy('id')
+            ->get(['id', 'ticket_id', 'cantidad_aves', 'cantidad_javas', 'peso_neto_kg', 'estado', 'created_at']));
+        $this->assertEquals($prices, DB::table('ticket_precios')->where('ticket_id', $ticket['id'])->orderBy('id')->get());
+        $this->assertDatabaseHas('movimientos_javas', ['ticket_despacho_id' => $ticket['id'], 'jornada_id' => $destinationJourneyId]);
+        $this->assertDatabaseHas('comprobantes', [
+            'id' => $document->id, 'fecha_emision' => '2026-07-21', 'fecha_vencimiento' => '2026-07-21',
+            'total' => $document->total, 'saldo_pendiente' => $document->saldo_pendiente,
+        ]);
+    }
+
+    public function test_datetime_change_uses_branch_wall_clock_for_weighings_after_reclassification(): void
+    {
+        DB::table('sucursales')->where('id', $this->branchId)->update(['zona_horaria' => 'America/Los_Angeles']);
+        $ticket = $this->createTicket(
+            'FECHA-HORA-ZONA-SUCURSAL',
+            CarbonImmutable::parse('2026-07-21 01:40:00'),
+            $this->sourceClientId,
+            $this->twoTypeValues(),
+        );
+        $weighingIds = DB::table('pesadas')->where('ticket_id', $ticket['id'])->orderBy('id')->pluck('id');
+        DB::table('pesadas')->where('id', $weighingIds[0])->update(['pesada_at' => '2026-07-20 23:30:00']);
+        DB::table('pesadas')->where('id', $weighingIds[1])->update(['pesada_at' => '2026-07-20 22:30:00', 'estado' => Pesada::STATUS_VOIDED]);
+        app(GeneralConfigurationService::class)->update((int) $this->user->empresa_id, '22:00', '21:00', (int) $this->user->id);
+        $target = (int) DB::table('jornadas_operativas')->where('sucursal_id', $this->branchId)->where('fecha_operativa', '2026-07-21')->value('id');
+        $this->assertNotSame(0, $target);
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-21T01:40',
+        ])->assertOk();
+        $this->assertDatabaseHas('tickets_despacho', ['id' => $ticket['id'], 'jornada_id' => $target]);
+        $this->assertDatabaseHas('pesadas', ['id' => $weighingIds[0], 'pesada_at' => '2026-07-20 23:30:00']);
+        $this->assertDatabaseHas('pesadas', ['id' => $weighingIds[1], 'pesada_at' => '2026-07-20 22:30:00', 'estado' => Pesada::STATUS_VOIDED]);
+    }
+
+    public function test_datetime_change_without_weighings_uses_registration_converted_to_branch_timezone(): void
+    {
+        DB::table('sucursales')->where('id', $this->branchId)->update(['zona_horaria' => 'America/Los_Angeles']);
+        $ticket = $this->createTicket('FECHA-HORA-SIN-PESADAS', CarbonImmutable::parse('2026-07-20 18:00:00'), $this->sourceClientId, []);
+        DB::table('tickets_despacho')->where('id', $ticket['id'])->update(['cerrado_at' => null]);
+        $target = DB::table('jornadas_operativas')->insertGetId([
+            'sucursal_id' => $this->branchId, 'fecha_operativa' => '2026-07-21',
+            'estado' => 'CERRADA', 'abierta_por' => $this->user->id,
+            'inicio_at' => '2026-07-20 21:00:00', 'cierre_programado_at' => '2026-07-21 21:00:00',
+        ]);
+        app(GeneralConfigurationService::class)->update((int) $this->user->empresa_id, '22:00', '21:00', (int) $this->user->id);
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/fecha-hora", [
+            'fecha_hora' => '2026-07-21T00:30',
+        ])->assertOk();
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'], 'jornada_id' => $target, 'cerrado_at' => '2026-07-21 00:30:00',
+            'created_at' => '2026-07-20 18:00:00',
+        ]);
+        $this->assertDatabaseCount('pesadas', 0);
+        $this->assertDatabaseCount('comprobantes', 0);
     }
 
     public function test_datetime_change_is_atomic_when_the_destination_journey_does_not_exist(): void

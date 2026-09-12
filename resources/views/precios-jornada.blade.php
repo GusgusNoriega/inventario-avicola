@@ -27,7 +27,7 @@
       </article>
       <article class="journey-summary-card card">
         <span>Horario</span>
-        <strong id="journeyPriceWindow">21:00 a 21:00</strong>
+        <strong id="journeyPriceWindow">Cargando...</strong>
       </article>
     </section>
 

@@ -51,6 +51,7 @@ class RetailDispatchService
         }
 
         return DB::transaction(function () use ($companyId, $branch, $actor, $data, $station): array {
+            DB::table('empresas')->where('id', $companyId)->lockForUpdate()->first(['id']);
             $existing = TicketDespacho::query()
                 ->where('referencia_externa', $data['draft_id'])
                 ->lockForUpdate()
@@ -357,7 +358,7 @@ class RetailDispatchService
     /** @param Collection<int, CarbonImmutable> $weighedAt */
     private function resolveOperatingDate(int $companyId, Collection $weighedAt, string $timezone): CarbonImmutable
     {
-        $cutoff = (string) DB::table('empresas')->where('id', $companyId)->value('hora_corte_operativo') ?: '21:00:00';
+        $cutoff = (string) DB::table('empresas')->where('id', $companyId)->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $dates = $weighedAt->map(function (CarbonImmutable $time) use ($cutoff): string {
             $cutoffAt = $time->startOfDay()->setTimeFromTimeString($cutoff);
 
@@ -375,7 +376,7 @@ class RetailDispatchService
 
     private function openJourney(int $companyId, object $branch, User $actor, CarbonImmutable $operatingDate): JornadaOperativa
     {
-        $cutoff = (string) DB::table('empresas')->where('id', $companyId)->value('hora_corte_operativo') ?: '21:00:00';
+        $cutoff = (string) DB::table('empresas')->where('id', $companyId)->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $journey = JornadaOperativa::query()
             ->where('sucursal_id', $branch->id)
             ->whereDate('fecha_operativa', $operatingDate->format('Y-m-d'))

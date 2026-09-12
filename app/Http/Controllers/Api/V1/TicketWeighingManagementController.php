@@ -203,7 +203,16 @@ class TicketWeighingManagementController extends Controller
             'driver_id.exists' => 'El chofer seleccionado no pertenece a la flota activa de la empresa.',
         ]);
 
-        DB::transaction(function () use ($request, $selected, $validated, $companyId): void {
+        DB::transaction(function () use ($request, $selected, $validated, $companyId, $branch, &$currentOperatingDate): void {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
+            TicketDespacho::query()->whereKey($selected->id)->lockForUpdate()->firstOrFail();
+            $selected->refresh();
+            $currentOperatingDate = $this->currentOperatingDate($companyId, $branch->zona_horaria);
+            $this->assertDeliveryEditable(
+                $selected,
+                $currentOperatingDate,
+                'Solo se puede modificar el transporte de tickets de la jornada operativa actual.'
+            );
             $before = $this->deliveryAuditValues($selected);
             $selected->update([
                 'vehiculo_entrega_id' => $validated['vehicle_id'],
@@ -222,7 +231,7 @@ class TicketWeighingManagementController extends Controller
                 $this->deliveryAuditValues($selected->refresh()),
                 $request->ip()
             );
-        });
+        }, 3);
 
         $this->loadTicket($selected);
 
@@ -330,6 +339,7 @@ class TicketWeighingManagementController extends Controller
                 (string) $validated['weighed_at'],
                 (string) $branch->zona_horaria,
                 $companyId,
+                $weighing,
             );
         }
         $actor = $this->context->actor($request, (int) $branch->id);
@@ -457,12 +467,14 @@ class TicketWeighingManagementController extends Controller
             $usesWholesaleTwoVariants,
             $variantDefinition,
             $allowHistoricalEditing,
-            $currentOperatingDate
+            &$currentOperatingDate
         ): void {
+            $this->receptionTicketInventory->lockCompanyScope($companyId);
             $lockedTicket = TicketDespacho::query()
                 ->whereKey($selected->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            $currentOperatingDate = $this->currentOperatingDate($companyId, $branch->zona_horaria);
             if ($allowHistoricalEditing) {
                 $this->assertFinanceEditable($lockedTicket);
             } else {
@@ -477,6 +489,7 @@ class TicketWeighingManagementController extends Controller
                     (string) $validated['weighed_at'],
                     (string) $lockedBranch->zona_horaria,
                     $companyId,
+                    $weighing,
                 );
             }
 
@@ -723,7 +736,7 @@ class TicketWeighingManagementController extends Controller
             );
         }, 3);
 
-        $this->loadTicket($selected);
+        $this->loadTicket($selected->refresh());
 
         return response()->json([
             'message' => 'Pesada actualizada correctamente.',
@@ -752,7 +765,12 @@ class TicketWeighingManagementController extends Controller
         ]);
         $actor = $this->context->actor($request, (int) $branch->id);
 
-        DB::transaction(function () use ($request, $selected, $weighing, $validated, $branch, $actor): void {
+        DB::transaction(function () use ($request, $selected, $weighing, $validated, $branch, $actor, &$currentOperatingDate): void {
+            $this->receptionTicketInventory->lockCompanyScope((int) $branch->empresa_id);
+            TicketDespacho::query()->whereKey($selected->id)->lockForUpdate()->firstOrFail();
+            $selected->refresh();
+            $currentOperatingDate = $this->currentOperatingDate((int) $branch->empresa_id, $branch->zona_horaria);
+            $this->assertEditable($selected, $currentOperatingDate);
             $record = Pesada::query()
                 ->with('tipoPollo')
                 ->where('ticket_id', $selected->id)
@@ -810,7 +828,7 @@ class TicketWeighingManagementController extends Controller
                 $this->auditValues($record->fresh()),
                 $request->ip()
             );
-        });
+        }, 3);
 
         $this->loadTicket($selected);
 
@@ -1081,7 +1099,7 @@ class TicketWeighingManagementController extends Controller
     {
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $now = CarbonImmutable::now($timezone);
         $cutoffAt = $now->startOfDay()->setTimeFromTimeString($cutoff);
 
@@ -1214,11 +1232,20 @@ class TicketWeighingManagementController extends Controller
         string $weighedAt,
         string $timezone,
         int $companyId,
+        ?int $weighingId = null,
     ): void {
+        // A preserved ticket can straddle a later cutoff. Editing its weight
+        // must not reject the unchanged, historically recorded timestamp.
+        if ($weighingId !== null) {
+            $storedAt = DB::table('pesadas')->where('ticket_id', $ticket->id)->where('id', $weighingId)->value('pesada_at');
+            if ($storedAt && CarbonImmutable::parse($weighedAt, $timezone)->setTimezone($timezone)->format('Y-m-d H:i:s') === (string) $storedAt) {
+                return;
+            }
+        }
         $ticket->loadMissing('jornada');
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $localTime = CarbonImmutable::parse($weighedAt, $timezone);
         $cutoffAt = $localTime->startOfDay()->setTimeFromTimeString($cutoff);
         $operatingDate = $localTime->greaterThanOrEqualTo($cutoffAt)

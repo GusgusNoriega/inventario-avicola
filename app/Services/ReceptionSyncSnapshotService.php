@@ -52,8 +52,8 @@ class ReceptionSyncSnapshotService
             }
 
             return DB::transaction(function () use ($token, $branch): array {
-                // Share the push mutex. Locking empresa first can deadlock against a push's
-                // branch lock when their foreign-key checks acquire the inverse parent locks.
+                // Use the same company -> branch order as pushes and schedule changes.
+                DB::table('empresas')->where('id', $token->empresa_id)->lockForUpdate()->firstOrFail();
                 DB::table('sucursales')->where('id', $token->sucursal_id)
                     ->where('empresa_id', $token->empresa_id)->lockForUpdate()->firstOrFail();
                 $now = CarbonImmutable::now()->startOfSecond();

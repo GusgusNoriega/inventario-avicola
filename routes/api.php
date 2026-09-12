@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\FinancialEntityController;
 use App\Http\Controllers\Api\V1\FinancialMovementController;
 use App\Http\Controllers\Api\V1\FinancialQueryController;
 use App\Http\Controllers\Api\V1\FinancialTicketController;
+use App\Http\Controllers\Api\V1\GeneralConfigurationController;
 use App\Http\Controllers\Api\V1\JavaControlController;
 use App\Http\Controllers\Api\V1\JourneyPlanController;
 use App\Http\Controllers\Api\V1\JourneyPriceController;
@@ -59,6 +60,16 @@ Route::prefix('v1')->group(function (): void {
 
     Route::post('/auth/login', [AuthController::class, 'login'])
         ->middleware('throttle:login');
+
+    Route::middleware([
+        'auth:sanctum',
+        'active',
+        'password.changed',
+        'module:MODULO_CONFIGURACION_GENERAL',
+    ])->group(function (): void {
+        Route::get('/configuracion-general', [GeneralConfigurationController::class, 'show']);
+        Route::put('/configuracion-general', [GeneralConfigurationController::class, 'update']);
+    });
 
     Route::prefix('finanzas')->middleware([
         'auth:sanctum',

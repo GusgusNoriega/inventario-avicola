@@ -146,7 +146,10 @@ function journeyWindowLabel(range) {
     return "Horario operativo no disponible.";
   }
 
-  return `Desde ${formatDate(fromDate)} a las ${fromTime} hasta ${formatDate(toDate)} a las ${toTime} (hora final no incluida).`;
+  const note = range.mode === "journey"
+    ? " Los tickets se incluyen completos según su primera pesada."
+    : "";
+  return `Desde ${formatDate(fromDate)} a las ${fromTime} hasta ${formatDate(toDate)} a las ${toTime} (hora final no incluida).${note}`;
 }
 
 function normalizeCode(value) {

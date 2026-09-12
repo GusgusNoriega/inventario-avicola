@@ -122,7 +122,7 @@ class ClientJourneyPriceService
     {
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
 
         return DB::table('jornadas_operativas as jornadas')
             ->join('sucursales', 'sucursales.id', '=', 'jornadas.sucursal_id')

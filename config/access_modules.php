@@ -178,6 +178,13 @@ return [
                 'RECEPCION_NO_PROGRAMADA',
             ],
         ],
+        'MODULO_CONFIGURACION_GENERAL' => [
+            'name' => 'Configuración general',
+            'description' => 'Hora general de cierre y apertura de las jornadas de la empresa.',
+            'path' => '/configuracion-general',
+            'technical_permissions' => [],
+            'legacy_permissions' => [],
+        ],
         'MODULO_USUARIOS_ROLES' => [
             'name' => 'Usuarios y roles',
             'description' => 'Administracion de usuarios, roles y accesos.',

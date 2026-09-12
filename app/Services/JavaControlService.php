@@ -177,6 +177,7 @@ class JavaControlService
             $actor,
             $data
         ): array {
+            DB::table('empresas')->where('id', $companyId)->lockForUpdate()->first(['id']);
             $javaField = array_key_exists('quantity', $data) ? 'quantity' : 'java_quantity';
             $inventory = InventarioJava::query()
                 ->where('empresa_id', $companyId)
@@ -356,6 +357,7 @@ class JavaControlService
             $data,
             $ip
         ): AjusteSaldoJava {
+            DB::table('empresas')->where('id', $companyId)->lockForUpdate()->first(['id']);
             if ((int) $actor->empresa_id !== $companyId) {
                 throw ValidationException::withMessages([
                     'actor' => 'El usuario que realiza la corrección no pertenece a la empresa.',
@@ -652,6 +654,7 @@ class JavaControlService
             $receivedAt,
             $timezone
         ): MovimientoJava {
+            DB::table('empresas')->where('id', $companyId)->lockForUpdate()->first(['id']);
             $journey = $this->currentJourney(
                 $companyId,
                 $branchId,
@@ -749,7 +752,7 @@ class JavaControlService
         $occurredAt = $occurredAt->setTimezone($timezone);
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $cutoffAt = $occurredAt->startOfDay()->setTimeFromTimeString($cutoff);
         $operatingDate = $occurredAt->greaterThanOrEqualTo($cutoffAt)
             ? $occurredAt->addDay()->startOfDay()

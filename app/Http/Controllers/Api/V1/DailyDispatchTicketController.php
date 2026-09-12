@@ -50,16 +50,19 @@ class DailyDispatchTicketController extends Controller
             ?? $this->currentOperatingDate($companyId, $branch->zona_horaria);
         $cutoff = $this->cutoff($companyId);
         [$from, $to] = $this->resolveRange($filters, $operatingDate, $cutoff, $branch->zona_horaria);
+        $usesTimeRange = collect(['from_date', 'from_time', 'to_date', 'to_time'])
+            ->contains(fn (string $key): bool => filled($filters[$key] ?? null));
         $ticketSearch = trim($filters['ticket'] ?? '');
 
         $tickets = TicketDespacho::query()
             ->whereHas(
                 'jornada',
                 fn (Builder $query) => $query->where('sucursal_id', $branch->id)
+                    ->when(! $usesTimeRange, fn (Builder $journey) => $journey->whereDate('fecha_operativa', $operatingDate))
             )
             ->whereHas(
                 'pesadas',
-                fn (Builder $query) => $this->applyRecordRange($query, $from, $to)
+                fn (Builder $query) => $query->when($usesTimeRange, fn ($records) => $this->applyRecordRange($records, $from, $to))
                     ->when(
                         ! $includeVoided,
                         fn (Builder $query) => $query->where('estado', Pesada::STATUS_ACTIVE)
@@ -79,7 +82,7 @@ class DailyDispatchTicketController extends Controller
                 'almacenDestino',
                 'anuladoPor:id,nombre',
                 ...($includePrintRows ? ['precios:id,ticket_id,tipo_pollo_id,precio_kg'] : []),
-                'pesadas' => fn ($query) => $this->applyRecordRange($query, $from, $to)
+                'pesadas' => fn ($query) => $query->when($usesTimeRange, fn ($records) => $this->applyRecordRange($records, $from, $to))
                     ->orderBy('numero'),
                 'pesadas.tipoPollo',
                 'pesadas.tipoJava',
@@ -128,6 +131,7 @@ class DailyDispatchTicketController extends Controller
                     'to_date' => $to->format('Y-m-d'),
                     'to_time' => $to->format('H:i'),
                     'cutoff_time' => substr($cutoff, 0, 5),
+                    'mode' => $usesTimeRange ? 'time_range' : 'journey',
                 ],
                 'generated_at' => now($branch->zona_horaria)->toISOString(),
                 'summary' => $summary,
@@ -158,7 +162,7 @@ class DailyDispatchTicketController extends Controller
     {
         return (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
     }
 
     /**

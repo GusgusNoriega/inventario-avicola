@@ -209,6 +209,10 @@ Route::middleware(['auth', 'active'])->group(function (): void {
                 ->name('control-javas.trazabilidad');
         });
 
+        Route::view('/configuracion-general', 'configuracion-general')
+            ->middleware('module:MODULO_CONFIGURACION_GENERAL')
+            ->name('configuracion-general');
+
         Route::view('/administracion/accesos', 'admin.access-control')
             ->middleware('module:MODULO_USUARIOS_ROLES')
             ->name('admin.access-control');

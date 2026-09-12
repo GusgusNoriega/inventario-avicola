@@ -14,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 /** Validates captured facts without invoking inventory, dispatch or finance services. */
 class ReceptionSyncPayloadService
 {
+    public function __construct(private readonly ReceptionSyncJourneyReclassificationService $journeys) {}
+
     public function normalize(ReceptionSyncToken $token, object $branch, string $kind, array $payload, ?ReceptionSyncRecord $previous): array
     {
         $data = Validator::make($payload, [
@@ -48,9 +50,8 @@ class ReceptionSyncPayloadService
         $external = in_array($lane, [3, 4], true);
         $this->check($external || empty($data['external_owner_id']), 'external_owner_id', 'Solo las columnas externas admiten propietario externo.');
         $this->check($kind === 'ticket' || (empty($data['delivery_vehicle_id']) && empty($data['delivery_driver_id'])), 'delivery_vehicle_id', 'La entrega solo corresponde a tickets.');
-        if ($previous) {
-            $this->check($data['operating_date'] === $previous->operating_date->format('Y-m-d'), 'operating_date', 'Una corrección no puede cambiar la jornada; anula el registro y crea otro.');
-        }
+        $cutoff = substr((string) (DB::table('empresas')->where('id', $token->empresa_id)
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00'), 0, 5).':00';
 
         // Inactive catalog entries remain valid for facts captured before deactivation.
         $destination = $kind === 'ticket'
@@ -75,8 +76,7 @@ class ReceptionSyncPayloadService
             $this->check($kind === 'ticket' || $line['sex'] === ($lane % 2 === 1 ? 'MACHO' : 'HEMBRA'), "{$prefix}.sex", 'El sexo no corresponde a la columna.');
             $at = CarbonImmutable::parse($line['weighed_at'])->setTimezone($branch->zona_horaria);
             $this->check($at->lessThanOrEqualTo(CarbonImmutable::now()->addMinutes(5)), "{$prefix}.weighed_at", 'La fecha de captura no puede estar en el futuro.');
-            $date = $at->format('H:i:s') >= $data['operating_cutoff'] ? $at->addDay()->format('Y-m-d') : $at->format('Y-m-d');
-            $this->check($date === $data['operating_date'], "{$prefix}.weighed_at", 'La pesada no corresponde a la fecha operativa y hora de corte enviadas.');
+            $this->check($at->format('Y-m-d') >= '2000-01-01', "{$prefix}.weighed_at", 'La fecha de captura debe ser posterior al año 1999.');
             // Integer grams make server and mobile calculations deterministic.
             $gross = (int) round((float) $line['read_weight_kg'] * 1000);
             $cageGrams = (int) round((float) $line['cage_weight_kg'] * 1000);
@@ -115,10 +115,16 @@ class ReceptionSyncPayloadService
         $active = array_values(array_filter($lines, fn (array $line): bool => $line['status'] === 'active'));
         $this->check($active !== [], 'weighings', 'Para anular todas las pesadas utiliza la acción void del registro.');
         $oldPayload = $previous?->payload ?? [];
+        // Offline devices can upload after the company changes its schedule. Derive
+        // the whole record from its first weighing using the current server cutoff.
+        $date = $this->journeys->operatingDate($lines, $branch->zona_horaria, $cutoff);
+        if ($previous) {
+            $this->check($date === $previous->operating_date->format('Y-m-d'), 'operating_date', 'Una corrección no puede cambiar la jornada; anula el registro y crea otro.');
+        }
 
         return [
-            'operating_date' => $data['operating_date'],
-            'operating_cutoff' => $data['operating_cutoff'],
+            'operating_date' => $date,
+            'operating_cutoff' => $cutoff,
             'lane' => $lane,
             'origin' => $data['origin'] ?? 'Camión del día',
             'local_number' => $data['local_number'] ?? null,

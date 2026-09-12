@@ -121,6 +121,7 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
                     $ticket,
                     (string) $input['weighed_at'],
                     "weighings.{$index}.weighed_at",
+                    (string) $record->getRawOriginal('pesada_at'),
                 );
                 $cages = (int) $input['cage_count'];
                 $birdsPerCage = (int) $input['birds_per_cage'];
@@ -759,6 +760,7 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
         TicketDespacho $ticket,
         string $value,
         string $field,
+        ?string $originalTime = null,
     ): CarbonImmutable {
         $weighedAt = CarbonImmutable::parse($value)->setTimezone($branch->zona_horaria);
 
@@ -768,9 +770,13 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
             ]);
         }
 
+        if ($originalTime !== null && $weighedAt->format('Y-m-d H:i:s') === $originalTime) {
+            return $weighedAt;
+        }
+
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $cutoffAt = $weighedAt->startOfDay()->setTimeFromTimeString($cutoff);
         $operatingDate = $weighedAt->greaterThanOrEqualTo($cutoffAt)
             ? $weighedAt->addDay()->startOfDay()
@@ -791,7 +797,7 @@ class LiveChickenReceptionDispatchTicketService extends DispatchTicketService
         $now = CarbonImmutable::now($timezone);
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $cutoffAt = $now->startOfDay()->setTimeFromTimeString($cutoff);
 
         return $now->greaterThanOrEqualTo($cutoffAt)

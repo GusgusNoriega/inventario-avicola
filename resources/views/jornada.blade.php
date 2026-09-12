@@ -30,7 +30,7 @@
       </article>
       <article class="journey-summary-card card">
         <span>Horario</span>
-        <strong id="journeyWindow">21:00 a 21:00</strong>
+        <strong id="journeyWindow">Cargando...</strong>
       </article>
       <article class="journey-summary-card card">
         <span>Orígenes seleccionados</span>

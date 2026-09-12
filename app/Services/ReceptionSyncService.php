@@ -51,8 +51,11 @@ class ReceptionSyncService
     private function apply(ReceptionSyncToken $token, object $branch, array $operation): array
     {
         return DB::transaction(function () use ($token, $branch, $operation): array {
+            // Schedule changes and device uploads share the same company mutex.
+            DB::table('empresas')->where('id', $token->empresa_id)->lockForUpdate()->firstOrFail();
             // Serialize writes across ALL devices in the branch, including inserts and retries.
-            DB::table('sucursales')->where('id', $token->sucursal_id)->lockForUpdate()->first();
+            $branch = DB::table('sucursales')->where('id', $token->sucursal_id)
+                ->where('empresa_id', $token->empresa_id)->lockForUpdate()->firstOrFail();
             $hash = hash('sha256', json_encode($this->canonical($operation), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION));
             $logQuery = DB::table('reception_sync_operations')->where('company_id', $token->empresa_id)
                 ->where('branch_id', $token->sucursal_id)->where('device_id', $token->device_id)
@@ -67,6 +70,11 @@ class ReceptionSyncService
                 if ($result['status'] === 'applied') {
                     $result['status'] = 'replayed';
                     $result['http_status'] = 200;
+                }
+                if (isset($result['record'])) {
+                    // Keep the receipt immutable while returning today's record state:
+                    // an old retry must not restore obsolete schedule data on a device.
+                    $result['record'] = $this->scope($token)->where('uuid', $operation['entity_id'])->firstOrFail()->document();
                 }
                 $result['replayed'] = true;
 
@@ -99,7 +107,7 @@ class ReceptionSyncService
                                 throw ValidationException::withMessages(['weighings' => 'Una de las pesadas ya pertenece a otro registro de la sucursal.']);
                             }
                             if ($record) {
-                                $record->update(['revision' => $record->revision + 1, 'payload' => $payload]);
+                                $record->update(['revision' => $record->revision + 1, 'operating_date' => $payload['operating_date'], 'payload' => $payload]);
                             } else {
                                 $record = ReceptionSyncRecord::query()->create([
                                     'company_id' => (int) $token->empresa_id, 'branch_id' => (int) $token->sucursal_id,

@@ -39,6 +39,7 @@ class DispatchTicketService
         array $data
     ): array {
         return DB::transaction(function () use ($companyId, $branch, $actor, $data): array {
+            DB::table('empresas')->where('id', $companyId)->lockForUpdate()->first(['id']);
             $operationType = $this->operationType($data['operation_type'] ?? null);
             $existing = TicketDespacho::query()
                 ->where('referencia_externa', $data['draft_id'])
@@ -454,7 +455,7 @@ class DispatchTicketService
     ): CarbonImmutable {
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $dates = $weighedAt
             ->map(fn (CarbonImmutable $time) => $this->operatingDateFor($time, $cutoff)->format('Y-m-d'))
             ->unique()
@@ -487,7 +488,7 @@ class DispatchTicketService
     ): JornadaOperativa {
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $journey = JornadaOperativa::query()
             ->where('sucursal_id', $branch->id)
             ->whereDate('fecha_operativa', $operatingDate->format('Y-m-d'))

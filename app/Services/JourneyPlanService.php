@@ -88,7 +88,6 @@ class JourneyPlanService
         User $actor,
         array $data
     ): array {
-        $window = $this->currentWindow($companyId, $branch);
         $selectedIds = collect($data['provider_vehicle_ids'])
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -122,8 +121,9 @@ class JourneyPlanService
             $selectedIds,
             $selectedWarehouseIds,
             $vehicles,
-            $window
+            $companyId
         ): void {
+            $window = $this->currentWindow($companyId, $branch);
             $program = ProgramacionRecepcion::query()->firstOrCreate(
                 [
                     'sucursal_id' => $branch->id,
@@ -212,7 +212,7 @@ class JourneyPlanService
     {
         $cutoff = (string) DB::table('empresas')
             ->where('id', $companyId)
-            ->value('hora_corte_operativo') ?: '21:00:00';
+            ->sharedLock()->value('hora_corte_operativo') ?: '21:00:00';
         $now = CarbonImmutable::now($branch->zona_horaria);
         $cutoffToday = $now->startOfDay()->setTimeFromTimeString($cutoff);
         $operatingDate = $now->greaterThanOrEqualTo($cutoffToday)
