@@ -488,6 +488,83 @@ class JavaControlService
         }, 3);
     }
 
+    public function reassignDispatchMovement(
+        TicketDespacho $ticket,
+        int $companyId,
+        int $branchId,
+        User $actor,
+        ?string $ip,
+    ): void {
+        // The caller holds the company lock and changes the ticket in the same transaction.
+        $movement = MovimientoJava::query()
+            ->where('empresa_id', $companyId)
+            ->where('ticket_despacho_id', $ticket->id)
+            ->lockForUpdate()
+            ->first();
+        $oldClientId = $movement ? (int) $movement->cliente_id : null;
+        $settledJavas = 0;
+        $settledTrays = 0;
+
+        if ($oldClientId !== null && $oldClientId !== (int) $ticket->cliente_destino_id) {
+            $oldBalance = $this->lockedClientBalance($companyId, $oldClientId);
+            // Returns and balance corrections belong to the client, not to a ticket.
+            // Compensate the settled portion that the remaining dispatches cannot cover.
+            $settledJavas = max(0, (int) $movement->cantidad - $oldBalance['javas']);
+            $settledTrays = max(0, (int) $movement->cantidad_bandejas - $oldBalance['trays']);
+        }
+
+        $this->syncDispatchMovement($ticket, $companyId, $branchId);
+
+        if ($settledJavas === 0 && $settledTrays === 0) {
+            return;
+        }
+
+        $reason = "Traslado del saldo pendiente por cambio de cliente del ticket {$ticket->codigo} (#{$ticket->id}), de cliente #{$oldClientId} a #{$ticket->cliente_destino_id}. Conserva devoluciones y ajustes anteriores.";
+
+        foreach ([$oldClientId => 1, (int) $ticket->cliente_destino_id => -1] as $clientId => $direction) {
+            $current = $this->lockedClientBalance($companyId, $clientId);
+            $javaDifference = $direction * $settledJavas;
+            $trayDifference = $direction * $settledTrays;
+            $adjustment = AjusteSaldoJava::query()->create([
+                'empresa_id' => $companyId,
+                'sucursal_id' => $branchId,
+                'jornada_id' => $ticket->jornada_id,
+                'cliente_id' => $clientId,
+                'saldo_anterior_javas' => $current['javas'],
+                'saldo_nuevo_javas' => $current['javas'] + $javaDifference,
+                'diferencia_javas' => $javaDifference,
+                'saldo_anterior_bandejas' => $current['trays'],
+                'saldo_nuevo_bandejas' => $current['trays'] + $trayDifference,
+                'diferencia_bandejas' => $trayDifference,
+                'motivo' => $reason,
+                'created_by' => $actor->id,
+            ]);
+            $this->audit->record(
+                $companyId,
+                (int) $actor->id,
+                'ajustes_saldos_javas',
+                (int) $adjustment->id,
+                'TRASLADAR_SALDO_POR_TICKET',
+                [
+                    'ticket_id' => (int) $ticket->id,
+                    'cliente_id' => $clientId,
+                    'saldo_javas' => $current['javas'],
+                    'saldo_bandejas' => $current['trays'],
+                ],
+                [
+                    'ticket_id' => (int) $ticket->id,
+                    'cliente_id' => $clientId,
+                    'saldo_javas' => $adjustment->saldo_nuevo_javas,
+                    'saldo_bandejas' => $adjustment->saldo_nuevo_bandejas,
+                    'diferencia_javas' => $javaDifference,
+                    'diferencia_bandejas' => $trayDifference,
+                    'motivo' => $reason,
+                ],
+                $ip,
+            );
+        }
+    }
+
     public function syncDispatchMovement(
         TicketDespacho $ticket,
         int $companyId,

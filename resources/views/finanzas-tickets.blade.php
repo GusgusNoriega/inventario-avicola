@@ -303,6 +303,7 @@
         <button class="fin-dialog-close" type="button" data-dialog-close aria-label="Cerrar">×</button>
       </header>
       <p id="financeTicketClientDescription" class="fin-section-copy"></p>
+      <p class="fin-section-copy">El saldo pendiente de javas y bandejas se trasladará al nuevo cliente. Las devoluciones ya registradas se conservarán.</p>
       <label class="fin-field">
         <span>Buscar cliente</span>
         <input id="financeTicketClientSearch" type="search" maxlength="120" autocomplete="off" placeholder="Nombre o documento">

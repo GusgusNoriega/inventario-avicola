@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\MovimientoJava;
 use App\Models\Pesada;
 use App\Models\Tercero;
 use App\Models\TerceroRole;
@@ -457,11 +456,6 @@ class FinancialTicketService
                     (int) $ticket->id,
                 );
                 $this->assertClientChangeHasNoAppliedPayments($financialDocumentIds);
-                $this->assertOldClientCanLoseJavaMovement(
-                    $companyId,
-                    (int) $ticket->id,
-                    $ticket->cliente_destino_id === null ? null : (int) $ticket->cliente_destino_id,
-                );
                 $this->markTicketPricesAsManual($companyId, $ticket, $actor, $ip);
                 $ticket->update($after);
                 $this->audit->record(
@@ -476,10 +470,12 @@ class FinancialTicketService
                 );
                 $ticket = $ticket->fresh();
                 $ticket->loadMissing('jornada:id,sucursal_id');
-                $this->javaControl->syncDispatchMovement(
+                $this->javaControl->reassignDispatchMovement(
                     $ticket,
                     $companyId,
                     (int) $ticket->jornada->sucursal_id,
+                    $actor,
+                    $ip,
                 );
                 $this->receptionTicketInventory->sync($companyId, $actor, $ticket);
                 $this->syncFinancialDocument($companyId, $ticket, $actor, true);
@@ -989,65 +985,6 @@ class FinancialTicketService
         if ($hasAppliedPayments) {
             throw ValidationException::withMessages([
                 'cliente_id' => 'No se puede cambiar el cliente porque el ticket ya tiene cobros aplicados. Anula primero los movimientos financieros relacionados.',
-            ]);
-        }
-    }
-
-    private function assertOldClientCanLoseJavaMovement(
-        int $companyId,
-        int $ticketId,
-        ?int $oldClientId,
-    ): void {
-        if ($oldClientId === null) {
-            return;
-        }
-
-        $ticketMovement = MovimientoJava::query()
-            ->where('empresa_id', $companyId)
-            ->where('cliente_id', $oldClientId)
-            ->where('ticket_despacho_id', $ticketId)
-            ->lockForUpdate()
-            ->first();
-
-        if (! $ticketMovement) {
-            return;
-        }
-
-        $movements = MovimientoJava::query()
-            ->where('empresa_id', $companyId)
-            ->where('cliente_id', $oldClientId)
-            ->lockForUpdate()
-            ->get();
-        $adjustmentDeltas = $this->javaControl->lockedAdjustmentDeltas(
-            $companyId,
-            $oldClientId
-        );
-        $otherJavaNet = (int) $movements
-            ->where('tipo', MovimientoJava::TYPE_DISPATCH)
-            ->where('ticket_despacho_id', '!=', $ticketId)
-            ->sum('cantidad')
-            - (int) $movements
-                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
-                ->sum('cantidad')
-            + $adjustmentDeltas['javas'];
-        $otherTrayNet = (int) $movements
-            ->where('tipo', MovimientoJava::TYPE_DISPATCH)
-            ->where('ticket_despacho_id', '!=', $ticketId)
-            ->sum('cantidad_bandejas')
-            - (int) $movements
-                ->where('tipo', MovimientoJava::TYPE_RECEIPT)
-                ->sum('cantidad_bandejas')
-            + $adjustmentDeltas['trays'];
-
-        if ($otherJavaNet < 0) {
-            throw ValidationException::withMessages([
-                'cliente_id' => 'No se puede cambiar el cliente porque el cliente actual ya devolvió javas asociadas a este ticket.',
-            ]);
-        }
-
-        if ($otherTrayNet < 0) {
-            throw ValidationException::withMessages([
-                'cliente_id' => 'No se puede cambiar el cliente porque el cliente actual ya devolvió bandejas asociadas a este ticket.',
             ]);
         }
     }

@@ -10,6 +10,7 @@ use App\Models\TicketDespacho;
 use App\Models\TipoPollo;
 use App\Models\User;
 use App\Services\GeneralConfigurationService;
+use App\Services\JavaControlService;
 use App\Support\WholesaleTwoChickenVariant;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,6 +18,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\InteractsWithAccessControl;
 use Tests\TestCase;
 
@@ -1308,6 +1310,174 @@ class FinancialTicketApiTest extends TestCase
         $this->assertDatabaseMissing('auditoria_eventos', [
             'entidad' => 'pesadas',
             'accion' => 'ACTUALIZAR_FINANZAS',
+        ]);
+    }
+
+    /** @return array<string, array{int, int, int, int, int, int}> */
+    public static function clientChangesWithReturnedContainers(): array
+    {
+        return [
+            'partial javas and trays' => [4, 5, 2, 3, 0, 0],
+            'all javas and trays returned' => [4, 5, 4, 5, 0, 0],
+            'javas only' => [4, 0, 3, 0, 0, 0],
+            'trays only' => [0, 5, 0, 2, 0, 0],
+            'returns and previous balance correction' => [4, 5, 1, 2, -2, -1],
+        ];
+    }
+
+    #[DataProvider('clientChangesWithReturnedContainers')]
+    public function test_client_change_transfers_pending_containers_and_preserves_return_history(
+        int $javas,
+        int $trays,
+        int $returnedJavas,
+        int $returnedTrays,
+        int $javaCorrection,
+        int $trayCorrection,
+    ): void {
+        $ticket = $this->createTicketWithContainers('CLIENTE-DEVOLUCIONES', $this->sourceClientId, $javas, $trays);
+        $receiptId = $this->createContainerReceipt($this->sourceClientId, $returnedJavas, $returnedTrays);
+        $receiptBefore = DB::table('movimientos_javas')->find($receiptId);
+        $weighingsBefore = DB::table('pesadas')->where('ticket_id', $ticket['id'])->get();
+        $adjustmentBefore = null;
+
+        if ($javaCorrection !== 0 || $trayCorrection !== 0) {
+            $adjustmentId = DB::table('ajustes_saldos_javas')->insertGetId([
+                'empresa_id' => $this->user->empresa_id,
+                'sucursal_id' => $this->branchId,
+                'jornada_id' => $this->journeyId,
+                'cliente_id' => $this->sourceClientId,
+                'saldo_anterior_javas' => $javas - $returnedJavas,
+                'saldo_nuevo_javas' => $javas - $returnedJavas + $javaCorrection,
+                'diferencia_javas' => $javaCorrection,
+                'saldo_anterior_bandejas' => $trays - $returnedTrays,
+                'saldo_nuevo_bandejas' => $trays - $returnedTrays + $trayCorrection,
+                'diferencia_bandejas' => $trayCorrection,
+                'motivo' => 'Corrección anterior al cambio de cliente.',
+                'created_by' => $this->user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $adjustmentBefore = DB::table('ajustes_saldos_javas')->find($adjustmentId);
+        }
+
+        $pendingJavas = $javas - $returnedJavas + $javaCorrection;
+        $pendingTrays = $trays - $returnedTrays + $trayCorrection;
+
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/cliente", [
+            'cliente_id' => $this->replacementClientId,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.client.id', $this->replacementClientId)
+            ->assertJsonPath('data.amount', '85.00')
+            ->assertJsonPath('data.can_change_client', true);
+
+        $this->assertContainerBalance($this->sourceClientId, 0, 0);
+        $this->assertContainerBalance($this->replacementClientId, $pendingJavas, $pendingTrays);
+        $this->assertDatabaseHas('tickets_despacho', [
+            'id' => $ticket['id'],
+            'cliente_destino_id' => $this->replacementClientId,
+        ]);
+        $this->assertDatabaseHas('movimientos_javas', [
+            'ticket_despacho_id' => $ticket['id'],
+            'cliente_id' => $this->replacementClientId,
+            'cantidad' => $javas,
+            'cantidad_bandejas' => $trays,
+        ]);
+        $this->assertDatabaseHas('comprobantes', [
+            'empresa_id' => $this->user->empresa_id,
+            'tercero_id' => $this->replacementClientId,
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'total' => 85,
+        ]);
+        $this->assertEquals($receiptBefore, DB::table('movimientos_javas')->find($receiptId));
+        $this->assertEquals($weighingsBefore, DB::table('pesadas')->where('ticket_id', $ticket['id'])->get());
+        if ($adjustmentBefore !== null) {
+            $this->assertEquals(
+                $adjustmentBefore,
+                DB::table('ajustes_saldos_javas')->find($adjustmentBefore->id),
+            );
+        }
+        $this->assertDatabaseCount('ajustes_saldos_javas', $adjustmentBefore === null ? 2 : 3);
+        $this->assertDatabaseHas('auditoria_eventos', [
+            'entidad' => 'tickets_despacho',
+            'entidad_id' => (string) $ticket['id'],
+            'accion' => 'CAMBIAR_CLIENTE',
+        ]);
+    }
+
+    public function test_client_change_preserves_other_tickets_and_existing_balances_after_returns(): void
+    {
+        $ticket = $this->createTicketWithContainers('CLIENTE-MOVER', $this->sourceClientId, 4, 5);
+        $otherTicket = $this->createTicketWithContainers('CLIENTE-OTRO', $this->sourceClientId, 6, 5);
+        $destinationTicket = $this->createTicketWithContainers('CLIENTE-DESTINO', $this->replacementClientId, 2, 3);
+        $this->createContainerReceipt($this->sourceClientId, 3, 2);
+        $this->createContainerReceipt($this->replacementClientId, 1, 1);
+        $otherMovementsBefore = DB::table('movimientos_javas')
+            ->whereNull('ticket_despacho_id')
+            ->orWhereIn('ticket_despacho_id', [$otherTicket['id'], $destinationTicket['id']])
+            ->orderBy('id')
+            ->get();
+
+        $this->putJson("/api/v1/finanzas/tickets/{$ticket['id']}/cliente", [
+            'cliente_id' => $this->replacementClientId,
+        ])->assertOk();
+
+        $this->assertContainerBalance($this->sourceClientId, 3, 3);
+        $this->assertContainerBalance($this->replacementClientId, 5, 7);
+        $this->assertDatabaseCount('ajustes_saldos_javas', 0);
+        $this->assertEquals(
+            $otherMovementsBefore,
+            DB::table('movimientos_javas')
+                ->whereNull('ticket_despacho_id')
+                ->orWhereIn('ticket_despacho_id', [$otherTicket['id'], $destinationTicket['id']])
+                ->orderBy('id')
+                ->get(),
+        );
+    }
+
+    public function test_repeated_client_changes_and_void_restore_keep_the_pending_container_balance(): void
+    {
+        $ticket = $this->createTicketWithContainers('CLIENTE-REPETIDO', $this->sourceClientId, 4, 5);
+        $receiptId = $this->createContainerReceipt($this->sourceClientId, 3, 2);
+        $receiptBefore = DB::table('movimientos_javas')->find($receiptId);
+        $thirdClientId = $this->createClient('Tercer cliente de envases', '20444444444');
+        $endpoint = "/api/v1/finanzas/tickets/{$ticket['id']}/cliente";
+
+        foreach ([$this->replacementClientId, $thirdClientId, $this->sourceClientId] as $clientId) {
+            $this->putJson($endpoint, ['cliente_id' => $clientId])
+                ->assertOk()
+                ->assertJsonPath('data.client.id', $clientId)
+                ->assertJsonPath('data.amount', '85.00');
+            foreach ([$this->sourceClientId, $this->replacementClientId, $thirdClientId] as $checkedClientId) {
+                $this->assertContainerBalance(
+                    $checkedClientId,
+                    $checkedClientId === $clientId ? 1 : 0,
+                    $checkedClientId === $clientId ? 3 : 0,
+                );
+            }
+        }
+
+        $adjustmentsBefore = DB::table('ajustes_saldos_javas')->orderBy('id')->get();
+        $this->assertCount(6, $adjustmentsBefore);
+        $this->putJson($endpoint, ['cliente_id' => $this->sourceClientId])->assertOk();
+        $this->assertEquals($adjustmentsBefore, DB::table('ajustes_saldos_javas')->orderBy('id')->get());
+
+        $this->makeAdministrator($this->user);
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/anular", [
+            'motivo' => 'Anular después de corregir el cliente.',
+        ])->assertOk();
+        $this->assertContainerBalance($this->sourceClientId, 0, 0);
+        $this->assertContainerBalance($this->replacementClientId, 0, 0);
+        $this->assertContainerBalance($thirdClientId, 0, 0);
+
+        $this->postJson("/api/v1/finanzas/tickets/{$ticket['id']}/restablecer")->assertOk();
+        $this->assertContainerBalance($this->sourceClientId, 1, 3);
+        $this->assertEquals($receiptBefore, DB::table('movimientos_javas')->find($receiptId));
+        $this->assertEquals($adjustmentsBefore, DB::table('ajustes_saldos_javas')->orderBy('id')->get());
+        $this->assertDatabaseHas('comprobantes', [
+            'tercero_id' => $this->sourceClientId,
+            'origen_clave' => "VENTA:TICKET:{$ticket['id']}",
+            'total' => 85,
         ]);
     }
 
@@ -3019,6 +3189,51 @@ class FinancialTicketApiTest extends TestCase
                 'cages' => 1,
             ],
         ];
+    }
+
+    /** @return array{id: int, price_ids: array<int, int>} */
+    private function createTicketWithContainers(string $code, int $clientId, int $javas, int $trays): array
+    {
+        $ticket = $this->createTicket(
+            $code,
+            CarbonImmutable::parse('2026-07-20 14:10:00'),
+            $clientId,
+            [$this->firstChickenTypeId => ['price' => '8.5000', 'weight' => '10.000', 'cages' => $javas]],
+        );
+        DB::table('pesadas')->where('ticket_id', $ticket['id'])->update(['cantidad_bandejas' => $trays]);
+        $this->createJavaMovement($ticket['id'], $clientId);
+
+        return $ticket;
+    }
+
+    private function createContainerReceipt(int $clientId, int $javas, int $trays): int
+    {
+        return DB::table('movimientos_javas')->insertGetId([
+            'empresa_id' => $this->user->empresa_id,
+            'sucursal_id' => $this->branchId,
+            'jornada_id' => $this->journeyId,
+            'cliente_id' => $clientId,
+            'tipo' => MovimientoJava::TYPE_RECEIPT,
+            'cantidad' => $javas,
+            'cantidad_bandejas' => $trays,
+            'ticket_despacho_id' => null,
+            'fecha_movimiento' => '2026-07-20 15:00:00',
+            'observaciones' => 'Devolución registrada antes del cambio de cliente.',
+            'created_by' => $this->user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function assertContainerBalance(int $clientId, int $javas, int $trays): void
+    {
+        $balance = app(JavaControlService::class)
+            ->clientBalancesQuery((int) $this->user->empresa_id)
+            ->where('cliente_id', $clientId)
+            ->first();
+
+        $this->assertSame($javas, (int) ($balance?->saldo_javas ?? 0));
+        $this->assertSame($trays, (int) ($balance?->saldo_bandejas ?? 0));
     }
 
     private function createJavaMovement(int $ticketId, int $clientId): void

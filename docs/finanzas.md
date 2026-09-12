@@ -49,6 +49,22 @@ completo.
 Una pesada cuyo documento de venta ya tiene cobros aplicados no puede editarse
 ni anularse hasta anular primero esos movimientos financieros.
 
+### Cambio de cliente de un ticket
+
+Desde Finanzas se puede cambiar el cliente de un ticket aunque existan
+devoluciones de javas o bandejas o correcciones de saldo. El despacho se
+reasigna al nuevo cliente y se traslada solo el saldo pendiente, conservando
+las devoluciones y correcciones originales. Como las devoluciones se registran
+por cliente, la cantidad pendiente se limita al saldo actual del cliente
+anterior, calculado por separado para javas y bandejas.
+
+Cuando parte del despacho ya está saldada, se registran dos ajustes
+compensatorios en `ajustes_saldos_javas`, con referencia al ticket y auditoría
+`TRASLADAR_SALDO_POR_TICKET`. Estos ajustes mantienen el saldo total de envases
+y permiten volver a cambiar el cliente sin duplicar lo pendiente. El ticket,
+el comprobante, el despacho y los ajustes se guardan en una misma transacción.
+Se conservan los precios y las validaciones financieras de cobros aplicados.
+
 ## Flujos de dinero
 
 | Tipo | Origen | Destino | Aplicación |
