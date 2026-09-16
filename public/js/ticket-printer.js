@@ -1,6 +1,8 @@
 const TICKET_LOCALE = "es-PE";
 const TICKET_TIME_ZONE = "America/Lima";
 const DEFAULT_TICKET_TITLE = "DISTRIBUIDORA DIEGO ALBERTO";
+// Ruta relativa al módulo: funciona en Laragon y en el hosting.
+const TICKET_LOGO_URL = new URL("../images/logo-avicola-negro.png", import.meta.url).href;
 const WHOLESALE_TWO_PRICE_REQUIRED_TYPES = new Set([
   "GR",
   "GD",
@@ -503,10 +505,46 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       font-size: 16px;
       font-weight: 900;
     }
+
+    /* Logo minorista: pequeño, centrado y próximo al nombre comercial. */
+    .ticket-header {
+      margin: 0;
+      padding: 0;
+      text-align: center;
+      break-inside: avoid;
+    }
+
+    .ticket-logo {
+      display: block;
+      width: 20mm;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto 0.5mm;
+    }
+
+    .ticket-header .business-name {
+      margin: 0;
+      line-height: 1.05;
+      letter-spacing: 0;
+      word-spacing: 0;
+      white-space: pre-line;
+    }
+
+    .ticket-header + .document-title {
+      margin-top: 2mm;
+    }
   </style>
 </head>
 <body class="retail-ticket">
-  <header class="center">
+  <header class="center ticket-header">
+    <img
+      class="ticket-logo"
+      src="${escapeTicketHtml(TICKET_LOGO_URL)}"
+      alt="Logo de la avícola"
+      width="1254"
+      height="1254"
+      loading="eager"
+    >
     <h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>
   </header>
 
@@ -968,12 +1006,25 @@ export function printWeightControlTicket(ticket, options = {}) {
   printFrame.className = "ticket-print-frame";
   printFrame.title = options.frameTitle || `Impresión de ${ticket?.code || "ticket"}`;
   printFrame.setAttribute("aria-hidden", "true");
-  printFrame.addEventListener("load", () => {
+  printFrame.addEventListener("load", async () => {
     const printWindow = printFrame.contentWindow;
 
     if (!printWindow) {
       printFrame.remove();
       options.onError?.();
+      return;
+    }
+
+    // Antes de abrir la impresión, comprobar que el logo está disponible.
+    // Un fallo no se silencia: se avisa mediante el onError del módulo.
+    try {
+      const logo = printWindow.document.querySelector(".ticket-logo");
+      if (logo) await logo.decode();
+    } catch {
+      printFrame.remove();
+      options.onError?.(new Error(
+        "No se pudo cargar el logo. Comprueba public/images/logo-avicola-negro.png."
+      ));
       return;
     }
 
