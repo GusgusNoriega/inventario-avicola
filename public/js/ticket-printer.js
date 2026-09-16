@@ -268,8 +268,12 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       color: #000;
     }
 
+    /* Rollo de 80 mm: reservar espacio para los bordes no imprimibles.
+       70 mm totales, incluidos 1.5 mm de protección interior por lado.
+       No usar 80 mm como ancho del contenido ni compensar con zoom. */
     body {
-      width: 76mm;
+      width: 70mm;
+      max-width: 100%;
       margin: 0 auto;
       padding: 2.5mm 1.5mm 12mm;
       font-family: "Courier New", Courier, monospace;
@@ -298,10 +302,10 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 
     .business-name {
       margin-top: 0.4mm;
-      font-size: 23px;
+      font-size: 22px;
       font-weight: 900;
       line-height: 1;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.2px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
@@ -329,6 +333,11 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       font-weight: 900;
     }
 
+    .document-title > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
     .date {
       margin-top: 1.8mm;
       font-size: 15px;
@@ -353,6 +362,7 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
       margin: 1.8mm 0 2mm;
       font-size: 14.5px;
       font-weight: 900;
+      overflow-wrap: anywhere;
     }
 
     .delivery p + p {
@@ -367,8 +377,17 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 
     th,
     td {
-      overflow: hidden;
-      text-overflow: clip;
+      text-align: center;
+      vertical-align: middle;
+      overflow-wrap: anywhere;
+      word-break: normal;
+      font-variant-numeric: tabular-nums;
+    }
+
+    tr,
+    .retail-summary-stack {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .detail-table th {
@@ -389,34 +408,42 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 
     .detail-table td {
       padding: 1.3mm 0.35mm 0.5mm;
-      font-size: 15.5px;
+      font-size: 14.5px;
       font-weight: 700;
-      white-space: nowrap;
+      text-align: center;
+      white-space: normal;
     }
 
     .detail-table td:first-child {
-      text-align: left;
+      text-align: center;
       font-weight: 900;
     }
 
     .detail-table .number {
-      text-align: right;
+      text-align: center;
+    }
+
+    /* Cantidades de hasta tres cifras dentro de las columnas estrechas. */
+    .detail-table td:nth-child(2),
+    .detail-table td:nth-child(3) {
+      font-size: 12px;
     }
 
     .detail-table .control-cell {
       text-align: center;
     }
 
-    .detail-table th:nth-child(1) { width: 12%; }
+    .detail-table th:nth-child(1) { width: 13%; }
     .detail-table th:nth-child(2) { width: 10%; }
     .detail-table th:nth-child(3) { width: 10%; }
     .detail-table th:nth-child(4) { width: 22%; }
     .detail-table th:nth-child(5) { width: 22%; }
-    .detail-table th:nth-child(6) { width: 24%; }
+    .detail-table th:nth-child(6) { width: 23%; }
 
+    /* Resúmenes minoristas: usar el ancho disponible sin ampliar el papel. */
     .retail-summary-stack {
       width: 100%;
-      margin: 7mm 0 0 auto;
+      margin: 7mm 0 0;
     }
 
     .retail-summary-table {
@@ -429,41 +456,30 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
     }
 
     .retail-summary-table th {
-      padding: 0.8mm 0.25mm;
+      padding: 0.8mm 1.2mm;
       border-top: 1.2px solid #000;
       border-bottom: 1.2px solid #000;
       font-size: 13.5px;
       font-weight: 900;
       text-align: center;
-      white-space: nowrap;
+      white-space: normal;
     }
 
     .retail-summary-table td {
-      padding: 1.2mm 0.25mm 0.7mm;
+      padding: 1.2mm 1.2mm 0.7mm;
       border-bottom: 1.2px solid #000;
-      font-size: 14.5px;
+      font-size: 13.5px;
       font-weight: 700;
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .retail-summary-table td:nth-child(2) {
       text-align: center;
+      white-space: normal;
     }
 
-    .retail-summary-table th:nth-child(1),
-    .retail-summary-table td:nth-child(1) {
-      width: 34%;
-    }
-
-    .retail-summary-table th:nth-child(2),
-    .retail-summary-table td:nth-child(2) {
-      width: 26%;
-    }
-
-    .retail-summary-table th:nth-child(3),
-    .retail-summary-table td:nth-child(3) {
-      width: 40%;
+    /* Las tres columnas tienen el mismo ancho. Encabezados y cifras
+       centrados, sin reglas posteriores que los desplacen a los bordes. */
+    .retail-summary-table th,
+    .retail-summary-table td {
+      width: 33.333333%;
+      text-align: center;
     }
 
     .retail-summary-table .price-various {
