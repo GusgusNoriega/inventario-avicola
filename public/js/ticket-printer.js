@@ -487,8 +487,6 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
 <body class="retail-ticket">
   <header class="center">
     <h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>
-    <p class="business-product">GALLINA</p>
-    <p class="business-mark">GD</p>
   </header>
 
   <h2 class="document-title">
