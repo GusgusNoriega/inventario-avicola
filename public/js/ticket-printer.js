@@ -415,8 +415,13 @@ function buildRetailWeightControlTicketHtml(ticket, safePrintDate, records, isRe
     .detail-table th:nth-child(6) { width: 24%; }
 
     .retail-summary-stack {
-      width: 64%;
+      width: 100%;
       margin: 7mm 0 0 auto;
+    }
+
+    .retail-summary-table {
+      width: 100%;
+      table-layout: fixed;
     }
 
     .retail-summary-table + .retail-summary-table {
