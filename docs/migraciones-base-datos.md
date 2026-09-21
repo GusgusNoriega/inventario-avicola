@@ -2,7 +2,8 @@
 
 La estructura aprobada está implementada incrementalmente en
 `database/migrations`. Las migraciones iniciales crean las tablas base y las
-posteriores amplían los módulos de despacho, javas, finanzas y compras.
+posteriores amplían los módulos de despacho, javas, finanzas, compras y
+sincronización de recepción.
 
 ## Orden de creación
 
@@ -19,10 +20,12 @@ posteriores amplían los módulos de despacho, javas, finanzas y compras.
 | `2026_06_26`–`2026_07_04` | Evolución de despacho, flota, javas y minorista |
 | `2026_07_12` | Finanzas, cuentas y trazabilidad de pagos |
 | `2026_07_14` | Clientes internos, compras y aplicación posterior de pagos a proveedores |
+| `2026_07_15`–`2026_09_05` | Evolución de minoristas, mayorista 2, recepción, productos, caja y reportes |
+| `2026_09_10` | Tokens, registros, descargas y vínculos financieros de recepción offline |
 
 ## Relaciones
 
-Las migraciones incluyen 137 claves foráneas. Como política general:
+Las migraciones definen las relaciones con claves foráneas. Como política general:
 
 - las tablas históricas usan `restrictOnDelete`;
 - las referencias opcionales de responsables usan `nullOnDelete`;
@@ -32,7 +35,7 @@ Las migraciones incluyen 137 claves foráneas. Como política general:
 
 ## Base local de Laragon
 
-El archivo `.env` está configurado para:
+Configurar `.env` con la conexión de la instalación. El ejemplo del repositorio usa:
 
 ```dotenv
 DB_CONNECTION=mysql
@@ -43,7 +46,7 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-La base `sistema_pollos` ya fue creada y migrada en MySQL 8.
+Crear la base indicada si aún no existe y aplicar las migraciones pendientes.
 
 ## Comandos
 
@@ -64,7 +67,7 @@ desarrollo.
 
 ### Limpiar únicamente los datos de prueba
 
-Para reiniciar compras, finanzas, despachos, jornadas e inventarios sin borrar
+Para reiniciar compras, finanzas, despachos, recepción sincronizada, jornadas e inventarios sin borrar
 los clientes, proveedores, camiones ni choferes, ejecutar:
 
 ```bash
@@ -77,12 +80,16 @@ normal de `php artisan db:seed` nunca dispara esta limpieza.
 
 Se conservan también los roles de clientes/proveedores, las asignaciones de
 camiones a proveedores, usuarios, permisos y catálogos técnicos necesarios
-para que la aplicación siga funcionando. Las listas de precios, las entidades
-y cuentas financieras se eliminan junto con los datos de prueba, por lo que
-deben configurarse nuevamente después de la limpieza.
+para que la aplicación siga funcionando. Se conservan las entidades y cuentas
+financieras, así como los cobradores. Las listas e historiales de precios se
+eliminan junto con los movimientos y deben configurarse nuevamente.
 
-También se vacían sesiones, tokens, caché y colas pendientes para evitar datos
-derivados obsoletos; por ello será necesario iniciar sesión nuevamente.
+También se vacían los registros, claves de pesadas, operaciones, vínculos
+financieros y descargas de sincronización, incluidos sus detalles. Se eliminan
+los tokens de dispositivos, sesiones, tokens de acceso, caché y colas pendientes;
+será necesario iniciar sesión y conectar los dispositivos nuevamente. La limpieza
+solo afecta al servidor: los datos locales de una aplicación externa deben
+reiniciarse por separado antes de reconectarla para evitar reenviar pruebas antiguas.
 
 Consultar el estado:
 
@@ -95,12 +102,14 @@ php artisan migrate:status
 El seeder registra:
 
 - empresa y sucursal principal;
-- pollo vivo, pelado y beneficiado;
-- javas de 7.00 kg y 6.90 kg;
+- pollo vivo, muerto, pelado y beneficiado;
+- javas de 7.00 kg, 6.90 kg y 6.80 kg y bandeja estándar;
 - almacenes 1 y 2;
-- balanzas 1 y 2;
+- balanzas mayoristas, minoristas, de recepción y de despacho de productos;
 - roles de administrador y operador;
 - permisos iniciales.
 
 El administrador inicial solo se crea cuando `ADMIN_EMAIL` y
 `ADMIN_PASSWORD` están definidos en `.env`.
+De forma independiente, `INSTALLATION_ADMIN_PASSWORD` habilita las cuentas
+temporales del seeder de instalación; dejarlo vacío si no se necesitan.

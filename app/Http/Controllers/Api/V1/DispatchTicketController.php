@@ -51,8 +51,7 @@ class DispatchTicketController extends Controller
         TicketDespacho $ticket,
         string $ticketTitle,
         ?string $ticketMessage
-    ): array
-    {
+    ): array {
         return [
             'id' => $ticket->id,
             'draft_id' => $ticket->referencia_externa,

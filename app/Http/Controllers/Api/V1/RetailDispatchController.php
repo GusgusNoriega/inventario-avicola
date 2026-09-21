@@ -176,8 +176,7 @@ class RetailDispatchController extends Controller
         int $station,
         string $ticketTitle,
         ?string $ticketMessage
-    ): array
-    {
+    ): array {
         $prices = $ticket->precios->keyBy('tipo_pollo_id');
         $sign = $ticket->tipo_operacion === TicketDespacho::OPERATION_RETURN ? -1 : 1;
         $deliveryMode = $ticket->resolvedDeliveryMode();

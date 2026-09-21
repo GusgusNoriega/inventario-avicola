@@ -15,6 +15,13 @@ class DevelopmentDataCleanupSeeder extends Seeder
      * @var list<string>
      */
     public const TABLES_TO_CLEAN = [
+        'reception_sync_financial_links',
+        'reception_sync_weighing_keys',
+        'reception_sync_operations',
+        'reception_sync_records',
+        'reception_sync_snapshot_items',
+        'reception_sync_snapshots',
+        'reception_sync_tokens',
         'compra_detalles',
         'compras',
         'cobranza_pendientes',
@@ -120,7 +127,7 @@ class DevelopmentDataCleanupSeeder extends Seeder
         if (app()->environment('local')
             && $this->command
             && ! $this->command->confirm(
-                'Se eliminarán compras, pagos, despachos, pesadas, jornadas, inventarios, precios, sesiones, caché y colas. Se conservarán empresas, cuentas financieras y usuarios. ¿Deseas continuar?',
+                'Se eliminarán compras, pagos, despachos, pesadas, jornadas, inventarios, precios, registros y descargas de sincronización, tokens de dispositivos, sesiones, caché y colas. Se conservarán empresas, cuentas financieras y usuarios. ¿Deseas continuar?',
                 false
             )) {
             $this->command->warn('Limpieza cancelada. No se modificó ningún registro.');

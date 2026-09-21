@@ -918,6 +918,15 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'failed_at' => $now,
         ]);
 
+        $this->createReceptionSyncScenario(
+            $user,
+            $branchId,
+            $client->id,
+            $documentId,
+            $currentPriceId,
+            $chickenTypeId,
+        );
+
         return [
             'user_id' => $user->id,
             'company_id' => $companyId,
@@ -931,5 +940,90 @@ class DevelopmentDataCleanupSeederTest extends TestCase
             'assignment_id' => $assignmentId,
             'chicken_type_id' => $chickenTypeId,
         ];
+    }
+
+    private function createReceptionSyncScenario(
+        User $user,
+        int $branchId,
+        int $clientId,
+        int $documentId,
+        int $priceHistoryId,
+        int $chickenTypeId,
+    ): void {
+        $now = now();
+        $deviceId = (string) Str::uuid();
+        $recordUuid = (string) Str::uuid();
+        $snapshotId = (string) Str::uuid();
+
+        DB::table('reception_sync_tokens')->insert([
+            'empresa_id' => $user->empresa_id,
+            'sucursal_id' => $branchId,
+            'user_id' => $user->id,
+            'device_id' => $deviceId,
+            'device_name' => 'Balanza de prueba',
+            'token_prefix' => 'rpv_prueba',
+            'token_hash' => hash('sha256', 'sync-cleanup-test'),
+            'password_fingerprint' => hash('sha256', $user->password_hash),
+            'expires_at' => $now->copy()->addDay(),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $recordId = DB::table('reception_sync_records')->insertGetId([
+            'company_id' => $user->empresa_id,
+            'branch_id' => $branchId,
+            'device_id' => $deviceId,
+            'uuid' => $recordUuid,
+            'kind' => 'ticket',
+            'operating_date' => today(),
+            'payload' => json_encode(['uuid' => $recordUuid], JSON_THROW_ON_ERROR),
+            'created_by' => $user->id,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('reception_sync_weighing_keys')->insert([
+            'branch_id' => $branchId,
+            'record_id' => $recordId,
+            'uuid' => (string) Str::uuid(),
+        ]);
+        DB::table('reception_sync_operations')->insert([
+            'company_id' => $user->empresa_id,
+            'branch_id' => $branchId,
+            'device_id' => $deviceId,
+            'operation_id' => (string) Str::uuid(),
+            'entity_id' => $recordUuid,
+            'request_hash' => hash('sha256', 'sync-cleanup-request'),
+            'request' => json_encode(['entity_id' => $recordUuid], JSON_THROW_ON_ERROR),
+            'result' => json_encode(['status' => 'applied'], JSON_THROW_ON_ERROR),
+            'actor_id' => $user->id,
+            'created_at' => $now,
+        ]);
+        DB::table('reception_sync_financial_links')->insert([
+            'record_id' => $recordId,
+            'document_id' => $documentId,
+            'price_history_id' => $priceHistoryId,
+            'chicken_type_id' => $chickenTypeId,
+            'client_id' => $clientId,
+            'price_kg' => 9,
+            'price_source' => 'CLIENTE',
+            'priced_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('reception_sync_snapshots')->insert([
+            'id' => $snapshotId,
+            'company_id' => $user->empresa_id,
+            'branch_id' => $branchId,
+            'device_id' => $deviceId,
+            'total_items' => 1,
+            'created_at' => $now,
+            'expires_at' => $now->copy()->addDay(),
+        ]);
+        DB::table('reception_sync_snapshot_items')->insert([
+            'snapshot_id' => $snapshotId,
+            'sequence' => 1,
+            'entity' => 'record',
+            'entity_key' => 'offline:'.$recordUuid,
+            'data' => json_encode(['uuid' => $recordUuid], JSON_THROW_ON_ERROR),
+        ]);
     }
 }

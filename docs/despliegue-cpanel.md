@@ -6,9 +6,9 @@ cargan directamente los recursos que ya están versionados en:
 - `public/css/style.css`
 - `public/js/*.js`
 
-El directorio `public/build` también puede incluirse en Git si en el futuro se
-empieza a usar Vite. La compilación deberá realizarse localmente antes del
-`push`.
+El directorio `public/build` ya está versionado. Cuando se actualicen sus entradas
+o dependencias, la compilación con Vite debe realizarse localmente antes del
+`push`, incluyendo el manifiesto y los recursos generados.
 
 ## Requisitos del hosting
 
@@ -112,7 +112,7 @@ pendientes. No se ejecuta Node ni npm. Si LiteSpeed continúa usando código
 anterior después de esta secuencia, se debe reiniciar PHP/LSAPI o vaciar OPcache
 desde cPanel.
 
-## Si se empieza a usar Vite
+## Actualizar los recursos de Vite
 
 La compilación se realiza en el equipo de desarrollo:
 

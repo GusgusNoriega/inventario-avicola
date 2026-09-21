@@ -66,7 +66,7 @@ class WebViewsTest extends TestCase
             ->assertDontSee('data-future-view', false);
     }
 
-    public function test_live_chicken_reception_menu_offers_operation_and_history_options(): void
+    public function test_live_chicken_reception_menu_offers_operation_history_and_sync_options(): void
     {
         $response = $this->get('/recepcion-pollo-vivo/menu');
 
@@ -76,12 +76,16 @@ class WebViewsTest extends TestCase
             ->assertSee('¿Qué necesitas hacer?')
             ->assertSee('Registrar recepción')
             ->assertSee('Historial y totales')
+            ->assertSee('Registros sincronizados')
+            ->assertSee('Conectar dispositivos')
             ->assertSee('href="'.route('recepcion-pollo-vivo').'"', false)
             ->assertSee('href="'.route('recepcion-pollo-vivo.historial').'"', false)
+            ->assertSee('href="'.route('reception-sync-records.index').'"', false)
+            ->assertSee('href="'.route('reception-sync-tokens.index').'"', false)
             ->assertSee(route('menu'), false)
             ->assertSee(asset('css/recepcion-pollo-vivo-menu.css'), false);
 
-        $this->assertSame(2, substr_count($response->getContent(), 'class="live-reception-menu-card card'));
+        $this->assertSame(4, substr_count($response->getContent(), 'class="live-reception-menu-card card'));
 
         $stylesheet = (string) file_get_contents(public_path('css/recepcion-pollo-vivo-menu.css'));
 
@@ -1685,8 +1689,8 @@ class WebViewsTest extends TestCase
 
         $this->assertStringContainsString('const ticketTitle = getTicketTitle(ticket);', $template);
         $this->assertStringContainsString('<h1 class="business-name">${escapeTicketHtml(ticketTitle)}</h1>', $template);
-        $this->assertStringContainsString('GALLINA</p>', $template);
-        $this->assertStringContainsString('GD</p>', $template);
+        $this->assertStringContainsString('class="ticket-logo"', $template);
+        $this->assertStringContainsString('src="${escapeTicketHtml(TICKET_LOGO_URL)}"', $template);
         $this->assertStringContainsString('CONTROL DE PESO', $template);
         $this->assertStringContainsString('formatTicketDate(ticket?.operatingDate, safePrintDate)', $template);
         $this->assertStringContainsString('<th>C/A</th>', $template);

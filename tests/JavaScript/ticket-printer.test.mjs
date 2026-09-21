@@ -313,13 +313,13 @@ test("el ticket minorista reproduce el encabezado, detalle y resumen del control
 
   assert.match(html, /<body class="retail-ticket">/);
   assert.doesNotMatch(html, /<body class="wholesale-ticket">/);
-  assert.match(html, /body \{[\s\S]*font-size: 15px;/);
-  assert.match(html, /\.business-name \{[\s\S]*font-size: 23px;/);
-  assert.match(html, /\.detail-table th \{[\s\S]*font-size: 11\.5px;/);
-  assert.match(html, /\.detail-table td \{[\s\S]*font-size: 15\.5px;/);
-  assert.match(html, /\.retail-summary-table td \{[\s\S]*font-size: 14\.5px;/);
-  assert.match(html, /\.form-fields \{[\s\S]*font-size: 16px;/);
-  assert.match(compact, /<h1 class="business-name">DISTRIBUIDORA DIEGO ALBERTO<\/h1>.*GALLINA.*GD/);
+  assert.match(html, /body \{[^}]*width: 70mm;[^}]*font-size: 15px;/);
+  assert.match(html, /\.business-name \{[^}]*font-size: 22px;/);
+  assert.match(html, /\.detail-table th \{[^}]*font-size: 11\.5px;/);
+  assert.match(html, /\.detail-table td \{[^}]*font-size: 14\.5px;/);
+  assert.match(html, /\.retail-summary-table td \{[^}]*font-size: 13\.5px;/);
+  assert.match(html, /\.form-fields \{[^}]*font-size: 16px;/);
+  assert.match(compact, /<header class="center ticket-header"> <img class="ticket-logo" src="[^"]*\/images\/logo-avicola-negro\.png"[^>]*> <h1 class="business-name">DISTRIBUIDORA DIEGO ALBERTO<\/h1> <\/header>/);
   assert.match(
     compact,
     /CONTROL DE PESO<\/span> <span>231271<\/span>.*FECHA 23\/07\/2026.*EDWIN/

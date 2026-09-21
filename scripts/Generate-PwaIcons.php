@@ -41,7 +41,7 @@ function createIcon(string $path, int $size, bool $maskable = false): void
 }
 
 $iconDirectory = dirname(__DIR__).'/public/icons';
-if (!is_dir($iconDirectory) && !mkdir($iconDirectory, 0775, true) && !is_dir($iconDirectory)) {
+if (! is_dir($iconDirectory) && ! mkdir($iconDirectory, 0775, true) && ! is_dir($iconDirectory)) {
     throw new RuntimeException('No fue posible crear el directorio de iconos.');
 }
 
