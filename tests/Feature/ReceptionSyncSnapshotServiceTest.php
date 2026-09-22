@@ -77,6 +77,22 @@ class ReceptionSyncSnapshotServiceTest extends TestCase
         $this->assertSame($before->all(), collect($tables)->mapWithKeys(fn (string $table): array => [$table => DB::table($table)->count()])->all());
     }
 
+    public function test_report_palette_is_normalized_scoped_and_frozen_until_the_next_snapshot(): void
+    {
+        $company = \App\Models\Empresa::query()->findOrFail($this->user->empresa_id);
+        $company->update(['paleta_reportes' => ['primary' => '#274c77', 'secondary' => 'invalid', 'unrelated_secret' => 'NEVER_EXPORT']]);
+        $snapshot = $this->snapshots->create($this->token, $this->branch);
+        $company->update(['paleta_reportes' => ['primary' => '#803344']]);
+        $items = collect($this->allItems($snapshot['id']));
+        $palette = $items->firstWhere('entity', 'company')['data']['report_palette'];
+        $this->assertSame('#274C77', $palette['primary']);
+        $this->assertSame(\App\Services\ReportPaletteService::DEFAULTS['secondary'], $palette['secondary']);
+        $this->assertSame(array_keys(\App\Services\ReportPaletteService::DEFAULTS), array_keys($palette));
+        $this->assertStringNotContainsString('NEVER_EXPORT', json_encode($items->all(), JSON_THROW_ON_ERROR));
+        $next = $this->snapshots->create($this->token, $this->branch);
+        $this->assertSame('#803344', collect($this->allItems($next['id']))->firstWhere('entity', 'company')['data']['report_palette']['primary']);
+    }
+
     public function test_pages_are_resumable_complete_and_unchanged_after_source_mutation(): void
     {
         for ($index = 0; $index < 213; $index++) {

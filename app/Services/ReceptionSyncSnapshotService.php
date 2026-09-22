@@ -216,6 +216,7 @@ class ReceptionSyncSnapshotService
             'operating_cutoff' => $company->hora_corte_operativo ?: '21:00:00',
             'ticket_title' => $this->ticketTitles->normalize($company->titulo_ticket),
             'ticket_message' => $this->ticketMessages->normalize($company->mensaje_ticket),
+            'report_palette' => app(ReportPaletteService::class)->current($company),
         ]);
         yield $this->item('branch', $branchId, [
             'id' => $branchId,

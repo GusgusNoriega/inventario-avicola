@@ -140,7 +140,7 @@ Ejemplo abreviado de página con `limit=1`:
 
 | `entity` | Contenido de `data` |
 |---|---|
-| `company` | Nombre comercial/razón social, identificación fiscal, país, moneda, zona horaria, hora de corte, título y mensaje del ticket. |
+| `company` | Nombre comercial/razón social, identificación fiscal, país, moneda, zona horaria, hora de corte, título y mensaje del ticket, paleta de reportes `report_palette`. |
 | `branch` | ID, empresa, código, nombre, dirección y zona horaria de sucursal. |
 | `configuration` | Valores por defecto para captura y configuración de los seis carriles. |
 | `client` | Clientes de la empresa, datos de identificación/contacto, indicador de cliente interno y estado; sin precios, saldos ni deudas. |
@@ -298,6 +298,10 @@ Usar únicamente documentos activos y sus pesadas activas para sumar cantidades 
 `/reports` requiere ambas fechas y admite hasta 366 días de diferencia entre ellas, además de filtros `kind` y `status`. Devuelve `scope: "offline_records"`, `record_counts`, `totals`, `by_day`, `by_client`, `by_owner`, `by_sex` y `by_lane`. `by_client` incluye solo tickets. `by_lane` conserva el carril real de captura: 1–4 para recepción y 5/6 para tickets. Un filtro de solo anulados devuelve sus cantidades de documentos pero cero totales activos.
 
 Los reportes de la aplicación y de esta API siguen siendo operativos: cantidades, pesos y destinos. La venta vinculada existe para finanzas y no añade otra recepción o ticket a estos reportes.
+
+Desde el 21-09-2026, `company.report_palette` incluye únicamente los once colores normalizados de `ReportPaletteService`, en formato `#RRGGBB`. Se utiliza la empresa del token y la paleta queda congelada con el resto del snapshot. Una personalización posterior llega en la siguiente descarga completa; no cambia un snapshot parcial ni un PDF ya generado. Es un campo adicional compatible con `schema_version: 1`: clientes anteriores pueden ignorarlo y clientes nuevos deben usar la paleta predeterminada si un servidor anterior no lo incluye. No requiere una migración de base de datos ni permisos adicionales.
+
+El reporte local puede reproducir el formato horizontal de `reports/live-chicken-reception-journey.blade.php`: trece columnas por pesada y los grupos Mi empresa, Empresa externa y Total general. Las capturas locales no confirmadas deben identificarse y los borradores/anulaciones no deben sumar al reporte de pesadas activas. Un reporte local no garantiza tener las capturas de otros equipos que todavía no se hayan descargado. El PDF completo de jornada de la web utiliza sus registros web; las identidades sincronizadas se mantienen separadas según el contrato.
 
 ## Errores y límites
 

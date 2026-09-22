@@ -1962,6 +1962,24 @@
           "ticket_message": {
             "type": "string",
             "description": "Mensaje para impresión"
+          },
+          "report_palette": {
+            "type": "object",
+            "description": "Paleta normalizada de ReportPaletteService, guardada con el snapshot para reportes offline. Extensión opcional compatible con schema_version 1; clientes antiguos pueden ignorarla y servidores anteriores pueden omitirla.",
+            "properties": {
+              "page_background": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "primary": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "primary_text": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "secondary": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "secondary_text": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "accent": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "body_text": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "muted_text": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "border": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "debit": { "type": "string", "pattern": "^#[0-9A-F]{6}$" },
+              "credit": { "type": "string", "pattern": "^#[0-9A-F]{6}$" }
+            },
+            "additionalProperties": false
           }
         },
         "required": [
